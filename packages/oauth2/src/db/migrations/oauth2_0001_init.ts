@@ -82,6 +82,8 @@ export const oauth2_0001_init: Migration = {
       .addColumn('last_seen_at', 'timestamptz', (c) => c.notNull().defaultTo(now))
       .addColumn('ip', 'text')
       .addColumn('user_agent', 'text')
+      // Refresh lease (R18): set while one request/instance refreshes the session's tokens.
+      .addColumn('refresh_lease_until', 'timestamptz')
       .execute();
     await db.schema.createIndex('auth_sessions_user_idx').on('auth_sessions').column('user_id').execute();
 

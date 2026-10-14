@@ -214,21 +214,35 @@ describe('BFF login and callback', () => {
     expect(new Date((await read()).idle_expires_at).getTime()).toBe(absolute);
   });
 
-  it('SessionStore.lockForRefresh/updateTokens/delete', async () => {
+  it('SessionStore.claimRefresh/completeRefresh/releaseRefresh/delete', async () => {
     const r = await loginAs(t, 'admin@x.com', PW);
     const store = t.app.get(SessionStore);
     const idHash = sha256(r.sessionCookie!);
-    const out = await store.lockForRefresh(idHash, async (row, trx) => {
-      expect(row?.userId).toBe(adminId);
-      await store.updateTokens(idHash, { accessToken: 'new-access', expiresIn: 60 }, trx);
-      return 'done';
-    });
-    expect(out).toBe('done');
+    const lease = async () =>
+      (await t.db.selectFrom('auth_sessions').select('refresh_lease_until').where('id_hash', '=', idHash).executeTakeFirstOrThrow())
+        .refresh_lease_until;
+
+    const won = await store.claimRefresh(idHash);
+    expect(won?.userId).toBe(adminId);
+    const until = new Date((await lease()) as Date).getTime();
+    expect(until).toBeGreaterThan(Date.now() + 8_000);
+    expect(until).toBeLessThanOrEqual(Date.now() + 11_000);
+    expect(await store.claimRefresh(idHash)).toBeUndefined(); // lease held
+    await store.completeRefresh(idHash, { accessToken: 'new-access', expiresIn: 60 });
+    expect(await lease()).toBeNull();
     const got = (await store.get(r.sessionCookie!))!;
     expect(got.accessToken).toBe('new-access');
     expect(got.refreshToken).toBeTruthy(); // kept when the response has none
     expect(got.accessExpiresAt!.getTime()).toBeLessThanOrEqual(Date.now() + 61_000);
-    expect(await store.lockForRefresh('missing', async (row) => row)).toBeUndefined();
+
+    expect(await store.claimRefresh(idHash)).toBeTruthy();
+    await store.releaseRefresh(idHash);
+    expect(await lease()).toBeNull();
+    // An expired lease can be taken over.
+    await t.db.updateTable('auth_sessions').set({ refresh_lease_until: new Date(Date.now() - 1000) }).where('id_hash', '=', idHash).execute();
+    expect(await store.claimRefresh(idHash)).toBeTruthy();
+
+    expect(await store.claimRefresh('missing')).toBeUndefined();
     await store.delete(idHash);
     expect(await store.get(r.sessionCookie!)).toBeUndefined();
   });

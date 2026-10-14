@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { isSecureUrl, parseCookies, serializeCookie } from '../bff/cookies';
 import { OidcClient } from '../bff/oidc-client';
-import { SessionStore, type SessionRow } from '../bff/session.store';
+import { REFRESH_LEASE_SEC, SessionStore, type SessionRow } from '../bff/session.store';
 import type { OAuth2Config } from '../config/schema';
 import { OAUTH2_CONFIG, SESSION_COOKIE } from '../constants';
 import { AuthError } from '../errors';
@@ -12,9 +12,9 @@ import type { RequestAuthSession, RequestUser } from './current-user.decorator';
 
 /** Refresh when the access token has less than this left (spec §6.5 step 4). */
 const REFRESH_MARGIN_MS = 60_000;
-/** `lock_timeout` of the refresh transaction. */
-const LOCK_TIMEOUT_MS = 5_000;
-const LOCK_NOT_AVAILABLE = '55P03';
+/** A request that lost the refresh lease polls this often, for at most the lease length. */
+const LEASE_POLL_MS = 100;
+const LEASE_WAIT_MS = REFRESH_LEASE_SEC * 1000;
 
 export type AuthenticatedRequest = Request & { user?: RequestUser; authSession?: RequestAuthSession };
 
@@ -95,50 +95,64 @@ export class SessionAuthenticator {
   }
 
   /**
-   * False when the session vanished or the refresh failed (the caller destroys the session).
+   * False when the session vanished or the refresh failed or timed out (the caller destroys the session).
    *
-   * In-process single-flight per session: concurrent requests of one session await the same refresh
-   * without taking a pool connection each. Otherwise N waiters blocked on the row lock could hold every
-   * connection while the lock holder's own /oauth2/token call (same pool) waits for one: a deadlock.
-   * The row lock stays for multi-instance safety.
+   * In-process single-flight per session in front of the DB lease (R18): concurrent requests of one
+   * session await the same refresh. No DB connection or transaction is held while the HTTP call to
+   * /oauth2/token runs (that endpoint needs the same pool).
    */
   private refresh(read: SessionRow): Promise<boolean> {
     const inFlight = this.refreshing.get(read.idHash);
     if (inFlight) return inFlight;
-    const p = this.refreshLocked(read).finally(() => this.refreshing.delete(read.idHash));
+    const p = this.refreshLeased(read).finally(() => this.refreshing.delete(read.idHash));
     this.refreshing.set(read.idHash, p);
     return p;
   }
 
-  private async refreshLocked(read: SessionRow): Promise<boolean> {
-    const seen = read.accessExpiresAt?.getTime();
+  private async refreshLeased(read: SessionRow): Promise<boolean> {
+    const seen = read.accessExpiresAt?.getTime() ?? -Infinity;
+    const fresher = (row: SessionRow | undefined) => (row?.accessExpiresAt?.getTime() ?? -Infinity) > seen;
+    let row: SessionRow | undefined;
     try {
-      return await this.sessions.lockForRefresh(
-        read.idHash,
-        async (row, trx) => {
-          if (!row) return false;
-          // Another request (or instance) refreshed while we waited for the lock: its tokens are ours too.
-          if (row.accessExpiresAt?.getTime() !== seen) return true;
-          if (!row.refreshToken) return false;
-          const tokens = await this.oidc.refresh(row.refreshToken);
-          await this.sessions.updateTokens(row.idHash, tokens, trx);
-          return true;
-        },
-        { lockTimeoutMs: LOCK_TIMEOUT_MS },
-      );
+      row = await this.sessions.claimRefresh(read.idHash);
     } catch (e) {
-      if ((e as { code?: string }).code === LOCK_NOT_AVAILABLE) {
-        // Another instance held the lock too long: continue only if it has refreshed meanwhile.
-        try {
-          const now = await this.sessions.getByHash(read.idHash);
-          return !!now && now.accessExpiresAt?.getTime() !== seen;
-        } catch {
-          return false;
-        }
-      }
-      this.warn('Token refresh failed', e);
+      this.warn('Refresh lease claim failed', e);
       return false;
     }
+    if (!row) return this.awaitOtherRefresh(read.idHash, fresher);
+
+    // Winner. Another instance may have finished between our read and the claim.
+    if (fresher(row) || !row.refreshToken) {
+      await this.sessions.releaseRefresh(read.idHash).catch(() => {});
+      return fresher(row);
+    }
+    try {
+      const tokens = await this.oidc.refresh(row.refreshToken);
+      await this.sessions.completeRefresh(read.idHash, tokens);
+      return true;
+    } catch (e) {
+      this.warn('Token refresh failed', e);
+      await this.sessions.releaseRefresh(read.idHash).catch(() => {});
+      return false;
+    }
+  }
+
+  /** Loser of the lease: poll until the holder has stored newer tokens (→ reuse) or give up. */
+  private async awaitOtherRefresh(idHash: string, fresher: (row: SessionRow | undefined) => boolean): Promise<boolean> {
+    const deadline = Date.now() + LEASE_WAIT_MS;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, LEASE_POLL_MS));
+      let row: SessionRow | undefined;
+      try {
+        row = await this.sessions.getByHash(idHash);
+      } catch {
+        return false;
+      }
+      if (!row) return false;
+      if (fresher(row)) return true;
+    }
+    this.logger.warn('Timed out waiting for another refresh of the session');
+    return false;
   }
 
   /** Error name only: messages may carry token-endpoint responses. */

@@ -66,6 +66,7 @@ export interface AuthSessionsTable {
   last_seen_at: Timestamp;
   ip: string | null;
   user_agent: string | null;
+  refresh_lease_until: NullableTimestamp;
 }
 
 export interface AuthSigningKeysTable {

@@ -6,7 +6,6 @@ import { AUTH_SETTINGS, OAUTH2_CONFIG, OAUTH2_DB } from '../constants';
 import type { AuthSessionsTable, AuthTables } from '../db/types';
 import { deriveKey, open, seal, sha256 } from '../security/crypto';
 import type { AuthSettingsProvider } from '../settings/settings.provider';
-import type { Trx } from '../users/user.service';
 import type { TokenSet } from './oidc-client';
 
 /** A BFF session with its tokens opened. Expiry is NOT checked here (the guard does that). */
@@ -27,6 +26,8 @@ export interface SessionRow {
 
 /** touch() writes at most once per this many ms. */
 const TOUCH_INTERVAL_MS = 60_000;
+/** How long a claimed refresh lease is valid (R18). */
+export const REFRESH_LEASE_SEC = 10;
 
 /** Server-side store of BFF sessions (`auth_sessions`, spec §4). The browser only holds the cookie value. */
 @Injectable()
@@ -82,43 +83,43 @@ export class SessionStore {
   }
 
   /**
-   * Runs `fn` while holding a row lock (`SELECT … FOR UPDATE`) on the session, so concurrent requests
-   * refresh once. `row` is undefined when the session no longer exists. With `lockTimeoutMs` a lock
-   * wait longer than that throws (Postgres `55P03 lock_not_available`).
+   * Claims the refresh lease (R18) with one atomic UPDATE: succeeds only when no unexpired lease exists.
+   * Returns the (decrypted) row for the winner, undefined when the session is gone or someone else holds
+   * the lease. No transaction stays open: the caller does the HTTP refresh afterwards.
    */
-  async lockForRefresh<T>(
-    idHash: string,
-    fn: (row: SessionRow | undefined, trx: Trx) => Promise<T>,
-    opts: { lockTimeoutMs?: number } = {},
-  ): Promise<T> {
-    return this.db.transaction().execute(async (trx) => {
-      if (opts.lockTimeoutMs !== undefined) {
-        // Fails the SELECT … FOR UPDATE with 55P03 instead of waiting forever.
-        await sql.raw(`set local lock_timeout = '${Math.max(1, Math.floor(opts.lockTimeoutMs))}ms'`).execute(trx);
-      }
-      const row = await trx
-        .selectFrom('auth_sessions')
-        .selectAll()
-        .where('id_hash', '=', idHash)
-        .forUpdate()
-        .executeTakeFirst();
-      return fn(row ? this.toRow(row) : undefined, trx);
-    });
+  async claimRefresh(idHash: string): Promise<SessionRow | undefined> {
+    const row = await this.db
+      .updateTable('auth_sessions')
+      .set({ refresh_lease_until: sql<Date>`now() + make_interval(secs => ${REFRESH_LEASE_SEC})` })
+      .where('id_hash', '=', idHash)
+      .where((eb) => eb.or([eb('refresh_lease_until', 'is', null), eb('refresh_lease_until', '<', sql<Date>`now()`)]))
+      .returningAll()
+      .executeTakeFirst();
+    return row ? this.toRow(row) : undefined;
   }
 
-  /** Stores refreshed tokens. A refresh/id token missing from the response keeps the stored one. */
-  async updateTokens(idHash: string, tokens: TokenSet, trx?: Trx): Promise<void> {
+  /**
+   * Stores the refreshed tokens and releases the lease. A refresh/id token missing from the response
+   * keeps the stored one.
+   */
+  async completeRefresh(idHash: string, tokens: TokenSet): Promise<void> {
     const now = new Date();
-    await (trx ?? this.db)
+    await this.db
       .updateTable('auth_sessions')
       .set({
         access_token_enc: seal(this.key, tokens.accessToken),
         access_expires_at: accessExpiry(now, tokens),
         ...(tokens.refreshToken ? { refresh_token_enc: seal(this.key, tokens.refreshToken) } : {}),
         ...(tokens.idToken ? { id_token_enc: seal(this.key, tokens.idToken) } : {}),
+        refresh_lease_until: null,
       })
       .where('id_hash', '=', idHash)
       .execute();
+  }
+
+  /** Releases the lease without changing tokens (refresh failed or turned out unnecessary). */
+  async releaseRefresh(idHash: string): Promise<void> {
+    await this.db.updateTable('auth_sessions').set({ refresh_lease_until: null }).where('id_hash', '=', idHash).execute();
   }
 
   /** Slides the idle expiry to min(now + idle, absolute); a no-op if last seen < 60 s before `now`. */

@@ -366,6 +366,34 @@ describe('AuthGuard refresh (access TTL 2 s)', () => {
     }
   }, 20_000);
 
+  it('another instance holds the refresh lease → request waits for its tokens, no own refresh', async () => {
+    const store = t.app.get(SessionStore);
+    const oidc = t.app.get(OidcClient);
+    const { sessionCookie } = await loginAs(t, 'admin@x.com', PW);
+    const idHash = sha256(sessionCookie!);
+    // "Instance B" has claimed the refresh and already got new tokens from the provider.
+    const tokens = await oidc.refresh((await store.get(sessionCookie!))!.refreshToken!);
+    await t.db
+      .updateTable('auth_sessions')
+      .set({ refresh_lease_until: new Date(Date.now() + 10_000) })
+      .where('id_hash', '=', idHash)
+      .execute();
+    await sleep(2100);
+    const spy = vi.spyOn(oidc, 'refresh');
+    try {
+      const completing = sleep(300).then(() => store.completeRefresh(idHash, tokens));
+      const r = await api('/api/auth/me', { cookie: sessionCookie });
+      await completing;
+      expect(r.status).toBe(200);
+      expect(r.body.email).toBe('admin@x.com');
+      expect(spy).not.toHaveBeenCalled();
+      const row = await t.db.selectFrom('auth_sessions').select('refresh_lease_until').where('id_hash', '=', idHash).executeTakeFirstOrThrow();
+      expect(row.refresh_lease_until).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('refresh failure → 401, session destroyed, cookie cleared', async () => {
     const { sessionCookie } = await loginAs(t, 'admin@x.com', PW);
     const spy = vi.spyOn(t.app.get(OidcClient), 'refresh').mockRejectedValue(new Error('boom'));

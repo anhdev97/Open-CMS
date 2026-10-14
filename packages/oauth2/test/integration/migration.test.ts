@@ -36,6 +36,11 @@ describe('oauth2_0001_init', () => {
     expect(await existing(db)).toEqual([...TABLES].sort());
   });
 
+  it('auth_sessions has a nullable refresh_lease_until timestamptz', async () => {
+    const r = await sql<{ data_type: string; is_nullable: string }>`select data_type, is_nullable from information_schema.columns where table_name = 'auth_sessions' and column_name = 'refresh_lease_until'`.execute(db);
+    expect(r.rows).toEqual([{ data_type: 'timestamp with time zone', is_nullable: 'YES' }]);
+  });
+
   it('seeds exactly one super_admin role', async () => {
     const rows = await db.selectFrom('auth_roles').selectAll().execute();
     expect(rows.map((r) => [r.key, r.name])).toEqual([['super_admin', 'Super Admin']]);
