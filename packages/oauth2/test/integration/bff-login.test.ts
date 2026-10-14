@@ -1,9 +1,10 @@
 import 'reflect-metadata';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { OidcClient } from '../../src/bff/oidc-client';
 import { SessionStore } from '../../src/bff/session.store';
-import { sha256 } from '../../src/security/crypto';
+import { deriveKey, open, sha256 } from '../../src/security/crypto';
 import { UserService } from '../../src/users/user.service';
+import { OAUTH2_CONFIG } from '../../src/constants';
 import { createTestApp, type TestApp } from '../support/app';
 import { CookieJar } from '../support/interaction';
 import { loginAs, type LoginResult } from '../support/login';
@@ -16,12 +17,17 @@ const auth = { rateLimit: { loginPerEmail: { limit: 1000 }, loginPerIp: { limit:
 const cookieLine = (lines: string[], name: string) => lines.find((l) => l.startsWith(`${name}=`));
 const attrs = (line: string) => line.split(';').slice(1).map((a) => a.trim().toLowerCase());
 
-/** Asserts that nothing the browser received in the chain carries a token. */
-function expectNoTokens(r: LoginResult): void {
+/**
+ * Asserts that nothing the browser received in the chain carries a token: neither the token key names nor
+ * (the first 20 chars of) any of the token values actually issued for the session.
+ */
+function expectNoTokens(r: LoginResult, tokens: (string | undefined)[]): void {
+  const values = tokens.filter((v): v is string => !!v);
+  expect(values.length).toBeGreaterThan(0);
   for (const res of r.responses) {
     const all = [res.body, JSON.stringify(res.headers), res.setCookies.join('\n')].join('\n');
-    for (const needle of ['access_token', 'refresh_token', 'id_token', 'eyJ']) {
-      expect(all, `${res.method} ${res.url} leaked ${needle}`).not.toContain(needle);
+    for (const needle of ['access_token', 'refresh_token', 'id_token', ...values.map((v) => v.slice(0, 20))]) {
+      expect(all, `${res.method} ${res.url} leaked a token`).not.toContain(needle);
     }
   }
 }
@@ -84,7 +90,10 @@ describe('BFF login and callback', () => {
     const clear = cookieLine(r.callbackSetCookies, 'oc_login')!;
     expect(clear).toBeTruthy();
     expect(attrs(clear)).toEqual(expect.arrayContaining(['path=/api/auth', 'max-age=0']));
-    expectNoTokens(r);
+    const store = t.app.get(SessionStore);
+    const got = await store.get(r.sessionCookie!);
+    expect(got).toMatchObject({ userId: adminId });
+    expectNoTokens(r, [got!.accessToken, got!.refreshToken, got!.idToken]);
 
     const rows = await sessions();
     expect(rows).toHaveLength(1);
@@ -94,7 +103,14 @@ describe('BFF login and callback', () => {
     expect(row.access_token_enc).toBeTruthy();
     expect(row.refresh_token_enc).toBeTruthy();
     expect(row.id_token_enc).toBeTruthy();
-    for (const col of [row.access_token_enc, row.refresh_token_enc, row.id_token_enc]) expect(col).not.toContain('eyJ');
+    // Sealed at rest: no column holds its plaintext, and opening it with the token key yields the issued token.
+    const tokenKey = deriveKey(t.app.get(OAUTH2_CONFIG).secret, 'token');
+    const issued = [got!.accessToken, got!.refreshToken!, got!.idToken];
+    [row.access_token_enc, row.refresh_token_enc, row.id_token_enc].forEach((col, i) => {
+      expect(col).not.toBe(issued[i]);
+      expect(col).not.toContain(issued[i].slice(0, 20));
+      expect(open(tokenKey, col!)).toBe(issued[i]);
+    });
     expect(row.user_agent).toBe('vitest-bff');
     expect(row.ip).toBeTruthy();
     const now = Date.now();
@@ -108,10 +124,8 @@ describe('BFF login and callback', () => {
     expect(after.last_login_at).not.toBeNull();
 
     // The store opens what it sealed.
-    const store = t.app.get(SessionStore);
-    const got = await store.get(r.sessionCookie!);
     expect(got).toMatchObject({ idHash: row.id_hash, userId: adminId });
-    expect(got!.idToken.startsWith('eyJ')).toBe(true);
+    expect(got!.idToken.split('.')).toHaveLength(3); // a JWS
     expect(got!.accessToken).toBeTruthy();
     expect(got!.refreshToken).toBeTruthy();
     expect(await store.get('not-a-session')).toBeUndefined();
@@ -163,6 +177,18 @@ describe('BFF login and callback', () => {
     const r = await loginAs(t, 'admin@x.com', PW, { beforeCallback: (u) => u.searchParams.set('code', 'bogus') });
     expect(r.finalLocation).toBe('/admin/login?error=login_failed');
     expect(r.sessionCookie).toBeUndefined();
+  });
+
+  it('session creation failure after a valid exchange → login_failed, no oc_session', async () => {
+    const spy = vi.spyOn(t.app.get(SessionStore), 'create').mockRejectedValueOnce(new Error('db down'));
+    try {
+      const r = await loginAs(t, 'admin@x.com', PW);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(r.finalLocation).toBe('/admin/login?error=login_failed');
+      expect(r.sessionCookie).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('SessionStore.touch extends idle at most once per 60 s and never past absolute', async () => {
@@ -251,7 +277,27 @@ describe('BFF behind a TLS reverse proxy (Review Focus 5)', () => {
     expect(attrs(cookieLine(r.responses[0].setCookies, 'oc_login')!)).toContain('secure');
     const session = cookieLine(r.callbackSetCookies, 'oc_session')!;
     expect(attrs(session)).toEqual(expect.arrayContaining(['secure', 'httponly', 'samesite=lax', 'path=/']));
-    expectNoTokens(r);
+    const got = (await t.app.get(SessionStore).get(r.sessionCookie!))!;
+    expectNoTokens(r, [got.accessToken, got.refreshToken, got.idToken]);
     expect(await t.db.selectFrom('auth_sessions').selectAll().execute()).toHaveLength(1);
+  });
+});
+
+describe('BFF with an unreachable internalUrl', () => {
+  let t: TestApp;
+
+  beforeAll(async () => {
+    // Port 9 (discard) on loopback: nothing listens, so discovery fails.
+    t = await createTestApp({ OPENCMS_INTERNAL_URL: 'http://127.0.0.1:9' }, { auth });
+  });
+  afterAll(async () => {
+    await t?.close();
+  });
+
+  it('GET /api/auth/login → 302 /admin/login?error=login_failed, no oc_login', async () => {
+    const res = await fetch(`${t.url}/api/auth/login?returnTo=/admin/x`, { redirect: 'manual' });
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/admin/login?error=login_failed');
+    expect(cookieLine(res.headers.getSetCookie(), 'oc_login')).toBeUndefined();
   });
 });

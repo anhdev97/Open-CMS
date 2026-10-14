@@ -1,3 +1,4 @@
+import { hkdfSync } from 'node:crypto';
 import type { Kysely } from 'kysely';
 import type { OAuth2Config, Ttls } from '../config/schema';
 import { ADMIN_CLIENT_ID } from '../constants';
@@ -24,6 +25,7 @@ export interface OidcProvider {
 export type OidcProviderClass = new (issuer: string, configuration: Record<string, unknown>) => OidcProvider;
 
 let cachedProvider: OidcProviderClass | undefined;
+let cachedErrors: Record<string, any> | undefined;
 
 // A real dynamic import that tsc (module: commonjs) does not rewrite into require().
 const dynamicImport = new Function('s', 'return import(s)') as (s: string) => Promise<any>;
@@ -43,7 +45,21 @@ export async function loadOidcProvider(): Promise<OidcProviderClass> {
     mod = await dynamicImport('oidc-provider');
   }
   cachedProvider = (mod.Provider ?? mod.default) as OidcProviderClass;
+  cachedErrors = mod.errors;
   return cachedProvider;
+}
+
+/** oidc-provider's `errors` export; available once loadOidcProvider() has run (always before a Provider exists). */
+function oidcErrors(): Record<string, any> {
+  if (!cachedErrors) throw new Error('oidc-provider is not loaded');
+  return cachedErrors;
+}
+
+/** R16: the provider's keygrip key sits one HKDF level below the `cookie` key that seals oc_login. */
+export function providerCookieKey(secret: Buffer): string {
+  return Buffer.from(hkdfSync('sha256', deriveKey(secret, 'cookie'), Buffer.alloc(0), 'oidc-provider/keygrip', 32)).toString(
+    'base64url',
+  );
 }
 
 export const ADMIN_SCOPES = ['openid', 'profile', 'email', 'offline_access'] as const;
@@ -127,7 +143,7 @@ export function buildProviderConfig(d: ProviderConfigDeps): Record<string, unkno
     clients: [d.client],
     jwks: { keys: d.jwks },
     cookies: {
-      keys: [deriveKey(d.cfg.secret, 'cookie').toString('base64url')],
+      keys: [providerCookieKey(d.cfg.secret)],
       // oidc-provider scopes the `_interaction` cookie to the interaction URL's path (/admin/login),
       // which the browser would not send to the Nest routes at /oauth2/interaction/:uid. A `path` in
       // cookies.short overrides that (the `_interaction_resume` cookie still sets its own path).
@@ -138,7 +154,18 @@ export function buildProviderConfig(d: ProviderConfigDeps): Record<string, unkno
     pkce: { required: () => true },
     features: {
       devInteractions: { enabled: false },
-      revocation: { enabled: true },
+      // Pinned to v9's default policy (set explicitly so the provider does not log its NOTICE): a client
+      // may only revoke its own tokens.
+      revocation: {
+        enabled: true,
+        allowedPolicy: async (_ctx: unknown, client: any, token: any) => {
+          if (token.clientId !== client.clientId) {
+            if (client.clientAuthMethod === 'none') return false;
+            throw new (oidcErrors().InvalidRequest)('client is not authorized to revoke the presented token');
+          }
+          return true;
+        },
+      },
       rpInitiatedLogout: { enabled: true },
     },
     rotateRefreshToken: true,

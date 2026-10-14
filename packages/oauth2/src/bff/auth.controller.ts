@@ -59,13 +59,20 @@ export class AuthController {
       returnTo: sanitizeReturnTo(first(req.query.returnTo)),
     };
     const codeChallenge = createHash('sha256').update(st.verifier).digest('base64url');
-    const url = await this.oidc.buildLoginUrl({
-      state: st.state,
-      nonce: st.nonce,
-      codeChallenge,
-      loginHint: loginHint || undefined,
-    });
     res.setHeader('Cache-Control', 'no-store');
+    let url: URL;
+    try {
+      url = await this.oidc.buildLoginUrl({
+        state: st.state,
+        nonce: st.nonce,
+        codeChallenge,
+        loginHint: loginHint || undefined,
+      });
+    } catch (e) {
+      // e.g. discovery via internalUrl failed. §8: redirect-chain errors go to the login page.
+      this.fail('BFF login: discovery failed', e);
+      return res.redirect(302, loginError('login_failed'));
+    }
     res.append(
       'Set-Cookie',
       serializeCookie(LOGIN_COOKIE, seal(this.cookieKey, JSON.stringify(st)), {
@@ -100,20 +107,33 @@ export class AuthController {
     try {
       tokens = await this.oidc.exchange(currentUrl, { verifier: st.verifier, state: st.state, nonce: st.nonce });
     } catch (e) {
-      // Never log tokens or codes; the error name/message from openid-client carries neither.
-      this.logger.warn(`BFF code exchange failed: ${(e as Error)?.name}: ${(e as Error)?.message}`);
+      this.fail('BFF code exchange failed', e);
       return res.redirect(302, loginError('login_failed'));
     }
 
-    const userAgent = first(req.headers['user-agent']);
-    const { cookieValue } = await this.sessions.create(tokens.sub!, tokens, { ip: req.ip, userAgent });
-    const ttl = await this.settings.getTtls();
-    res.append(
-      'Set-Cookie',
-      serializeCookie(SESSION_COOKIE, cookieValue, { path: '/', maxAge: ttl.sessionAbsolute, secure: this.secure }),
-    );
-    await this.users.touchLogin(tokens.sub!);
+    let sessionCookie: string;
+    try {
+      const userAgent = first(req.headers['user-agent']);
+      const { cookieValue } = await this.sessions.create(tokens.sub!, tokens, { ip: req.ip, userAgent });
+      const ttl = await this.settings.getTtls();
+      await this.users.touchLogin(tokens.sub!);
+      sessionCookie = serializeCookie(SESSION_COOKIE, cookieValue, {
+        path: '/',
+        maxAge: ttl.sessionAbsolute,
+        secure: this.secure,
+      });
+    } catch (e) {
+      // e.g. the user was deleted between the interaction and the callback (FK violation).
+      this.fail('BFF session creation failed', e);
+      return res.redirect(302, loginError('login_failed'));
+    }
+    res.append('Set-Cookie', sessionCookie);
     res.redirect(302, st.returnTo);
+  }
+
+  /** Logs the error name only: messages may echo request data, and nothing token-/cookie-bearing is logged. */
+  private fail(what: string, e: unknown): void {
+    this.logger.warn(`${what}: ${(e as Error)?.name ?? 'Error'}`);
   }
 
   private readLoginState(sealed: string | undefined): LoginState | undefined {
