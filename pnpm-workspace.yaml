@@ -6,3 +6,4 @@ onlyBuiltDependencies:
   - esbuild
   - sharp
   - '@nestjs/core'
+  - argon2
