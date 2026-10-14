@@ -133,6 +133,9 @@ describe('password login interaction', () => {
     expect(res.status).toBe(429);
     expect(Number(res.headers.get('retry-after'))).toBeGreaterThan(0);
     expect(await res.json()).toMatchObject({ error: { code: 'rate_limited' } });
+    const last = (await events('login_failed')).at(-1)!;
+    expect(last).toMatchObject({ user_id: null, user_agent: 'vitest-ua', meta: { reason: 'rate_limited' } });
+    expect(last.ip).toBeTruthy();
   });
 });
 

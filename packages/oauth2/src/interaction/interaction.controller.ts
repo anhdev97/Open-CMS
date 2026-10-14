@@ -20,6 +20,7 @@ const loginSchema = z.object({
 });
 
 type Expired = { redirectTo: string };
+type LoginFailReason = 'invalid_credentials' | 'account_disabled' | 'rate_limited';
 const expired = (): Expired => ({ redirectTo: LOGIN_EXPIRED_REDIRECT });
 
 /**
@@ -81,6 +82,9 @@ export class InteractionController {
     const byEmail = this.limiter.hit(`login:email:${email}`, loginPerEmail.limit, loginPerEmail.windowSec);
     const byIp = this.limiter.hit(`login:ip:${ip}`, loginPerIp.limit, loginPerIp.windowSec);
     if (!byEmail.ok || !byIp.ok) {
+      // R14: audited without a user lookup (no userId), so blocked attempts leak nothing about accounts.
+      const reason: LoginFailReason = 'rate_limited';
+      await this.audit.record({ type: 'login_failed', ip, userAgent, meta: { reason } });
       const retryAfterSec = Math.max(byEmail.retryAfterSec, byIp.retryAfterSec);
       throw new AuthError('rate_limited', 429, 'Too many attempts', { retryAfterSec });
     }
@@ -92,7 +96,7 @@ export class InteractionController {
       throw e;
     }
 
-    const fail = async (reason: 'invalid_credentials' | 'account_disabled', userId?: string) => {
+    const fail = async (reason: Exclude<LoginFailReason, 'rate_limited'>, userId?: string) => {
       await this.audit.record({ type: 'login_failed', userId, ip, userAgent, meta: { reason } });
       return reason === 'account_disabled'
         ? new AuthError('account_disabled', 403, 'Account is disabled')
