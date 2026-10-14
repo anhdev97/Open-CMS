@@ -1,0 +1,7 @@
+export const OAUTH2_DB = Symbol('OAUTH2_DB');
+export const AUTH_SETTINGS = Symbol('AUTH_SETTINGS');
+export const AUTH_SETUP_LOCK = 0x0c_a0_5e_70;
+export const ADMIN_CLIENT_ID = 'opencms-admin';
+export const SESSION_COOKIE = 'oc_session';
+export const LOGIN_COOKIE = 'oc_login';
+export const IDP_COOKIE = 'oc_idp';
