@@ -18,7 +18,9 @@ import { ConfigAuthSettingsProvider } from './settings/settings.provider';
 import { BootstrapService } from './setup/bootstrap.service';
 import { SetupController } from './setup/setup.controller';
 import { SetupState } from './setup/setup-state';
+import { PasswordController } from './users/password.controller';
 import { UserService } from './users/user.service';
+import { UsersController } from './users/users.controller';
 
 export interface OAuth2ModuleOptions {
   /** DI token under which the app provides its Kysely instance (e.g. OPENCMS_DB). */
@@ -36,7 +38,7 @@ export class OAuth2Module {
     return {
       module: OAuth2Module,
       global: true,
-      controllers: [SetupController, InteractionController, AuthController],
+      controllers: [SetupController, InteractionController, AuthController, UsersController, PasswordController],
       providers: [
         { provide: OAUTH2_DB, useExisting: opts.dbToken },
         // Throws ConfigError on a missing/short secret or missing public URL → app refuses to start.
