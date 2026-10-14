@@ -6,3 +6,4 @@ export const SESSION_COOKIE = 'oc_session';
 export const LOGIN_COOKIE = 'oc_login';
 export const IDP_COOKIE = 'oc_idp';
 export const RATE_LIMITER = Symbol('RATE_LIMITER');
+export const GRANT_REVOKER = Symbol('GRANT_REVOKER');

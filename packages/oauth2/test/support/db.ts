@@ -22,7 +22,10 @@ export async function startTestDb(): Promise<TestDb> {
   const u = new URL(ADMIN_URL);
   u.pathname = `/${name}`;
   const url = u.toString();
-  const db = new Kysely<AuthTables>({ dialect: new PostgresDialect({ pool: new Pool({ connectionString: url, max: 10 }) }) });
+  const pool = new Pool({ connectionString: url, max: 10 });
+  // `drop database ... with (force)` can race pool shutdown and kill an idle client; that is expected.
+  pool.on('error', () => {});
+  const db = new Kysely<AuthTables>({ dialect: new PostgresDialect({ pool }) });
   try {
     const { error } = await coreMigrator(db).migrateToLatest();
     if (error) throw error instanceof Error ? error : new Error(String(error));
