@@ -8,6 +8,7 @@ import { Public } from '../guard/public.decorator';
 import { assertSameOrigin } from '../security/origin';
 import type { RateLimiter } from '../security/rate-limiter';
 import { normalizeEmail } from '../security/email';
+import { parseBody } from '../security/validate';
 import { UserService } from '../users/user.service';
 import { SetupState } from './setup-state';
 
@@ -46,12 +47,7 @@ export class SetupController {
     const hit = this.limiter.hit(`setup:${req.ip ?? 'unknown'}`, limit, windowSec);
     if (!hit.ok) throw new AuthError('rate_limited', 429, 'Too many attempts', { retryAfterSec: hit.retryAfterSec });
 
-    const parsed = bodySchema.safeParse(body);
-    if (!parsed.success) {
-      const msg = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
-      throw new AuthError('validation_failed', 422, msg);
-    }
-    const { email, name, password } = parsed.data;
+    const { email, name, password } = parseBody(bodySchema, body);
 
     const user = await this.users.withSetupLock(async (trx) => {
       if ((await this.users.countUsers(trx)) > 0) {

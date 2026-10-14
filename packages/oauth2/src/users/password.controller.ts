@@ -8,6 +8,7 @@ import { CurrentUser, type RequestUser } from '../guard/current-user.decorator';
 import type { AuthenticatedRequest } from '../guard/session-auth.service';
 import { PasswordService } from '../security/password';
 import type { RateLimiter } from '../security/rate-limiter';
+import { parseBody } from '../security/validate';
 import { UserService } from './user.service';
 
 const bodySchema = z.object({ currentPassword: z.string(), newPassword: z.string() }).strict();
@@ -30,12 +31,7 @@ export class PasswordController {
     const hit = this.limiter.hit(`pwchange:${me.id}`, limit, windowSec);
     if (!hit.ok) throw new AuthError('rate_limited', 429, 'Too many attempts', { retryAfterSec: hit.retryAfterSec });
 
-    const parsed = bodySchema.safeParse(body);
-    if (!parsed.success) {
-      const msg = parsed.error.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('; ');
-      throw new AuthError('validation_failed', 422, msg);
-    }
-    const { currentPassword, newPassword } = parsed.data;
+    const { currentPassword, newPassword } = parseBody(bodySchema, body);
 
     const user = await this.users.findById(me.id);
     if (!user) throw new AuthError('unauthenticated', 401, 'Not authenticated');

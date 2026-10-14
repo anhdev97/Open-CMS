@@ -7,6 +7,7 @@ import type { AuthTables } from '../db/types';
 import { AuthError } from '../errors';
 import { CurrentUser, RequireRole, type RequestUser } from '../guard/current-user.decorator';
 import { normalizeEmail } from '../security/email';
+import { parseBody } from '../security/validate';
 import { UserService } from './user.service';
 
 export interface UserView {
@@ -25,15 +26,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function uuid(value: string): string {
   if (!UUID.test(value)) throw new AuthError('not_found', 404, 'Not found');
   return value;
-}
-
-function parse<T extends z.ZodTypeAny>(schema: T, body: unknown): z.infer<T> {
-  const r = schema.safeParse(body);
-  if (!r.success) {
-    const msg = r.error.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`).join('; ');
-    throw new AuthError('validation_failed', 422, msg);
-  }
-  return r.data;
 }
 
 const createSchema = z
@@ -110,7 +102,7 @@ export class UsersController {
   @Post()
   @HttpCode(201)
   async create(@Body() body: unknown, @CurrentUser() actor: RequestUser): Promise<{ data: UserView }> {
-    const input = parse(createSchema, body);
+    const input = parseBody(createSchema, body);
     const created = await this.users.create({ ...input, actorId: actor.id });
     return { data: await this.view(created.id) };
   }
@@ -118,7 +110,7 @@ export class UsersController {
   @Patch(':id')
   async update(@Param('id') rawId: string, @Body() body: unknown, @CurrentUser() actor: RequestUser): Promise<{ data: UserView }> {
     const id = uuid(rawId);
-    const input = parse(patchSchema, body);
+    const input = parseBody(patchSchema, body);
     if (!(await this.users.findById(id))) throw new AuthError('not_found', 404, 'User not found');
     if (input.status !== undefined) await this.users.setStatus(id, input.status, actor.id);
     if (input.name !== undefined) {
@@ -131,7 +123,7 @@ export class UsersController {
   @HttpCode(204)
   async resetPassword(@Param('id') rawId: string, @Body() body: unknown, @CurrentUser() actor: RequestUser): Promise<void> {
     const id = uuid(rawId);
-    const { password } = parse(passwordSchema, body);
+    const { password } = parseBody(passwordSchema, body);
     await this.users.setPassword(id, password);
     await this.users.revokeAll(id);
     await this.audit.record({ type: 'password_reset_by_admin', userId: id, actorId: actor.id });

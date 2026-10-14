@@ -6,6 +6,7 @@ import type { OAuth2Config } from '../config/schema';
 import { OAUTH2_CONFIG, RATE_LIMITER } from '../constants';
 import { AuthError } from '../errors';
 import { Public } from '../guard/public.decorator';
+import { parseBody } from '../security/validate';
 import { normalizeEmail } from '../security/email';
 import { assertSameOrigin } from '../security/origin';
 import { PasswordService } from '../security/password';
@@ -68,13 +69,9 @@ export class InteractionController {
     const origin = req.headers.origin;
     assertSameOrigin(Array.isArray(origin) ? origin[0] : origin, this.cfg.publicUrl);
 
-    const parsed = loginSchema.safeParse(body);
-    if (!parsed.success) {
-      const msg = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
-      throw new AuthError('validation_failed', 422, msg);
-    }
-    const email = normalizeEmail(parsed.data.email);
-    const { password } = parsed.data;
+    const parsed = parseBody(loginSchema, body);
+    const email = normalizeEmail(parsed.email);
+    const { password } = parsed;
     const ip = req.ip ?? 'unknown';
     const userAgent = req.headers['user-agent'];
 
