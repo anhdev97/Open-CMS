@@ -17,6 +17,7 @@
     "argon2": "^0.45.1",
     "kysely": "^0.28.0",
     "oidc-provider": "^9.12.2",
+    "openid-client": "^6.8.8",
     "zod": "^3.25.0"
   },
   "peerDependencies": {

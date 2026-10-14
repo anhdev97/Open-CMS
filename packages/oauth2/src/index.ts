@@ -27,3 +27,7 @@ export * from './provider/provider.service';
 export * from './oauth2.module';
 export * from './interaction/interaction.service';
 export * from './interaction/interaction.controller';
+export * from './bff/cookies';
+export { OidcClient, type TokenSet } from './bff/oidc-client';
+export * from './bff/session.store';
+export * from './bff/auth.controller';

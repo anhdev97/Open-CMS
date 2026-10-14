@@ -145,6 +145,11 @@ export function buildProviderConfig(d: ProviderConfigDeps): Record<string, unkno
     // R12: oidc-provider strips offline_access unless prompt=consent; the admin client always gets one.
     issueRefreshToken: async (_ctx: unknown, client: any, _source: unknown) =>
       client.clientId === ADMIN_CLIENT_ID && client.grantTypeAllowed('refresh_token'),
+    // R13: v9 binds codes/tokens without offline_access (stripped, see R12) to the provider Session. For
+    // the admin client the BFF session (idle/absolute, §6.5) is the single source of truth instead;
+    // explicit revocation (revokeAllGrants) still deletes Grants and Sessions. Others keep v9's default.
+    expiresWithSession: async (_ctx: unknown, source: any) =>
+      source.clientId === ADMIN_CLIENT_ID ? false : !source.scopes.has('offline_access'),
     ttl: {
       AccessToken: () => t().accessToken,
       IdToken: () => t().accessToken,

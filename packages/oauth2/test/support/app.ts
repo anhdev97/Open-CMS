@@ -15,7 +15,10 @@ export const TEST_DB = Symbol('TEST_DB');
 export interface TestApp {
   app: INestApplication;
   db: Kysely<AuthTables>;
+  /** OPENCMS_PUBLIC_URL (no trailing slash): the origin the browser sees. */
   url: string;
+  /** The address the app actually listens on (http://127.0.0.1:<port>). */
+  baseUrl: string;
   close(): Promise<void>;
 }
 
@@ -70,6 +73,7 @@ export async function createTestApp(
       app: started,
       db: testDb.db,
       url: fullEnv.OPENCMS_PUBLIC_URL.replace(/\/+$/, ''),
+      baseUrl: base,
       async close() {
         await started.close();
         if (ownsDb) await testDb.stop();
