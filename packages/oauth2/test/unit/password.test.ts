@@ -14,6 +14,14 @@ describe('PasswordService', () => {
   it('rejects password equal to email case-insensitively', () => {
     expect(() => svc.validate('ADMIN@X.COM', e)).toThrowError(expect.objectContaining({ code: 'weak_password' }));
   });
+  it('rejects password equal to email via the email rule (not length)', () => {
+    const lax = new PasswordService({ minLength: 1 });
+    const msg = /must not equal the email/;
+    expect(() => lax.validate('Admin@Example.com', 'admin@example.com')).toThrowError(msg);
+    expect(() => lax.validate('admin@example.com', ' Admin@Example.com ')).toThrowError(msg);
+    expect(() => svc.validate('Admin@Example.com', 'admin@example.com')).toThrowError(msg);
+    expect(() => svc.validate('admin@example.com', ' Admin@Example.com ')).toThrowError(msg);
+  });
   it('accepts a good password', () => {
     expect(() => svc.validate('correct horse battery', e)).not.toThrow();
   });
