@@ -1,0 +1,171 @@
+/**
+ * Database access and the two migration streams:
+ *   - core migrations (system tables shipped with @opencms/db), tracked in opencms_core_migrations
+ *   - project migrations (generated ct_* tables in <project>/migrations), tracked in opencms_migrations
+ * Core always runs first. Kysely's migrator takes a lock, so several instances
+ * starting at once will not apply the same migration twice.
+ */
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { createJiti } from 'jiti';
+import { Kysely, Migrator, PostgresDialect, sql, type Migration, type MigrationProvider, type MigrationResultSet } from 'kysely';
+import { Pool, types } from 'pg';
+import { SYSTEM_TABLES } from '@opencms/schema';
+
+// Keep `date` columns as 'YYYY-MM-DD' strings instead of timezone-shifted JS Dates.
+types.setTypeParser(1082, (v: string) => v);
+
+export function createDb(connectionString: string): Kysely<any> {
+  return new Kysely<any>({ dialect: new PostgresDialect({ pool: new Pool({ connectionString, max: 10 }) }) });
+}
+
+/* ------------------------------ core ------------------------------ */
+
+export const coreMigrations: Record<string, Migration> = {
+  '0001_system_tables': {
+    async up(db) {
+      await db.schema
+        .createTable(SYSTEM_TABLES.assets)
+        .addColumn('id', 'uuid', (c) => c.primaryKey().defaultTo(sql`gen_random_uuid()`))
+        .addColumn('filename', 'varchar(255)', (c) => c.notNull())
+        .addColumn('url', 'varchar(2048)', (c) => c.notNull())
+        .addColumn('mime_type', 'varchar(127)')
+        .addColumn('size', 'bigint')
+        .addColumn('width', 'integer')
+        .addColumn('height', 'integer')
+        .addColumn('alt', 'varchar(512)')
+        .addColumn('metadata', 'jsonb')
+        .addColumn('created_at', 'timestamptz', (c) => c.notNull().defaultTo(sql`now()`))
+        .execute();
+      await db.schema
+        .createTable(SYSTEM_TABLES.taxonomies)
+        .addColumn('id', 'uuid', (c) => c.primaryKey().defaultTo(sql`gen_random_uuid()`))
+        .addColumn('slug', 'varchar(64)', (c) => c.notNull().unique())
+        .addColumn('name', 'varchar(255)', (c) => c.notNull())
+        .addColumn('created_at', 'timestamptz', (c) => c.notNull().defaultTo(sql`now()`))
+        .execute();
+      await db.schema
+        .createTable(SYSTEM_TABLES.taxonomyTerms)
+        .addColumn('id', 'uuid', (c) => c.primaryKey().defaultTo(sql`gen_random_uuid()`))
+        .addColumn('taxonomy_id', 'uuid', (c) => c.notNull().references(`${SYSTEM_TABLES.taxonomies}.id`).onDelete('cascade'))
+        .addColumn('parent_id', 'uuid', (c) => c.references(`${SYSTEM_TABLES.taxonomyTerms}.id`).onDelete('set null'))
+        .addColumn('slug', 'varchar(128)', (c) => c.notNull())
+        .addColumn('name', 'jsonb', (c) => c.notNull()) // { "vi-VN": "Ô tô", "en": "Car" }
+        .addColumn('sort_order', 'integer', (c) => c.notNull().defaultTo(0))
+        .addUniqueConstraint('opencms_taxonomy_terms_slug_uq', ['taxonomy_id', 'slug'])
+        .execute();
+      await db.schema
+        .createTable(SYSTEM_TABLES.entryVersions)
+        .addColumn('id', 'uuid', (c) => c.primaryKey().defaultTo(sql`gen_random_uuid()`))
+        .addColumn('content_type', 'varchar(64)', (c) => c.notNull())
+        .addColumn('document_id', 'uuid', (c) => c.notNull())
+        .addColumn('snapshot', 'jsonb', (c) => c.notNull())
+        .addColumn('created_at', 'timestamptz', (c) => c.notNull().defaultTo(sql`now()`))
+        .execute();
+      await db.schema
+        .createIndex('opencms_entry_versions_doc_idx')
+        .on(SYSTEM_TABLES.entryVersions)
+        .columns(['content_type', 'document_id', 'created_at'])
+        .execute();
+    },
+    async down(db) {
+      await db.schema.dropTable(SYSTEM_TABLES.entryVersions).execute();
+      await db.schema.dropTable(SYSTEM_TABLES.taxonomyTerms).execute();
+      await db.schema.dropTable(SYSTEM_TABLES.taxonomies).execute();
+      await db.schema.dropTable(SYSTEM_TABLES.assets).execute();
+    },
+  },
+};
+
+/* ----------------------------- project ---------------------------- */
+
+export class FileMigrationProvider implements MigrationProvider {
+  constructor(private readonly dir: string) {}
+  async getMigrations(): Promise<Record<string, Migration>> {
+    if (!fs.existsSync(this.dir)) return {};
+    const jiti = createJiti(path.join(this.dir, 'noop.js'), { moduleCache: false, fsCache: false });
+    const out: Record<string, Migration> = {};
+    const files = fs.readdirSync(this.dir).filter((f) => /^\d{14}_.+\.(ts|js)$/.test(f)).sort();
+    for (const file of files) {
+      const mod = await jiti.import<Migration>(path.join(this.dir, file));
+      if (typeof mod.up !== 'function') throw new Error(`Migration ${file} has no up() export`);
+      out[file.replace(/\.(ts|js)$/, '')] = mod;
+    }
+    return out;
+  }
+}
+
+export function coreMigrator(db: Kysely<any>): Migrator {
+  return new Migrator({
+    db,
+    provider: { getMigrations: async () => coreMigrations },
+    migrationTableName: 'opencms_core_migrations',
+    migrationLockTableName: 'opencms_core_migrations_lock',
+  });
+}
+
+export function projectMigrator(db: Kysely<any>, migrationsDir: string): Migrator {
+  return new Migrator({
+    db,
+    provider: new FileMigrationProvider(migrationsDir),
+    migrationTableName: 'opencms_migrations',
+    migrationLockTableName: 'opencms_migrations_lock',
+  });
+}
+
+export interface MigrationRun {
+  stream: 'core' | 'project';
+  name: string;
+  direction: 'Up' | 'Down';
+  status: 'Success' | 'Error' | 'NotExecuted';
+}
+
+function unwrap(stream: 'core' | 'project', rs: MigrationResultSet): MigrationRun[] {
+  const runs = (rs.results ?? []).map((r) => ({ stream, name: r.migrationName, direction: r.direction, status: r.status }));
+  if (rs.error) {
+    const err = rs.error instanceof Error ? rs.error : new Error(String(rs.error));
+    (err as Error & { runs?: MigrationRun[] }).runs = runs;
+    err.message = `[${stream}] ${err.message}`;
+    throw err;
+  }
+  return runs;
+}
+
+/** Applies pending core migrations, then pending project migrations. */
+export async function migrateUp(db: Kysely<any>, migrationsDir: string): Promise<MigrationRun[]> {
+  const core = unwrap('core', await coreMigrator(db).migrateToLatest());
+  const project = unwrap('project', await projectMigrator(db, migrationsDir).migrateToLatest());
+  return [...core, ...project];
+}
+
+/** Reverts the last `steps` project migrations (core migrations are never rolled back here). */
+export async function migrateDown(db: Kysely<any>, migrationsDir: string, steps = 1): Promise<MigrationRun[]> {
+  const runs: MigrationRun[] = [];
+  for (let i = 0; i < steps; i++) {
+    const r = unwrap('project', await projectMigrator(db, migrationsDir).migrateDown());
+    if (!r.length) break;
+    runs.push(...r);
+  }
+  return runs;
+}
+
+export interface MigrationStatusRow {
+  stream: 'core' | 'project';
+  name: string;
+  executedAt: Date | null;
+}
+
+export async function migrationStatus(db: Kysely<any>, migrationsDir: string): Promise<MigrationStatusRow[]> {
+  const core = await coreMigrator(db).getMigrations();
+  const project = await projectMigrator(db, migrationsDir).getMigrations();
+  return [
+    ...core.map((m) => ({ stream: 'core' as const, name: m.name, executedAt: m.executedAt ?? null })),
+    ...project.map((m) => ({ stream: 'project' as const, name: m.name, executedAt: m.executedAt ?? null })),
+  ];
+}
+
+export async function pendingMigrations(db: Kysely<any>, migrationsDir: string): Promise<MigrationStatusRow[]> {
+  return (await migrationStatus(db, migrationsDir)).filter((m) => !m.executedAt);
+}
+
+export { sql };

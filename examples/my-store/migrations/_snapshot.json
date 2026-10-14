@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "lastMigration": "20260923042345_init",
+  "contentTypes": [
+    {
+      "id": "ct_brand0001",
+      "apiId": "brand",
+      "displayName": "Brand",
+      "fields": [
+        {
+          "id": "fld_brand_name",
+          "name": "name",
+          "kind": "text",
+          "required": true,
+          "localizable": false,
+          "indexed": true,
+          "unique": false,
+          "options": {}
+        },
+        {
+          "id": "fld_brand_slug",
+          "name": "slug",
+          "kind": "slug",
+          "required": true,
+          "localizable": false,
+          "indexed": true,
+          "unique": true,
+          "options": {
+            "from": "name"
+          }
+        },
+        {
+          "id": "fld_brand_logo",
+          "name": "logo",
+          "kind": "asset",
+          "required": false,
+          "localizable": false,
+          "indexed": false,
+          "unique": false,
+          "options": {
+            "accept": [
+              "image/*"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ct_product01",
+      "apiId": "product",
+      "displayName": "Product",
+      "fields": [
+        {
+          "id": "fld_prod_name",
+          "name": "name",
+          "kind": "text",
+          "required": true,
+          "localizable": true,
+          "indexed": true,
+          "unique": false,
+          "options": {}
+        },
+        {
+          "id": "fld_prod_slug",
+          "name": "slug",
+          "kind": "slug",
+          "required": true,
+          "localizable": false,
+          "indexed": true,
+          "unique": true,
+          "options": {
+            "from": "name"
+          }
+        },
+        {
+          "id": "fld_prod_desc",
+          "name": "description",
+          "kind": "richText",
+          "required": false,
+          "localizable": true,
+          "indexed": false,
+          "unique": false,
+          "options": {}
+        },
+        {
+          "id": "fld_prod_price",
+          "name": "price",
+          "kind": "money",
+          "required": false,
+          "localizable": false,
+          "indexed": false,
+          "unique": false,
+          "options": {
+            "currencyMode": "market"
+          }
+        },
+        {
+          "id": "fld_prod_featured",
+          "name": "featured",
+          "kind": "boolean",
+          "required": false,
+          "localizable": false,
+          "indexed": true,
+          "unique": false,
+          "options": {}
+        },
+        {
+          "id": "fld_prod_images",
+          "name": "images",
+          "kind": "asset",
+          "required": false,
+          "localizable": false,
+          "indexed": false,
+          "unique": false,
+          "options": {
+            "multiple": true,
+            "accept": [
+              "image/*"
+            ]
+          }
+        },
+        {
+          "id": "fld_prod_brand",
+          "name": "brand",
+          "kind": "reference",
+          "required": false,
+          "localizable": false,
+          "indexed": true,
+          "unique": false,
+          "options": {
+            "target": "brand"
+          }
+        },
+        {
+          "id": "fld_prod_cats",
+          "name": "categories",
+          "kind": "taxonomy",
+          "required": false,
+          "localizable": false,
+          "indexed": false,
+          "unique": false,
+          "options": {
+            "taxonomy": "product-category",
+            "multiple": true
+          }
+        },
+        {
+          "id": "fld_prod_specs",
+          "name": "specs",
+          "kind": "json",
+          "required": false,
+          "localizable": false,
+          "indexed": false,
+          "unique": false,
+          "options": {}
+        }
+      ]
+    }
+  ]
+}

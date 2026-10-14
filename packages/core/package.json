@@ -1,0 +1,36 @@
+{
+  "name": "@opencms/core",
+  "version": "0.1.0",
+  "description": "NestJS modules for opencms: content engine, admin and storefront APIs",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@opencms/codegen": "workspace:*",
+    "@opencms/db": "workspace:*",
+    "@opencms/schema": "workspace:*",
+    "kysely": "^0.28.0",
+    "zod": "^3.25.0"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "reflect-metadata": "^0.2.0",
+    "rxjs": "^7.8.0"
+  },
+  "devDependencies": {
+    "@nestjs/common": "^11.2.5",
+    "@nestjs/core": "^11.2.5",
+    "@nestjs/platform-express": "^11.2.5",
+    "@types/express": "^5.0.6",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  }
+}
