@@ -105,7 +105,7 @@ export class UserService {
 
   async setPassword(userId: string, password: string, trx?: Trx): Promise<void> {
     const user = await this.findById(userId, trx);
-    if (!user) throw new AuthError('validation_failed', 404, 'User not found');
+    if (!user) throw new AuthError('not_found', 404, 'User not found');
     this.passwords.validate(password, user.email);
     const hash = await this.passwords.hash(password);
     await (trx ?? this.db)
@@ -145,7 +145,7 @@ export class UserService {
         .set({ status, updated_at: new Date() })
         .where('id', '=', userId)
         .executeTakeFirst();
-      if (Number(res.numUpdatedRows) === 0) throw new AuthError('validation_failed', 404, 'User not found');
+      if (Number(res.numUpdatedRows) === 0) throw new AuthError('not_found', 404, 'User not found');
       if (status === 'disabled') await this.revokeAll(userId, undefined, trx);
       await this.audit.record({ type: status === 'disabled' ? 'user_disabled' : 'user_enabled', userId, actorId }, trx);
     });
@@ -154,9 +154,12 @@ export class UserService {
   async delete(userId: string, actorId: string): Promise<void> {
     if (userId === actorId) throw new AuthError('forbidden', 403, 'Cannot delete yourself');
     await this.withSetupLock(async (trx) => {
+      const exists = await trx.selectFrom('auth_users').select('id').where('id', '=', userId).executeTakeFirst();
+      if (!exists) throw new AuthError('not_found', 404, 'User not found');
       if (await this.isLastActiveSuperAdmin(userId, trx)) throw new AuthError('last_super_admin', 409);
       await this.audit.record({ type: 'user_deleted', userId, actorId }, trx);
       await trx.deleteFrom('auth_users').where('id', '=', userId).execute();
+      await this.revoker.revokeAllGrants(userId);
     });
   }
 

@@ -3,7 +3,7 @@ import { Catch, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common'
 export type AuthErrorCode =
   | 'unauthenticated' | 'setup_required' | 'setup_already_completed' | 'invalid_credentials'
   | 'account_disabled' | 'forbidden' | 'origin_mismatch' | 'validation_failed' | 'weak_password'
-  | 'email_taken' | 'last_super_admin' | 'rate_limited'
+  | 'not_found' | 'email_taken' | 'last_super_admin' | 'rate_limited'
   | 'idp_account_not_found' | 'idp_email_unverified' | 'login_expired' | 'invalid_state';
 
 export class AuthError extends Error {

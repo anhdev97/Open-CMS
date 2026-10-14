@@ -108,9 +108,21 @@ describe('UserService', () => {
     const a = await mk();
     const b = await mk();
     await expect(users.delete(a.id, a.id)).rejects.toMatchObject({ code: 'forbidden', status: 403 });
+    revoker.revokeAllGrants.mockClear();
     await users.delete(b.id, a.id);
+    expect(revoker.revokeAllGrants).toHaveBeenCalledWith(b.id);
     expect(await users.findById(b.id)).toBeUndefined();
     expect((await events('user_deleted')).some((e) => e.user_id === b.id && e.actor_id === a.id)).toBe(true);
+  });
+
+  it('unknown user id -> not_found 404, no false audit', async () => {
+    const a = await mk();
+    const ghost = '00000000-0000-0000-0000-000000000001';
+    await expect(users.setPassword(ghost, 'another long password')).rejects.toMatchObject({ code: 'not_found', status: 404 });
+    await expect(users.setStatus(ghost, 'disabled', a.id)).rejects.toMatchObject({ code: 'not_found', status: 404 });
+    await expect(users.delete(ghost, a.id)).rejects.toMatchObject({ code: 'not_found', status: 404 });
+    expect((await events('user_deleted')).some((e) => e.user_id === ghost)).toBe(false);
+    expect((await events('user_disabled')).some((e) => e.user_id === ghost)).toBe(false);
   });
 
   it('revokeAll keeps exceptSessionId and calls revoker once', async () => {

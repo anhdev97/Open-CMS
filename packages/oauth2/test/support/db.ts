@@ -24,7 +24,9 @@ export async function startTestDb(): Promise<TestDb> {
   const url = u.toString();
   const pool = new Pool({ connectionString: url, max: 10 });
   // `drop database ... with (force)` can race pool shutdown and kill an idle client; that is expected.
-  pool.on('error', () => {});
+  pool.on('error', (err: Error & { code?: string }) => {
+    if (err.code !== '57P01') console.error('oauth2 test pool error', err);
+  });
   const db = new Kysely<AuthTables>({ dialect: new PostgresDialect({ pool }) });
   try {
     const { error } = await coreMigrator(db).migrateToLatest();
