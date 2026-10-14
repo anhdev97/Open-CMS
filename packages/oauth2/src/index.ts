@@ -25,3 +25,5 @@ export {
 } from './provider/provider.factory';
 export * from './provider/provider.service';
 export * from './oauth2.module';
+export * from './interaction/interaction.service';
+export * from './interaction/interaction.controller';

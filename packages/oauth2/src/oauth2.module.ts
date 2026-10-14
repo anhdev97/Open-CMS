@@ -2,6 +2,8 @@ import { Global, Module, type DynamicModule, type InjectionToken } from '@nestjs
 import { AuditService } from './audit/audit.service';
 import { loadConfig, type AuthFileConfig, type OAuth2Config } from './config/schema';
 import { AUTH_SETTINGS, GRANT_REVOKER, OAUTH2_CONFIG, OAUTH2_DB, RATE_LIMITER } from './constants';
+import { InteractionController } from './interaction/interaction.controller';
+import { InteractionService } from './interaction/interaction.service';
 import { ProviderService } from './provider/provider.service';
 import { PasswordService } from './security/password';
 import { InMemoryRateLimiter } from './security/rate-limiter';
@@ -27,7 +29,7 @@ export class OAuth2Module {
     return {
       module: OAuth2Module,
       global: true,
-      controllers: [SetupController],
+      controllers: [SetupController, InteractionController],
       providers: [
         { provide: OAUTH2_DB, useExisting: opts.dbToken },
         // Throws ConfigError on a missing/short secret or missing public URL → app refuses to start.
@@ -54,6 +56,7 @@ export class OAuth2Module {
           inject: [OAUTH2_CONFIG, UserService, PasswordService, AuditService],
         },
         ProviderService,
+        InteractionService,
       ],
       exports: [
         OAUTH2_DB,
@@ -67,6 +70,7 @@ export class OAuth2Module {
         SetupState,
         BootstrapService,
         ProviderService,
+        InteractionService,
       ],
     };
   }

@@ -4,6 +4,7 @@ import { createServer } from 'node:net';
 import { Global, Module, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { Kysely } from 'kysely';
+import type { AuthFileConfig } from '../../src/config/schema';
 import type { AuthTables } from '../../src/db/types';
 import { AuthExceptionFilter } from '../../src/errors';
 import { OAuth2Module } from '../../src/oauth2.module';
@@ -34,10 +35,11 @@ async function freePort(): Promise<number> {
 /**
  * Boots the full OAuth2Module on a real HTTP port (R7). `opts.db` reuses an existing test database
  * (its lifetime then stays with the caller); otherwise a fresh database is created and dropped on close().
+ * `opts.auth` is passed through as the file `auth` config (e.g. `{ ttl: { interaction: 1 } }`).
  */
 export async function createTestApp(
   env: Record<string, string> = {},
-  opts: { db?: TestDb } = {},
+  opts: { db?: TestDb; auth?: Partial<AuthFileConfig> } = {},
 ): Promise<TestApp> {
   const testDb = opts.db ?? (await startTestDb());
   const ownsDb = !opts.db;
@@ -58,7 +60,7 @@ export async function createTestApp(
     class TestDbModule {}
 
     const mod = await Test.createTestingModule({
-      imports: [TestDbModule, OAuth2Module.forRoot({ dbToken: TEST_DB, env: fullEnv })],
+      imports: [TestDbModule, OAuth2Module.forRoot({ dbToken: TEST_DB, env: fullEnv, auth: opts.auth })],
     }).compile();
     app = mod.createNestApplication({ logger: false });
     app.useGlobalFilters(new AuthExceptionFilter());

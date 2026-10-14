@@ -128,6 +128,10 @@ export function buildProviderConfig(d: ProviderConfigDeps): Record<string, unkno
     jwks: { keys: d.jwks },
     cookies: {
       keys: [deriveKey(d.cfg.secret, 'cookie').toString('base64url')],
+      // oidc-provider scopes the `_interaction` cookie to the interaction URL's path (/admin/login),
+      // which the browser would not send to the Nest routes at /oauth2/interaction/:uid. A `path` in
+      // cookies.short overrides that (the `_interaction_resume` cookie still sets its own path).
+      short: { path: '/oauth2/interaction' },
     },
     scopes: [...ADMIN_SCOPES],
     claims: { openid: ['sub'], email: ['email'], profile: ['name'] },
