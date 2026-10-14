@@ -8,7 +8,8 @@ import { loadConfig, type AuthFileConfig, type OAuth2Config } from './config/sch
 import { AuthExceptionFilter } from './errors';
 import { AuthGuard } from './guard/auth.guard';
 import { SessionAuthenticator } from './guard/session-auth.service';
-import { AUTH_SETTINGS, GRANT_REVOKER, OAUTH2_CONFIG, OAUTH2_DB, RATE_LIMITER } from './constants';
+import { CleanupService } from './maintenance/cleanup.service';
+import { AUTH_SETTINGS, PUBLIC_PATH_PREFIXES, GRANT_REVOKER, OAUTH2_CONFIG, OAUTH2_DB, RATE_LIMITER } from './constants';
 import { IdentityLinker } from './idp/identity-linker';
 import { IDENTITY_PROVIDERS } from './idp/identity-provider';
 import { IdpController } from './idp/idp.controller';
@@ -33,6 +34,8 @@ export interface OAuth2ModuleOptions {
   auth?: Partial<AuthFileConfig>;
   /** Defaults to process.env. */
   env?: NodeJS.ProcessEnv;
+  /** `/api` path prefixes served without a session (published-content delivery API). Default `['/api/content/']`. */
+  publicPathPrefixes?: string[];
 }
 
 @Global()
@@ -52,6 +55,8 @@ export class OAuth2Module {
           useFactory: (cfg: OAuth2Config) => new ConfigAuthSettingsProvider(cfg),
           inject: [OAUTH2_CONFIG],
         },
+        { provide: PUBLIC_PATH_PREFIXES, useValue: (opts.publicPathPrefixes ?? ['/api/content/']).map((p) => p.toLowerCase()) },
+        CleanupService,
         { provide: RATE_LIMITER, useFactory: () => new InMemoryRateLimiter() },
         {
           provide: PasswordService,

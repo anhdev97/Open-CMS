@@ -5,10 +5,7 @@ export * from './settings/settings.provider';
 export * from './db/types';
 export { oauth2CoreMigrations } from './db/migrations';
 
-import { registerCoreMigrations } from '@opencms/db';
-import { oauth2CoreMigrations } from './db/migrations';
-
-registerCoreMigrations(oauth2CoreMigrations);
+import './register-migrations';
 export * from './guard/public.decorator';
 export * from './guard/current-user.decorator';
 export * from './guard/auth.guard';
@@ -38,3 +35,4 @@ export * from './idp/identity-provider';
 export { OidcIdentityProvider } from './idp/oidc.identity-provider';
 export * from './idp/identity-linker';
 export * from './idp/idp.controller';
+export * from './maintenance/cleanup.service';

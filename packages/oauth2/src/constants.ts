@@ -8,3 +8,6 @@ export const IDP_COOKIE = 'oc_idp';
 export const RATE_LIMITER = Symbol('RATE_LIMITER');
 export const GRANT_REVOKER = Symbol('GRANT_REVOKER');
 export const OAUTH2_CONFIG = Symbol('OAUTH2_CONFIG');
+
+/** Lower-cased `/api/...` prefixes the AuthGuard lets through without a session (R17). */
+export const PUBLIC_PATH_PREFIXES = Symbol('OAUTH2_PUBLIC_PATH_PREFIXES');
