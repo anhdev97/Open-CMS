@@ -1,3 +1,5 @@
+// Registers the oauth2 core migrations so migrate:up/status see them (R8). Nest-free entry.
+import '@opencms/oauth2/migrations';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Command } from 'commander';

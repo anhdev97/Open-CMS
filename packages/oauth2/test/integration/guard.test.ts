@@ -433,3 +433,43 @@ describe('AuthGuard refresh (access TTL 2 s)', () => {
     expect(me.status).toBe(401);
   });
 });
+
+@Controller('api/content')
+class PublicContentController {
+  @Get('x')
+  x(): { ok: true } {
+    return { ok: true };
+  }
+}
+
+@Controller('api/contents')
+class NotPublicController {
+  @Get()
+  list(): { ok: true } {
+    return { ok: true };
+  }
+}
+
+describe('publicPathPrefixes (R17)', () => {
+  let t: TestApp;
+  let api: ReturnType<typeof client>;
+  beforeAll(async () => {
+    t = await createTestApp({}, { auth, controllers: [PublicContentController, NotPublicController] });
+    api = client(t);
+    await t.app.get(UserService).create({ email: 'admin@x.com', name: 'Admin', password: PW });
+  });
+  afterAll(async () => {
+    await t?.close();
+  });
+
+  it('/api/content/** is reachable without a session, in any case', async () => {
+    expect((await api('/api/content/x')).body).toEqual({ ok: true });
+    expect((await api('/API/Content/x')).status).toBe(200);
+  });
+
+  it('/api/contents (no trailing-slash match) stays protected', async () => {
+    const r = await api('/api/contents');
+    expect(r.status).toBe(401);
+    expect(r.body.error.code).toBe('unauthenticated');
+  });
+});

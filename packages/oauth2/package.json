@@ -5,6 +5,14 @@
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./migrations": { "types": "./dist/register-migrations.d.ts", "default": "./dist/register-migrations.js" },
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": { "migrations": ["dist/register-migrations.d.ts"] }
+  },
   "files": [
     "dist"
   ],

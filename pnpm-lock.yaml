@@ -88,6 +88,9 @@ importers:
       '@opencms/db':
         specifier: workspace:*
         version: link:../db
+      '@opencms/oauth2':
+        specifier: workspace:*
+        version: link:../oauth2
       '@opencms/schema':
         specifier: workspace:*
         version: link:../schema

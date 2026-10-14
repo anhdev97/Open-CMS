@@ -2,7 +2,7 @@ import { Inject, Injectable, type CanActivate, type ExecutionContext } from '@ne
 import { Reflector } from '@nestjs/core';
 import type { Response } from 'express';
 import type { OAuth2Config } from '../config/schema';
-import { OAUTH2_CONFIG } from '../constants';
+import { OAUTH2_CONFIG, PUBLIC_PATH_PREFIXES } from '../constants';
 import { AuthError } from '../errors';
 import { assertSameOrigin } from '../security/origin';
 import { SetupState } from '../setup/setup-state';
@@ -30,6 +30,7 @@ export class AuthGuard implements CanActivate {
   constructor(
     @Inject(Reflector) private readonly reflector: Reflector,
     @Inject(OAUTH2_CONFIG) private readonly cfg: OAuth2Config,
+    @Inject(PUBLIC_PATH_PREFIXES) private readonly publicPrefixes: string[],
     @Inject(SetupState) private readonly setup: SetupState,
     @Inject(SessionAuthenticator) private readonly auth: SessionAuthenticator,
   ) {}
@@ -39,6 +40,7 @@ export class AuthGuard implements CanActivate {
     const req = ctx.switchToHttp().getRequest<AuthenticatedRequest>();
     const path = scopePath(req);
     if (path !== '/api' && !path.startsWith('/api/')) return true;
+    if (this.publicPrefixes.some((p) => path.startsWith(p))) return true;
     const targets = [ctx.getHandler(), ctx.getClass()];
     if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, targets)) return true;
 
