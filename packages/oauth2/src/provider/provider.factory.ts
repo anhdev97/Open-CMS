@@ -69,13 +69,18 @@ export function adminClientMetadata(cfg: Pick<OAuth2Config, 'secret' | 'publicUr
   };
 }
 
-/** Spec §6.1 step 3. Returns the metadata that is also handed to the provider as a static client. */
+/**
+ * Spec §6.1 step 3. Stores the metadata without `client_secret`; returns the full metadata (with secret)
+ * that is handed to the provider as a static client.
+ */
 export async function upsertAdminClient(
   db: Kysely<AuthTables>,
   cfg: Pick<OAuth2Config, 'secret' | 'publicUrl'>,
 ): Promise<Record<string, unknown>> {
   const metadata = adminClientMetadata(cfg);
-  const json = JSON.stringify(metadata);
+  // The secret is derived from OPENCMS_SECRET on every boot; never persist it.
+  const { client_secret: _secret, ...stored } = metadata;
+  const json = JSON.stringify(stored);
   await db
     .insertInto('auth_oauth_clients')
     .values({ client_id: ADMIN_CLIENT_ID, metadata: json, created_at: new Date(), updated_at: new Date() })
@@ -133,10 +138,9 @@ export function buildProviderConfig(d: ProviderConfigDeps): Record<string, unkno
       rpInitiatedLogout: { enabled: true },
     },
     rotateRefreshToken: true,
-    issueRefreshToken: async (_ctx: unknown, client: any, source: any) =>
-      client.clientId === ADMIN_CLIENT_ID &&
-      client.grantTypeAllowed('refresh_token') &&
-      source.scopes.has('offline_access'),
+    // R12: oidc-provider strips offline_access unless prompt=consent; the admin client always gets one.
+    issueRefreshToken: async (_ctx: unknown, client: any, _source: unknown) =>
+      client.clientId === ADMIN_CLIENT_ID && client.grantTypeAllowed('refresh_token'),
     ttl: {
       AccessToken: () => t().accessToken,
       IdToken: () => t().accessToken,

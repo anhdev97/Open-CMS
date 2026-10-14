@@ -57,7 +57,8 @@ export class ProviderService implements OnModuleInit, GrantRevoker {
   }
 
   /**
-   * Destroys every Grant of `userId` plus all codes/tokens issued under it. Uses OAUTH2_DB directly
+   * Destroys every Grant of `userId`, all codes/tokens issued under it, and the user's provider
+   * Sessions. Uses OAUTH2_DB directly
    * (never a caller's transaction) so it also works before the Provider exists.
    */
   async revokeAllGrants(userId: string): Promise<void> {
@@ -71,5 +72,11 @@ export class ProviderService implements OnModuleInit, GrantRevoker {
       await new this.adapter('Grant').revokeByGrantId(id);
       await new this.adapter('Grant').destroy(id);
     }
+    // Without this the surviving provider `_session` would re-mint a grant on the next /oauth2/auth.
+    await this.db
+      .deleteFrom('auth_oidc_payloads')
+      .where('kind', '=', 'Session')
+      .where(sql<string>`payload->>'accountId'`, '=', userId)
+      .execute();
   }
 }

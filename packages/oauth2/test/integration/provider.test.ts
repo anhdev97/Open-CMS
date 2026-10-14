@@ -1,8 +1,8 @@
 import 'reflect-metadata';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomBytes } from 'node:crypto';
-import { loadConfig } from '../../src/config/schema';
-import { ADMIN_CLIENT_ID, GRANT_REVOKER } from '../../src/constants';
+import { loadConfig, type OAuth2Config } from '../../src/config/schema';
+import { ADMIN_CLIENT_ID, GRANT_REVOKER, OAUTH2_CONFIG } from '../../src/constants';
 import { deriveKey } from '../../src/security/crypto';
 import { createKyselyAdapter } from '../../src/provider/kysely.adapter';
 import { adminClientSecret } from '../../src/provider/provider.factory';
@@ -53,8 +53,9 @@ describe('oidc provider mounted at /oauth2', () => {
     expect(meta.post_logout_redirect_uris).toEqual([`${t.url}/admin/login`]);
     expect(meta.grant_types).toEqual(['authorization_code', 'refresh_token']);
     expect(meta.token_endpoint_auth_method).toBe('client_secret_basic');
+    expect(meta).not.toHaveProperty('client_secret');
 
-    const secret = meta.client_secret as string;
+    const secret = adminClientSecret(t.app.get<OAuth2Config>(OAUTH2_CONFIG));
     const ok = await fetch(`${t.url}/oauth2/token/revocation`, {
       method: 'POST',
       headers: {
@@ -85,7 +86,7 @@ describe('oidc provider mounted at /oauth2', () => {
     expect(JSON.stringify(body)).not.toMatch(/stack|at .*\.js/);
   });
 
-  it('GrantRevoker removes only the given user\'s Grants and their tokens', async () => {
+  it('GrantRevoker removes only the given user\'s Grants, their tokens and Sessions', async () => {
     const A = createKyselyAdapter(t.db);
     const grants = new A('Grant');
     const access = new A('AccessToken');
@@ -96,6 +97,9 @@ describe('oidc provider mounted at /oauth2', () => {
     await grants.upsert('g-o', { accountId: other, clientId: ADMIN_CLIENT_ID }, 600);
     await access.upsert('at-u1', { accountId: u, grantId: 'g-u1' }, 600);
     await access.upsert('at-o', { accountId: other, grantId: 'g-o' }, 600);
+    const sessions = new A('Session');
+    await sessions.upsert('s-u', { accountId: u, uid: 'uid-u' }, 600);
+    await sessions.upsert('s-o', { accountId: other, uid: 'uid-o' }, 600);
 
     await t.app.get<GrantRevoker>(GRANT_REVOKER).revokeAllGrants(u);
 
@@ -103,6 +107,7 @@ describe('oidc provider mounted at /oauth2', () => {
     expect(left).toEqual([
       { kind: 'AccessToken', id: 'at-o' },
       { kind: 'Grant', id: 'g-o' },
+      { kind: 'Session', id: 's-o' },
     ]);
   });
 });
