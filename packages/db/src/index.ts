@@ -95,10 +95,35 @@ export class FileMigrationProvider implements MigrationProvider {
   }
 }
 
+const registeredSources: Record<string, Migration>[] = [];
+
+/**
+ * Lets other packages (e.g. @opencms/oauth2) contribute migrations to the core stream.
+ * Registering the same object again is a no-op; a key that already exists (built-in or
+ * from another source) throws.
+ */
+export function registerCoreMigrations(source: Record<string, Migration>): void {
+  if (registeredSources.includes(source)) return;
+  const taken = allCoreMigrations();
+  for (const key of Object.keys(source)) {
+    if (key in taken) throw new Error(`Core migration "${key}" is already registered`);
+  }
+  registeredSources.push(source);
+}
+
+/** Built-in core migrations merged with registered sources, sorted by key. */
+export function allCoreMigrations(): Record<string, Migration> {
+  const merged: Record<string, Migration> = { ...coreMigrations };
+  for (const src of registeredSources) Object.assign(merged, src);
+  const out: Record<string, Migration> = {};
+  for (const key of Object.keys(merged).sort()) out[key] = merged[key];
+  return out;
+}
+
 export function coreMigrator(db: Kysely<any>): Migrator {
   return new Migrator({
     db,
-    provider: { getMigrations: async () => coreMigrations },
+    provider: { getMigrations: async () => allCoreMigrations() },
     migrationTableName: 'opencms_core_migrations',
     migrationLockTableName: 'opencms_core_migrations_lock',
   });

@@ -171,9 +171,15 @@ importers:
 
   packages/oauth2:
     dependencies:
+      '@opencms/db':
+        specifier: workspace:*
+        version: link:../db
       argon2:
         specifier: ^0.45.1
         version: 0.45.1
+      kysely:
+        specifier: ^0.28.0
+        version: 0.28.17
       zod:
         specifier: ^3.25.0
         version: 3.25.76
@@ -184,6 +190,12 @@ importers:
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
+      pg:
+        specifier: ^8.13.0
+        version: 8.23.1
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
