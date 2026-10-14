@@ -13,3 +13,15 @@ export * from './guard/public.decorator';
 export * from './setup/bootstrap.service';
 export * from './setup/setup-state';
 export * from './setup/setup.controller';
+export * from './audit/audit.service';
+export * from './users/user.service';
+export * from './security/password';
+export * from './security/rate-limiter';
+export { createKyselyAdapter } from './provider/kysely.adapter';
+export type { Adapter, AdapterPayload, AdapterConstructor } from './provider/kysely.adapter';
+export { ensureSigningKey, type JWK } from './provider/signing-keys';
+export {
+  ADMIN_SCOPES, adminClientSecret, adminClientMetadata, upsertAdminClient, issuerFor, type OidcProvider,
+} from './provider/provider.factory';
+export * from './provider/provider.service';
+export * from './oauth2.module';

@@ -29,8 +29,8 @@ const SUPER_ADMIN = 'super_admin';
 export class UserService {
   constructor(
     @Inject(OAUTH2_DB) private readonly db: Kysely<AuthTables>,
-    private readonly passwords: PasswordService,
-    private readonly audit: AuditService,
+    @Inject(PasswordService) private readonly passwords: PasswordService,
+    @Inject(AuditService) private readonly audit: AuditService,
     @Inject(GRANT_REVOKER) private readonly revoker: GrantRevoker,
   ) {}
 
