@@ -72,20 +72,30 @@ export class SessionStore {
 
   async get(cookieValue: string): Promise<SessionRow | undefined> {
     if (!cookieValue) return undefined;
-    const row = await this.db
-      .selectFrom('auth_sessions')
-      .selectAll()
-      .where('id_hash', '=', sha256(cookieValue))
-      .executeTakeFirst();
+    return this.getByHash(sha256(cookieValue));
+  }
+
+  /** Same as get(), by `sha256(cookie)`. */
+  async getByHash(idHash: string): Promise<SessionRow | undefined> {
+    const row = await this.db.selectFrom('auth_sessions').selectAll().where('id_hash', '=', idHash).executeTakeFirst();
     return row ? this.toRow(row) : undefined;
   }
 
   /**
    * Runs `fn` while holding a row lock (`SELECT … FOR UPDATE`) on the session, so concurrent requests
-   * refresh once. `row` is undefined when the session no longer exists.
+   * refresh once. `row` is undefined when the session no longer exists. With `lockTimeoutMs` a lock
+   * wait longer than that throws (Postgres `55P03 lock_not_available`).
    */
-  async lockForRefresh<T>(idHash: string, fn: (row: SessionRow | undefined, trx: Trx) => Promise<T>): Promise<T> {
+  async lockForRefresh<T>(
+    idHash: string,
+    fn: (row: SessionRow | undefined, trx: Trx) => Promise<T>,
+    opts: { lockTimeoutMs?: number } = {},
+  ): Promise<T> {
     return this.db.transaction().execute(async (trx) => {
+      if (opts.lockTimeoutMs !== undefined) {
+        // Fails the SELECT … FOR UPDATE with 55P03 instead of waiting forever.
+        await sql.raw(`set local lock_timeout = '${Math.max(1, Math.floor(opts.lockTimeoutMs))}ms'`).execute(trx);
+      }
       const row = await trx
         .selectFrom('auth_sessions')
         .selectAll()

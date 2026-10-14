@@ -174,6 +174,20 @@ describe('AuthGuard, me, logout (default TTLs)', () => {
     expect(ok.body).toEqual({ ok: true, id: adminId });
   });
 
+  it('mixed-case /api paths are guarded too (Express routes case-insensitively)', async () => {
+    const upper = await api('/API/test/whoami');
+    expect(upper.status).toBe(401);
+    expect(upper.body.error.code).toBe('unauthenticated');
+    const echo = await api('/Api/test/echo', { method: 'POST', origin: 'http://evil.example' });
+    expect(echo.status).toBe(403);
+    expect(echo.body.error.code).toBe('origin_mismatch');
+    expect((await api('/aPI/TEST/needs-role')).status).toBe(401);
+    const { sessionCookie } = await loginAs(t, 'admin@x.com', PW);
+    const role = await api('/API/Test/Needs-Role', { cookie: sessionCookie });
+    expect(role.status).toBe(403);
+    expect(role.body.error.code).toBe('forbidden');
+  });
+
   it('disabling the user via UserService → next request 401 and cookie cleared', async () => {
     const users = t.app.get(UserService);
     const other = await users.create({ email: 'second@x.com', name: 'Second', password: PW });
@@ -329,6 +343,28 @@ describe('AuthGuard refresh (access TTL 2 s)', () => {
       spy.mockRestore();
     }
   });
+
+  it('12 parallel requests at refresh time → all 200, exactly one refresh, no pool deadlock', async () => {
+    const { sessionCookie } = await loginAs(t, 'admin@x.com', PW);
+    await sleep(2100);
+    const oidc = t.app.get(OidcClient);
+    const original = oidc.refresh.bind(oidc);
+    const spy = vi.spyOn(oidc, 'refresh').mockImplementation(async (rt) => {
+      await sleep(300);
+      return original(rt);
+    });
+    try {
+      const results = await Promise.all(
+        Array.from({ length: 12 }, (_, i) =>
+          api(i % 2 ? '/api/test/whoami' : '/api/auth/me', { cookie: sessionCookie }),
+        ),
+      );
+      expect(results.map((r) => r.status)).toEqual(Array(12).fill(200));
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  }, 20_000);
 
   it('refresh failure → 401, session destroyed, cookie cleared', async () => {
     const { sessionCookie } = await loginAs(t, 'admin@x.com', PW);

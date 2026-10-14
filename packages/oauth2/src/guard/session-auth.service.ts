@@ -12,6 +12,9 @@ import type { RequestAuthSession, RequestUser } from './current-user.decorator';
 
 /** Refresh when the access token has less than this left (spec §6.5 step 4). */
 const REFRESH_MARGIN_MS = 60_000;
+/** `lock_timeout` of the refresh transaction. */
+const LOCK_TIMEOUT_MS = 5_000;
+const LOCK_NOT_AVAILABLE = '55P03';
 
 export type AuthenticatedRequest = Request & { user?: RequestUser; authSession?: RequestAuthSession };
 
@@ -23,6 +26,7 @@ export type AuthenticatedRequest = Request & { user?: RequestUser; authSession?:
 export class SessionAuthenticator {
   private readonly logger = new Logger('OAuth2');
   private readonly secure: boolean;
+  private readonly refreshing = new Map<string, Promise<boolean>>();
 
   constructor(
     @Inject(OAUTH2_CONFIG) cfg: OAuth2Config,
@@ -90,20 +94,48 @@ export class SessionAuthenticator {
     return result;
   }
 
-  /** False when the session vanished or the refresh failed (the caller destroys the session). */
-  private async refresh(read: SessionRow): Promise<boolean> {
+  /**
+   * False when the session vanished or the refresh failed (the caller destroys the session).
+   *
+   * In-process single-flight per session: concurrent requests of one session await the same refresh
+   * without taking a pool connection each. Otherwise N waiters blocked on the row lock could hold every
+   * connection while the lock holder's own /oauth2/token call (same pool) waits for one: a deadlock.
+   * The row lock stays for multi-instance safety.
+   */
+  private refresh(read: SessionRow): Promise<boolean> {
+    const inFlight = this.refreshing.get(read.idHash);
+    if (inFlight) return inFlight;
+    const p = this.refreshLocked(read).finally(() => this.refreshing.delete(read.idHash));
+    this.refreshing.set(read.idHash, p);
+    return p;
+  }
+
+  private async refreshLocked(read: SessionRow): Promise<boolean> {
     const seen = read.accessExpiresAt?.getTime();
     try {
-      return await this.sessions.lockForRefresh(read.idHash, async (row, trx) => {
-        if (!row) return false;
-        // Another request refreshed while we waited for the lock: its tokens are ours too.
-        if (row.accessExpiresAt?.getTime() !== seen) return true;
-        if (!row.refreshToken) return false;
-        const tokens = await this.oidc.refresh(row.refreshToken);
-        await this.sessions.updateTokens(row.idHash, tokens, trx);
-        return true;
-      });
+      return await this.sessions.lockForRefresh(
+        read.idHash,
+        async (row, trx) => {
+          if (!row) return false;
+          // Another request (or instance) refreshed while we waited for the lock: its tokens are ours too.
+          if (row.accessExpiresAt?.getTime() !== seen) return true;
+          if (!row.refreshToken) return false;
+          const tokens = await this.oidc.refresh(row.refreshToken);
+          await this.sessions.updateTokens(row.idHash, tokens, trx);
+          return true;
+        },
+        { lockTimeoutMs: LOCK_TIMEOUT_MS },
+      );
     } catch (e) {
+      if ((e as { code?: string }).code === LOCK_NOT_AVAILABLE) {
+        // Another instance held the lock too long: continue only if it has refreshed meanwhile.
+        try {
+          const now = await this.sessions.getByHash(read.idHash);
+          return !!now && now.accessExpiresAt?.getTime() !== seen;
+        } catch {
+          return false;
+        }
+      }
       this.warn('Token refresh failed', e);
       return false;
     }

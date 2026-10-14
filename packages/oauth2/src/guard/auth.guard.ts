@@ -12,7 +12,14 @@ import { SessionAuthenticator, type AuthenticatedRequest } from './session-auth.
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-const pathOf = (req: AuthenticatedRequest): string => (req.originalUrl ?? req.url ?? '').split('?')[0];
+/**
+ * Scope is decided from the matched route pattern (set by Express before guards run), lower-cased:
+ * Express routes case-insensitively, so `/API/x` reaches an `api/x` handler and must be guarded too.
+ */
+const scopePath = (req: AuthenticatedRequest): string => {
+  const route = (req as { route?: { path?: unknown } }).route?.path;
+  return (typeof route === 'string' ? route : req.path ?? '').toLowerCase();
+};
 
 /**
  * Global guard (APP_GUARD) for `/api/**` (spec §6.5). Routes outside `/api` (host app, `/admin`, `/oauth2`
@@ -30,7 +37,7 @@ export class AuthGuard implements CanActivate {
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     if (ctx.getType() !== 'http') return true;
     const req = ctx.switchToHttp().getRequest<AuthenticatedRequest>();
-    const path = pathOf(req);
+    const path = scopePath(req);
     if (path !== '/api' && !path.startsWith('/api/')) return true;
     const targets = [ctx.getHandler(), ctx.getClass()];
     if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, targets)) return true;
