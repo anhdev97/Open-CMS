@@ -1,9 +1,13 @@
 import { Global, Module, type DynamicModule, type InjectionToken } from '@nestjs/common';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { AuditService } from './audit/audit.service';
 import { AuthController } from './bff/auth.controller';
 import { OidcClient } from './bff/oidc-client';
 import { SessionStore } from './bff/session.store';
 import { loadConfig, type AuthFileConfig, type OAuth2Config } from './config/schema';
+import { AuthExceptionFilter } from './errors';
+import { AuthGuard } from './guard/auth.guard';
+import { SessionAuthenticator } from './guard/session-auth.service';
 import { AUTH_SETTINGS, GRANT_REVOKER, OAUTH2_CONFIG, OAUTH2_DB, RATE_LIMITER } from './constants';
 import { InteractionController } from './interaction/interaction.controller';
 import { InteractionService } from './interaction/interaction.service';
@@ -62,6 +66,10 @@ export class OAuth2Module {
         InteractionService,
         OidcClient,
         SessionStore,
+        SessionAuthenticator,
+        // Spec §6.5: every /api/** route is protected unless @Public(); §8 error JSON everywhere.
+        { provide: APP_GUARD, useClass: AuthGuard },
+        { provide: APP_FILTER, useClass: AuthExceptionFilter },
       ],
       exports: [
         OAUTH2_DB,
@@ -78,6 +86,7 @@ export class OAuth2Module {
         InteractionService,
         OidcClient,
         SessionStore,
+        SessionAuthenticator,
       ],
     };
   }

@@ -140,14 +140,11 @@ export class OidcClient {
   }
 
   /** RP-initiated logout URL (public origin). Async: it may need discovery first. */
-  async endSessionUrl(idToken: string): Promise<string> {
+  async endSessionUrl(idToken?: string): Promise<string> {
     const client = await loadOpenidClient();
-    return client
-      .buildEndSessionUrl(await this.getConfig(), {
-        id_token_hint: idToken,
-        post_logout_redirect_uri: `${this.cfg.publicUrl}/admin/login`,
-      })
-      .toString();
+    const params: Record<string, string> = { post_logout_redirect_uri: `${this.cfg.publicUrl}/admin/login` };
+    if (idToken) params.id_token_hint = idToken;
+    return client.buildEndSessionUrl(await this.getConfig(), params).toString();
   }
 }
 

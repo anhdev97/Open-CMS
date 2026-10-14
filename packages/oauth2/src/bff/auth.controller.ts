@@ -1,11 +1,16 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { Controller, Get, Inject, Logger, Req, Res } from '@nestjs/common';
+import { Controller, Get, HttpCode, Inject, Logger, Post, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { AuditService } from '../audit/audit.service';
 import type { OAuth2Config } from '../config/schema';
 import { AUTH_SETTINGS, LOGIN_COOKIE, OAUTH2_CONFIG, SESSION_COOKIE } from '../constants';
+import { AuthError } from '../errors';
+import type { RequestUser } from '../guard/current-user.decorator';
 import { Public } from '../guard/public.decorator';
+import { SessionAuthenticator, type AuthenticatedRequest } from '../guard/session-auth.service';
 import { deriveKey, open, seal } from '../security/crypto';
 import { sanitizeReturnTo } from '../security/return-to';
+import { SetupState } from '../setup/setup-state';
 import type { AuthSettingsProvider } from '../settings/settings.provider';
 import { UserService } from '../users/user.service';
 import { isSecureUrl, parseCookies, serializeCookie } from './cookies';
@@ -28,10 +33,10 @@ const first = (v: unknown): string | undefined =>
   typeof v === 'string' ? v : Array.isArray(v) && typeof v[0] === 'string' ? v[0] : undefined;
 
 /**
- * BFF side of spec §6.3 (steps 1–2 and 6): the server is the confidential client; the browser only ever
- * gets `oc_login` (sealed PKCE/state) and `oc_session` (random id). No token leaves the server.
+ * BFF side of spec §6.3 (steps 1–2 and 6), §6.5 (`me`) and §6.6 (`logout`): the server is the confidential
+ * client; the browser only ever gets `oc_login` (sealed PKCE/state) and `oc_session` (random id). No token
+ * leaves the server. login/callback/me are public (spec §3); logout goes through AuthGuard (Origin + session).
  */
-@Public()
 @Controller('api/auth')
 export class AuthController {
   private readonly logger = new Logger('OAuth2');
@@ -44,11 +49,15 @@ export class AuthController {
     @Inject(OidcClient) private readonly oidc: OidcClient,
     @Inject(SessionStore) private readonly sessions: SessionStore,
     @Inject(UserService) private readonly users: UserService,
+    @Inject(SetupState) private readonly setup: SetupState,
+    @Inject(SessionAuthenticator) private readonly auth: SessionAuthenticator,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {
     this.cookieKey = deriveKey(cfg.secret, 'cookie');
     this.secure = isSecureUrl(cfg.publicUrl);
   }
 
+  @Public()
   @Get('login')
   async login(@Req() req: Request, @Res() res: Response): Promise<void> {
     const loginHint = first(req.query.login_hint);
@@ -84,6 +93,7 @@ export class AuthController {
     res.redirect(302, url.toString());
   }
 
+  @Public()
   @Get('callback')
   async callback(@Req() req: Request, @Res() res: Response): Promise<void> {
     res.setHeader('Cache-Control', 'no-store');
@@ -129,6 +139,47 @@ export class AuthController {
     }
     res.append('Set-Cookie', sessionCookie);
     res.redirect(302, st.returnTo);
+  }
+
+  /** Public so it can answer setup_required itself; otherwise the guard's own session validation. */
+  @Public()
+  @Get('me')
+  async me(@Req() req: AuthenticatedRequest, @Res({ passthrough: true }) res: Response): Promise<RequestUser> {
+    res.setHeader('Cache-Control', 'no-store');
+    if (await this.setup.isRequired()) throw new AuthError('setup_required', 409, 'Setup is required');
+    return this.auth.authenticate(req, res);
+  }
+
+  @Post('logout')
+  @HttpCode(200)
+  async logout(@Req() req: AuthenticatedRequest, @Res({ passthrough: true }) res: Response): Promise<{ redirectTo: string }> {
+    res.setHeader('Cache-Control', 'no-store');
+    const cookie = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+    // The guard has just validated (and possibly refreshed) this session, so it is readable.
+    const session = cookie ? await this.sessions.get(cookie).catch(() => undefined) : undefined;
+    if (session?.refreshToken) {
+      try {
+        await this.oidc.revoke(session.refreshToken);
+      } catch (e) {
+        this.fail('Refresh token revocation failed', e);
+      }
+    }
+    if (req.authSession) await this.sessions.delete(req.authSession.idHash);
+    this.auth.clearCookie(res);
+    await this.audit.record({
+      type: 'logout',
+      userId: req.user?.id,
+      ip: req.ip,
+      userAgent: first(req.headers['user-agent']),
+    });
+    let redirectTo = `${this.cfg.publicUrl}/admin/login`;
+    try {
+      redirectTo = await this.oidc.endSessionUrl(session?.idToken || undefined);
+    } catch (e) {
+      // Discovery failed: the BFF session is gone anyway; skip the provider-side logout.
+      this.fail('End-session URL unavailable', e);
+    }
+    return { redirectTo };
   }
 
   /** Logs the error name only: messages may echo request data, and nothing token-/cookie-bearing is logged. */

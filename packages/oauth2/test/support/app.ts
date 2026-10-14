@@ -1,12 +1,11 @@
 import 'reflect-metadata';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:net';
-import { Global, Module, type INestApplication } from '@nestjs/common';
+import { Global, Module, type INestApplication, type Type } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { Kysely } from 'kysely';
 import type { AuthFileConfig } from '../../src/config/schema';
 import type { AuthTables } from '../../src/db/types';
-import { AuthExceptionFilter } from '../../src/errors';
 import { OAuth2Module } from '../../src/oauth2.module';
 import { startTestDb, type TestDb } from './db';
 
@@ -39,10 +38,12 @@ async function freePort(): Promise<number> {
  * Boots the full OAuth2Module on a real HTTP port (R7). `opts.db` reuses an existing test database
  * (its lifetime then stays with the caller); otherwise a fresh database is created and dropped on close().
  * `opts.auth` is passed through as the file `auth` config (e.g. `{ ttl: { interaction: 1 } }`).
+ * `opts.controllers` mounts extra (test-only) controllers next to the module.
+ * Error JSON comes from the module's own APP_FILTER (Task 11), so no global filter is added here.
  */
 export async function createTestApp(
   env: Record<string, string> = {},
-  opts: { db?: TestDb; auth?: Partial<AuthFileConfig> } = {},
+  opts: { db?: TestDb; auth?: Partial<AuthFileConfig>; controllers?: Type[] } = {},
 ): Promise<TestApp> {
   const testDb = opts.db ?? (await startTestDb());
   const ownsDb = !opts.db;
@@ -59,14 +60,17 @@ export async function createTestApp(
     };
 
     @Global()
-    @Module({ providers: [{ provide: TEST_DB, useValue: testDb.db }], exports: [TEST_DB] })
+    @Module({
+      controllers: opts.controllers ?? [],
+      providers: [{ provide: TEST_DB, useValue: testDb.db }],
+      exports: [TEST_DB],
+    })
     class TestDbModule {}
 
     const mod = await Test.createTestingModule({
       imports: [TestDbModule, OAuth2Module.forRoot({ dbToken: TEST_DB, env: fullEnv, auth: opts.auth })],
     }).compile();
     app = mod.createNestApplication({ logger: false });
-    app.useGlobalFilters(new AuthExceptionFilter());
     await app.listen(port, '127.0.0.1');
     const started = app;
     return {

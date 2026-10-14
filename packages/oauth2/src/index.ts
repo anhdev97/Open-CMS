@@ -10,6 +10,9 @@ import { oauth2CoreMigrations } from './db/migrations';
 
 registerCoreMigrations(oauth2CoreMigrations);
 export * from './guard/public.decorator';
+export * from './guard/current-user.decorator';
+export * from './guard/auth.guard';
+export * from './guard/session-auth.service';
 export * from './setup/bootstrap.service';
 export * from './setup/setup-state';
 export * from './setup/setup.controller';
