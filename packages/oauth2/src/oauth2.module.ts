@@ -9,6 +9,10 @@ import { AuthExceptionFilter } from './errors';
 import { AuthGuard } from './guard/auth.guard';
 import { SessionAuthenticator } from './guard/session-auth.service';
 import { AUTH_SETTINGS, GRANT_REVOKER, OAUTH2_CONFIG, OAUTH2_DB, RATE_LIMITER } from './constants';
+import { IdentityLinker } from './idp/identity-linker';
+import { IDENTITY_PROVIDERS } from './idp/identity-provider';
+import { IdpController } from './idp/idp.controller';
+import { OidcIdentityProvider } from './idp/oidc.identity-provider';
 import { InteractionController } from './interaction/interaction.controller';
 import { InteractionService } from './interaction/interaction.service';
 import { ProviderService } from './provider/provider.service';
@@ -38,7 +42,7 @@ export class OAuth2Module {
     return {
       module: OAuth2Module,
       global: true,
-      controllers: [SetupController, InteractionController, AuthController, UsersController, PasswordController],
+      controllers: [SetupController, InteractionController, IdpController, AuthController, UsersController, PasswordController],
       providers: [
         { provide: OAUTH2_DB, useExisting: opts.dbToken },
         // Throws ConfigError on a missing/short secret or missing public URL → app refuses to start.
@@ -69,6 +73,13 @@ export class OAuth2Module {
         OidcClient,
         SessionStore,
         SessionAuthenticator,
+        // Spec §6.4: only IdPs that are configured; today the single generic OIDC one.
+        {
+          provide: IDENTITY_PROVIDERS,
+          useFactory: (cfg: OAuth2Config) => (cfg.idp.oidc ? [new OidcIdentityProvider(cfg.idp.oidc, cfg)] : []),
+          inject: [OAUTH2_CONFIG],
+        },
+        IdentityLinker,
         // Spec §6.5: every /api/** route is protected unless @Public(); §8 error JSON everywhere.
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: AuthExceptionFilter },
@@ -89,6 +100,8 @@ export class OAuth2Module {
         OidcClient,
         SessionStore,
         SessionAuthenticator,
+        IDENTITY_PROVIDERS,
+        IdentityLinker,
       ],
     };
   }

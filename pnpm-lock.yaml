@@ -211,6 +211,9 @@ importers:
       '@types/supertest':
         specifier: ^6.0.3
         version: 6.0.3
+      oauth2-mock-server:
+        specifier: ^9.3.0
+        version: 9.3.0
       pg:
         specifier: ^8.13.0
         version: 8.23.1
@@ -924,6 +927,10 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
+  basic-auth@3.0.0:
+    resolution: {integrity: sha512-B63UKsSJ2atgiSuCJvzAjpfAdFY6mYT3C0vZFlLV/81Rw2/VCs6Tp29UzkpKETB3qA2cHwuU1LjBnhUQ0WkPKw==}
+    engines: {node: '>=22'}
+
   body-parser@2.3.0:
     resolution: {integrity: sha512-2cGmJupaNgg+QUwVLAucDuWuoMZ6EX9iHDRswZ5lsNYEmwPaRknMPCLZz07yTzVq/83p4o/wzbDZbBrTvGGTIw==}
     engines: {node: '>=18'}
@@ -1346,6 +1353,11 @@ packages:
 
   node-gyp-build@4.8.4:
     resolution: {integrity: sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ==}
+    hasBin: true
+
+  oauth2-mock-server@9.3.0:
+    resolution: {integrity: sha512-nqdjiAfDSWWWKrLhD7DSCgNUkX35z2+h1oRHEgNdZqFwHXDNZp98RVJ7Cs45u3GPplbazTeGoBsO8SPfv5GOIw==}
+    engines: {node: ^22.12 || ^24 || ^26}
     hasBin: true
 
   oauth4webapi@3.8.8:
@@ -2293,6 +2305,8 @@ snapshots:
 
   baseline-browser-mapping@2.11.28: {}
 
+  basic-auth@3.0.0: {}
+
   body-parser@2.3.0:
     dependencies:
       bytes: 3.1.2
@@ -2738,6 +2752,11 @@ snapshots:
   node-addon-api@8.9.2: {}
 
   node-gyp-build@4.8.4: {}
+
+  oauth2-mock-server@9.3.0:
+    dependencies:
+      basic-auth: 3.0.0
+      jose: 6.2.12
 
   oauth4webapi@3.8.8: {}
 

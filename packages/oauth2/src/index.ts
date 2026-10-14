@@ -34,3 +34,7 @@ export * from './bff/cookies';
 export { OidcClient, type TokenSet } from './bff/oidc-client';
 export * from './bff/session.store';
 export * from './bff/auth.controller';
+export * from './idp/identity-provider';
+export { OidcIdentityProvider } from './idp/oidc.identity-provider';
+export * from './idp/identity-linker';
+export * from './idp/idp.controller';

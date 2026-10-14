@@ -12,6 +12,17 @@ export class InteractionExpired extends Error {
 }
 
 /**
+ * The browser holds a live interaction, but a different one than the uid in the URL. Still an
+ * InteractionExpired for the password routes; the IdP completion maps it to `invalid_state`.
+ */
+export class InteractionMismatch extends InteractionExpired {
+  constructor() {
+    super();
+    this.name = 'InteractionMismatch';
+  }
+}
+
+/**
  * Wraps oidc-provider's interaction API for the Nest interaction routes (password login here, IdP
  * login in Task 13).
  */
@@ -32,7 +43,8 @@ export class InteractionService {
       if ((e as Error)?.name === 'SessionNotFound') throw new InteractionExpired();
       throw e;
     }
-    if (!interaction || interaction.uid !== uid) throw new InteractionExpired();
+    if (!interaction) throw new InteractionExpired();
+    if (interaction.uid !== uid) throw new InteractionMismatch();
     return interaction;
   }
 
