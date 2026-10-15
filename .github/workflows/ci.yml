@@ -24,4 +24,3 @@ jobs:
       - run: pnpm --filter my-store opencms migrate:check
       - run: pnpm --filter my-store opencms migrate:up
       - run: pnpm --filter my-store typecheck
-      - run: pnpm --filter @opencms/admin build

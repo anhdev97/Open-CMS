@@ -3,11 +3,12 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  app.enableCors({ origin: process.env.ADMIN_ORIGIN ?? 'http://localhost:3000' });
+  // bodyParser: false — @opencms/core owns request body parsing.
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
   app.enableShutdownHooks();
   const port = Number(process.env.PORT ?? 4000);
   await app.listen(port);
-  console.log(`opencms API on http://localhost:${port}`);
+  const publicUrl = process.env.OPENCMS_PUBLIC_URL ?? `http://localhost:${port}`;
+  console.log(`OpenCMS ready at ${publicUrl}/admin`);
 }
 bootstrap();
