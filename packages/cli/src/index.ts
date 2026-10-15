@@ -14,6 +14,8 @@ import {
   loadDefinitions,
   writeSchemaChange,
 } from '@opencms/codegen';
+import { loadProjectEnv } from './env';
+import { nextSteps, runInit } from './init';
 import { createDb, migrateDown, migrateUp, migrationStatus } from '@opencms/db';
 import type { ContentTypeDefinition, FieldDefinition, FieldKind, ResolvedConfig } from '@opencms/schema';
 import { FIELD_KINDS, newId, SchemaValidationError } from '@opencms/schema';
@@ -27,7 +29,9 @@ const c = {
 };
 
 async function project(): Promise<ResolvedConfig> {
-  return loadConfig(findProjectRoot(process.env.OPENCMS_ROOT ?? process.cwd()));
+  const root = findProjectRoot(process.env.OPENCMS_ROOT ?? process.cwd());
+  loadProjectEnv(root);
+  return loadConfig(root);
 }
 
 const rel = (config: ResolvedConfig, p: string) => path.relative(config.root, p) || '.';
@@ -106,6 +110,33 @@ export function parseFieldSpec(spec: string): FieldDefinition {
 
 const program = new Command();
 program.name('opencms').description('opencms-cli: schema-as-code headless CMS tooling').version('0.1.0');
+
+program
+  .command('init <dir>')
+  .description('Scaffold a new OpenCMS project in <dir>')
+  .option('--pm <pm>', 'package manager: pnpm | npm | yarn')
+  .option('--no-install', 'do not install dependencies')
+  .option('--db-url <url>', 'database URL written to .env')
+  .option('--port <n>', 'server port', '4000')
+  .option('--link <path>', 'link internal packages from an opencms monorepo checkout')
+  .action(
+    run(async (dir: string, opts: { pm?: string; install: boolean; dbUrl?: string; port: string; link?: string }) => {
+      if (opts.pm && !['pnpm', 'npm', 'yarn'].includes(opts.pm)) throw new Error(`Unknown package manager "${opts.pm}". Use pnpm, npm or yarn.`);
+      const port = Number(opts.port);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Invalid port "${opts.port}"`);
+      const r = await runInit(dir, {
+        pm: opts.pm as 'pnpm' | 'npm' | 'yarn' | undefined,
+        install: opts.install,
+        dbUrl: opts.dbUrl,
+        port,
+        link: opts.link,
+        cliVersion: program.version() as string,
+        userAgent: process.env.npm_config_user_agent,
+      });
+      console.log(`${c.green('✓')} Created ${c.bold(dir)} (${r.files.length} files)${r.installed ? ', dependencies installed' : ''}\n`);
+      console.log(nextSteps(dir, r));
+    }),
+  );
 
 program
   .command('generate')
