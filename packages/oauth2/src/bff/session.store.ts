@@ -137,6 +137,22 @@ export class SessionStore {
       .execute();
   }
 
+  /**
+   * The provider Grant behind a session: its stored refresh token is the id of the adapter's
+   * `RefreshToken` row, which carries the grant id. Undefined when the session or token is gone.
+   */
+  async grantIdOf(idHash: string): Promise<string | undefined> {
+    const refreshToken = (await this.getByHash(idHash))?.refreshToken;
+    if (!refreshToken) return undefined;
+    const row = await this.db
+      .selectFrom('auth_oidc_payloads')
+      .select('grant_id')
+      .where('kind', '=', 'RefreshToken')
+      .where('id', '=', refreshToken)
+      .executeTakeFirst();
+    return row?.grant_id ?? undefined;
+  }
+
   async delete(idHash: string): Promise<void> {
     await this.db.deleteFrom('auth_sessions').where('id_hash', '=', idHash).execute();
   }

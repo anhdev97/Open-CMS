@@ -1,6 +1,7 @@
 import { Body, Controller, HttpCode, Inject, Post, Req } from '@nestjs/common';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service';
+import { SessionStore } from '../bff/session.store';
 import type { OAuth2Config } from '../config/schema';
 import { OAUTH2_CONFIG, RATE_LIMITER } from '../constants';
 import { AuthError } from '../errors';
@@ -21,6 +22,7 @@ export class PasswordController {
     @Inject(PasswordService) private readonly passwords: PasswordService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(RATE_LIMITER) private readonly limiter: RateLimiter,
+    @Inject(SessionStore) private readonly sessions: SessionStore,
   ) {}
 
   /** Any authenticated user (no role required): change own password, keep this session, drop the others. */
@@ -41,7 +43,9 @@ export class PasswordController {
     if (!ok) throw new AuthError('invalid_credentials', 401, 'Invalid credentials');
 
     await this.users.setPassword(me.id, newPassword);
-    await this.users.revokeAll(me.id, { exceptSessionId: req.authSession?.idHash });
+    const exceptSessionId = req.authSession?.idHash;
+    const exceptGrantId = exceptSessionId ? await this.sessions.grantIdOf(exceptSessionId) : undefined;
+    await this.users.revokeAll(me.id, { exceptSessionId, exceptGrantId });
     await this.audit.record({ type: 'password_changed', userId: me.id, actorId: me.id });
   }
 }

@@ -166,11 +166,17 @@ export class UserService {
     });
   }
 
-  async revokeAll(userId: string, opts?: { exceptSessionId?: string }, trx?: Trx): Promise<void> {
+  /**
+   * Deletes the user's BFF sessions and revokes their provider grants. To keep one session working
+   * (own password change) pass both its id and its grant (`SessionStore.grantIdOf`): without the grant
+   * the kept session would lose its refresh token at the next refresh.
+   */
+  async revokeAll(userId: string, opts?: { exceptSessionId?: string; exceptGrantId?: string }, trx?: Trx): Promise<void> {
     let q = (trx ?? this.db).deleteFrom('auth_sessions').where('user_id', '=', userId);
     if (opts?.exceptSessionId) q = q.where('id_hash', '<>', opts.exceptSessionId);
     await q.execute();
-    await this.revoker.revokeAllGrants(userId);
+    if (opts?.exceptGrantId) await this.revoker.revokeAllGrants(userId, { exceptGrantId: opts.exceptGrantId });
+    else await this.revoker.revokeAllGrants(userId);
   }
 
   async touchLogin(userId: string): Promise<void> {

@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { SessionStore } from '../../src/bff/session.store';
+import { sha256 } from '../../src/security/crypto';
 import { UserService } from '../../src/users/user.service';
 import { createTestApp, type TestApp } from '../support/app';
 import { loginAs } from '../support/login';
@@ -210,6 +212,16 @@ describe('user management + password change API', () => {
     const ok = await api('/api/auth/password', { cookie: s1, method: 'POST', body: { currentPassword: PW, newPassword: 'another long passphrase' } });
     expect(ok.status).toBe(204);
     expect((await api('/api/auth/me', { cookie: s1 })).status).toBe(200);
+    expect((await api('/api/auth/me', { cookie: s2 })).status).toBe(401);
+
+    // I1: the kept session must also survive its next token refresh (its grant is not revoked).
+    const store = t.app.get(SessionStore);
+    const before = (await store.get(s1))!;
+    await t.db.updateTable('auth_sessions').set({ access_expires_at: new Date() }).where('id_hash', '=', sha256(s1)).execute();
+    expect((await api('/api/auth/me', { cookie: s1 })).status).toBe(200);
+    const after = (await store.get(s1))!;
+    expect(after.refreshToken).toBeTruthy();
+    expect(after.refreshToken).not.toBe(before.refreshToken); // rotated
     expect((await api('/api/auth/me', { cookie: s2 })).status).toBe(401);
     expect(await login('pw@x.com', 'another long passphrase')).toBeTruthy();
     const u = (await users.findByEmail('pw@x.com'))!;
