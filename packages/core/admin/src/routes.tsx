@@ -1,9 +1,6 @@
 import type { RouteObject } from 'react-router';
 import { AuthGate } from './auth/AuthGate';
 import { t } from './i18n/en';
-import { Login } from './pages/Login';
-import { NotFound } from './pages/NotFound';
-import { Setup } from './pages/Setup';
 
 function Placeholder() {
   return (
@@ -20,13 +17,13 @@ export const routes: RouteObject[] = [
   ...(import.meta.env.DEV
     ? [{ path: '_ui', lazy: async () => ({ Component: (await import('./pages/UiKit')).UiKit }) }]
     : []),
-  { path: 'setup', element: <Setup /> },
-  { path: 'login', element: <Login /> },
+  { path: 'setup', lazy: async () => ({ Component: (await import('./pages/Setup')).Setup }) },
+  { path: 'login', lazy: async () => ({ Component: (await import('./pages/Login')).Login }) },
   {
     element: <AuthGate />,
     children: [
       { index: true, element: <Placeholder /> },
-      { path: '*', element: <NotFound /> },
+      { path: '*', lazy: async () => ({ Component: (await import('./pages/NotFound')).NotFound }) },
     ],
   },
 ];

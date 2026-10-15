@@ -17,10 +17,16 @@ describe('loginUrl', () => {
 describe('loginPageAction', () => {
   it('restarts without a uid', () => {
     expect(loginPageAction('')).toEqual({ kind: 'restart' });
-    expect(loginPageAction('?error=login_failed')).toEqual({ kind: 'restart' });
+    expect(loginPageAction('?error=')).toEqual({ kind: 'restart' });
+  });
+  it('shows only the error when there is an error but no uid', () => {
+    expect(loginPageAction('?error=login_failed')).toEqual({ kind: 'error', error: 'login_failed' });
   });
   it('shows with a uid', () => {
     expect(loginPageAction('?uid=abc')).toEqual({ kind: 'show', uid: 'abc' });
+  });
+  it('keeps an unknown error code next to the uid', () => {
+    expect(loginPageAction('?uid=abc&error=x')).toEqual({ kind: 'show', uid: 'abc', error: 'x' });
   });
   it('carries the error code', () => {
     expect(loginPageAction('?uid=abc&error=login_expired')).toEqual({ kind: 'show', uid: 'abc', error: 'login_expired' });

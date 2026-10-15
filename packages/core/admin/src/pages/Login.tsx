@@ -128,13 +128,13 @@ export function Login() {
   const { search } = useLocation();
   const action = useMemo(() => loginPageAction(search), [search]);
   const uid = action.kind === 'show' ? action.uid : null;
-  const errorCode = action.kind === 'show' ? (action.error ?? null) : null;
+  const errorCode = action.kind === 'restart' ? null : (action.error ?? null);
   const [interaction, setInteraction] = useState<Interaction | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);
 
   useEffect(() => {
     if (uid === null) {
-      window.location.assign('/api/auth/login');
+      if (action.kind === 'restart') window.location.assign('/api/auth/login');
       return;
     }
     let live = true;
@@ -149,9 +149,9 @@ export function Login() {
     return () => {
       live = false;
     };
-  }, [uid]);
+  }, [uid, action.kind]);
 
-  if (uid === null) return null;
+  if (action.kind === 'restart') return null;
 
   return (
     <main className="flex min-h-svh items-center justify-center p-4">
@@ -172,7 +172,7 @@ export function Login() {
               </AlertDescription>
             </Alert>
           )}
-          {loadError ? (
+          {uid === null ? null : loadError ? (
             <ErrorAlert error={loadError} />
           ) : interaction ? (
             <LoginForm uid={uid} interaction={interaction} />

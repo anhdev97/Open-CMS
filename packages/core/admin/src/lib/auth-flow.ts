@@ -9,14 +9,20 @@ export function loginUrl(loc: { pathname: string; search: string }): string {
   return '/api/auth/login?returnTo=' + encodeURIComponent(ADMIN_PREFIX + inner + loc.search);
 }
 
-export type LoginPageAction = { kind: 'restart' } | { kind: 'show'; uid: string; error?: string };
+export type LoginPageAction =
+  | { kind: 'restart' }
+  | { kind: 'error'; error: string }
+  | { kind: 'show'; uid: string; error?: string };
 
-/** `/login` needs `?uid=`; without it the whole page restarts at `/api/auth/login`. */
+/**
+ * `/login` with a `uid` shows the form. Redirect-chain failures arrive as `?error=<code>` without a uid and are
+ * only shown (with "Try again"). With neither, the whole page restarts at `/api/auth/login`.
+ */
 export function loginPageAction(search: string): LoginPageAction {
   const params = new URLSearchParams(search);
   const uid = params.get('uid');
-  if (!uid) return { kind: 'restart' };
   const error = params.get('error');
+  if (!uid) return error ? { kind: 'error', error } : { kind: 'restart' };
   return error ? { kind: 'show', uid, error } : { kind: 'show', uid };
 }
 

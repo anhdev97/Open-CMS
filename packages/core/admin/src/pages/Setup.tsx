@@ -27,6 +27,7 @@ type Values = z.infer<typeof schema>;
 export function Setup() {
   const navigate = useNavigate();
   const [ready, setReady] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [formError, setFormError] = useState<Error | null>(null);
   const form = useForm<Values>({
@@ -36,6 +37,7 @@ export function Setup() {
 
   useEffect(() => {
     let live = true;
+    setLoadError(null);
     api<{ required: boolean }>('/api/auth/setup', { redirectOn401: false }).then(
       ({ required }) => {
         if (!live) return;
@@ -47,7 +49,7 @@ export function Setup() {
     return () => {
       live = false;
     };
-  }, [navigate]);
+  }, [navigate, attempt]);
 
   async function onSubmit({ email, name, password }: Values) {
     setFormError(null);
@@ -56,7 +58,7 @@ export function Setup() {
       await api('/api/auth/setup', { method: 'POST', json: body, redirectOn401: false });
       window.location.assign('/api/auth/login?login_hint=' + encodeURIComponent(body.email));
     } catch (e) {
-      if (e instanceof ApiError && e.status === 409 && e.code === 'setup_already_completed') {
+      if (e instanceof ApiError && e.status === 409) {
         void navigate('/', { replace: true });
       } else if (e instanceof ApiError && e.status === 422) {
         const { form: general, ...fields } = setupFieldErrors(e);
@@ -77,7 +79,12 @@ export function Setup() {
         </CardHeader>
         <CardContent>
           {loadError ? (
-            <ErrorAlert error={loadError} />
+            <div className="grid gap-4">
+              <ErrorAlert error={loadError} />
+              <Button className="w-fit" onClick={() => setAttempt((n) => n + 1)}>
+                {t('auth.retry')}
+              </Button>
+            </div>
           ) : !ready ? (
             <div className="space-y-4" role="status" aria-label={t('setup.checking')}>
               <Skeleton className="h-9 w-full" />
