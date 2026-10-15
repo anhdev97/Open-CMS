@@ -130,6 +130,9 @@ importers:
       '@opencms/schema':
         specifier: workspace:*
         version: link:../schema
+      express:
+        specifier: ^5.2.1
+        version: 5.2.1
       kysely:
         specifier: ^0.28.0
         version: 0.28.17

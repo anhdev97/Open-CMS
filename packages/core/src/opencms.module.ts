@@ -2,11 +2,13 @@
 // registers it too, so every process that migrates (autoMigrate, the Content Type Builder) must know it,
 // or Kysely reports a missing migration.
 import '@opencms/oauth2/migrations';
-import { Inject, Logger, Module, type DynamicModule, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
+import { Inject, Logger, Module, RequestMethod, type DynamicModule, type MiddlewareConsumer, type NestModule, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
 import type { Kysely } from 'kysely';
 import { createDb, migrateUp, pendingMigrations } from '@opencms/db';
 import { OAuth2Module, type CoreReady } from '@opencms/oauth2';
 import { resolveConfig } from '@opencms/schema';
+import { ContentCorsMiddleware } from './http/content-cors.middleware';
+import { JsonBodyParserMiddleware } from './http/body-parser.middleware';
 import { AdminContentController, ContentController } from './content.controllers';
 import { EntriesService } from './entries.service';
 import { EntryRepository } from './entry.repository';
@@ -42,7 +44,7 @@ class DeferredCoreReady implements CoreReady {
 }
 
 @Module({})
-export class OpenCmsModule implements OnModuleInit, OnApplicationShutdown {
+export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger('OpenCms');
 
   constructor(
@@ -83,6 +85,11 @@ export class OpenCmsModule implements OnModuleInit, OnApplicationShutdown {
       ],
       exports: [OPENCMS_DB, CORE_READY_CORE, ContentRegistry, EntriesService],
     };
+  }
+
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(JsonBodyParserMiddleware).forRoutes({ path: '*path', method: RequestMethod.ALL });
+    consumer.apply(ContentCorsMiddleware).forRoutes({ path: 'api/content/*path', method: RequestMethod.ALL });
   }
 
   /** Refuses to start on a database that is behind the code (unless autoMigrate). */

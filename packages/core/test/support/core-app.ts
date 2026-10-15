@@ -84,7 +84,7 @@ export async function createCoreTestApp(opts: CoreTestAppOptions = {}): Promise<
       ],
     })
     class TestRootModule {}
-    app = await NestFactory.create(TestRootModule, { logger: false, abortOnError: false });
+    app = await NestFactory.create(TestRootModule, { logger: false, abortOnError: false, bodyParser: false });
     await app.init();
     await app.listen(port, '127.0.0.1');
     const started = app;

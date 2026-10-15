@@ -17,6 +17,7 @@
     "@opencms/db": "workspace:*",
     "@opencms/oauth2": "workspace:*",
     "@opencms/schema": "workspace:*",
+    "express": "^5.2.1",
     "kysely": "^0.28.0",
     "zod": "^3.25.0"
   },
