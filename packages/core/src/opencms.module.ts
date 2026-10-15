@@ -5,14 +5,41 @@ import '@opencms/oauth2/migrations';
 import { Inject, Logger, Module, type DynamicModule, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
 import type { Kysely } from 'kysely';
 import { createDb, migrateUp, pendingMigrations } from '@opencms/db';
+import { OAuth2Module, type CoreReady } from '@opencms/oauth2';
 import { resolveConfig } from '@opencms/schema';
-import { AdminContentController, AdminGuard, ContentController } from './content.controllers';
+import { AdminContentController, ContentController } from './content.controllers';
 import { EntriesService } from './entries.service';
 import { EntryRepository } from './entry.repository';
-import { OPENCMS_DB, OPENCMS_OPTIONS, type OpenCmsModuleOptions, type ResolvedOpenCmsOptions } from './options';
+import { CORE_READY_CORE, OPENCMS_DB, OPENCMS_OPTIONS, type OpenCmsModuleOptions, type ResolvedOpenCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
 import { SchemaBuilderService, SchemaController } from './schema-builder';
 import { SystemController } from './system.controller';
+
+/** A `CoreReady` holder (not a promise: Nest would await that at DI time) settled by OpenCmsModule.onModuleInit. */
+class DeferredCoreReady implements CoreReady {
+  private readonly promise: Promise<void>;
+  private resolveFn!: () => void;
+  private rejectFn!: (e: unknown) => void;
+
+  constructor() {
+    this.promise = new Promise<void>((resolve, reject) => {
+      this.resolveFn = resolve;
+      this.rejectFn = reject;
+    });
+    // Nobody may be waiting yet; the failure still reaches onModuleInit's caller and every later wait().
+    this.promise.catch(() => {});
+  }
+
+  wait(): Promise<void> {
+    return this.promise;
+  }
+  resolve(): void {
+    this.resolveFn();
+  }
+  reject(e: unknown): void {
+    this.rejectFn(e);
+  }
+}
 
 @Module({})
 export class OpenCmsModule implements OnModuleInit, OnApplicationShutdown {
@@ -21,6 +48,7 @@ export class OpenCmsModule implements OnModuleInit, OnApplicationShutdown {
   constructor(
     @Inject(OPENCMS_OPTIONS) private readonly options: ResolvedOpenCmsOptions,
     @Inject(OPENCMS_DB) private readonly db: Kysely<any>,
+    @Inject(CORE_READY_CORE) private readonly ready: DeferredCoreReady,
   ) {}
 
   static forRoot(input: OpenCmsModuleOptions): DynamicModule {
@@ -34,6 +62,15 @@ export class OpenCmsModule implements OnModuleInit, OnApplicationShutdown {
     return {
       module: OpenCmsModule,
       global: true,
+      imports: [
+        OAuth2Module.forRoot({
+          dbToken: OPENCMS_DB,
+          coreReady: CORE_READY_CORE,
+          publicPathPrefixes: ['/api/content/'],
+          auth: input.auth,
+          env: input.env,
+        }),
+      ],
       controllers: [ContentController, AdminContentController, SchemaController, SystemController],
       providers: [
         { provide: OPENCMS_OPTIONS, useValue: options },
@@ -42,14 +79,24 @@ export class OpenCmsModule implements OnModuleInit, OnApplicationShutdown {
         EntryRepository,
         EntriesService,
         SchemaBuilderService,
-        AdminGuard,
+        { provide: CORE_READY_CORE, useValue: new DeferredCoreReady() },
       ],
-      exports: [OPENCMS_DB, ContentRegistry, EntriesService],
+      exports: [OPENCMS_DB, CORE_READY_CORE, ContentRegistry, EntriesService],
     };
   }
 
   /** Refuses to start on a database that is behind the code (unless autoMigrate). */
   async onModuleInit(): Promise<void> {
+    try {
+      await this.ensureMigrated();
+      this.ready.resolve();
+    } catch (e) {
+      this.ready.reject(e);
+      throw e;
+    }
+  }
+
+  private async ensureMigrated(): Promise<void> {
     const dir = this.options.config.migrationsDir;
     const pending = await pendingMigrations(this.db, dir);
     if (!pending.length) return;

@@ -14,7 +14,6 @@ import { hooks } from './extensions';
       hooks,
       // Content Type Builder writes schema files + migrations: dev only.
       schemaEditable: process.env.NODE_ENV !== 'production',
-      adminToken: process.env.OPENCMS_ADMIN_TOKEN,
     }),
   ],
 })
