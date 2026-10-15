@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { HttpAdapterHost, ModuleRef } from '@nestjs/core';
 import { sql, type Kysely } from 'kysely';
 import type { OAuth2Config } from '../config/schema';
-import { AUTH_SETTINGS, CORE_READY, OAUTH2_CONFIG, OAUTH2_DB } from '../constants';
+import { AUTH_SETTINGS, CORE_READY, OAUTH2_CONFIG, OAUTH2_DB, type CoreReady } from '../constants';
 import type { AuthTables } from '../db/types';
 import { deriveKey } from '../security/crypto';
 import type { AuthSettingsProvider } from '../settings/settings.provider';
@@ -35,7 +35,7 @@ export class ProviderService implements OnModuleInit, GrantRevoker {
   }
 
   async onModuleInit(): Promise<void> {
-    await this.moduleRef.get(CORE_READY, { strict: false });
+    await this.moduleRef.get<CoreReady>(CORE_READY, { strict: false }).wait();
     const jwks = await ensureSigningKey(this.db, deriveKey(this.cfg.secret, 'key'));
     const client = await upsertAdminClient(this.db, this.cfg);
     const users = this.moduleRef.get(UserService, { strict: false });

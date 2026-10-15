@@ -14,3 +14,11 @@ export const PUBLIC_PATH_PREFIXES = Symbol('OAUTH2_PUBLIC_PATH_PREFIXES');
 
 /** Resolves once the host (e.g. @opencms/core) is ready for the provider to touch the database; rejects to abort startup. */
 export const CORE_READY = Symbol('CORE_READY');
+
+/**
+ * What CORE_READY resolves to. A holder object (not a promise) so Nest does not await it during provider
+ * instantiation: the host settles `wait()` later, from its own onModuleInit.
+ */
+export interface CoreReady {
+  wait(): Promise<void>;
+}

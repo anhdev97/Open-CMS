@@ -9,7 +9,9 @@ import { ApiExceptionFilter, AuthExceptionFilter } from './errors';
 import { AuthGuard } from './guard/auth.guard';
 import { SessionAuthenticator } from './guard/session-auth.service';
 import { CleanupService } from './maintenance/cleanup.service';
-import { AUTH_SETTINGS, CORE_READY, PUBLIC_PATH_PREFIXES, GRANT_REVOKER, OAUTH2_CONFIG, OAUTH2_DB, RATE_LIMITER } from './constants';
+import {
+  AUTH_SETTINGS, CORE_READY, PUBLIC_PATH_PREFIXES, GRANT_REVOKER, OAUTH2_CONFIG, OAUTH2_DB, RATE_LIMITER, type CoreReady,
+} from './constants';
 import { IdentityLinker } from './idp/identity-linker';
 import { IDENTITY_PROVIDERS } from './idp/identity-provider';
 import { IdpController } from './idp/idp.controller';
@@ -37,8 +39,8 @@ export interface OAuth2ModuleOptions {
   /** `/api` path prefixes served without a session (published-content delivery API). Default `['/api/content/']`. */
   publicPathPrefixes?: string[];
   /**
-   * Token of a provider whose value is a promise that settles when the host is ready (e.g. migrations applied);
-   * the provider awaits it before touching the database. Default: ready immediately.
+   * Token of a provider whose value is a `CoreReady` holder; ProviderService awaits `wait()` in onModuleInit
+   * before touching the database (rejecting aborts startup). Default: ready immediately.
    */
   coreReady?: InjectionToken;
 }
@@ -61,7 +63,9 @@ export class OAuth2Module {
           inject: [OAUTH2_CONFIG],
         },
         { provide: PUBLIC_PATH_PREFIXES, useValue: (opts.publicPathPrefixes ?? ['/api/content/']).map((p) => p.toLowerCase()) },
-        opts.coreReady ? { provide: CORE_READY, useExisting: opts.coreReady } : { provide: CORE_READY, useValue: Promise.resolve() },
+        opts.coreReady
+          ? { provide: CORE_READY, useExisting: opts.coreReady }
+          : { provide: CORE_READY, useValue: { wait: () => Promise.resolve() } satisfies CoreReady },
         CleanupService,
         { provide: RATE_LIMITER, useFactory: () => new InMemoryRateLimiter() },
         {

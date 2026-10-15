@@ -83,7 +83,9 @@ export class ApiExceptionFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
       const body = exception.getResponse();
-      if (typeof body !== 'object' || body === null) return sendError(host, status, codeForStatus(status), exception.message);
+      if (typeof body !== 'object' || body === null) {
+        return sendError(host, status, codeForStatus(status), exception.message);
+      }
       const { issues, message } = body as { issues?: unknown; message?: unknown };
       const list = Array.isArray(issues) ? issues : undefined;
       if (Array.isArray(message)) return sendError(host, status, codeForStatus(status), message.join('; '), list ?? message);
