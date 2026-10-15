@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:net';
-import { Global, Module, type INestApplication, type Type } from '@nestjs/common';
+import { Global, Module, type INestApplication, type InjectionToken, type Type } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { Kysely } from 'kysely';
 import type { AuthFileConfig } from '../../src/config/schema';
@@ -10,6 +10,7 @@ import { OAuth2Module } from '../../src/oauth2.module';
 import { startTestDb, type TestDb } from './db';
 
 export const TEST_DB = Symbol('TEST_DB');
+export const TEST_CORE_READY = Symbol('TEST_CORE_READY');
 
 export interface TestApp {
   app: INestApplication;
@@ -40,12 +41,18 @@ async function freePort(): Promise<number> {
  * `opts.auth` is passed through as the file `auth` config (e.g. `{ ttl: { interaction: 1 } }`).
  * `opts.listenPort` is the port the app listens on (default: a free port, also used as PORT); pass `env.PORT`
  * separately to point the BFF's internal URL elsewhere.
+ * `opts.coreReady` supplies the promise behind the module's `coreReady` token (what @opencms/core provides in
+ * production); `opts.configureApp` runs on the Nest app before it listens (e.g. `app.useGlobalFilters(...)`).
  * `opts.controllers` mounts extra (test-only) controllers next to the module.
  * Error JSON comes from the module's own APP_FILTER (Task 11), so no global filter is added here.
  */
 export async function createTestApp(
   env: Record<string, string> = {},
-  opts: { db?: TestDb; auth?: Partial<AuthFileConfig>; controllers?: Type[]; listenPort?: number } = {},
+  opts: { db?: TestDb; auth?: Partial<AuthFileConfig>; controllers?: Type[];
+    listenPort?: number;
+    coreReady?: () => Promise<void>;
+    configureApp?: (app: INestApplication) => void;
+  } = {},
 ): Promise<TestApp> {
   const testDb = opts.db ?? (await startTestDb());
   const ownsDb = !opts.db;
@@ -60,18 +67,24 @@ export async function createTestApp(
       ...env,
     };
 
+    // A rejected promise must not trip Node's unhandled-rejection check before the module awaits it.
+    const coreReady = opts.coreReady?.();
+    coreReady?.catch(() => {});
+    const coreReadyToken: InjectionToken | undefined = coreReady ? TEST_CORE_READY : undefined;
+
     @Global()
     @Module({
       controllers: opts.controllers ?? [],
-      providers: [{ provide: TEST_DB, useValue: testDb.db }],
-      exports: [TEST_DB],
+      providers: [{ provide: TEST_DB, useValue: testDb.db }, ...(coreReady ? [{ provide: TEST_CORE_READY, useValue: coreReady }] : [])],
+      exports: [TEST_DB, ...(coreReady ? [TEST_CORE_READY] : [])],
     })
     class TestDbModule {}
 
     const mod = await Test.createTestingModule({
-      imports: [TestDbModule, OAuth2Module.forRoot({ dbToken: TEST_DB, env: fullEnv, auth: opts.auth })],
+      imports: [TestDbModule, OAuth2Module.forRoot({ dbToken: TEST_DB, env: fullEnv, auth: opts.auth, coreReady: coreReadyToken })],
     }).compile();
     app = mod.createNestApplication({ logger: false });
+    opts.configureApp?.(app);
     await app.listen(listenPort, '127.0.0.1');
     const started = app;
     return {

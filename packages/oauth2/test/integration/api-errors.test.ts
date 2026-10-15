@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { BadRequestException, ConflictException, Controller, ForbiddenException, Get, Post } from '@nestjs/common';
+import { ArgumentsHost, BadRequestException, Catch, ConflictException, Controller, ForbiddenException, Get, Post, type ExceptionFilter } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Public } from '../../src/guard/public.decorator';
 import { createTestApp, type TestApp } from '../support/app';
@@ -20,6 +20,16 @@ class ThrowingController {
   @Get('bad-request')
   badRequest(): never {
     throw new BadRequestException('Nope');
+  }
+
+  @Get('with-issues')
+  withIssues(): never {
+    throw new BadRequestException({ message: 'Invalid schema', issues: ['a: bad'] });
+  }
+
+  @Get('message-array')
+  messageArray(): never {
+    throw new BadRequestException(['x must be string', 'y missing']);
   }
 
   @Get('boom')
@@ -45,6 +55,14 @@ class HostThrowingController {
   @Get('boom')
   boom(): never {
     throw new Error('boom');
+  }
+}
+
+/** An app-level catch-all registered after createNestApplication must still see non-/api errors. */
+@Catch()
+class AppCatchAll implements ExceptionFilter {
+  catch(_e: unknown, host: ArgumentsHost): void {
+    host.switchToHttp().getResponse().status(599).json({ marker: 'app-filter' });
   }
 }
 
@@ -97,6 +115,20 @@ describe('§8 error JSON for non-AuthError failures under /api', () => {
     expect(await get('/api/test-errors/bad-request')).toEqual({ status: 400, body: { error: { code: 'bad_request', message: 'Nope' } } });
   });
 
+  it('keeps `issues` from an HttpException body', async () => {
+    expect(await get('/api/test-errors/with-issues')).toEqual({
+      status: 400,
+      body: { error: { code: 'bad_request', message: 'Invalid schema', issues: ['a: bad'] } },
+    });
+  });
+
+  it('joins a message array and exposes it as issues', async () => {
+    expect(await get('/api/test-errors/message-array')).toEqual({
+      status: 400,
+      body: { error: { code: 'bad_request', message: 'x must be string; y missing', issues: ['x must be string', 'y missing'] } },
+    });
+  });
+
   it('unknown errors → 500 internal_error with a generic message (nothing of the original leaks)', async () => {
     const r = await get('/api/test-errors/boom');
     expect(r.status).toBe(500);
@@ -116,5 +148,29 @@ describe('§8 error JSON for non-AuthError failures under /api', () => {
     });
     expect(await get('/host-errors/boom')).toEqual({ status: 500, body: { statusCode: 500, message: 'Internal server error' } });
     expect((await get('/nothing-here')).body).toMatchObject({ statusCode: 404 });
+  });
+});
+
+/**
+ * Nest runs filters registered with `app.useGlobalFilters` before the module's APP_FILTER, so a host's
+ * catch-all keeps control of every error (a catch-all that wants the /api contract must delegate to it).
+ */
+describe('app-level filters registered after createNestApplication', () => {
+  let t: TestApp;
+  beforeAll(async () => {
+    t = await createTestApp({}, {
+      controllers: [HostThrowingController],
+      configureApp: (app) => app.useGlobalFilters(new AppCatchAll()),
+    });
+  });
+  afterAll(async () => {
+    await t?.close();
+  });
+
+  it('receives errors from non-/api routes', async () => {
+    for (const path of ['/host-errors/conflict', '/host-errors/boom', '/nothing-here']) {
+      const res = await fetch(`${t.url}${path}`);
+      expect({ path, status: res.status, body: await res.json() }).toEqual({ path, status: 599, body: { marker: 'app-filter' } });
+    }
   });
 });

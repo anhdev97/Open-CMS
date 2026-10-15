@@ -11,3 +11,6 @@ export const OAUTH2_CONFIG = Symbol('OAUTH2_CONFIG');
 
 /** Lower-cased `/api/...` prefixes the AuthGuard lets through without a session (R17). */
 export const PUBLIC_PATH_PREFIXES = Symbol('OAUTH2_PUBLIC_PATH_PREFIXES');
+
+/** Resolves once the host (e.g. @opencms/core) is ready for the provider to touch the database; rejects to abort startup. */
+export const CORE_READY = Symbol('CORE_READY');

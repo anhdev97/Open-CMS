@@ -29,8 +29,8 @@ export class ConfigError extends Error {
   }
 }
 
-function sendError(host: ArgumentsHost, status: number, code: string, message: string): void {
-  host.switchToHttp().getResponse().status(status).json({ error: { code, message } });
+function sendError(host: ArgumentsHost, status: number, code: string, message: string, issues?: unknown[]): void {
+  host.switchToHttp().getResponse().status(status).json({ error: issues === undefined ? { code, message } : { code, message, issues } });
 }
 
 function renderAuthError(err: AuthError, host: ArgumentsHost): void {
@@ -82,7 +82,12 @@ export class ApiExceptionFilter implements ExceptionFilter {
     if (isMalformedRequest(exception, req)) return sendError(host, 422, 'validation_failed', 'Malformed request');
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
-      return sendError(host, status, codeForStatus(status), exception.message);
+      const body = exception.getResponse();
+      if (typeof body !== 'object' || body === null) return sendError(host, status, codeForStatus(status), exception.message);
+      const { issues, message } = body as { issues?: unknown; message?: unknown };
+      const list = Array.isArray(issues) ? issues : undefined;
+      if (Array.isArray(message)) return sendError(host, status, codeForStatus(status), message.join('; '), list ?? message);
+      return sendError(host, status, codeForStatus(status), exception.message, list);
     }
     const clientStatus = clientStatusOf(exception);
     if (clientStatus) return sendError(host, clientStatus, codeForStatus(clientStatus), STATUS_CODES[clientStatus] ?? 'Error');
