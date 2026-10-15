@@ -3,10 +3,12 @@
 // or Kysely reports a missing migration.
 import '@opencms/oauth2/migrations';
 import { Inject, Logger, Module, RequestMethod, type DynamicModule, type MiddlewareConsumer, type NestModule, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
+import { HttpAdapterHost } from '@nestjs/core';
 import type { Kysely } from 'kysely';
 import { createDb, migrateUp, pendingMigrations } from '@opencms/db';
 import { OAuth2Module, type CoreReady } from '@opencms/oauth2';
 import { resolveConfig } from '@opencms/schema';
+import { createAdminSpaHandler, DEFAULT_ADMIN_DIST_DIR } from './http/admin-spa.middleware';
 import { ContentCorsMiddleware } from './http/content-cors.middleware';
 import { JsonBodyParserMiddleware } from './http/body-parser.middleware';
 import { AdminContentController, ContentController } from './content.controllers';
@@ -51,6 +53,7 @@ export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShu
     @Inject(OPENCMS_OPTIONS) private readonly options: ResolvedOpenCmsOptions,
     @Inject(OPENCMS_DB) private readonly db: Kysely<any>,
     @Inject(CORE_READY_CORE) private readonly ready: DeferredCoreReady,
+    @Inject(HttpAdapterHost) private readonly httpHost: HttpAdapterHost,
   ) {}
 
   static forRoot(input: OpenCmsModuleOptions): DynamicModule {
@@ -97,10 +100,18 @@ export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShu
     try {
       await this.ensureMigrated();
       this.ready.resolve();
+      this.mountAdmin();
     } catch (e) {
       this.ready.reject(e);
       throw e;
     }
+  }
+
+  /** Mounted from onModuleInit, i.e. before Nest registers its routes and its 404 handler. */
+  private mountAdmin(): void {
+    if (this.options.admin?.enabled === false) return;
+    const handler = createAdminSpaHandler({ distDir: this.options.admin?.distDir ?? DEFAULT_ADMIN_DIST_DIR, logger: this.logger });
+    this.httpHost.httpAdapter.getInstance().use('/admin', handler);
   }
 
   private async ensureMigrated(): Promise<void> {
