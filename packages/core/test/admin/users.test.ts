@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { userActions, type AdminUser } from '../../admin/src/lib/users';
+import { ApiError } from '../../admin/src/lib/api-error';
+import { userActions, userError, type AdminUser } from '../../admin/src/lib/users';
 
 const base: AdminUser = {
   id: 'u1',
@@ -24,5 +25,17 @@ describe('userActions', () => {
       canDisable: false,
       canEnable: true,
     });
+  });
+});
+
+describe('userError', () => {
+  it('maps a known code and keeps retryAfterSec and issues', () => {
+    const e = userError(new ApiError(409, 'email_taken', 'email_taken', [1], 7)) as ApiError;
+    expect(e.message).toBe('A user with this email already exists.');
+    expect([e.status, e.code, e.issues, e.retryAfterSec]).toEqual([409, 'email_taken', [1], 7]);
+  });
+  it('passes unknown errors through', () => {
+    const raw = new ApiError(500, 'boom', 'Boom');
+    expect(userError(raw)).toBe(raw);
   });
 });

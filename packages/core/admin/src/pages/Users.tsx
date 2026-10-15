@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { MoreHorizontalIcon, PlusIcon, UsersIcon, XIcon } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -35,6 +35,7 @@ import {
   setUserStatus,
   unlinkIdentity,
   userActions,
+  userError,
   userErrorMessage,
   type AdminUser,
 } from '@/lib/users';
@@ -76,7 +77,7 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
     } catch (e) {
       if (e instanceof ApiError && e.code === 'email_taken') form.setError('email', { message: userErrorMessage(e) });
       else if (e instanceof ApiError && e.code === 'weak_password') form.setError('password', { message: e.message });
-      else setFormError(e instanceof ApiError ? new ApiError(e.status, e.code, userErrorMessage(e), e.issues) : (e as Error));
+      else setFormError(userError(e));
     }
   }
 
@@ -145,7 +146,7 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
   );
 }
 
-function ResetPasswordDialog({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+function ResetPasswordDialog({ user, isMe, onClose }: { user: AdminUser; isMe: boolean; onClose: () => void }) {
   const [formError, setFormError] = useState<Error | null>(null);
   const form = useForm<z.infer<typeof resetSchema>>({
     resolver: zodResolver(resetSchema),
@@ -160,7 +161,7 @@ function ResetPasswordDialog({ user, onClose }: { user: AdminUser; onClose: () =
       onClose();
     } catch (e) {
       if (e instanceof ApiError && e.code === 'weak_password') form.setError('password', { message: e.message });
-      else setFormError(e instanceof ApiError ? new ApiError(e.status, e.code, userErrorMessage(e), e.issues) : (e as Error));
+      else setFormError(userError(e));
     }
   }
 
@@ -169,7 +170,10 @@ function ResetPasswordDialog({ user, onClose }: { user: AdminUser; onClose: () =
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('users.reset.title')}</DialogTitle>
-          <DialogDescription>{t('users.reset.description', { email: user.email })}</DialogDescription>
+          <DialogDescription>
+            {t('users.reset.description', { email: user.email })}
+            {isMe && ` ${t('users.reset.selfNote')}`}
+          </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form className="grid gap-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
@@ -231,7 +235,12 @@ export function Users() {
   }
 
   const close = () => setDialog(null);
-  const target = dialog && dialog.kind !== 'create' ? dialog.user : null;
+  // Texts keep showing the last dialog while the close animation runs.
+  const lastDialog = useRef<Dialogs | null>(null);
+  if (dialog) lastDialog.current = dialog;
+  const shown = dialog ?? lastDialog.current;
+  const target = shown && shown.kind !== 'create' ? shown.user : null;
+  const targetIsMe = target?.id === me.id;
 
   return (
     <div className="space-y-6">
@@ -360,13 +369,13 @@ export function Users() {
       )}
 
       {dialog?.kind === 'create' && <CreateUserDialog onClose={close} onDone={load} />}
-      {dialog?.kind === 'reset' && <ResetPasswordDialog user={dialog.user} onClose={close} />}
+      {dialog?.kind === 'reset' && <ResetPasswordDialog user={dialog.user} isMe={dialog.user.id === me.id} onClose={close} />}
 
       <ConfirmDialog
         open={dialog?.kind === 'disable'}
         onOpenChange={(open) => !open && close()}
         title={t('users.disable.title', { email: target?.email ?? '' })}
-        description={t('users.disable.description')}
+        description={targetIsMe ? t('users.disable.descriptionSelf') : t('users.disable.description')}
         confirmLabel={t('users.disable.confirm')}
         destructive
         onConfirm={() => target && void run(() => setUserStatus(target.id, 'disabled'), t('users.disable.done'))}
@@ -391,9 +400,9 @@ export function Users() {
       <ConfirmDialog
         open={dialog?.kind === 'unlink'}
         onOpenChange={(open) => !open && close()}
-        title={t('users.unlink.title', { provider: dialog?.kind === 'unlink' ? dialog.identity.provider : '' })}
+        title={t('users.unlink.title', { provider: shown?.kind === 'unlink' ? shown.identity.provider : '' })}
         description={t('users.unlink.description', {
-          provider: dialog?.kind === 'unlink' ? dialog.identity.provider : '',
+          provider: shown?.kind === 'unlink' ? shown.identity.provider : '',
           email: target?.email ?? '',
         })}
         confirmLabel={t('users.unlink.confirm')}

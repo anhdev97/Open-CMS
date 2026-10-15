@@ -56,3 +56,11 @@ export function userErrorMessage(err: unknown): string {
   if (err instanceof ApiError && KNOWN_ERRORS.includes(err.code)) return t(`users.errors.${err.code}`);
   return err instanceof Error ? err.message : String(err);
 }
+
+/** Same error with a known code's en.ts message; keeps status, issues and retryAfterSec. Other errors pass through. */
+export function userError(err: unknown): Error {
+  if (err instanceof ApiError && KNOWN_ERRORS.includes(err.code)) {
+    return new ApiError(err.status, err.code, userErrorMessage(err), err.issues, err.retryAfterSec);
+  }
+  return err instanceof Error ? err : new Error(String(err));
+}

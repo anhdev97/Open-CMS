@@ -158,13 +158,13 @@ export function Account() {
           <CardTitle>{t('account.profile')}</CardTitle>
         </CardHeader>
         <CardContent>
-          <dl className="grid max-w-md gap-4 text-sm sm:grid-cols-[8rem_1fr]">
+          <dl className="grid max-w-md gap-4 text-sm sm:grid-cols-3">
             <dt className="text-muted-foreground">{t('account.name')}</dt>
-            <dd>{user.name || t('content.noValue')}</dd>
+            <dd className="sm:col-span-2">{user.name || t('content.noValue')}</dd>
             <dt className="text-muted-foreground">{t('account.email')}</dt>
-            <dd>{user.email}</dd>
+            <dd className="sm:col-span-2">{user.email}</dd>
             <dt className="text-muted-foreground">{t('account.roles')}</dt>
-            <dd className="flex flex-wrap gap-1">
+            <dd className="flex flex-wrap gap-1 sm:col-span-2">
               {user.roles.length === 0 ? t('account.noRoles') : user.roles.map((r) => <Badge key={r} variant="secondary">{r}</Badge>)}
             </dd>
           </dl>
