@@ -5,6 +5,8 @@ export class ApiError extends Error {
     public code: string,
     message: string,
     public issues: unknown[] = [],
+    /** Seconds from a `Retry-After` header (429), when present. */
+    public retryAfterSec?: number,
   ) {
     super(message);
     this.name = 'ApiError';

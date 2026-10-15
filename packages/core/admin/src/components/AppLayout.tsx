@@ -31,6 +31,7 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { t } from '@/i18n/en';
+import { api } from '../lib/api';
 
 export interface LayoutUser {
   name?: string | null;
@@ -43,11 +44,8 @@ interface ContentTypeLink {
   displayName: string;
 }
 
-// Kept in one small function so the api client (Task 9) can replace it.
 async function loadContentTypes(): Promise<ContentTypeLink[]> {
-  const res = await fetch('/api/admin/content-types', { credentials: 'same-origin' });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return ((await res.json()) as { data: ContentTypeLink[] }).data;
+  return (await api<{ data: ContentTypeLink[] }>('/api/admin/content-types')).data;
 }
 
 const NAV = [
@@ -195,7 +193,7 @@ function AccountMenu({ user, onLogout }: { user: LayoutUser; onLogout?: () => vo
 
 interface AppLayoutProps {
   user: LayoutUser;
-  /** Called by "Log out"; the auth layer (Task 9) supplies it. */
+  /** Called by "Log out"; AuthGate supplies it. */
   onLogout?: () => void;
   children: ReactNode;
 }
