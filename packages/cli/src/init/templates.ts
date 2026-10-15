@@ -54,14 +54,27 @@ export default defineConfig({
 });
 `;
 
+/** Project root = nearest directory (walking up from `from`) with a package.json; works from src/ and dist/src/. */
+export const FIND_ROOT_SNIPPET = `function findProjectRoot(from: string): string {
+  let dir = from;
+  for (;;) {
+    if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return process.cwd();
+    dir = parent;
+  }
+}`;
+
 export const mainTs = (): string => `import 'reflect-metadata';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { NestFactory } from '@nestjs/core';
 
+${FIND_ROOT_SNIPPET}
+
 async function bootstrap() {
   // Load .env before the app (and opencms.config.ts) is evaluated; variables already set win.
-  const envFile = path.resolve(__dirname, '..', '.env');
+  const envFile = path.join(findProjectRoot(__dirname), '.env');
   if (fs.existsSync(envFile)) {
     try {
       process.loadEnvFile(envFile);
@@ -81,17 +94,20 @@ async function bootstrap() {
 bootstrap();
 `;
 
-export const appModuleTs = (): string => `import * as path from 'node:path';
+export const appModuleTs = (): string => `import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { Module } from '@nestjs/common';
 import { OpenCmsModule } from '@opencms/core';
 import config from '../opencms.config';
 import { contentTypes } from './generated';
 import { hooks } from './extensions';
 
+${FIND_ROOT_SNIPPET}
+
 @Module({
   imports: [
     OpenCmsModule.forRoot({
-      root: path.resolve(__dirname, '..'),
+      root: findProjectRoot(__dirname),
       config,
       contentTypes,
       hooks,

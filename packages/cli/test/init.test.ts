@@ -2,7 +2,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import ts from 'typescript';
 import { runInit } from '../src/init';
+import { FIND_ROOT_SNIPPET } from '../src/init/templates';
 import { dbNameFor, packageNameFor } from '../src/init/names';
 
 let tmp: string;
@@ -26,11 +28,14 @@ describe('names', () => {
     expect(packageNameFor('/x/My Shop')).toBe('my-shop');
     expect(packageNameFor('/x/shop-2026')).toBe('shop-2026');
     expect(packageNameFor('/x/@@@')).toBe('opencms-project');
+    expect(packageNameFor('/x/.hidden_app')).toBe('hidden_app');
+    expect(packageNameFor('/x/_x')).toBe('x');
   });
   it('dbNameFor', () => {
     expect(dbNameFor('/x/My Shop')).toBe('my_shop');
     expect(dbNameFor('/x/2026shop')).toBe('db_2026shop');
     expect(dbNameFor('/x/---')).toBe('opencms');
+    expect(dbNameFor('/x/' + 'a'.repeat(80))).toHaveLength(63);
   });
 });
 
@@ -106,7 +111,12 @@ describe('runInit', () => {
     expect(pkg.dependencies['@opencms/core']).toBe('^1.2.3');
     expect(pkg.dependencies['@nestjs/core']).toBe('^11.0.0');
     expect(pkg.devDependencies['opencms-cli']).toBe('^1.2.3');
-    expect(pkg.scripts.dev).toBe('opencms migrate:up && tsx src/main.ts');
+    expect(pkg.scripts).toEqual({
+      dev: 'opencms migrate:up && tsx src/main.ts',
+      build: 'tsc -p tsconfig.json',
+      start: 'opencms migrate:up && node dist/src/main.js',
+      opencms: 'opencms',
+    });
   });
 
   it('links internal packages and core-owned dependencies with --link', async () => {
@@ -178,5 +188,26 @@ describe('runInit', () => {
     expect(main).toContain('process.env.PORT ?? 4000');
     expect(main).toContain('OpenCMS ready at');
     expect(main).not.toContain('enableCors');
+  });
+
+  it('refuses a path that is an existing file', async () => {
+    const f = path.join(tmp, 'file');
+    fs.writeFileSync(f, 'x');
+    await expect(runInit(f, base)).rejects.toThrow(/not a directory/);
+  });
+
+  it('templates locate the project root from src/ and from dist/src/', async () => {
+    const dir = path.join(tmp, 'app');
+    await runInit(dir, base);
+    for (const f of ['src/main.ts', 'src/app.module.ts']) {
+      expect(read(dir, f)).toContain(FIND_ROOT_SNIPPET);
+      expect(read(dir, f)).not.toContain("path.resolve(__dirname, '..')");
+    }
+    const js = ts.transpileModule(`${FIND_ROOT_SNIPPET}\nmodule.exports = findProjectRoot;`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+    const findRoot = new Function('fs', 'path', 'process', 'module', `${js}; return module.exports;`)(fs, path, process, { exports: {} }) as (d: string) => string;
+    const real = fs.realpathSync(dir);
+    fs.mkdirSync(path.join(dir, 'dist', 'src'), { recursive: true });
+    expect(findRoot(path.join(real, 'src'))).toBe(real);
+    expect(findRoot(path.join(real, 'dist', 'src'))).toBe(real);
   });
 });

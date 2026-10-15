@@ -74,6 +74,7 @@ function defaultSpawn(cmd: string, args: string[], cwd: string): Promise<number>
 
 export async function runInit(dir: string, opts: InitOptions): Promise<InitResult> {
   const target = path.resolve(dir);
+  if (fs.existsSync(target) && !fs.statSync(target).isDirectory()) throw new Error(`${dir} exists and is not a directory`);
   if (fs.existsSync(target) && fs.readdirSync(target).length > 0) throw new Error(`Directory ${dir} is not empty`);
 
   const pm = opts.pm ?? detectPm(opts.userAgent) ?? 'pnpm';
