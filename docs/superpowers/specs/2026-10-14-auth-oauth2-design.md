@@ -259,7 +259,7 @@ Mọi endpoint cần role `super_admin`.
 
 | Endpoint | Ghi chú |
 |---|---|
-| `GET /api/admin/users` | Danh sách: id, email, name, status, roles, last_login_at, identities |
+| `GET /api/admin/users` | `{ data: [...] }`, mỗi phần tử: `id, email, name, status, roles, lastLoginAt, identities` (camelCase và bọc `data`, theo quy ước API của `@opencms/core`) |
 | `POST /api/admin/users` | `{ email, name, password? }`. Không có password nghĩa là user chỉ đăng nhập qua IdP. Email trùng → `409 email_taken`. Audit `user_created` |
 | `PATCH /api/admin/users/:id` | `{ name?, status? }`. Vô hiệu hoá super_admin active cuối cùng → `409 last_super_admin`. Vô hiệu hoá thì gọi `revokeAll`. Audit `user_disabled` / `user_enabled` |
 | `POST /api/admin/users/:id/password` | `{ password }`. Gọi `revokeAll`. Audit `password_reset_by_admin` |
