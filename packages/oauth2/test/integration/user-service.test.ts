@@ -87,6 +87,23 @@ describe('UserService', () => {
         await c.stop();
       }
     });
+
+    it('two concurrent deletes of the last two admins (each by the other): exactly one succeeds', async () => {
+      const c = await startTestDb();
+      try {
+        const s = new UserService(c.db, new PasswordService({ minLength: 12 }), new AuditService(c.db), revoker);
+        const a = await s.create({ email: 'a@x.com', name: 'A' });
+        const b = await s.create({ email: 'b@x.com', name: 'B' });
+        const r = await Promise.allSettled([s.delete(a.id, b.id), s.delete(b.id, a.id)]);
+        expect(r.filter((x) => x.status === 'fulfilled')).toHaveLength(1);
+        const rej = r.filter((x): x is PromiseRejectedResult => x.status === 'rejected');
+        expect(rej).toHaveLength(1);
+        expect(rej[0].reason).toMatchObject({ code: 'last_super_admin' });
+        expect(await s.countUsers()).toBe(1);
+      } finally {
+        await c.stop();
+      }
+    });
   });
 
   it('setStatus disabled revokes + audits; enabled audits', async () => {
