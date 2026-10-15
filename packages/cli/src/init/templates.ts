@@ -173,7 +173,8 @@ Configuration lives in \`.env\` (see \`.env.example\`). Every \`opencms\` comman
 1. Set \`NODE_ENV=production\`.
 2. Set \`OPENCMS_PUBLIC_URL\` to the public URL of the site (required in production, the server refuses to start without it).
 3. Set \`OPENCMS_SECRET\` (random, at least 32 bytes) and \`DATABASE_URL\`.
-4. \`${pm} run build\`, then \`${pm} run start\` (applies migrations, then starts \`dist/src/main.js\`).
+4. Install with dev dependencies (do not use \`--omit=dev\` / \`--prod\`): \`start\` runs \`opencms migrate:up\`, and \`opencms-cli\` and \`typescript\` are dev dependencies.
+5. \`${pm} run build\`, then \`${pm} run start\` (applies migrations, then starts \`dist/src/main.js\`).
 
 ## Security notes
 

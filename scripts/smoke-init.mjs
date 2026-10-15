@@ -135,6 +135,10 @@ async function main() {
   else run('npm', ['install'], { cwd: app });
   ok('dependencies installed');
 
+  // Registry-install approximation: with symlinks preserved, @types/node must come from the project's own devDependencies.
+  run('node', [join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json', '--noEmit', '--preserveSymlinks'], { cwd: app });
+  ok('generated project type-checks (tsc --noEmit --preserveSymlinks)');
+
   const env = { ...process.env, PORT: String(port) };
   delete env.NODE_ENV;
   delete env.OPENCMS_PUBLIC_URL;

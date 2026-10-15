@@ -111,6 +111,8 @@ describe('runInit', () => {
     expect(pkg.dependencies['@opencms/core']).toBe('^1.2.3');
     expect(pkg.dependencies['@nestjs/core']).toBe('^11.0.0');
     expect(pkg.devDependencies['opencms-cli']).toBe('^1.2.3');
+    expect(pkg.devDependencies['@types/node']).toBe('^22.0.0');
+    expect(read(dir, 'README.md')).toContain('Install with dev dependencies');
     expect(pkg.scripts).toEqual({
       dev: 'opencms migrate:up && tsx src/main.ts',
       build: 'tsc -p tsconfig.json',
@@ -134,6 +136,7 @@ describe('runInit', () => {
     expect(pkg.dependencies['@opencms/core']).toBe(`link:${repo}/packages/core`);
     expect(pkg.dependencies['@opencms/schema']).toBe(`link:${repo}/packages/schema`);
     expect(pkg.devDependencies['opencms-cli']).toBe(`link:${repo}/packages/cli`);
+    expect(pkg.devDependencies['@types/node']).toBe('^22.0.0');
     expect(pkg.dependencies['@nestjs/core']).toBe(`link:${fs.realpathSync(path.join(store, '@nestjs/core'))}`);
     expect(pkg.dependencies.rxjs).toBe(`link:${fs.realpathSync(path.join(store, 'rxjs'))}`);
   });

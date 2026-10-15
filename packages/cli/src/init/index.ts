@@ -36,7 +36,7 @@ const RANGES = {
   rxjs: '^7.8.0',
   kysely: '^0.28.0',
 } as const;
-const DEV_RANGES = { tsx: '^4.19.0', typescript: '^5.6.0' } as const;
+const DEV_RANGES = { '@types/node': '^22.0.0', tsx: '^4.19.0', typescript: '^5.6.0' } as const;
 
 /** Packages the app must share with the linked core (two copies of Nest break DI). */
 const SHARED_WITH_CORE = Object.keys(RANGES);

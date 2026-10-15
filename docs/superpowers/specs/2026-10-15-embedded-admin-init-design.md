@@ -301,7 +301,7 @@ Token khác:
 ### 7.2 Các file sinh ra
 | File | Nội dung |
 |---|---|
-| `package.json` | `name` là tên thư mục. `dependencies`: `@opencms/core`, `@opencms/schema`, `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express`, `reflect-metadata`, `rxjs`, `kysely` (cùng khoảng phiên bản với `examples/my-store`). `devDependencies`: `opencms-cli`, `tsx`, `typescript`. `scripts`: `dev` = `opencms migrate:up && tsx src/main.ts`, `build` = `tsc -p tsconfig.json`, `start` = `opencms migrate:up && node dist/src/main.js`, `opencms` = `opencms` |
+| `package.json` | `name` là tên thư mục. `dependencies`: `@opencms/core`, `@opencms/schema`, `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express`, `reflect-metadata`, `rxjs`, `kysely` (cùng khoảng phiên bản với `examples/my-store`). `devDependencies`: `opencms-cli`, `tsx`, `typescript`, `@types/node` (`^22.0.0`; `build` type-checks `node:*` imports and `process`). `scripts`: `dev` = `opencms migrate:up && tsx src/main.ts`, `build` = `tsc -p tsconfig.json`, `start` = `opencms migrate:up && node dist/src/main.js`, `opencms` = `opencms` |
 | `tsconfig.json` | Độc lập (không extends monorepo): CommonJS, ES2022, `experimentalDecorators`, `emitDecoratorMetadata`, `strict`, `outDir: dist`, `rootDir: .` |
 | `opencms.config.ts` | `defineConfig({ database: { url: process.env.DATABASE_URL }, defaultLocale: 'en', locales: ['en'] })` |
 | `src/main.ts` | Nạp `.env` (dùng `process.loadEnvFile` của Node ≥ 20.12 nếu có file), tạo Nest app, `enableShutdownHooks`, `listen(PORT)`, rồi log `OpenCMS ready at <publicUrl>/admin` |
