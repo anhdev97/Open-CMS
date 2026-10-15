@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:net';
-import { Global, Module, type INestApplication, type InjectionToken, type Type } from '@nestjs/common';
+import { Global, Module, type INestApplication, type InjectionToken, type Provider, type Type } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { Kysely } from 'kysely';
 import type { AuthFileConfig } from '../../src/config/schema';
@@ -55,6 +55,8 @@ export async function createTestApp(
     controllers?: Type[];
     listenPort?: number;
     coreReady?: Promise<void>;
+    /** Extra (test-only) providers next to the module, e.g. a stand-in for the host's onModuleInit. */
+    providers?: Provider[];
     configureApp?: (app: INestApplication) => void;
   } = {},
 ): Promise<TestApp> {
@@ -81,6 +83,7 @@ export async function createTestApp(
       controllers: opts.controllers ?? [],
       providers: [
         { provide: TEST_DB, useValue: testDb.db },
+        ...(opts.providers ?? []),
         ...(coreReady ? [{ provide: TEST_CORE_READY, useValue: { wait: () => coreReady } satisfies CoreReady }] : []),
       ],
       exports: [TEST_DB, ...(coreReady ? [TEST_CORE_READY] : [])],

@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp } from '../support/app';
@@ -26,7 +27,7 @@ describe('CORE_READY gate', () => {
     expect(await keyCount()).toBe(0);
   });
 
-  it('a pending coreReady holds onModuleInit (DI completes, no auth_* access) until it resolves', async () => {
+  it('a pending coreReady holds onModuleInit until it resolves', async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
     let ready = false;
@@ -38,6 +39,29 @@ describe('CORE_READY gate', () => {
 
     release();
     const t = await starting;
+    expect(await keyCount()).toBe(1);
+    await t.close();
+  });
+
+  /**
+   * Stand-in for OpenCmsModule: settles the gate from its own onModuleInit, which only runs once every
+   * provider is instantiated. If CORE_READY were a promise Nest awaits during DI, startup would deadlock.
+   */
+  it('a coreReady settled from a sibling onModuleInit does not deadlock startup', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    @Injectable()
+    class FakeHost implements OnModuleInit {
+      onModuleInit(): void {
+        release();
+      }
+    }
+    const t = await Promise.race([
+      createTestApp(env, { db: testDb, coreReady: gate, providers: [FakeHost] }),
+      sleep(5000).then(() => {
+        throw new Error('startup deadlocked');
+      }),
+    ]);
     expect(await keyCount()).toBe(1);
     await t.close();
   });
