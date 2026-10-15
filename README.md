@@ -28,15 +28,16 @@ schema files ──► validate ──► diff with migrations/_snapshot.json �
 You need Node 22+ and a Postgres database.
 
 ```bash
-npx opencms-cli init my-cms --db-url postgres://postgres:postgres@localhost:5432/my_cms
+npx opencms-cli init my-cms --pm pnpm
 cd my-cms
-pnpm dev                                  # migrates, then serves on http://localhost:4000
+docker compose up -d                      # Postgres 16 with the database init configured (skip if you pass your own --db-url)
+pnpm run dev                              # migrates, then serves on http://localhost:4000
 ```
 
 `init` writes the project (config, `src/main.ts`, `.env` with a random `OPENCMS_SECRET`), installs
 dependencies (`--no-install` to skip, `--pm pnpm|npm|yarn` to choose) and never overwrites a non-empty
 directory. Open <http://localhost:4000/admin>: on a fresh database it asks you to create the first
-super_admin. One origin serves everything: UI `/admin`, API `/api`, auth `/oauth2`, delivery API `/api/content`.
+super_admin. Open it at the public URL (`OPENCMS_PUBLIC_URL`, default `http://localhost:4000`): another address such as `127.0.0.1` fails with `origin_mismatch`. One origin serves everything: UI `/admin`, API `/api`, auth `/oauth2`, delivery API `/api/content`.
 
 Working on this monorepo instead:
 
@@ -45,6 +46,8 @@ pnpm install && pnpm build
 docker compose up -d                      # Postgres 16 on :5432
 
 cd examples/my-store
+cp .env.example .env                      # then set OPENCMS_SECRET, e.g. (32 random bytes):
+                                          #   node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 pnpm opencms migrate:up                   # core system tables + project tables
 pnpm dev                                  # http://localhost:4000/admin
 OPENCMS_ADMIN_DEV=1 pnpm dev              # admin UI with Vite HMR (edit packages/core/admin/src)
