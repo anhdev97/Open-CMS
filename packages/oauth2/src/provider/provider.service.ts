@@ -9,7 +9,7 @@ import type { AuthSettingsProvider } from '../settings/settings.provider';
 import { BootstrapService } from '../setup/bootstrap.service';
 import { UserService, type GrantRevoker } from '../users/user.service';
 import { createKyselyAdapter, type AdapterConstructor } from './kysely.adapter';
-import { createProvider, TtlSnapshot, upsertAdminClient, type OidcProvider } from './provider.factory';
+import { createProvider, loopbackForwardedHost, TtlSnapshot, upsertAdminClient, type OidcProvider } from './provider.factory';
 import { ensureSigningKey } from './signing-keys';
 
 @Injectable()
@@ -54,7 +54,9 @@ export class ProviderService implements OnModuleInit, GrantRevoker {
       this.logger.warn('No HTTP adapter; oidc-provider is not mounted at /oauth2');
       return;
     }
-    http.getInstance().use('/oauth2', this.instance.callback());
+    const mount = http.getInstance();
+    if (this.cfg.publicUrl.startsWith('https://')) mount.use('/oauth2', this.instance.callback());
+    else mount.use('/oauth2', loopbackForwardedHost, this.instance.callback());
   }
 
   /**

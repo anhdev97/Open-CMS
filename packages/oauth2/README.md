@@ -31,9 +31,11 @@ export class AppModule {}
 
 The package does not depend on `@opencms/core`; you hand it the Kysely token.
 
-Exclude `/oauth2` from Nest's body parser in the host app (e.g. create the app with `bodyParser: false` and
-register `json()`/`urlencoded()` for every path except `/oauth2`); otherwise oidc-provider logs
-"already parsed request body detected" on its first parsed request.
+Create the host app with `NestFactory.create(AppModule, { bodyParser: false })`. oidc-provider must read its
+own request bodies, so Nest's default parser cannot run on `/oauth2`; `@opencms/core` registers the JSON and
+urlencoded parsers for the rest of the app (it skips `/oauth2/*` except the `/oauth2/interaction/*`
+controllers, which need JSON). Without `bodyParser: false`, oidc-provider logs "already parsed request body
+detected" and token requests fail.
 
 ### Migrations
 
@@ -49,14 +51,14 @@ Importing `@opencms/oauth2` registers its core migration (`oauth2_0001_init`) wi
 
 ## Configuration
 
-`OPENCMS_SECRET` and `OPENCMS_PUBLIC_URL` are mandatory; the app refuses to start without them.
+`OPENCMS_SECRET` is mandatory. `OPENCMS_PUBLIC_URL` is optional outside production (default
+`http://localhost:${PORT ?? 4000}`) and mandatory when `NODE_ENV=production`; the app refuses to start without them.
 Env values override the `auth` section of `opencms.config.ts`.
 
 | Key | Default | Env |
 |---|---|---|
-| `publicUrl` | required | `OPENCMS_PUBLIC_URL` (issuer is `<publicUrl>/oauth2`; a trailing `/` is ignored) |
+| `publicUrl` | dev: `http://localhost:${PORT ?? 4000}`; production: required | `OPENCMS_PUBLIC_URL` (issuer is `<publicUrl>/oauth2`; a trailing `/` is ignored) |
 | secret | required, at least 32 bytes | `OPENCMS_SECRET` |
-| `internalUrl` | `http://127.0.0.1:${PORT}` | `OPENCMS_INTERNAL_URL` (address the BFF uses to call its own provider for code exchange, refresh and revoke; set it when running behind a TLS reverse proxy where `publicUrl` is not reachable from inside the container) |
 | `ttl.accessToken` | 900 s | `OPENCMS_AUTH_TTL_ACCESS` |
 | `ttl.refreshToken` | 30 days | `OPENCMS_AUTH_TTL_REFRESH` (clamped to the absolute session TTL) |
 | `ttl.sessionIdle` | 7 days | `OPENCMS_AUTH_TTL_SESSION_IDLE` |
@@ -67,6 +69,11 @@ Env values override the `auth` section of `opencms.config.ts`.
 | `rateLimit.login` | 5 / 15 min per email, 20 / 15 min per IP | config only |
 | `idp.oidc` | disabled | `OPENCMS_IDP_OIDC_ISSUER`, `OPENCMS_IDP_OIDC_CLIENT_ID`, `OPENCMS_IDP_OIDC_CLIENT_SECRET`, `OPENCMS_IDP_OIDC_LABEL` |
 | admin seed | none | `OPENCMS_ADMIN_EMAIL`, `OPENCMS_ADMIN_PASSWORD`, `OPENCMS_ADMIN_NAME`, `OPENCMS_ADMIN_FORCE_RESET` |
+
+The BFF always calls its own provider at `http://127.0.0.1:${PORT ?? 4000}` (with the public URL's
+`X-Forwarded-Proto`/`X-Forwarded-Host`; for an http public URL the provider applies that host only to
+loopback peers). There is no `internalUrl` setting and no `OPENCMS_INTERNAL_URL`
+(removed; a leftover value is ignored).
 
 The rate limiter is in memory, so limits are per instance. It tracks at most 10 000 keys and drops the
 oldest when full.
@@ -83,7 +90,7 @@ oldest when full.
 | `/oauth2/*` | The OIDC provider (discovery, auth, token, jwks, end_session) and login interaction (`/oauth2/interaction/:uid`) |
 | `/oauth2/interaction/:uid/idp/:provider`, `/oauth2/idp/:provider/callback` | External IdP sign-in |
 
-Errors under `/api/**` look like `{ "error": { "code", "message" } }`; failures inside the redirect chain
+Errors under `/api/**` look like `{ "error": { "code", "message", "issues"? } }`; failures inside the redirect chain
 answer `302 /admin/login?error=<code>`.
 
 ## Setup flow
@@ -113,8 +120,9 @@ const app = await NestFactory.create<NestExpressApplication>(AppModule);
 app.set('trust proxy', 1); // one proxy in front
 ```
 
-Without it, every request appears to come from the proxy and shares one per-IP budget. Also set
-`OPENCMS_INTERNAL_URL` so the BFF can reach the provider without going through the proxy.
+Without it, every request appears to come from the proxy and shares one per-IP budget. Set
+`OPENCMS_PUBLIC_URL` to the public https origin; the BFF reaches the provider on the loopback address by
+itself, so nothing else is needed.
 
 ## Public path prefixes
 

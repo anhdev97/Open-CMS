@@ -16,7 +16,7 @@ export const TEST_CORE_READY = Symbol('TEST_CORE_READY');
 export interface TestApp {
   app: INestApplication;
   db: Kysely<AuthTables>;
-  /** OPENCMS_PUBLIC_URL (no trailing slash): the origin the browser sees. */
+  /** OPENCMS_PUBLIC_URL (no trailing slash): the origin the browser sees. When the env sets it to '' this is the dev default, http://localhost:<port>. */
   url: string;
   /** The address the app actually listens on (http://127.0.0.1:<port>). */
   baseUrl: string;
@@ -103,7 +103,7 @@ export async function createTestApp(
     return {
       app: started,
       db: testDb.db,
-      url: fullEnv.OPENCMS_PUBLIC_URL.replace(/\/+$/, ''),
+      url: (fullEnv.OPENCMS_PUBLIC_URL || `http://localhost:${listenPort}`).replace(/\/+$/, ''),
       baseUrl: base,
       async close() {
         await started.close();

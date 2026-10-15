@@ -1,4 +1,5 @@
 import { hkdfSync } from 'node:crypto';
+import type { IncomingMessage } from 'node:http';
 import type { Kysely } from 'kysely';
 import type { OAuth2Config, Ttls } from '../config/schema';
 import { ADMIN_CLIENT_ID } from '../constants';
@@ -214,6 +215,20 @@ export function buildProviderConfig(d: ProviderConfigDeps): Record<string, unkno
       ctx.body = { error: out.error, error_description: out.error_description };
     },
   };
+}
+
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
+/**
+ * For an http public URL the provider does not trust X-Forwarded-* (`proxy` is only on for https), so it builds
+ * issuer-relative URLs (discovery endpoints, redirects) from `Host`. The BFF reaches the provider on the
+ * loopback address (internalFetch) and Node's fetch cannot set `Host`, so its X-Forwarded-Host (the public
+ * host) is applied as `Host` here, for loopback peers only. Any other client keeps its own `Host`.
+ */
+export function loopbackForwardedHost(req: IncomingMessage, _res: unknown, next: () => void): void {
+  const forwarded = req.headers['x-forwarded-host'];
+  if (typeof forwarded === 'string' && LOOPBACK.has(req.socket.remoteAddress ?? '')) req.headers.host = forwarded;
+  next();
 }
 
 export async function createProvider(d: ProviderConfigDeps): Promise<OidcProvider> {
