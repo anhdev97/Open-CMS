@@ -106,7 +106,7 @@ export function registerCoreMigrations(source: Record<string, Migration>): void 
   if (registeredSources.includes(source)) return;
   const taken = allCoreMigrations();
   for (const key of Object.keys(source)) {
-    if (key in taken) throw new Error(`Core migration "${key}" is already registered`);
+    if (Object.hasOwn(taken, key)) throw new Error(`Core migration "${key}" is already registered`);
   }
   registeredSources.push(source);
 }
@@ -120,10 +120,16 @@ export function allCoreMigrations(): Record<string, Migration> {
   return out;
 }
 
+/**
+ * Unordered on purpose: contributed sources are independent of the built-ins, and their keys
+ * (`oauth2_0001_init`) sort after every `000N_*`, so the next built-in would otherwise land before an
+ * already executed migration and Kysely would refuse to run.
+ */
 export function coreMigrator(db: Kysely<any>): Migrator {
   return new Migrator({
     db,
     provider: { getMigrations: async () => allCoreMigrations() },
+    allowUnorderedMigrations: true,
     migrationTableName: 'opencms_core_migrations',
     migrationLockTableName: 'opencms_core_migrations_lock',
   });

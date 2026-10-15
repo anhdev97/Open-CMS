@@ -29,4 +29,9 @@ describe('registerCoreMigrations', () => {
   it('throws when colliding with a built-in core migration', () => {
     expect(() => registerCoreMigrations({ '0001_system_tables': noop })).toThrow(/0001_system_tables/);
   });
+
+  it('accepts keys that only exist on Object.prototype (own-key duplicate check)', () => {
+    expect(() => registerCoreMigrations({ toString: noop })).not.toThrow();
+    expect(Object.keys(allCoreMigrations())).toContain('toString');
+  });
 });
