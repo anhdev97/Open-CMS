@@ -123,3 +123,51 @@ export function createAdminSpaHandler(opts: AdminSpaOptions): (req: Request, res
     res.end(method === 'HEAD' ? undefined : html);
   };
 }
+
+export interface AdminDevOptions {
+  /** Directory of the admin Vite project (holds vite.config.mts and index.html). */
+  root: string;
+  /** The Nest HTTP server; Vite attaches its HMR websocket to it. */
+  httpServer: import('node:http').Server;
+}
+
+export interface AdminDevHandler {
+  handler: (req: Request, res: Response, next: (err?: unknown) => void) => void;
+  close(): Promise<void>;
+}
+
+/** The slice of Vite's dev server used here (the types of `vite` do not resolve under moduleResolution node). */
+interface ViteDevServer {
+  middlewares: (req: Request, res: Response, next: (err?: unknown) => void) => void;
+  close(): Promise<void>;
+}
+
+// A variable specifier keeps tsc from resolving vite's types. Under CommonJS it compiles to require(), which loads
+// vite's ESM build on Node >= 22 (require(esm)).
+const VITE = 'vite';
+const loadVite = (): Promise<{ createServer(config: Record<string, unknown>): Promise<ViteDevServer> }> => import(VITE);
+
+/**
+ * Dev UI mode: Vite in middleware mode, mounted at `/admin`. `vite` is imported lazily, only here, so installed
+ * packages without devDependencies never load it. Rejects when `vite` cannot be imported. The production CSP is
+ * deliberately not applied: Vite's index.html carries inline module scripts (HMR client, react-refresh preamble).
+ */
+export async function createAdminDevHandler(opts: AdminDevOptions): Promise<AdminDevHandler> {
+  const { createServer } = await loadVite();
+  const vite = await createServer({
+    root: opts.root,
+    configFile: path.join(opts.root, 'vite.config.mts'),
+    base: '/admin/',
+    server: { middlewareMode: true, hmr: { server: opts.httpServer } },
+    appType: 'spa',
+    logLevel: 'warn',
+  });
+  return {
+    handler: (req, res, next) => {
+      // `use('/admin')` stripped the mount point; Vite's base handling wants the full URL.
+      req.url = req.originalUrl;
+      vite.middlewares(req, res, next);
+    },
+    close: () => vite.close(),
+  };
+}

@@ -8,7 +8,8 @@ import type { Kysely } from 'kysely';
 import { createDb, migrateUp, pendingMigrations } from '@opencms/db';
 import { OAuth2Module, type CoreReady } from '@opencms/oauth2';
 import { resolveConfig } from '@opencms/schema';
-import { createAdminSpaHandler, DEFAULT_ADMIN_DIST_DIR } from './http/admin-spa.middleware';
+import * as path from 'node:path';
+import { createAdminDevHandler, createAdminSpaHandler, DEFAULT_ADMIN_DIST_DIR, type AdminDevHandler } from './http/admin-spa.middleware';
 import { ContentCorsMiddleware } from './http/content-cors.middleware';
 import { JsonBodyParserMiddleware } from './http/body-parser.middleware';
 import { AdminContentController, ContentController } from './content.controllers';
@@ -48,6 +49,7 @@ class DeferredCoreReady implements CoreReady {
 @Module({})
 export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger('OpenCms');
+  private adminDev?: AdminDevHandler;
 
   constructor(
     @Inject(OPENCMS_OPTIONS) private readonly options: ResolvedOpenCmsOptions,
@@ -100,7 +102,7 @@ export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShu
     try {
       await this.ensureMigrated();
       this.ready.resolve();
-      this.mountAdmin();
+      await this.mountAdmin();
     } catch (e) {
       this.ready.reject(e);
       throw e;
@@ -108,10 +110,22 @@ export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShu
   }
 
   /** Mounted from onModuleInit, i.e. before Nest registers its routes and its 404 handler. */
-  private mountAdmin(): void {
+  private async mountAdmin(): Promise<void> {
     if (this.options.admin?.enabled === false) return;
+    const adapter = this.httpHost.httpAdapter;
+    const env = this.options.env ?? process.env;
+    if (env.OPENCMS_ADMIN_DEV === '1') {
+      try {
+        // dist/ (or src/) -> packages/core/admin
+        this.adminDev = await createAdminDevHandler({ root: path.resolve(__dirname, '../admin'), httpServer: adapter.getHttpServer() });
+        adapter.getInstance().use('/admin', this.adminDev.handler);
+        return;
+      } catch (e) {
+        this.logger.error(`OPENCMS_ADMIN_DEV requires the @opencms/core source checkout (${e instanceof Error ? e.message : String(e)}); serving the built admin UI instead.`);
+      }
+    }
     const handler = createAdminSpaHandler({ distDir: this.options.admin?.distDir ?? DEFAULT_ADMIN_DIST_DIR, logger: this.logger });
-    this.httpHost.httpAdapter.getInstance().use('/admin', handler);
+    adapter.getInstance().use('/admin', handler);
   }
 
   private async ensureMigrated(): Promise<void> {
@@ -130,6 +144,7 @@ export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShu
   }
 
   async onApplicationShutdown(): Promise<void> {
+    await this.adminDev?.close();
     await this.db.destroy();
   }
 }
