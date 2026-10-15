@@ -231,6 +231,11 @@ export function loopbackForwardedHost(req: IncomingMessage, _res: unknown, next:
   next();
 }
 
+/** Handlers mounted at /oauth2: the loopback host rewrite only for an http public URL (https uses `proxy`). */
+export function providerMountHandlers<T>(publicUrl: string, callback: T): Array<T | typeof loopbackForwardedHost> {
+  return publicUrl.startsWith('https://') ? [callback] : [loopbackForwardedHost, callback];
+}
+
 export async function createProvider(d: ProviderConfigDeps): Promise<OidcProvider> {
   const Provider = await loadOidcProvider();
   const provider = new Provider(issuerFor(d.cfg), buildProviderConfig(d));

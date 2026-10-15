@@ -33,15 +33,15 @@ export interface LoginOptions {
  * Drives the real browser chain like a browser behind the app's public origin:
  * GET /api/auth/login → /oauth2/auth → /admin/login?uid → POST interaction login → provider resume
  * redirects → GET /api/auth/callback. Requests are physically sent to `t.baseUrl`; when the public URL
- * differs (TLS reverse proxy, or dev `localhost` vs the 127.0.0.1 listener), `Host` and `X-Forwarded-Proto`/`X-Forwarded-Host`
- * of the public URL are added the way the browser / proxy would.
+ * differs (TLS reverse proxy, or dev `localhost` vs the 127.0.0.1 listener), `X-Forwarded-Proto`/`X-Forwarded-Host` of the
+ * public URL are added the way a proxy would (the provider applies them from loopback peers; node's fetch cannot set `Host`).
  */
 export async function loginAs(t: TestApp, email: string, password: string, opts: LoginOptions = {}): Promise<LoginResult> {
   const pub = new URL(t.url);
   const physical = new URL(t.baseUrl);
   const proxied = pub.origin !== physical.origin;
   const forwarded: Record<string, string> = proxied
-    ? { host: pub.host, 'x-forwarded-proto': pub.protocol.replace(':', ''), 'x-forwarded-host': pub.host }
+    ? { 'x-forwarded-proto': pub.protocol.replace(':', ''), 'x-forwarded-host': pub.host }
     : {};
   const cookies = new CookieJar();
   const responses: RecordedResponse[] = [];

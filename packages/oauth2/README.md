@@ -124,6 +124,10 @@ Without it, every request appears to come from the proxy and shares one per-IP b
 `OPENCMS_PUBLIC_URL` to the public https origin; the BFF reaches the provider on the loopback address by
 itself, so nothing else is needed.
 
+With an **http** public URL behind a proxy on the same host, the provider takes `Host` from `X-Forwarded-Host`
+of loopback peers (that is how the BFF's own calls are handled), so the proxy must overwrite or strip
+`X-Forwarded-Host` instead of passing the client's value through.
+
 ## Public path prefixes
 
 `AuthGuard` protects every `/api/**` route, except routes whose path starts with one of
