@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { OidcClient } from '../../src/bff/oidc-client';
 import { SessionStore } from '../../src/bff/session.store';
-import { deriveKey, open, sha256 } from '../../src/security/crypto';
+import { deriveKey, open, seal, sha256 } from '../../src/security/crypto';
 import { UserService } from '../../src/users/user.service';
 import { OAUTH2_CONFIG } from '../../src/constants';
 import { createTestApp, type TestApp } from '../support/app';
@@ -190,6 +190,20 @@ describe('BFF login and callback', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('a session sealed with another OPENCMS_SECRET → 401 (not 500) and the row is deleted', async () => {
+    const r = await loginAs(t, 'admin@x.com', PW);
+    const other = deriveKey(Buffer.alloc(32, 7), 'token');
+    await t.db
+      .updateTable('auth_sessions')
+      .set({ access_token_enc: seal(other, 'a'), refresh_token_enc: seal(other, 'r'), id_token_enc: seal(other, 'i') })
+      .where('id_hash', '=', sha256(r.sessionCookie!))
+      .execute();
+    const me = await fetch(`${t.url}/api/auth/me`, { headers: { cookie: `oc_session=${r.sessionCookie}` } });
+    expect(me.status).toBe(401);
+    const row = await t.db.selectFrom('auth_sessions').select('id_hash').where('id_hash', '=', sha256(r.sessionCookie!)).executeTakeFirst();
+    expect(row).toBeUndefined();
   });
 
   it('SessionStore.touch extends idle at most once per 60 s and never past absolute', async () => {

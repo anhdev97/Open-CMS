@@ -34,8 +34,9 @@ The package does not depend on `@opencms/core`; you hand it the Kysely token.
 Create the host app with `NestFactory.create(AppModule, { bodyParser: false })`. oidc-provider must read its
 own request bodies, so Nest's default parser cannot run on `/oauth2`; `@opencms/core` registers the JSON and
 urlencoded parsers for the rest of the app (it skips `/oauth2/*` except the `/oauth2/interaction/*`
-controllers, which need JSON). Without `bodyParser: false`, oidc-provider logs "already parsed request body
-detected" and token requests fail.
+controllers, which need JSON). Without `bodyParser: false`, oidc-provider warns "already parsed request body
+detected" (once) and falls back to the body Nest already parsed. It keeps working, but set the option so
+oidc-provider reads its own requests as designed.
 
 ### Migrations
 
@@ -72,7 +73,7 @@ Env values override the `auth` section of `opencms.config.ts`.
 
 The BFF always calls its own provider at `http://127.0.0.1:${PORT ?? 4000}` (with the public URL's
 `X-Forwarded-Proto`/`X-Forwarded-Host`; for an http public URL the provider applies that host only to
-loopback peers). There is no `internalUrl` setting and no `OPENCMS_INTERNAL_URL`
+loopback peers, and only when it equals the public URL's host). There is no `internalUrl` setting and no `OPENCMS_INTERNAL_URL`
 (removed; a leftover value is ignored).
 
 The rate limiter is in memory, so limits are per instance. It tracks at most 10 000 keys and drops the
@@ -116,7 +117,7 @@ client spoof its IP and dodge the per-IP login limit. If you terminate TLS in a 
 the exact number of proxy hops:
 
 ```ts
-const app = await NestFactory.create<NestExpressApplication>(AppModule);
+const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
 app.set('trust proxy', 1); // one proxy in front
 ```
 
@@ -124,9 +125,9 @@ Without it, every request appears to come from the proxy and shares one per-IP b
 `OPENCMS_PUBLIC_URL` to the public https origin; the BFF reaches the provider on the loopback address by
 itself, so nothing else is needed.
 
-With an **http** public URL behind a proxy on the same host, the provider takes `Host` from `X-Forwarded-Host`
-of loopback peers (that is how the BFF's own calls are handled), so the proxy must overwrite or strip
-`X-Forwarded-Host` instead of passing the client's value through.
+With an **http** public URL, the provider takes `Host` from `X-Forwarded-Host` only for loopback peers and
+only when the value equals the public URL's host (that is how the BFF's own calls are handled). A client
+header passed through by a same-host proxy is ignored, so no extra proxy configuration is needed.
 
 ## Public path prefixes
 

@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { loadConfig, type OAuth2Config } from '../../src/config/schema';
 import { ADMIN_CLIENT_ID, GRANT_REVOKER, OAUTH2_CONFIG } from '../../src/constants';
+import { ConfigError } from '../../src/errors';
 import { deriveKey } from '../../src/security/crypto';
 import { createKyselyAdapter } from '../../src/provider/kysely.adapter';
 import { adminClientSecret } from '../../src/provider/provider.factory';
@@ -134,6 +135,20 @@ describe('provider boot', () => {
       expect(jwks.map((j) => j.kid)).toEqual(kid1);
       expect(jwks[0].d).toBeTypeOf('string');
       expect(await ctx.db.selectFrom('auth_signing_keys').select('kid').execute()).toHaveLength(1);
+    } finally {
+      await ctx.stop();
+    }
+  });
+
+  it('stored signing keys sealed with another OPENCMS_SECRET → ConfigError naming the secret and the remedy', async () => {
+    const ctx = await startTestDb();
+    try {
+      await ensureSigningKey(ctx.db, deriveKey(Buffer.alloc(32, 1), 'key'));
+      const err = await ensureSigningKey(ctx.db, deriveKey(Buffer.alloc(32, 2), 'key')).catch((e) => e);
+      expect(err).toBeInstanceOf(ConfigError);
+      expect(err.message).toMatch(/OPENCMS_SECRET/);
+      expect(err.message).toMatch(/auth_signing_keys/);
+      expect(err.message).toMatch(/auth_sessions/);
     } finally {
       await ctx.stop();
     }

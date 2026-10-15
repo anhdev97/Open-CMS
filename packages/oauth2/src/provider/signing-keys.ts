@@ -1,6 +1,7 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import type { Kysely } from 'kysely';
 import type { AuthTables } from '../db/types';
+import { ConfigError } from '../errors';
 import { open, seal } from '../security/crypto';
 
 /** Private EC JWK as stored (sealed) in auth_signing_keys and handed to oidc-provider's `jwks`. */
@@ -44,5 +45,13 @@ export async function ensureSigningKey(db: Kysely<AuthTables>, key: Buffer): Pro
       .execute();
     rows = await load();
   }
-  return rows.map((r) => JSON.parse(open(key, r.jwk_private_enc)) as JWK);
+  try {
+    return rows.map((r) => JSON.parse(open(key, r.jwk_private_enc)) as JWK);
+  } catch {
+    throw new ConfigError(
+      'The signing keys stored in auth_signing_keys were encrypted with a different OPENCMS_SECRET. ' +
+        'Restore the previous OPENCMS_SECRET, or delete the rows in auth_signing_keys and auth_sessions ' +
+        '(a new key is generated at startup; all users are signed out).',
+    );
+  }
 }

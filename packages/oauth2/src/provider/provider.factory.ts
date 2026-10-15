@@ -223,17 +223,21 @@ const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
  * For an http public URL the provider does not trust X-Forwarded-* (`proxy` is only on for https), so it builds
  * issuer-relative URLs (discovery endpoints, redirects) from `Host`. The BFF reaches the provider on the
  * loopback address (internalFetch) and Node's fetch cannot set `Host`, so its X-Forwarded-Host (the public
- * host) is applied as `Host` here, for loopback peers only. Any other client keeps its own `Host`.
+ * host) is applied as `Host` here. Only for loopback peers, and only when it equals the public URL's host: any
+ * other value (a client header passed through by a same-host proxy) is ignored and the request keeps its Host.
  */
-export function loopbackForwardedHost(req: IncomingMessage, _res: unknown, next: () => void): void {
-  const forwarded = req.headers['x-forwarded-host'];
-  if (typeof forwarded === 'string' && LOOPBACK.has(req.socket.remoteAddress ?? '')) req.headers.host = forwarded;
-  next();
+export function loopbackForwardedHost(publicUrl: string) {
+  const publicHost = new URL(publicUrl).host;
+  return (req: IncomingMessage, _res: unknown, next: () => void): void => {
+    const forwarded = req.headers['x-forwarded-host'];
+    if (forwarded === publicHost && LOOPBACK.has(req.socket.remoteAddress ?? '')) req.headers.host = forwarded;
+    next();
+  };
 }
 
 /** Handlers mounted at /oauth2: the loopback host rewrite only for an http public URL (https uses `proxy`). */
-export function providerMountHandlers<T>(publicUrl: string, callback: T): Array<T | typeof loopbackForwardedHost> {
-  return publicUrl.startsWith('https://') ? [callback] : [loopbackForwardedHost, callback];
+export function providerMountHandlers<T>(publicUrl: string, callback: T): Array<T | ReturnType<typeof loopbackForwardedHost>> {
+  return publicUrl.startsWith('https://') ? [callback] : [loopbackForwardedHost(publicUrl), callback];
 }
 
 export async function createProvider(d: ProviderConfigDeps): Promise<OidcProvider> {
