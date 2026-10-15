@@ -1,17 +1,7 @@
 import type { RouteObject } from 'react-router';
 import { AuthGate } from './auth/AuthGate';
-import { t } from './i18n/en';
 
-function Placeholder() {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-      <h1 className="text-2xl font-semibold">{t('app.name')}</h1>
-      <p className="text-muted-foreground">{t('app.comingSoon')}</p>
-    </div>
-  );
-}
-
-// /setup and /login sit outside AuthGate; the content, builder, users and account routes join the gate in later tasks.
+// /setup and /login sit outside AuthGate; users and account routes join the gate in later tasks.
 export const routes: RouteObject[] = [
   // `import.meta.env.DEV` is a build-time constant: in production the branch (and the lazy chunk) is dropped.
   ...(import.meta.env.DEV
@@ -22,7 +12,9 @@ export const routes: RouteObject[] = [
   {
     element: <AuthGate />,
     children: [
-      { index: true, element: <Placeholder /> },
+      { index: true, lazy: async () => ({ Component: (await import('./pages/Home')).Home }) },
+      { path: 'content/:apiId', lazy: async () => ({ Component: (await import('./pages/Content')).Content }) },
+      { path: 'builder', lazy: async () => ({ Component: (await import('./pages/Builder')).Builder }) },
       { path: '*', lazy: async () => ({ Component: (await import('./pages/NotFound')).NotFound }) },
     ],
   },
