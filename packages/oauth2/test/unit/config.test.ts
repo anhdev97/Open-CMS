@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from '../../src/config/schema';
+import { ConfigError, loadConfig } from '../../src/config/schema';
 
 const secret = Buffer.alloc(32, 7).toString('base64');
 const base = { OPENCMS_SECRET: secret, OPENCMS_PUBLIC_URL: 'https://cms.x.com' };
@@ -16,8 +16,22 @@ describe('loadConfig', () => {
     const cfg = loadConfig({ ...base, OPENCMS_SECRET: 'ab'.repeat(32) });
     expect(cfg.secret.length).toBe(32);
   });
-  it('requires OPENCMS_PUBLIC_URL', () => {
-    expect(() => loadConfig({ OPENCMS_SECRET: secret })).toThrow(/OPENCMS_PUBLIC_URL/);
+  it('defaults publicUrl and internalUrl from PORT (4000 when unset) outside production', () => {
+    const cfg = loadConfig({ OPENCMS_SECRET: secret });
+    expect(cfg.publicUrl).toBe('http://localhost:4000');
+    expect(cfg.internalUrl).toBe('http://127.0.0.1:4000');
+    const c5 = loadConfig({ OPENCMS_SECRET: secret, PORT: '5000' });
+    expect(c5.publicUrl).toBe('http://localhost:5000');
+    expect(c5.internalUrl).toBe('http://127.0.0.1:5000');
+  });
+  it('requires OPENCMS_PUBLIC_URL when NODE_ENV=production', () => {
+    const run = () => loadConfig({ OPENCMS_SECRET: secret, NODE_ENV: 'production' });
+    expect(run).toThrow(ConfigError);
+    expect(run).toThrow(/OPENCMS_PUBLIC_URL/);
+  });
+  it('ignores OPENCMS_INTERNAL_URL', () => {
+    const cfg = loadConfig({ ...base, OPENCMS_INTERNAL_URL: 'http://app:8080' });
+    expect(cfg.internalUrl).toBe('http://127.0.0.1:4000');
   });
   it('strips trailing slash from publicUrl', () => {
     const cfg = loadConfig({ ...base, OPENCMS_PUBLIC_URL: 'https://cms.x.com/' });
@@ -29,11 +43,6 @@ describe('loadConfig', () => {
   });
   it('file config applies when env is absent', () => {
     expect(loadConfig(base, { ttl: { accessToken: 120 } }).ttl.accessToken).toBe(120);
-  });
-  it('internalUrl defaults to loopback on PORT', () => {
-    expect(loadConfig(base).internalUrl).toBe('http://127.0.0.1:3000');
-    expect(loadConfig({ ...base, PORT: '4100' }).internalUrl).toBe('http://127.0.0.1:4100');
-    expect(loadConfig({ ...base, OPENCMS_INTERNAL_URL: 'http://app:8080/' }).internalUrl).toBe('http://app:8080');
   });
   it('has documented defaults', () => {
     const cfg = loadConfig(base);

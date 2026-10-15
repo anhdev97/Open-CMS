@@ -28,7 +28,6 @@ export type OAuth2Config = {
 /** Non-secret part of `auth` in opencms.config.ts. */
 export type AuthFileConfig = {
   publicUrl?: string;
-  internalUrl?: string;
   ttl?: Partial<Ttls>;
   password?: { minLength?: number };
   rateLimit?: { loginPerEmail?: Partial<RateRule>; loginPerIp?: Partial<RateRule> };
@@ -88,12 +87,13 @@ function envInt(env: NodeJS.ProcessEnv, name: string): number | undefined {
 
 export function loadConfig(env: NodeJS.ProcessEnv, file: Partial<AuthFileConfig> = {}): OAuth2Config {
   const secret = decodeSecret(env.OPENCMS_SECRET);
+  const port = Number(env.PORT) || 4000;
+  const internalUrl = `http://127.0.0.1:${port}`;
   const publicRaw = env.OPENCMS_PUBLIC_URL || file.publicUrl;
-  if (!publicRaw) throw new ConfigError('OPENCMS_PUBLIC_URL is required');
-  const publicUrl = trimSlash(publicRaw.trim());
-  const internalUrl = trimSlash(
-    (env.OPENCMS_INTERNAL_URL || file.internalUrl || `http://127.0.0.1:${env.PORT ?? 3000}`).trim(),
-  );
+  if (!publicRaw && env.NODE_ENV === 'production') {
+    throw new ConfigError('OPENCMS_PUBLIC_URL is required when NODE_ENV=production');
+  }
+  const publicUrl = trimSlash((publicRaw ?? `http://localhost:${port}`).trim());
 
   const ttl = {
     ...file.ttl,

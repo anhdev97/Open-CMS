@@ -267,7 +267,7 @@ describe('BFF behind a TLS reverse proxy (Review Focus 5)', () => {
   let t: TestApp;
 
   beforeAll(async () => {
-    // internalUrl defaults to the app's real address (R7); publicUrl is unreachable from inside.
+    // the internal URL defaults to the app's real address via PORT (R7); publicUrl is unreachable from inside.
     t = await createTestApp({ OPENCMS_PUBLIC_URL: 'https://cms.test' }, { auth });
     await t.app.get(UserService).create({ email: 'admin@x.com', name: 'Admin', password: PW });
   });
@@ -290,12 +290,13 @@ describe('BFF behind a TLS reverse proxy (Review Focus 5)', () => {
   });
 });
 
-describe('BFF with an unreachable internalUrl', () => {
+describe('BFF with an unreachable internal URL', () => {
   let t: TestApp;
 
   beforeAll(async () => {
-    // Port 9 (discard) on loopback: nothing listens, so discovery fails.
-    t = await createTestApp({ OPENCMS_INTERNAL_URL: 'http://127.0.0.1:9' }, { auth });
+    // PORT=9 (discard) on loopback: nothing listens there, so the BFF's internal discovery fails
+    // while the app itself listens on another port.
+    t = await createTestApp({ PORT: '9' }, { auth });
   });
   afterAll(async () => {
     await t?.close();

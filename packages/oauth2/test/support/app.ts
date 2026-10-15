@@ -38,24 +38,25 @@ async function freePort(): Promise<number> {
  * Boots the full OAuth2Module on a real HTTP port (R7). `opts.db` reuses an existing test database
  * (its lifetime then stays with the caller); otherwise a fresh database is created and dropped on close().
  * `opts.auth` is passed through as the file `auth` config (e.g. `{ ttl: { interaction: 1 } }`).
+ * `opts.listenPort` is the port the app listens on (default: a free port, also used as PORT); pass `env.PORT`
+ * separately to point the BFF's internal URL elsewhere.
  * `opts.controllers` mounts extra (test-only) controllers next to the module.
  * Error JSON comes from the module's own APP_FILTER (Task 11), so no global filter is added here.
  */
 export async function createTestApp(
   env: Record<string, string> = {},
-  opts: { db?: TestDb; auth?: Partial<AuthFileConfig>; controllers?: Type[] } = {},
+  opts: { db?: TestDb; auth?: Partial<AuthFileConfig>; controllers?: Type[]; listenPort?: number } = {},
 ): Promise<TestApp> {
   const testDb = opts.db ?? (await startTestDb());
   const ownsDb = !opts.db;
   let app: INestApplication | undefined;
   try {
-    const port = await freePort();
-    const base = `http://127.0.0.1:${port}`;
+    const listenPort = opts.listenPort ?? (await freePort());
+    const base = `http://127.0.0.1:${listenPort}`;
     const fullEnv: Record<string, string> = {
       OPENCMS_SECRET: randomBytes(32).toString('hex'),
       OPENCMS_PUBLIC_URL: base,
-      OPENCMS_INTERNAL_URL: base,
-      PORT: String(port),
+      PORT: String(listenPort),
       ...env,
     };
 
@@ -71,7 +72,7 @@ export async function createTestApp(
       imports: [TestDbModule, OAuth2Module.forRoot({ dbToken: TEST_DB, env: fullEnv, auth: opts.auth })],
     }).compile();
     app = mod.createNestApplication({ logger: false });
-    await app.listen(port, '127.0.0.1');
+    await app.listen(listenPort, '127.0.0.1');
     const started = app;
     return {
       app: started,
