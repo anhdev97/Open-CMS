@@ -65,6 +65,10 @@ export const oauth2_0001_init: Migration = {
       .addPrimaryKeyConstraint('auth_oidc_payloads_pk', ['kind', 'id'])
       .execute();
     await db.schema.createIndex('auth_oidc_payloads_kind_grant_idx').on('auth_oidc_payloads').columns(['kind', 'grant_id']).execute();
+    // revokeByGrantId() filters on grant_id alone (any kind).
+    await db.schema.createIndex('auth_oidc_payloads_grant_id_idx').on('auth_oidc_payloads').column('grant_id').execute();
+    // Per-user Grant/Session lookups of the GrantRevoker.
+    await sql`create index auth_oidc_payloads_kind_account_idx on auth_oidc_payloads (kind, (payload->>'accountId'))`.execute(db);
     await db.schema.createIndex('auth_oidc_payloads_kind_uid_idx').on('auth_oidc_payloads').columns(['kind', 'uid']).execute();
     await db.schema.createIndex('auth_oidc_payloads_expires_idx').on('auth_oidc_payloads').column('expires_at').execute();
 

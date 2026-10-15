@@ -31,6 +31,10 @@ export class AppModule {}
 
 The package does not depend on `@opencms/core`; you hand it the Kysely token.
 
+Exclude `/oauth2` from Nest's body parser in the host app (e.g. create the app with `bodyParser: false` and
+register `json()`/`urlencoded()` for every path except `/oauth2`); otherwise oidc-provider logs
+"already parsed request body detected" on its first parsed request.
+
 ### Migrations
 
 Importing `@opencms/oauth2` registers its core migration (`oauth2_0001_init`) with `@opencms/db`'s

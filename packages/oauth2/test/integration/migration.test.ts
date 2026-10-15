@@ -65,6 +65,28 @@ describe('oauth2_0001_init', () => {
     expect(await db.selectFrom('auth_user_identities').selectAll().where('user_id', '=', u.id).execute()).toHaveLength(0);
   });
 
+  it('indexes auth_oidc_payloads for grant revocation and per-account lookups', async () => {
+    const r = await sql<{ indexname: string; indexdef: string }>`select indexname, indexdef from pg_indexes where tablename = 'auth_oidc_payloads' order by indexname`.execute(db);
+    const defs = Object.fromEntries(r.rows.map((x) => [x.indexname, x.indexdef]));
+    expect(Object.keys(defs)).toEqual([
+      'auth_oidc_payloads_expires_idx',
+      'auth_oidc_payloads_grant_id_idx',
+      'auth_oidc_payloads_kind_account_idx',
+      'auth_oidc_payloads_kind_grant_idx',
+      'auth_oidc_payloads_kind_uid_idx',
+      'auth_oidc_payloads_pk',
+    ]);
+    expect(defs.auth_oidc_payloads_grant_id_idx).toMatch(/\(grant_id\)$/);
+    expect(defs.auth_oidc_payloads_kind_account_idx).toMatch(/\(kind, \(\(payload ->> 'accountId'::text\)\)\)$/);
+
+    // The revoker's lookup (kind + payload->>'accountId') can use the expression index.
+    const plan = await db.transaction().execute(async (trx) => {
+      await sql`set local enable_seqscan = off`.execute(trx);
+      return sql<{ 'QUERY PLAN': string }>`explain select id from auth_oidc_payloads where kind = 'Grant' and payload->>'accountId' = 'x'`.execute(trx);
+    });
+    expect(plan.rows.map((x) => x['QUERY PLAN']).join('\n')).toContain('auth_oidc_payloads_kind_account_idx');
+  });
+
   it('records the migration in opencms_core_migrations', async () => {
     const r = await sql<{ name: string }>`select name from opencms_core_migrations`.execute(db);
     expect(r.rows.map((x) => x.name)).toContain('oauth2_0001_init');
