@@ -61,7 +61,8 @@ describe('BFF login and callback', () => {
     expect(p.get('state')).toBeTruthy();
     expect(p.get('nonce')).toBeTruthy();
     expect(p.get('login_hint')).toBe('admin@x.com');
-    expect(p.has('prompt')).toBe(false);
+    // C1: every BFF login runs the interaction; a surviving provider session never re-authenticates.
+    expect(p.get('prompt')).toBe('login');
 
     const line = cookieLine(res.headers.getSetCookie(), 'oc_login')!;
     expect(line).toBeTruthy();
@@ -259,14 +260,6 @@ describe('BFF login and callback', () => {
     expect(next.refreshToken).not.toBe(refreshToken); // rotated
     await client.revoke(next.refreshToken!);
     await expect(client.refresh(next.refreshToken!)).rejects.toThrow();
-  });
-
-  it('endSessionUrl → public end_session endpoint with id_token_hint and the admin login redirect', async () => {
-    const url = new URL(await t.app.get(OidcClient).endSessionUrl('eyJhint'));
-    expect(url.origin).toBe(t.url);
-    expect(url.pathname.startsWith('/oauth2/')).toBe(true);
-    expect(url.searchParams.get('id_token_hint')).toBe('eyJhint');
-    expect(url.searchParams.get('post_logout_redirect_uri')).toBe(`${t.url}/admin/login`);
   });
 });
 

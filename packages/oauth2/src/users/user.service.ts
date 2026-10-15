@@ -20,7 +20,10 @@ export type AuthUser = {
 };
 
 export interface GrantRevoker {
-  revokeAllGrants(userId: string): Promise<void>;
+  /** Destroys the user's Grants (and their codes/tokens) except `exceptGrantId`, and all provider Sessions. */
+  revokeAllGrants(userId: string, opts?: { exceptGrantId?: string }): Promise<void>;
+  /** Destroys the user's provider Sessions only (logout, BFF session expiry). */
+  destroyProviderSessions(userId: string): Promise<void>;
 }
 
 const SUPER_ADMIN = 'super_admin';

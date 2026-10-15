@@ -99,7 +99,11 @@ export class OidcClient {
     );
   }
 
-  /** Authorization URL as the browser sees it (public origin). */
+  /**
+   * Authorization URL as the browser sees it (public origin). Always `prompt=login` (C1): the BFF session
+   * is the only authentication the admin client accepts, so a surviving provider session must never
+   * re-authenticate a browser whose BFF session was logged out or expired.
+   */
   async buildLoginUrl(p: { state: string; nonce: string; codeChallenge: string; loginHint?: string }): Promise<URL> {
     const client = await loadOpenidClient();
     const params: Record<string, string> = {
@@ -110,6 +114,7 @@ export class OidcClient {
       nonce: p.nonce,
       code_challenge: p.codeChallenge,
       code_challenge_method: 'S256',
+      prompt: 'login',
     };
     if (p.loginHint) params.login_hint = p.loginHint;
     return client.buildAuthorizationUrl(await this.getConfig(), params);
@@ -137,14 +142,6 @@ export class OidcClient {
   async revoke(refreshToken: string): Promise<void> {
     const client = await loadOpenidClient();
     await client.tokenRevocation(await this.getConfig(), refreshToken, { token_type_hint: 'refresh_token' });
-  }
-
-  /** RP-initiated logout URL (public origin). Async: it may need discovery first. */
-  async endSessionUrl(idToken?: string): Promise<string> {
-    const client = await loadOpenidClient();
-    const params: Record<string, string> = { post_logout_redirect_uri: `${this.cfg.publicUrl}/admin/login` };
-    if (idToken) params.id_token_hint = idToken;
-    return client.buildEndSessionUrl(await this.getConfig(), params).toString();
   }
 }
 

@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { Controller, Get, HttpCode, Post } from '@nestjs/common';
+import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { OidcClient } from '../../src/bff/oidc-client';
 import { SessionStore } from '../../src/bff/session.store';
@@ -9,7 +10,7 @@ import { adminClientSecret } from '../../src/provider/provider.factory';
 import { sha256 } from '../../src/security/crypto';
 import { UserService } from '../../src/users/user.service';
 import { createTestApp, type TestApp } from '../support/app';
-import { loginAs } from '../support/login';
+import { loginAs, restartLogin } from '../support/login';
 
 const PW = 'correct horse battery';
 const auth = { rateLimit: { loginPerEmail: { limit: 1000 }, loginPerIp: { limit: 1000 } } };
@@ -245,7 +246,7 @@ describe('AuthGuard, me, logout (default TTLs)', () => {
     expect(row).toBeUndefined();
   });
 
-  it('logout: needs Origin; revokes, deletes the session, clears the cookie, audits, returns end-session URL', async () => {
+  it('logout: needs Origin; revokes, deletes the session, clears the cookie, audits, returns the login page', async () => {
     const { sessionCookie } = await loginAs(t, 'admin@x.com', PW);
     const stored = await t.app.get(SessionStore).get(sessionCookie!);
     expect(stored?.refreshToken).toBeTruthy();
@@ -257,11 +258,8 @@ describe('AuthGuard, me, logout (default TTLs)', () => {
     const r = await api('/api/auth/logout', { method: 'POST', cookie: sessionCookie });
     expect(r.status).toBe(200);
     expect(clearsSession(r)).toBe(true);
-    const redirectTo = new URL(r.body.redirectTo);
-    expect(r.body.redirectTo.startsWith(`${t.url}/oauth2/session/end`)).toBe(true);
-    expect(redirectTo.searchParams.get('post_logout_redirect_uri')).toBe(`${t.url}/admin/login`);
-    expect(redirectTo.searchParams.get('id_token_hint')).toBe(stored!.idToken);
-    expect(Object.keys(r.body)).toEqual(['redirectTo']);
+    // C1/M1: no end-session hop (and so no id token in a browser-visible URL).
+    expect(r.body).toEqual({ redirectTo: '/admin/login' });
 
     const row = await t.db.selectFrom('auth_sessions').select('id_hash').where('id_hash', '=', sha256(sessionCookie!)).executeTakeFirst();
     expect(row).toBeUndefined();
@@ -279,6 +277,42 @@ describe('AuthGuard, me, logout (default TTLs)', () => {
     const reuse = await useRefreshToken(t, stored!.refreshToken!);
     expect(reuse.status).toBe(400);
     expect(reuse.body.error).toBe('invalid_grant');
+  });
+
+  const providerSessions = (userId: string) =>
+    t.db
+      .selectFrom('auth_oidc_payloads')
+      .select('id')
+      .where('kind', '=', 'Session')
+      .where(sql<string>`payload->>'accountId'`, '=', userId)
+      .execute();
+
+  it('C1: after logout, /api/auth/login in the same browser runs the login interaction again', async () => {
+    const r = await loginAs(t, 'admin@x.com', PW);
+    expect(await providerSessions(adminId)).not.toHaveLength(0);
+    expect((await api('/api/auth/logout', { method: 'POST', cookie: r.sessionCookie })).status).toBe(200);
+    expect(await providerSessions(adminId)).toHaveLength(0);
+
+    const again = await restartLogin(t, r.cookies);
+    expect(again.location.pathname).toBe('/admin/login');
+    expect(again.location.searchParams.get('uid')).toBeTruthy();
+    expect(again.newSession).toBe(false);
+  });
+
+  it('C1: after BFF idle expiry, /api/auth/login in the same browser runs the login interaction again', async () => {
+    const r = await loginAs(t, 'admin@x.com', PW);
+    await t.db
+      .updateTable('auth_sessions')
+      .set({ idle_expires_at: new Date(Date.now() - 1000) })
+      .where('id_hash', '=', sha256(r.sessionCookie!))
+      .execute();
+    expect((await api('/api/auth/me', { cookie: r.sessionCookie })).status).toBe(401);
+    expect(await providerSessions(adminId)).toHaveLength(0);
+
+    const again = await restartLogin(t, r.cookies);
+    expect(again.location.pathname).toBe('/admin/login');
+    expect(again.location.searchParams.get('uid')).toBeTruthy();
+    expect(again.newSession).toBe(false);
   });
 
   it('logout without a session → 401', async () => {

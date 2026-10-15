@@ -105,7 +105,7 @@ auth_oidc_payloads              -- kho của KyselyAdapter
   payload jsonb not null
   grant_id text null, uid text null, user_code text null
   expires_at timestamptz null, consumed_at timestamptz null
-  index (kind, grant_id), index (kind, uid), index (expires_at)
+  index (kind, grant_id), index (grant_id), index (kind, (payload->>'accountId')), index (kind, uid), index (expires_at)
 
 auth_sessions                   -- session BFF
   id_hash text pk               -- sha256 của giá trị cookie
@@ -188,7 +188,7 @@ Bước 4 và 5 chạy trong transaction có `pg_advisory_xact_lock(<hằng số
 2. BFF:
    - Kiểm tra `returnTo`: chỉ chấp nhận đường dẫn tương đối bắt đầu bằng `/admin`, không có `//` và không có scheme. Sai thì dùng `/admin`.
    - Sinh `state`, `nonce` và PKCE verifier, lưu vào cookie `oc_login` (đã mã hoá, httpOnly, SameSite=Lax, Path=/api/auth, 10 phút).
-   - Chuyển hướng 302 đến `/oauth2/auth?...&code_challenge_method=S256[&login_hint]`.
+   - Chuyển hướng 302 đến `/oauth2/auth?...&code_challenge_method=S256&prompt=login[&login_hint]`. `prompt=login` luôn được gửi: session phía provider không bao giờ tự đăng nhập lại một trình duyệt đã đăng xuất hoặc hết hạn session BFF (xem §6.6).
 3. Provider tạo interaction và chuyển hướng 302 đến `/admin/login?uid=<uid>`.
 4. SPA gọi `GET /oauth2/interaction/:uid` để lấy `{ loginHint, idps: [{ id, label }] }`, rồi hiện form.
 5. `POST /oauth2/interaction/:uid/login` với `{ email, password }`:
@@ -246,8 +246,10 @@ type ExternalIdentity = { provider: string; subject: string; email?: string; ema
 ### 6.6 Đăng xuất và thu hồi
 - `POST /api/auth/logout`:
   - Thu hồi refresh token tại `/oauth2/token/revocation`, xoá session, xoá cookie, ghi audit `logout`.
-  - Trả `{ redirectTo: <end_session URL với id_token_hint và post_logout_redirect_uri> }` để kết thúc cả session phía provider.
-- Hàm `UserService.revokeAll(userId, { exceptSessionId? })` xoá các dòng `auth_sessions` và gọi `provider.Grant` destroy cho các grant của user. Hàm được dùng khi:
+  - Kết thúc session phía provider ngay trên server: xoá mọi dòng `Session` của user trong `auth_oidc_payloads` (`payload->>'accountId'` = user id).
+  - Trả `{ redirectTo: '/admin/login' }`. Không có bước chuyển qua end_session của provider: bước đó cần `id_token_hint` trong URL mà trình duyệt nhìn thấy, trái với §7 (không response nào trả token cho trình duyệt), và phụ thuộc vào việc trình duyệt đi theo redirect.
+- Khi `AuthGuard` huỷ session BFF vì hết `idle_expires_at`/`absolute_expires_at` hoặc vì user không còn `active` (§6.5 bước 2–3), các `Session` phía provider của user cũng bị xoá như trên. Cùng với `prompt=login` (§6.3 bước 2), lần `GET /api/auth/login` tiếp theo luôn chạy interaction đăng nhập.
+- Hàm `UserService.revokeAll(userId, { exceptSessionId? })` xoá các dòng `auth_sessions` và gọi `provider.Grant` destroy cho các grant của user (kèm code/token cấp theo grant và các `Session` phía provider). Khi có `exceptSessionId`, grant của session đó (tra từ refresh token đang lưu) được giữ lại để session hiện tại vẫn refresh được. Hàm được dùng khi:
   - Admin vô hiệu hoá user hoặc reset mật khẩu → huỷ tất cả.
   - User tự đổi mật khẩu → giữ session hiện tại.
   - Force reset từ env → huỷ tất cả.

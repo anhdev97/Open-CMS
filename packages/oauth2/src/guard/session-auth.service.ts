@@ -4,10 +4,10 @@ import { isSecureUrl, parseCookies, serializeCookie } from '../bff/cookies';
 import { OidcClient } from '../bff/oidc-client';
 import { REFRESH_LEASE_SEC, SessionStore, type SessionRow } from '../bff/session.store';
 import type { OAuth2Config } from '../config/schema';
-import { OAUTH2_CONFIG, SESSION_COOKIE } from '../constants';
+import { GRANT_REVOKER, OAUTH2_CONFIG, SESSION_COOKIE } from '../constants';
 import { AuthError } from '../errors';
 import { sha256 } from '../security/crypto';
-import { UserService } from '../users/user.service';
+import { UserService, type GrantRevoker } from '../users/user.service';
 import type { RequestAuthSession, RequestUser } from './current-user.decorator';
 
 /** Refresh when the access token has less than this left (spec §6.5 step 4). */
@@ -33,6 +33,7 @@ export class SessionAuthenticator {
     @Inject(SessionStore) private readonly sessions: SessionStore,
     @Inject(UserService) private readonly users: UserService,
     @Inject(OidcClient) private readonly oidc: OidcClient,
+    @Inject(GRANT_REVOKER) private readonly revoker: GrantRevoker,
   ) {
     this.secure = isSecureUrl(cfg.publicUrl);
   }
@@ -63,17 +64,20 @@ export class SessionAuthenticator {
     }
     if (!session) throw unauthenticated();
     const now = Date.now();
-    if (session.idleExpiresAt.getTime() <= now || session.absoluteExpiresAt.getTime() <= now) {
+    // C1: a BFF session that ends here also ends the user's provider session, so the next
+    // /api/auth/login cannot be silently re-authenticated by it.
+    const endSession = async (userId: string): Promise<AuthError> => {
       await this.sessions.delete(idHash);
-      throw unauthenticated();
+      await this.revoker.destroyProviderSessions(userId);
+      return unauthenticated();
+    };
+    if (session.idleExpiresAt.getTime() <= now || session.absoluteExpiresAt.getTime() <= now) {
+      throw await endSession(session.userId);
     }
 
     // Step 3: the user must still exist and be active.
     const user = await this.users.findById(session.userId);
-    if (!user || user.status !== 'active') {
-      await this.sessions.delete(idHash);
-      throw unauthenticated();
-    }
+    if (!user || user.status !== 'active') throw await endSession(session.userId);
 
     // Step 4: refresh near expiry, serialised per session.
     if (session.accessExpiresAt && session.accessExpiresAt.getTime() - now < REFRESH_MARGIN_MS) {

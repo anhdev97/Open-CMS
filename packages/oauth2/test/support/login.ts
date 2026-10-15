@@ -102,3 +102,24 @@ export async function loginAs(t: TestApp, email: string, password: string, opts:
   const sessionCookie = sessionLine ? sessionLine.split(';')[0].slice('oc_session='.length) || undefined : undefined;
   return { sessionCookie, finalLocation, callbackSetCookies: cb.setCookies, responses, cookies };
 }
+
+/**
+ * A browser that already went through a login (same jar, incl. the provider's `_session` cookie) starts
+ * `GET /api/auth/login` again. Follows same-origin redirects until the chain leaves the provider and
+ * returns where it ended plus whether the callback set a new `oc_session` (a silent re-login).
+ */
+export async function restartLogin(t: TestApp, cookies: CookieJar): Promise<{ location: URL; newSession: boolean }> {
+  let next = `${t.url}/api/auth/login`;
+  let newSession = false;
+  for (let hop = 0; hop < 12; hop++) {
+    const res = await cookies.fetch(next, { headers: { 'user-agent': 'vitest-bff' } });
+    if (res.headers.getSetCookie().some((l) => /^oc_session=[^;]+/.test(l))) newSession = true;
+    const loc = res.headers.get('location');
+    if (res.status < 300 || res.status >= 400 || !loc) throw new Error(`no redirect from ${next}: ${res.status}`);
+    const u = new URL(loc, next);
+    const inChain = u.origin === new URL(t.url).origin && (u.pathname.startsWith('/oauth2/') || u.pathname === '/api/auth/callback');
+    if (!inChain) return { location: u, newSession };
+    next = u.toString();
+  }
+  throw new Error('too many redirects');
+}

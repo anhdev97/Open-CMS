@@ -57,22 +57,30 @@ export class ProviderService implements OnModuleInit, GrantRevoker {
   }
 
   /**
-   * Destroys every Grant of `userId`, all codes/tokens issued under it, and the user's provider
-   * Sessions. Uses OAUTH2_DB directly
-   * (never a caller's transaction) so it also works before the Provider exists.
+   * Destroys every Grant of `userId` except `opts.exceptGrantId` (the current BFF session's, on an own
+   * password change), all codes/tokens issued under them, and the user's provider Sessions. Uses
+   * OAUTH2_DB directly (never a caller's transaction) so it also works before the Provider exists.
    */
-  async revokeAllGrants(userId: string): Promise<void> {
-    const rows = await this.db
+  async revokeAllGrants(userId: string, opts: { exceptGrantId?: string } = {}): Promise<void> {
+    let q = this.db
       .selectFrom('auth_oidc_payloads')
       .select('id')
       .where('kind', '=', 'Grant')
-      .where(sql<string>`payload->>'accountId'`, '=', userId)
-      .execute();
-    for (const { id } of rows) {
+      .where(sql<string>`payload->>'accountId'`, '=', userId);
+    if (opts.exceptGrantId) q = q.where('id', '<>', opts.exceptGrantId);
+    for (const { id } of await q.execute()) {
       await new this.adapter('Grant').revokeByGrantId(id);
       await new this.adapter('Grant').destroy(id);
     }
-    // Without this the surviving provider `_session` would re-mint a grant on the next /oauth2/auth.
+    await this.destroyProviderSessions(userId);
+  }
+
+  /**
+   * C1: the provider `_session` must not outlive the BFF session (logout, idle/absolute expiry, user no
+   * longer active). The BFF always sends prompt=login, so provider Sessions only matter during an
+   * interaction; destroying all of the user's is safe.
+   */
+  async destroyProviderSessions(userId: string): Promise<void> {
     await this.db
       .deleteFrom('auth_oidc_payloads')
       .where('kind', '=', 'Session')

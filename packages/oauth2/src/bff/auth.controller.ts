@@ -3,7 +3,7 @@ import { Controller, Get, HttpCode, Inject, Logger, Post, Req, Res } from '@nest
 import type { Request, Response } from 'express';
 import { AuditService } from '../audit/audit.service';
 import type { OAuth2Config } from '../config/schema';
-import { AUTH_SETTINGS, LOGIN_COOKIE, OAUTH2_CONFIG, SESSION_COOKIE } from '../constants';
+import { AUTH_SETTINGS, GRANT_REVOKER, LOGIN_COOKIE, OAUTH2_CONFIG, SESSION_COOKIE } from '../constants';
 import { AuthError } from '../errors';
 import type { RequestUser } from '../guard/current-user.decorator';
 import { Public } from '../guard/public.decorator';
@@ -12,7 +12,7 @@ import { deriveKey, open, seal } from '../security/crypto';
 import { sanitizeReturnTo } from '../security/return-to';
 import { SetupState } from '../setup/setup-state';
 import type { AuthSettingsProvider } from '../settings/settings.provider';
-import { UserService } from '../users/user.service';
+import { UserService, type GrantRevoker } from '../users/user.service';
 import { isSecureUrl, parseCookies, serializeCookie } from './cookies';
 import { OidcClient } from './oidc-client';
 import { SessionStore } from './session.store';
@@ -44,7 +44,7 @@ export class AuthController {
   private readonly secure: boolean;
 
   constructor(
-    @Inject(OAUTH2_CONFIG) private readonly cfg: OAuth2Config,
+    @Inject(OAUTH2_CONFIG) cfg: OAuth2Config,
     @Inject(AUTH_SETTINGS) private readonly settings: AuthSettingsProvider,
     @Inject(OidcClient) private readonly oidc: OidcClient,
     @Inject(SessionStore) private readonly sessions: SessionStore,
@@ -52,6 +52,7 @@ export class AuthController {
     @Inject(SetupState) private readonly setup: SetupState,
     @Inject(SessionAuthenticator) private readonly auth: SessionAuthenticator,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(GRANT_REVOKER) private readonly revoker: GrantRevoker,
   ) {
     this.cookieKey = deriveKey(cfg.secret, 'cookie');
     this.secure = isSecureUrl(cfg.publicUrl);
@@ -165,6 +166,8 @@ export class AuthController {
       }
     }
     if (req.authSession) await this.sessions.delete(req.authSession.idHash);
+    // C1: end the provider session server-side; no end-session hop (§7: no token ever reaches the browser).
+    if (req.user) await this.revoker.destroyProviderSessions(req.user.id);
     this.auth.clearCookie(res);
     await this.audit.record({
       type: 'logout',
@@ -172,14 +175,7 @@ export class AuthController {
       ip: req.ip,
       userAgent: first(req.headers['user-agent']),
     });
-    let redirectTo = `${this.cfg.publicUrl}/admin/login`;
-    try {
-      redirectTo = await this.oidc.endSessionUrl(session?.idToken || undefined);
-    } catch (e) {
-      // Discovery failed: the BFF session is gone anyway; skip the provider-side logout.
-      this.fail('End-session URL unavailable', e);
-    }
-    return { redirectTo };
+    return { redirectTo: '/admin/login' };
   }
 
   /** Logs the error name only: messages may echo request data, and nothing token-/cookie-bearing is logged. */
