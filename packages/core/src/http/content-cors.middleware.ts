@@ -13,9 +13,10 @@ export class ContentCorsMiddleware implements NestMiddleware {
 
   use(req: Request, res: Response, next: NextFunction): void {
     const origin = req.headers.origin;
+    // The response depends on Origin whenever CORS is configured, so shared caches must key on it.
+    if (this.origins.size > 0) res.vary('Origin');
     if (origin && this.origins.has(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
-      res.vary('Origin');
       res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
       res.setHeader('Access-Control-Max-Age', '600');

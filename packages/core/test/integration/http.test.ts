@@ -7,6 +7,9 @@ const EMAIL = 'admin@example.com';
 const ALLOWED = 'https://site.example.com';
 
 describe('HTTP layer owned by core', () => {
+  // oidc-provider warns at most once per process, so the spies must exist before the first login of this file.
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const emit = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
   let t: CoreTestApp;
   let cookie: string;
 
@@ -26,15 +29,30 @@ describe('HTTP layer owned by core', () => {
   }, 60_000);
 
   afterAll(async () => {
+    warn.mockRestore();
+    emit.mockRestore();
     await t?.close();
   });
 
   describe('body parsing', () => {
-    it('parses a JSON body on an admin route', async () => {
-      const res = await postJson('/api/admin/content-types/plan', JSON.stringify({ removeId: 'nope' }));
-      expect(res.status).not.toBe(422);
-      expect(res.status).not.toBe(413);
-      expect(res.status).toBeLessThan(500);
+    it('parses a JSON body on an admin route (the parsed definition is validated)', async () => {
+      const res = await postJson(
+        '/api/admin/content-types',
+        JSON.stringify({ definition: { id: 'x', apiId: 'Not Valid', fields: [] } }),
+      );
+      expect(res.status).toBe(400);
+      const { error } = await res.json();
+      expect(error.issues.length).toBeGreaterThan(0); // an unparsed body would give 'Body must be { definition }' without issues
+    });
+
+    it('parses an urlencoded body', async () => {
+      const res = await call('/api/admin/content-types', {
+        method: 'POST',
+        headers: { cookie, 'content-type': 'application/x-www-form-urlencoded', origin: t.url },
+        body: 'unrelated=1',
+      });
+      expect(res.status).toBe(400);
+      expect((await res.json()).error.message).toContain('Body must be { definition }');
     });
 
     it('answers malformed JSON with 422 validation_failed', async () => {
@@ -50,17 +68,11 @@ describe('HTTP layer owned by core', () => {
     });
 
     it('leaves /oauth2 to oidc-provider: login works and nothing warns about a parsed body', async () => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const emit = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
-      try {
-        const login = await loginAs(t, EMAIL, PW);
-        expect(login.sessionCookie).toBeTruthy();
-        const texts = [...warn.mock.calls, ...emit.mock.calls].map((c) => String(c[0]));
-        expect(texts.filter((x) => /already parsed request body/i.test(x))).toEqual([]);
-      } finally {
-        warn.mockRestore();
-        emit.mockRestore();
-      }
+      const login = await loginAs(t, EMAIL, PW);
+      expect(login.sessionCookie).toBeTruthy();
+      // Covers the beforeAll logins too: any login in this file would have triggered the one-time warning.
+      const texts = [...warn.mock.calls, ...emit.mock.calls].map((c) => String(c[0]));
+      expect(texts.filter((x) => /already parsed request body/i.test(x))).toEqual([]);
     });
   });
 
@@ -79,6 +91,12 @@ describe('HTTP layer owned by core', () => {
       const res = await call('/api/content/x', { method: 'OPTIONS', headers: { origin: ALLOWED } });
       expect(res.status).toBe(204);
       expect(res.headers.get('access-control-allow-origin')).toBe(ALLOWED);
+    });
+
+    it('varies on Origin even without an Origin header', async () => {
+      const res = await call('/api/content/x');
+      expect(res.headers.get('vary')).toMatch(/Origin/i);
+      expect(res.headers.get('access-control-allow-origin')).toBeNull();
     });
 
     it('adds nothing for an unknown origin (preflight still 204)', async () => {
