@@ -64,7 +64,8 @@ Env values override the `auth` section of `opencms.config.ts`.
 | `idp.oidc` | disabled | `OPENCMS_IDP_OIDC_ISSUER`, `OPENCMS_IDP_OIDC_CLIENT_ID`, `OPENCMS_IDP_OIDC_CLIENT_SECRET`, `OPENCMS_IDP_OIDC_LABEL` |
 | admin seed | none | `OPENCMS_ADMIN_EMAIL`, `OPENCMS_ADMIN_PASSWORD`, `OPENCMS_ADMIN_NAME`, `OPENCMS_ADMIN_FORCE_RESET` |
 
-The rate limiter is in memory, so limits are per instance.
+The rate limiter is in memory, so limits are per instance. It tracks at most 10 000 keys and drops the
+oldest when full.
 
 ## Endpoints
 

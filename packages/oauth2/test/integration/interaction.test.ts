@@ -1,5 +1,7 @@
 import 'reflect-metadata';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { RATE_LIMITER } from '../../src/constants';
+import type { RateLimiter } from '../../src/security/rate-limiter';
 import { UserService } from '../../src/users/user.service';
 import { createTestApp, type TestApp } from '../support/app';
 import { followToCode, startInteraction, type StartedInteraction } from '../support/interaction';
@@ -167,5 +169,34 @@ describe('expired interaction', () => {
     const get = await i.cookies.fetch(`${t.url}/oauth2/interaction/${i.uid}`);
     expect(get.status).toBe(200);
     expect(await get.json()).toEqual({ redirectTo: '/admin/login?error=login_expired' });
+  });
+});
+
+describe('login rate limit order (M4)', () => {
+  let t: TestApp;
+  beforeAll(async () => {
+    t = await createTestApp({}, { auth: { rateLimit: { loginPerIp: { limit: 2 } } } });
+  });
+  afterAll(async () => {
+    await t?.close();
+  });
+
+  it('checks the IP key first; once the IP is limited, sprayed emails create no email keys', async () => {
+    const limiter = t.app.get<RateLimiter>(RATE_LIMITER);
+    const hit = vi.spyOn(limiter, 'hit');
+    const i = await startInteraction(t.url);
+    const login = (email: string) =>
+      i.cookies.fetch(`${t.url}/oauth2/interaction/${i.uid}/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: t.url },
+        body: JSON.stringify({ email, password: 'wrong password!!' }),
+      });
+    expect((await login('a@x.com')).status).toBe(401);
+    expect((await login('b@x.com')).status).toBe(401);
+    hit.mockClear();
+    for (const email of ['c@x.com', 'd@x.com', 'e@x.com']) expect((await login(email)).status).toBe(429);
+    const keys = hit.mock.calls.map(([key]) => key);
+    expect(keys).toHaveLength(3);
+    expect(keys.every((k) => k.startsWith('login:ip:'))).toBe(true);
   });
 });

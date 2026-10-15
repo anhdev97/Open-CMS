@@ -81,9 +81,13 @@ export class InteractionController {
     const userAgent = req.headers['user-agent'];
 
     const { loginPerEmail, loginPerIp } = this.cfg.rateLimit;
-    const byEmail = this.limiter.hit(`login:email:${email}`, loginPerEmail.limit, loginPerEmail.windowSec);
+    // M4: IP first; the email key is only created for an IP that is not limited, so a limited client
+    // spraying emails adds no entries.
     const byIp = this.limiter.hit(`login:ip:${ip}`, loginPerIp.limit, loginPerIp.windowSec);
-    if (!byEmail.ok || !byIp.ok) {
+    const byEmail = byIp.ok
+      ? this.limiter.hit(`login:email:${email}`, loginPerEmail.limit, loginPerEmail.windowSec)
+      : { ok: true, retryAfterSec: 0 };
+    if (!byIp.ok || !byEmail.ok) {
       // R14: audited without a user lookup (no userId), so blocked attempts leak nothing about accounts.
       const reason: LoginFailReason = 'rate_limited';
       await this.audit.record({ type: 'login_failed', ip, userAgent, meta: { reason } });
