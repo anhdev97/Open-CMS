@@ -4,6 +4,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
+  color-scheme: light;
   --radius: 0.5rem;
   --background: #f7f7f5;
   --foreground: #1d1d1b;
@@ -45,6 +46,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: #161615;
   --foreground: #ecebe7;
   --card: #1f1f1d;
@@ -134,7 +136,7 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;

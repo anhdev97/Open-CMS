@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -40,8 +41,9 @@ const SECURITY = {
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'same-origin',
   'x-frame-options': 'DENY',
-  'content-security-policy': "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'",
 };
+const BASE_CSP = "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'";
+const sha = (text: string) => `'sha256-${createHash('sha256').update(text, 'utf8').digest('base64')}'`;
 
 describe('admin SPA served by OpenCmsModule', () => {
   let t: CoreTestApp;
@@ -86,6 +88,29 @@ describe('admin SPA served by OpenCmsModule', () => {
       expect(r.headers['cache-control']).toBe('no-store');
       expect(r.headers['content-type']).toBe('text/html; charset=utf-8');
       for (const [k, v] of Object.entries(SECURITY)) expect(r.headers[k], k).toBe(v);
+    }
+  });
+
+  it('allows exactly the inline scripts of index.html (and no others) through script-src', async () => {
+    const r = await raw(t.baseUrl, 'GET', '/admin/');
+    expect(r.headers['content-security-policy']).toBe(`${BASE_CSP}; script-src 'self' ${sha('document.documentElement.className="x";')}`);
+  });
+
+  it('adds one hash per inline script and none for external scripts', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'opencms-admin-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'index.html'), '<script>a()</script><script src="/admin/assets/x.js"></script><script type="module">b()</script>');
+      const app = express();
+      app.use('/admin', createAdminSpaHandler({ distDir: dir, logger: { warn() {} } }));
+      const { base, close } = await listen(app);
+      try {
+        const r = await raw(base, 'GET', '/admin/');
+        expect(r.headers['content-security-policy']).toBe(`${BASE_CSP}; script-src 'self' ${sha('a()')} ${sha('b()')}`);
+      } finally {
+        await close();
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 

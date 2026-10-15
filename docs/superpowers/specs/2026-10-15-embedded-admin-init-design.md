@@ -101,7 +101,7 @@ packages/core/
   - `/admin/*` trả 503 với một trang HTML ngắn: "Admin UI chưa được build. Chạy `pnpm build` trong `@opencms/core`."
 - Header bảo mật cho `index.html`:
   - `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `X-Frame-Options: DENY`;
-  - `Content-Security-Policy: default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'`. `style-src` cần `unsafe-inline` vì Radix set style inline.
+  - `Content-Security-Policy: default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; script-src 'self' 'sha256-<hash>'...`. `style-src` cần `unsafe-inline` vì Radix set style inline. Middleware tính một hash sha256 cho mỗi `<script>` inline trong `index.html` (script đặt class `.dark` trước khi vẽ, §6.5) khi đọc file, và thêm vào `script-src`; script ngoài chỉ được nạp từ `'self'`.
 
 ### 3.4 Khi phát triển chính core (E5)
 - Khi `OPENCMS_ADMIN_DEV=1`, `AdminSpaMiddleware` thay phần phục vụ file tĩnh bằng `vite.createServer({ root: <core>/admin, base: '/admin/', server: { middlewareMode: true, hmr: { server: <http server của Nest> } }, appType: 'spa' })` và chuyển các request `/admin/*` cho `vite.middlewares`.
@@ -246,6 +246,9 @@ Tất cả các cặp chữ trên nền dưới đây đạt WCAG AA (≥ 4.5:1)
 | `--sidebar-accent` | `#eaf0ff` | `#232c47` | Mục đang chọn |
 | `--sidebar-accent-foreground` | `#1e3fb8` | `#c7d4ff` | |
 | `--sidebar-border` | `#e3e2de` | `#34332f` | |
+| `--sidebar-primary` | `#2f5bea` | `#7b9cff` | = `--primary` |
+| `--sidebar-primary-foreground` | `#ffffff` | `#10172e` | = `--primary-foreground` |
+| `--sidebar-ring` | `#2f5bea` | `#7b9cff` | = `--ring` |
 | `--chart-1`…`--chart-5` | `#2f5bea`, `#1f7a4a`, `#c77d00`, `#8e44ad`, `#c73a2e` | `#7b9cff`, `#6fd39c`, `#f0c060`, `#c39bd3`, `#ff7b6e` | Để dành cho biểu đồ sau này |
 
 Token khác:

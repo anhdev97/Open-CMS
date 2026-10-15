@@ -28,3 +28,13 @@ export function setTheme(t: Theme): void {
   }
   applyTheme();
 }
+
+/** Re-applies the theme when the OS preference flips while 'system' is selected. Returns an unsubscribe function. */
+export function watchSystemTheme(): () => void {
+  const mql = window.matchMedia('(prefers-color-scheme: dark)');
+  const onChange = () => {
+    if (getTheme() === 'system') applyTheme();
+  };
+  mql.addEventListener('change', onChange);
+  return () => mql.removeEventListener('change', onChange);
+}

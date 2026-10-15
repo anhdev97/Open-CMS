@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Request, Response } from 'express';
@@ -19,6 +20,16 @@ const NOT_BUILT_HTML =
 export interface AdminSpaOptions {
   distDir: string;
   logger: { warn(msg: string): void };
+}
+
+/** CSP for index.html: the base policy plus `script-src 'self'` and one sha256 per inline <script> (the pre-paint theme script). */
+function cspFor(html: string): string {
+  const hashes: string[] = [];
+  for (const m of html.matchAll(/<script(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi)) {
+    if (m[1].trim() === '') continue;
+    hashes.push(`'sha256-${createHash('sha256').update(m[1], 'utf8').digest('base64')}'`);
+  }
+  return `${SECURITY_HEADERS['Content-Security-Policy']}; script-src 'self'${hashes.length ? ' ' + hashes.join(' ') : ''}`;
 }
 
 /** Real path of `file` when it is a regular file inside `root` (symlinks resolved), otherwise undefined. */
@@ -108,7 +119,7 @@ export function createAdminSpaHandler(opts: AdminSpaOptions): (req: Request, res
     // Every other path is a client-side route.
     const html = fs.readFileSync(index);
     res.status(200);
-    res.set({ ...SECURITY_HEADERS, 'Cache-Control': 'no-store', 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': String(html.length) });
+    res.set({ ...SECURITY_HEADERS, 'Content-Security-Policy': cspFor(html.toString('utf8')), 'Cache-Control': 'no-store', 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': String(html.length) });
     res.end(method === 'HEAD' ? undefined : html);
   };
 }

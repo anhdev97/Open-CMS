@@ -11,6 +11,7 @@ describe.skipIf(!built)('admin SPA build output (run `pnpm --filter @opencms/cor
     const html = fs.readFileSync(indexHtml, 'utf8');
     expect(html).toContain('<div id="root">');
     expect(html).toContain('src="/admin/assets/');
+    expect(html).toMatch(/<link rel="stylesheet"[^>]* href="\/admin\/assets\/[^"]+\.css"/);
   });
 
   it('keeps the SPA output apart from server code', () => {
@@ -26,8 +27,12 @@ describe.skipIf(!built)('admin SPA build output (run `pnpm --filter @opencms/cor
       .map((f) => fs.readFileSync(path.join(assets, f), 'utf8'))
       .join('\n')
       .toLowerCase();
-    expect(css).toMatch(/--primary:\s*#2f5bea/);
-    expect(css).toMatch(/--primary:\s*#7b9cff/);
+    const rule = (selector: string) => {
+      const m = css.match(new RegExp(`(?:^|[},\\s])${selector}\\s*\\{([^}]*)\\}`));
+      return m?.[1] ?? '';
+    };
+    expect(rule(':root')).toMatch(/--primary:\s*#2f5bea/);
+    expect(rule('\\.dark')).toMatch(/--primary:\s*#7b9cff/);
   });
 });
 

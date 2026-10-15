@@ -5,12 +5,12 @@ import { defineConfig } from 'vite';
 
 // Built into dist/admin, which holds only the SPA (server code lives in dist/http), so emptyOutDir is safe.
 export default defineConfig({
-  root: __dirname,
+  root: import.meta.dirname,
   base: '/admin/',
   plugins: [react(), tailwindcss()],
-  resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
+  resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },
   build: {
-    outDir: path.resolve(__dirname, '../dist/admin'),
+    outDir: path.resolve(import.meta.dirname, '../dist/admin'),
     emptyOutDir: true,
     assetsDir: 'assets',
   },
