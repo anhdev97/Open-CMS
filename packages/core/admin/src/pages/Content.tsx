@@ -38,6 +38,9 @@ function ContentView({ apiId }: { apiId: string }) {
   const [form, setForm] = useState<Record<string, any>>({});
   const [error, setError] = useState<ApiError | Error | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Bumped whenever the form is replaced from the server (open, locale switch), so the editor card remounts with
+  // the new values; uncontrolled-text inputs such as JSON would otherwise keep showing the previous ones.
+  const [formGen, setFormGen] = useState(0);
 
   useEffect(() => {
     api<Meta>('/api/admin/meta')
@@ -67,6 +70,7 @@ function ContentView({ apiId }: { apiId: string }) {
   const openEntry = (entry: Entry | null) => {
     setEditing(entry ?? ({ documentId: '', status: 'draft', publishedAt: null } as Entry));
     setForm(entry ? Object.fromEntries(def!.fields.map((f) => [f.name, entry[f.name]])) : {});
+    setFormGen((g) => g + 1);
     setError(null);
   };
 
@@ -165,13 +169,18 @@ function ContentView({ apiId }: { apiId: string }) {
 
       <div className="grid items-start gap-6 lg:grid-cols-2">
         <Card className="py-0">
-          <CardHeader className="border-b px-4 py-3 [.border-b]:pb-3">
+          <div className="border-b px-4 py-3">
             <p className="text-sm text-muted-foreground">
               {count} · {t('content.showing', { locale, fallback: meta?.defaultLocale ?? '' })}
             </p>
-          </CardHeader>
+          </div>
           <CardContent className="px-0">
-            {entries?.length === 0 ? (
+            {entries === null ? (
+              <div className="space-y-2 p-4" aria-hidden="true">
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+              </div>
+            ) : entries.length === 0 ? (
               <div className="p-4">
                 <EmptyState
                   icon={FileTextIcon}
@@ -195,7 +204,7 @@ function ContentView({ apiId }: { apiId: string }) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {entries?.map((e) => (
+                  {entries.map((e) => (
                     <TableRow key={e.documentId} data-state={editing?.documentId === e.documentId ? 'selected' : undefined}>
                       <TableCell>
                         <Button variant="link" className="h-auto p-0" onClick={() => openEntry(e)}>
@@ -219,7 +228,7 @@ function ContentView({ apiId }: { apiId: string }) {
         </Card>
 
         {editing && (
-          <Card key={`${editing.documentId}:${locale}`} role="region" aria-label={t('content.editorLabel')}>
+          <Card key={`${editing.documentId}:${formGen}`} role="region" aria-label={t('content.editorLabel')}>
             <CardHeader className="flex-row items-center justify-between">
               <CardTitle>{editing.documentId ? t('content.editEntry') : t('content.newEntry')}</CardTitle>
               <span className="font-mono text-sm text-muted-foreground">{locale}</span>
@@ -231,7 +240,12 @@ function ContentView({ apiId }: { apiId: string }) {
                   <div key={f.id} className="space-y-2">
                     <Label id={`${id}-label`} htmlFor={id}>
                       {f.label ?? f.name}
-                      {f.required && <span aria-hidden="true"> *</span>}
+                      {f.required && (
+                        <>
+                          <span aria-hidden="true"> *</span>
+                          <span className="sr-only"> {t('field.required')}</span>
+                        </>
+                      )}
                       {f.localizable && <Badge variant="outline">{locale}</Badge>}
                     </Label>
                     <FieldInput id={id} field={f} value={form[f.name]} onChange={(v) => setForm((s) => ({ ...s, [f.name]: v }))} />

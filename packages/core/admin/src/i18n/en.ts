@@ -2,7 +2,6 @@ export const en = {
   app: {
     name: 'OpenCMS',
     loading: 'Loading the admin…',
-    comingSoon: 'The admin screens are on their way.',
   },
   auth: {
     checking: 'Checking your session…',
@@ -144,6 +143,7 @@ export const en = {
     currency: 'Currency code',
     currencyPlaceholder: 'USD',
     noOptions: 'No options available',
+    required: 'required',
   },
   builder: {
     title: 'Content Type Builder',
@@ -159,9 +159,9 @@ export const en = {
     renameWarning: 'Renaming the API id renames every table and changes the REST path.',
     newField: 'New field',
     renameField: 'rename {from} → {to}',
-    moveUp: 'Move field up',
-    moveDown: 'Move field down',
-    removeField: 'Remove field',
+    moveUp: 'Move {name} up',
+    moveDown: 'Move {name} down',
+    removeField: 'Remove {name}',
     fieldName: 'Name',
     fieldNamePlaceholder: 'title',
     fieldKind: 'Kind',

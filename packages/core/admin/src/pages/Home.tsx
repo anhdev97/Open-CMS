@@ -95,12 +95,9 @@ export function Home() {
                 {types.map((type) => (
                   <TableRow key={type.id}>
                     <TableCell className="font-medium">
-                      <Link
-                        to={`/content/${type.apiId}`}
-                        className="rounded-sm underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        {type.displayName}
-                      </Link>
+                      <Button asChild variant="link" className="h-auto p-0 font-medium">
+                        <Link to={`/content/${type.apiId}`}>{type.displayName}</Link>
+                      </Button>
                     </TableCell>
                     <TableCell className="font-mono text-muted-foreground">{type.apiId}</TableCell>
                     <TableCell>

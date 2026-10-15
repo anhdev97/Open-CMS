@@ -315,8 +315,8 @@ export function Builder() {
         </Alert>
       )}
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="space-y-4">
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
           <Card>
             <CardContent className="space-y-3">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -361,13 +361,13 @@ export function Builder() {
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-1">
-                    <Button variant="ghost" size="icon-sm" aria-label={t('builder.moveUp')} disabled={i === 0} onClick={() => moveField(i, -1)}>
+                    <Button variant="ghost" size="icon-sm" aria-label={t('builder.moveUp', { name: field.name || t('builder.newField') })} disabled={i === 0} onClick={() => moveField(i, -1)}>
                       <ArrowUpIcon aria-hidden="true" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      aria-label={t('builder.moveDown')}
+                      aria-label={t('builder.moveDown', { name: field.name || t('builder.newField') })}
                       disabled={i === draft.fields.length - 1}
                       onClick={() => moveField(i, 1)}
                     >
@@ -376,7 +376,7 @@ export function Builder() {
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      aria-label={t('builder.removeField')}
+                      aria-label={t('builder.removeField', { name: field.name || t('builder.newField') })}
                       onClick={() => setDraft({ ...draft, fields: draft.fields.filter((_, j) => j !== i) })}
                     >
                       <Trash2Icon aria-hidden="true" />
