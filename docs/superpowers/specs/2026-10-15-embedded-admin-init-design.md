@@ -63,7 +63,7 @@ packages/core/
       components/ui/*         # component shadcn §6.3
       components/*            # component riêng của OpenCMS §6.4
       pages/*                 # Setup, Login, Home, Content, Builder, Users, Account, UiKit
-  src/admin/                  # phía server: middleware phục vụ SPA (§3.3)
+  src/http/                   # phía server: middleware phục vụ SPA (§3.3), body parser, CORS
 ```
 - Code của `apps/admin` (trang chủ, content, builder, `FieldInput`) được chuyển sang:
   - `next/link` thành `<Link>` của React Router;
@@ -91,7 +91,7 @@ packages/core/
 | `GET` hoặc `HEAD` mọi đường dẫn khác dưới `/admin/` | `index.html`, `Cache-Control: no-store`, `Content-Type: text/html; charset=utf-8` |
 | Method khác dưới `/admin/` | 405 |
 
-- Thư mục được phục vụ là `path.join(__dirname, '../admin')`, tính từ `dist/admin/admin-spa.middleware.js`.
+- Thư mục được phục vụ là `path.join(__dirname, '../admin')`, tính từ `dist/http/admin-spa.middleware.js`. Nhờ vậy `dist/admin` chỉ chứa bản build của Vite, không có code server.
 - Không cho thoát ra ngoài thư mục này: chặn `..`, cả dạng đã encode, và symlink trỏ ra ngoài.
 - `OpenCmsModuleOptions.admin?: { enabled?: boolean }`, mặc định `true`.
   - Khi `false`, middleware không được đăng ký và `/admin/*` trả 404.
