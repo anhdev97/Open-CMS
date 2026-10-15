@@ -11,4 +11,10 @@ function Placeholder() {
 }
 
 // Placeholder only: the real route table (§5.1) arrives with the pages in later tasks.
-export const routes: RouteObject[] = [{ path: '*', element: <Placeholder /> }];
+export const routes: RouteObject[] = [
+  // `import.meta.env.DEV` is a build-time constant: in production the branch (and the lazy chunk) is dropped.
+  ...(import.meta.env.DEV
+    ? [{ path: '_ui', lazy: async () => ({ Component: (await import('./pages/UiKit')).UiKit }) }]
+    : []),
+  { path: '*', element: <Placeholder /> },
+];
