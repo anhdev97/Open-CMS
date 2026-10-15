@@ -1,0 +1,51 @@
+{
+  "name": "@opencms/oauth2",
+  "version": "0.1.0",
+  "description": "OAuth2/OIDC authentication for opencms admin",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./migrations": { "types": "./dist/register-migrations.d.ts", "default": "./dist/register-migrations.js" },
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": { "migrations": ["dist/register-migrations.d.ts"] }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@opencms/db": "workspace:*",
+    "argon2": "^0.45.1",
+    "kysely": "^0.28.0",
+    "oidc-provider": "^9.12.2",
+    "openid-client": "^6.8.8",
+    "zod": "^3.25.0"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "reflect-metadata": "^0.2.0",
+    "rxjs": "^7.8.0"
+  },
+  "devDependencies": {
+    "@nestjs/common": "^11.2.5",
+    "@nestjs/core": "^11.2.5",
+    "@nestjs/platform-express": "^11.2.5",
+    "@nestjs/testing": "^11.2.5",
+    "@types/express": "^5.0.6",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^6.0.3",
+    "oauth2-mock-server": "^9.3.0",
+    "pg": "^8.13.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "supertest": "^7.1.0"
+  }
+}

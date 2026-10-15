@@ -1,0 +1,148 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --radius: 0.5rem;
+  --background: #f7f7f5;
+  --foreground: #1d1d1b;
+  --card: #ffffff;
+  --card-foreground: #1d1d1b;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1b;
+  --primary: #2f5bea;
+  --primary-foreground: #ffffff;
+  --secondary: #efeeea;
+  --secondary-foreground: #1d1d1b;
+  --muted: #efeeea;
+  --muted-foreground: #6b6a66;
+  --accent: #eaf0ff;
+  --accent-foreground: #1e3fb8;
+  --destructive: #c73a2e;
+  --destructive-foreground: #ffffff;
+  --destructive-soft: #fdecea;
+  --success: #1f7a4a;
+  --success-soft: #e8f6ee;
+  --warning: #8a5a00;
+  --warning-soft: #fff5e0;
+  --border: #e3e2de;
+  --input: #d6d5d0;
+  --ring: #2f5bea;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1d1d1b;
+  --sidebar-primary: #2f5bea;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eaf0ff;
+  --sidebar-accent-foreground: #1e3fb8;
+  --sidebar-border: #e3e2de;
+  --sidebar-ring: #2f5bea;
+  --chart-1: #2f5bea;
+  --chart-2: #1f7a4a;
+  --chart-3: #c77d00;
+  --chart-4: #8e44ad;
+  --chart-5: #c73a2e;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #161615;
+  --foreground: #ecebe7;
+  --card: #1f1f1d;
+  --card-foreground: #ecebe7;
+  --popover: #1f1f1d;
+  --popover-foreground: #ecebe7;
+  --primary: #7b9cff;
+  --primary-foreground: #10172e;
+  --secondary: #2a2a27;
+  --secondary-foreground: #ecebe7;
+  --muted: #2a2a27;
+  --muted-foreground: #a09e97;
+  --accent: #232c47;
+  --accent-foreground: #c7d4ff;
+  --destructive: #ff7b6e;
+  --destructive-foreground: #2a0f0c;
+  --destructive-soft: #3a1f1c;
+  --success: #6fd39c;
+  --success-soft: #173024;
+  --warning: #f0c060;
+  --warning-soft: #3a2f16;
+  --border: #34332f;
+  --input: #3d3c38;
+  --ring: #7b9cff;
+  --sidebar: #1f1f1d;
+  --sidebar-foreground: #ecebe7;
+  --sidebar-primary: #7b9cff;
+  --sidebar-primary-foreground: #10172e;
+  --sidebar-accent: #232c47;
+  --sidebar-accent-foreground: #c7d4ff;
+  --sidebar-border: #34332f;
+  --sidebar-ring: #7b9cff;
+  --chart-1: #7b9cff;
+  --chart-2: #6fd39c;
+  --chart-3: #f0c060;
+  --chart-4: #c39bd3;
+  --chart-5: #ff7b6e;
+}
+
+@theme inline {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  /* Focus ring only on elements a user can really focus; programmatically focused Radix containers stay ring-free. */
+  :is(a, button, input, select, textarea, summary, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}

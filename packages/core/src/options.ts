@@ -1,8 +1,11 @@
 import type { Kysely } from 'kysely';
+import type { AuthFileConfig } from '@opencms/oauth2';
 import type { ContentTypeDefinition, OpenCmsConfig, ResolvedConfig } from '@opencms/schema';
 
 export const OPENCMS_OPTIONS = Symbol('OPENCMS_OPTIONS');
 export const OPENCMS_DB = Symbol('OPENCMS_DB');
+/** Provides a `CoreReady` holder that OpenCmsModule settles once the database is known to be migrated. */
+export const CORE_READY_CORE = Symbol('CORE_READY_CORE');
 
 export interface HookContext {
   apiId: string;
@@ -53,8 +56,18 @@ export interface OpenCmsModuleOptions {
   schemaEditable?: boolean;
   /** Apply pending migrations on startup instead of refusing to start. Default false. */
   autoMigrate?: boolean;
-  /** When set, /api/admin/* requires `Authorization: Bearer <adminToken>`. */
-  adminToken?: string;
+  /** Non-secret `auth` section (see @opencms/oauth2). Secrets come from the environment. */
+  auth?: Partial<AuthFileConfig>;
+  admin?: {
+    /** Serve the embedded admin UI at /admin. Default true. */
+    enabled?: boolean;
+    /** Directory with the built admin UI. Undocumented; for tests. */
+    distDir?: string;
+  };
+  /** Exact origins allowed to read `/api/content/**` cross-origin (GET, HEAD, OPTIONS; no credentials). */
+  cors?: { origins: string[] };
+  /** Environment for the auth module. Default `process.env`. */
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface ResolvedOpenCmsOptions extends Omit<OpenCmsModuleOptions, 'config'> {

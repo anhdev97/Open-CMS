@@ -16,14 +16,13 @@ import {
   Injectable,
   Param,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import type { Kysely } from 'kysely';
+import { RequireRole } from '@opencms/oauth2';
 import { captureProjectFiles, createMigration, DiffError, previewChange, restoreProjectFiles, writeSchemaChange } from '@opencms/codegen';
 import { migrateUp } from '@opencms/db';
 import type { ContentTypeDefinition } from '@opencms/schema';
 import { FIELD_KINDS, SchemaValidationError, newId } from '@opencms/schema';
-import { AdminGuard } from './content.controllers';
 import { OPENCMS_DB, OPENCMS_OPTIONS, type ResolvedOpenCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
 
@@ -104,7 +103,7 @@ export class SchemaBuilderService {
   }
 }
 
-@UseGuards(AdminGuard)
+@RequireRole('super_admin')
 @Controller('api/admin')
 export class SchemaController {
   constructor(

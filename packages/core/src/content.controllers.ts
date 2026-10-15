@@ -1,23 +1,18 @@
 import {
   Body,
-  CanActivate,
   Controller,
   Delete,
-  ExecutionContext,
   Get,
   HttpCode,
   Inject,
-  Injectable,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
-  UnauthorizedException,
-  UseGuards,
 } from '@nestjs/common';
+import { RequireRole } from '@opencms/oauth2';
 import { EntriesService, type ListParams } from './entries.service';
-import { OPENCMS_OPTIONS, type ResolvedOpenCmsOptions } from './options';
 
 /** Accepts both `filter[name]=x` flat keys (Express 5) and nested objects (qs). */
 export function parseListQuery(query: Record<string, unknown>): ListParams {
@@ -37,17 +32,6 @@ export function parseListQuery(query: Record<string, unknown>): ListParams {
     offset: query.offset as string | undefined,
     filter,
   };
-}
-
-@Injectable()
-export class AdminGuard implements CanActivate {
-  constructor(@Inject(OPENCMS_OPTIONS) private readonly options: ResolvedOpenCmsOptions) {}
-  canActivate(ctx: ExecutionContext): boolean {
-    if (!this.options.adminToken) return true;
-    const header = ctx.switchToHttp().getRequest().headers?.authorization ?? '';
-    if (header === `Bearer ${this.options.adminToken}`) return true;
-    throw new UnauthorizedException('Missing or invalid admin token');
-  }
 }
 
 /** Storefront / delivery API: published content only, no auth. */
@@ -72,7 +56,7 @@ export class ContentController {
 }
 
 /** Management API: drafts, publishing, versions. */
-@UseGuards(AdminGuard)
+@RequireRole('super_admin')
 @Controller('api/admin/content')
 export class AdminContentController {
   constructor(@Inject(EntriesService) private readonly entries: EntriesService) {}

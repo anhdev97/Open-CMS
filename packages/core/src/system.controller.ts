@@ -2,13 +2,13 @@
  * Minimal system APIs so asset and taxonomy fields are usable in v0.
  * (File upload + storage adapters come with the asset module.)
  */
-import { BadRequestException, Body, Controller, Get, Inject, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Inject, Param, Post, Query } from '@nestjs/common';
 import type { Kysely } from 'kysely';
+import { RequireRole } from '@opencms/oauth2';
 import { SYSTEM_TABLES } from '@opencms/schema';
-import { AdminGuard } from './content.controllers';
 import { OPENCMS_DB } from './options';
 
-@UseGuards(AdminGuard)
+@RequireRole('super_admin')
 @Controller('api/admin')
 export class SystemController {
   constructor(@Inject(OPENCMS_DB) private readonly db: Kysely<any>) {}

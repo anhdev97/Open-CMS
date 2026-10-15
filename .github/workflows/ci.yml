@@ -20,8 +20,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm test
+      # Scaffolds a project with `opencms init`, boots it and walks setup/login/logout over HTTP
+      - run: node scripts/smoke-init.mjs
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
       # Fails when schema files changed without a migration or generated code is stale
       - run: pnpm --filter my-store opencms migrate:check
       - run: pnpm --filter my-store opencms migrate:up
       - run: pnpm --filter my-store typecheck
-      - run: pnpm --filter @opencms/admin build
