@@ -7,6 +7,8 @@ export const en = {
     checking: 'Checking your session…',
     failedTitle: 'Could not load the admin',
     retry: 'Try again',
+    originMismatch:
+      'The server rejected this address. Open the admin at its configured public URL, or set OPENCMS_PUBLIC_URL to the address you are using and restart.',
   },
   setup: {
     title: 'Create the first admin',

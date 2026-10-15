@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../../admin/src/lib/api-error';
-import { errorMessage, loginPageAction, loginUrl, setupFieldErrors, validateSetup } from '../../admin/src/lib/auth-flow';
+import { errorMessage, originMismatchMessage, loginPageAction, loginUrl, setupFieldErrors, validateSetup } from '../../admin/src/lib/auth-flow';
 import { en } from '../../admin/src/i18n/en';
 
 describe('loginUrl', () => {
@@ -79,5 +79,17 @@ describe('setupFieldErrors', () => {
   });
   it('falls back to a form error', () => {
     expect(setupFieldErrors(new ApiError(500, 'error', 'boom'))).toEqual({ form: 'boom' });
+  });
+});
+
+describe('originMismatchMessage', () => {
+  it('explains a 403 origin_mismatch with the remedy', () => {
+    const msg = originMismatchMessage(new ApiError(403, 'origin_mismatch', 'Origin not allowed'));
+    expect(msg).toBe(en.auth.originMismatch);
+    expect(msg).toContain('OPENCMS_PUBLIC_URL');
+  });
+  it('ignores every other error', () => {
+    expect(originMismatchMessage(new ApiError(403, 'account_disabled', 'x'))).toBeNull();
+    expect(originMismatchMessage(new Error('origin_mismatch'))).toBeNull();
   });
 });

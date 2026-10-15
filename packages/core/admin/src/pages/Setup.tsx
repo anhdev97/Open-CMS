@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { t } from '@/i18n/en';
 import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
-import { PASSWORD_MAX, PASSWORD_MIN, setupFieldErrors, validateSetup } from '../lib/auth-flow';
+import { originMismatchMessage, PASSWORD_MAX, PASSWORD_MIN, setupFieldErrors, validateSetup } from '../lib/auth-flow';
 
 // One rule set: the zod schema reports whatever `validateSetup` finds, field by field.
 const schema = z
@@ -64,6 +64,8 @@ export function Setup() {
         const { form: general, ...fields } = setupFieldErrors(e);
         for (const [field, message] of Object.entries(fields)) form.setError(field as keyof Values, { message });
         if (general) setFormError(new ApiError(e.status, e.code, general));
+      } else if (originMismatchMessage(e)) {
+        setFormError(new ApiError(403, 'origin_mismatch', originMismatchMessage(e)!));
       } else {
         setFormError(e instanceof Error ? e : new Error(String(e)));
       }

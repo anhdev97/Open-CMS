@@ -86,3 +86,8 @@ export function setupFieldErrors(err: ApiError): Partial<Record<SetupField | 'fo
   }
   return { form: err.message };
 }
+
+/** The text for a 403 `origin_mismatch` (the page was opened at an address other than the public URL), else null. */
+export function originMismatchMessage(e: unknown): string | null {
+  return e instanceof ApiError && e.status === 403 && e.code === 'origin_mismatch' ? t('auth.originMismatch') : null;
+}

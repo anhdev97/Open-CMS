@@ -39,12 +39,14 @@ Fixed paths, none configurable: UI `/admin`, API `/api`, auth `/oauth2`, deliver
 | `schemaEditable` | `NODE_ENV !== 'production'` | Content Type Builder writes schema files and migrations |
 | `autoMigrate` | `false` | apply pending migrations at startup instead of refusing to start |
 | `auth` | `{}` | non-secret auth settings (`@opencms/oauth2`: TTLs, password policy, rate limit, OIDC IdP) |
-| `admin.enabled` | `true` | serve the admin UI at `/admin`; `false` leaves `/admin` unregistered (404) |
+| `admin.enabled` | `true` | serve the admin UI at `/admin`; `false` leaves `/admin` unregistered (404). The auth flow still redirects to `/admin/login` (and `/admin/setup`), so with `false` the host must serve its own UI there |
 | `cors.origins` | none | exact origins (no wildcard) allowed to read `/api/content/**` cross-origin |
 | `env` | `process.env` | environment for the auth module (tests) |
 
 CORS applies to `GET`, `HEAD`, `OPTIONS` on `/api/content/**` only, without credentials. No other route
 sends CORS headers; the admin UI is same-origin.
+
+The browser must reach the admin at the public URL (`OPENCMS_PUBLIC_URL`, default `http://localhost:PORT`). Opening it at another address (`127.0.0.1`, a LAN IP) makes setup and login fail with `origin_mismatch`; open the configured URL or set `OPENCMS_PUBLIC_URL` to the address you use.
 
 ## Environment
 

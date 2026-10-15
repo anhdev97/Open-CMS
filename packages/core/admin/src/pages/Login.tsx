@@ -14,7 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { t } from '@/i18n/en';
 import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
-import { errorMessage, loginPageAction } from '../lib/auth-flow';
+import { errorMessage, loginPageAction, originMismatchMessage } from '../lib/auth-flow';
 
 interface Interaction {
   loginHint?: string;
@@ -30,6 +30,8 @@ type Values = z.infer<typeof schema>;
 
 function submitErrorText(e: unknown): string | null {
   if (!(e instanceof ApiError)) return null;
+  const mismatch = originMismatchMessage(e);
+  if (mismatch) return mismatch;
   if (e.status === 401 && e.code === 'invalid_credentials') return t('login.errors.invalid_credentials');
   if (e.status === 403 && e.code === 'account_disabled') return errorMessage('account_disabled');
   if (e.status === 429) {

@@ -29,6 +29,7 @@ import {
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { t } from '@/i18n/en';
 import { api } from '../lib/api';
@@ -77,6 +78,11 @@ function useContentTypes() {
 function AppSidebar() {
   const { pathname } = useLocation();
   const { types, failed } = useContentTypes();
+  const { isMobile, setOpenMobile } = useSidebar();
+  // On mobile the sidebar is a sheet: close it once a link is followed.
+  const closeOnNavigate = () => {
+    if (isMobile) setOpenMobile(false);
+  };
   const isActive = (to: string) => (to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`));
 
   return (
@@ -84,6 +90,7 @@ function AppSidebar() {
       <SidebarHeader>
         <Link
           to="/"
+          onClick={closeOnNavigate}
           className="flex items-center gap-2 rounded-md px-2 py-1.5 text-base font-semibold tracking-tight"
         >
           <span className="flex size-7 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
@@ -99,7 +106,7 @@ function AppSidebar() {
               {NAV.map(({ to, label, icon: Icon }) => (
                 <SidebarMenuItem key={to}>
                   <SidebarMenuButton asChild isActive={isActive(to)}>
-                    <Link to={to} aria-current={isActive(to) ? 'page' : undefined}>
+                    <Link to={to} aria-current={isActive(to) ? 'page' : undefined} onClick={closeOnNavigate}>
                       <Icon aria-hidden="true" />
                       <span>{t(label)}</span>
                     </Link>
@@ -131,7 +138,7 @@ function AppSidebar() {
                 return (
                   <SidebarMenuItem key={ct.id}>
                     <SidebarMenuButton asChild isActive={isActive(to)}>
-                      <Link to={to} aria-current={isActive(to) ? 'page' : undefined}>
+                      <Link to={to} aria-current={isActive(to) ? 'page' : undefined} onClick={closeOnNavigate}>
                         <span>{ct.displayName}</span>
                       </Link>
                     </SidebarMenuButton>
