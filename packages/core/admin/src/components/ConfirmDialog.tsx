@@ -8,10 +8,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { buttonVariants } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 import { t } from '@/i18n/en';
 
+/**
+ * Confirmation for destructive actions. Clicking the confirm button runs `onConfirm`, then the dialog
+ * closes itself by calling `onOpenChange(false)`; Cancel and Escape call `onOpenChange(false)` only.
+ */
 interface ConfirmDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -40,10 +42,7 @@ export function ConfirmDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-          <AlertDialogAction
-            className={cn(destructive && buttonVariants({ variant: 'destructive' }))}
-            onClick={onConfirm}
-          >
+          <AlertDialogAction variant={destructive ? 'destructive' : 'default'} onClick={onConfirm}>
             {confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>

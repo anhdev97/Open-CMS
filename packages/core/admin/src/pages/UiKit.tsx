@@ -1,6 +1,11 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { InboxIcon, MoonIcon, PlusIcon, SunIcon, Trash2Icon } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { useForm } from 'react-hook-form';
+import { MemoryRouter } from 'react-router';
 import { toast } from 'sonner';
+import { z } from 'zod';
+import { AppLayout } from '@/components/AppLayout';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -29,9 +34,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
@@ -52,6 +59,66 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       <div className="flex flex-wrap items-start gap-3">{children}</div>
       <Separator />
     </section>
+  );
+}
+
+const SIDES = ['top', 'right', 'bottom', 'left'] as const;
+
+const demoSchema = z.object({
+  name: z.string().min(3, t('uiKit.form.nameTooShort')),
+  email: z.string().email(t('uiKit.form.emailInvalid')),
+});
+type DemoValues = z.infer<typeof demoSchema>;
+
+function FormDemo() {
+  const form = useForm<DemoValues>({
+    resolver: zodResolver(demoSchema),
+    defaultValues: { name: 'ab', email: 'ok@example.com' },
+    mode: 'onChange',
+  });
+  // Validate once on mount so the invalid default shows its message without any interaction.
+  useEffect(() => {
+    void form.trigger();
+  }, [form]);
+
+  return (
+    <Form {...form}>
+      <form
+        className="grid w-full max-w-sm gap-4"
+        onSubmit={form.handleSubmit(() => toast.success(t('uiKit.form.submitted')))}
+      >
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t('uiKit.form.name')}</FormLabel>
+              <FormControl>
+                <Input {...field} />
+              </FormControl>
+              <FormDescription>{t('uiKit.form.nameHint')}</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="email"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t('uiKit.form.email')}</FormLabel>
+              <FormControl>
+                <Input type="email" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <Button type="submit" className="w-fit">
+          {t('uiKit.form.submit')}
+        </Button>
+      </form>
+    </Form>
   );
 }
 
@@ -90,56 +157,56 @@ export function UiKit() {
       <Section title={t('ui.sections.buttons')}>
         {(['default', 'secondary', 'outline', 'ghost', 'link', 'destructive'] as const).map((v) => (
           <Button key={v} variant={v}>
-            {v}
+            {t(`uiKit.variants.${v}`)}
           </Button>
         ))}
-        <Button size="sm">sm</Button>
-        <Button size="lg">lg</Button>
-        <Button size="icon" aria-label="Add">
+        <Button size="sm">{t('uiKit.sizeSm')}</Button>
+        <Button size="lg">{t('uiKit.sizeLg')}</Button>
+        <Button size="icon" aria-label={t('uiKit.addLabel')}>
           <PlusIcon />
         </Button>
-        <Button disabled>disabled</Button>
+        <Button disabled>{t('uiKit.disabled')}</Button>
       </Section>
 
       <Section title={t('ui.sections.form')}>
-        <Field id="kit-input" label="Input">
-          <Input id="kit-input" placeholder="Type here" />
+        <Field id="kit-input" label={t('uiKit.input')}>
+          <Input id="kit-input" placeholder={t('uiKit.inputPlaceholder')} />
         </Field>
-        <Field id="kit-invalid" label="Invalid input">
-          <Input id="kit-invalid" aria-invalid defaultValue="nope" />
+        <Field id="kit-invalid" label={t('uiKit.invalidInput')}>
+          <Input id="kit-invalid" aria-invalid defaultValue={t('uiKit.invalidInput')} />
         </Field>
-        <Field id="kit-disabled" label="Disabled input">
-          <Input id="kit-disabled" disabled defaultValue="Read only" />
+        <Field id="kit-disabled" label={t('uiKit.disabledInput')}>
+          <Input id="kit-disabled" disabled defaultValue={t('uiKit.readOnlyValue')} />
         </Field>
-        <Field id="kit-textarea" label="Textarea">
-          <Textarea id="kit-textarea" placeholder="Longer text" />
+        <Field id="kit-textarea" label={t('uiKit.textarea')}>
+          <Textarea id="kit-textarea" placeholder={t('uiKit.textareaPlaceholder')} />
         </Field>
-        <Field id="kit-select" label="Select">
+        <Field id="kit-select" label={t('uiKit.select')}>
           <Select defaultValue="b">
             <SelectTrigger id="kit-select" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="a">Option A</SelectItem>
-              <SelectItem value="b">Option B</SelectItem>
-              <SelectItem value="c">Option C</SelectItem>
+              <SelectItem value="a">{t('uiKit.optionA')}</SelectItem>
+              <SelectItem value="b">{t('uiKit.optionB')}</SelectItem>
+              <SelectItem value="c">{t('uiKit.optionC')}</SelectItem>
             </SelectContent>
           </Select>
         </Field>
         <div className="flex items-center gap-2">
           <Checkbox id="kit-check" defaultChecked />
-          <Label htmlFor="kit-check">Checkbox</Label>
+          <Label htmlFor="kit-check">{t('uiKit.checkbox')}</Label>
         </div>
         <div className="flex items-center gap-2">
           <Switch id="kit-switch" defaultChecked />
-          <Label htmlFor="kit-switch">Switch</Label>
+          <Label htmlFor="kit-switch">{t('uiKit.switch')}</Label>
         </div>
       </Section>
 
       <Section title={t('ui.sections.badges')}>
         {(['default', 'secondary', 'outline', 'success', 'warning', 'destructive'] as const).map((v) => (
           <Badge key={v} variant={v}>
-            {v}
+            {t(`uiKit.variants.${v}`)}
           </Badge>
         ))}
         <Separator orientation="vertical" className="h-6" />
@@ -152,7 +219,7 @@ export function UiKit() {
         <div className="grid w-full gap-3">
           {(['default', 'success', 'warning', 'destructive'] as const).map((v) => (
             <Alert key={v} variant={v}>
-              <AlertTitle>{v}</AlertTitle>
+              <AlertTitle>{t(`uiKit.variants.${v}`)}</AlertTitle>
               <AlertDescription>{t('ui.sampleDescription')}</AlertDescription>
             </Alert>
           ))}
@@ -183,14 +250,14 @@ export function UiKit() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>{t('uiKit.tableName')}</TableHead>
+                <TableHead>{t('uiKit.tableStatus')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {STATUSES.map((s) => (
                 <TableRow key={s}>
-                  <TableCell className="capitalize">{s} item</TableCell>
+                  <TableCell>{t('uiKit.tableRow', { status: t(`status.${s}`) })}</TableCell>
                   <TableCell>
                     <StatusBadge status={s} />
                   </TableCell>
@@ -268,11 +335,31 @@ export function UiKit() {
         </Button>
       </Section>
 
+      <Section title={t('uiKit.sections.sheet')}>
+        {SIDES.map((side) => (
+          <Sheet key={side}>
+            <SheetTrigger asChild>
+              <Button variant="outline">{t('uiKit.sheetOpen', { side: t(`uiKit.sheetSides.${side}`) })}</Button>
+            </SheetTrigger>
+            <SheetContent side={side}>
+              <SheetHeader>
+                <SheetTitle>{t('uiKit.sheetTitle')}</SheetTitle>
+                <SheetDescription>{t('ui.sampleDescription')}</SheetDescription>
+              </SheetHeader>
+            </SheetContent>
+          </Sheet>
+        ))}
+      </Section>
+
+      <Section title={t('uiKit.sections.formDemo')}>
+        <FormDemo />
+      </Section>
+
       <Section title={t('ui.sections.navigation')}>
         <Tabs defaultValue="one" className="w-full max-w-md">
           <TabsList>
-            <TabsTrigger value="one">One</TabsTrigger>
-            <TabsTrigger value="two">Two</TabsTrigger>
+            <TabsTrigger value="one">{t('uiKit.tabOne')}</TabsTrigger>
+            <TabsTrigger value="two">{t('uiKit.tabTwo')}</TabsTrigger>
           </TabsList>
           <TabsContent value="one" className="text-sm text-muted-foreground">
             {t('ui.sampleDescription')}
@@ -294,6 +381,19 @@ export function UiKit() {
           />
         </div>
       </Section>
+
+      <section className="space-y-4" aria-label={t('uiKit.sections.appLayout')}>
+        <h2 className="text-lg font-semibold tracking-tight">{t('uiKit.sections.appLayout')}</h2>
+        <p className="text-sm text-muted-foreground">{t('uiKit.layoutNote')}</p>
+        {/* transform-gpu makes this box the containing block of the sidebar's fixed positioning */}
+        <div className="h-128 transform-gpu overflow-auto rounded-lg border">
+          <MemoryRouter>
+            <AppLayout user={{ name: 'Ada Lovelace', email: 'ada@example.com' }}>
+              <PageHeader title={t('ui.sampleTitle')} description={t('ui.sampleDescription')} />
+            </AppLayout>
+          </MemoryRouter>
+        </div>
+      </section>
     </main>
   );
 }

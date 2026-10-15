@@ -5,6 +5,10 @@ import { t } from '@/i18n/en';
 
 const THEMES: Theme[] = ['light', 'dark', 'system'];
 
+function isTheme(v: string): v is Theme {
+  return (THEMES as string[]).includes(v);
+}
+
 /** Light / Dark / System radio items; render inside a `DropdownMenuContent` or `DropdownMenuSubContent`. */
 export function ThemeToggle() {
   const [theme, setCurrent] = useState<Theme>(getTheme);
@@ -12,8 +16,9 @@ export function ThemeToggle() {
     <DropdownMenuRadioGroup
       value={theme}
       onValueChange={(v) => {
-        setTheme(v as Theme);
-        setCurrent(v as Theme);
+        if (!isTheme(v)) return;
+        setTheme(v);
+        setCurrent(v);
       }}
     >
       {THEMES.map((name) => (

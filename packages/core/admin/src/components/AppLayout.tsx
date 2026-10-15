@@ -206,7 +206,7 @@ export function AppLayout({ user, onLogout, children }: AppLayoutProps) {
     <SidebarProvider>
       <a
         href="#main-content"
-        className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
+        className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground focus-visible:not-sr-only focus-visible:fixed focus-visible:top-2 focus-visible:left-2"
       >
         {t('nav.skipToContent')}
       </a>

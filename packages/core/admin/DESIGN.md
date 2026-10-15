@@ -51,7 +51,7 @@ From `packages/core/admin`:
 pnpm dlx shadcn@latest add <name>
 ```
 
-Commit the generated file unchanged, then show it on the `/_ui` page (`src/pages/UiKit.tsx`). The only intentional edits to generated files are the `success` / `warning` variants of `badge` and `alert`, the `destructive` variant of `button`, and the focus-ring classes (`focus-visible:` with `ring-offset-background`). Radix primitives come from the `radix-ui` umbrella package.
+Commit the generated file unchanged, then show it on the `/_ui` page (`src/pages/UiKit.tsx`). The only intentional edits to generated files are the `success` / `warning` variants of `badge` and `alert`, the `destructive` variant of `button`, the `variant` prop of `AlertDialogAction`, and the focus-ring classes (`focus-visible:` with `ring-offset-background`). Radix primitives come from the `radix-ui` umbrella package.
 
 ## Rules
 
@@ -61,7 +61,7 @@ Commit the generated file unchanged, then show it on the `/_ui` page (`src/pages
 - Icons come only from `lucide-react`.
 - Every interactive element works with the keyboard and shows a visible focus ring (`focus-visible:`, never plain `focus:`, with `ring-offset-background`).
 - UI text is English and lives only in `src/i18n/en.ts`, read through `t()`.
-- Modules imported by root vitest tests (`lib/api.ts`, `lib/api-error.ts`, `lib/format-issue.ts`, `i18n/en.ts`, ...) use relative imports only, never the `@/` alias.
+- Modules imported by root vitest tests (`lib/api.ts` once the API client is added, `lib/api-error.ts`, `lib/format-issue.ts`, `i18n/en.ts`, ...) use relative imports only, never the `@/` alias.
 
 ## Note for plugins
 
