@@ -36,10 +36,12 @@ The package does not depend on `@opencms/core`; you hand it the Kysely token.
 Importing `@opencms/oauth2` registers its core migration (`oauth2_0001_init`) with `@opencms/db`'s
 `coreMigrator()`. Any process that runs migrations must therefore load the package first:
 
-- The `opencms` CLI does this itself (`import '@opencms/oauth2/migrations'`, a Nest-free side-effect entry),
-  so `opencms migrate:up` / `migrate:status` apply and list `core/oauth2_0001_init`.
-- In your own scripts import `@opencms/oauth2` (or `@opencms/oauth2/migrations`) **before** calling
-  `coreMigrator(...)`, otherwise Kysely reports a missing migration.
+- The `opencms` CLI and `@opencms/core` do this themselves (`import '@opencms/oauth2/migrations'`, a
+  Nest-free side-effect entry), so `opencms migrate:up` / `migrate:status`, `autoMigrate` and the Content
+  Type Builder all see `core/oauth2_0001_init`.
+- In your own scripts that use `@opencms/db` without `@opencms/core`, import `@opencms/oauth2` (or
+  `@opencms/oauth2/migrations`) **before** calling `coreMigrator(...)`, otherwise Kysely reports a missing
+  migration.
 
 ## Configuration
 

@@ -1,3 +1,7 @@
+// Side-effect, Nest-free: registers oauth2_0001_init with the core migration stream. The `opencms` CLI
+// registers it too, so every process that migrates (autoMigrate, the Content Type Builder) must know it,
+// or Kysely reports a missing migration.
+import '@opencms/oauth2/migrations';
 import { Inject, Logger, Module, type DynamicModule, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
 import type { Kysely } from 'kysely';
 import { createDb, migrateUp, pendingMigrations } from '@opencms/db';
