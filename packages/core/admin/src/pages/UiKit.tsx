@@ -226,9 +226,9 @@ export function UiKit() {
           <ErrorAlert
             error={
               new ApiError(422, 'validation_failed', t('ui.sampleError'), [
-                { path: 'title', message: 'Required' },
-                { locale: 'vi', path: 'slug', message: 'Already taken' },
-                'Plain string issue',
+                { path: 'title', message: t('uiKit.issueRequired') },
+                { locale: 'vi', path: 'slug', message: t('uiKit.issueTaken') },
+                t('uiKit.issuePlain'),
               ])
             }
           />

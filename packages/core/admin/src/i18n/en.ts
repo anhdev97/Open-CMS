@@ -87,6 +87,9 @@ export const en = {
       submit: 'Validate',
       submitted: 'The form is valid',
     },
+    issueRequired: 'Required',
+    issueTaken: 'Already taken',
+    issuePlain: 'Plain string issue',
     layoutNote: 'AppLayout inside a memory router. Without an API the content types list shows its error state.',
   },
   ui: {
