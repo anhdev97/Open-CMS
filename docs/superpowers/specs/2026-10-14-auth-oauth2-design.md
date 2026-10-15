@@ -136,9 +136,8 @@ auth_audit_events
 
 | Khoá | Mặc định | Env |
 |---|---|---|
-| `publicUrl` | — (bắt buộc) | `OPENCMS_PUBLIC_URL` |
+| `publicUrl` | Dev: `http://localhost:${PORT ?? 4000}`. Production (`NODE_ENV=production`): bắt buộc, thiếu thì từ chối khởi động | `OPENCMS_PUBLIC_URL` |
 | — | — (bắt buộc) | `OPENCMS_SECRET` (≥ 32 byte) |
-| `internalUrl` | `http://127.0.0.1:${PORT}` | `OPENCMS_INTERNAL_URL` — địa chỉ BFF dùng để gọi chính provider (đổi code, refresh, revoke); cần khi chạy sau reverse proxy TLS |
 | `ttl.accessToken` | 900 s | `OPENCMS_AUTH_TTL_ACCESS` |
 | `ttl.refreshToken` | 30 ngày | `OPENCMS_AUTH_TTL_REFRESH` |
 | `ttl.sessionIdle` | 7 ngày | `OPENCMS_AUTH_TTL_SESSION_IDLE` |
@@ -150,6 +149,7 @@ auth_audit_events
 | `idp.oidc` | không bật | `OPENCMS_IDP_OIDC_ISSUER`, `_CLIENT_ID`, `_CLIENT_SECRET`, `_LABEL` |
 | — | — | `OPENCMS_ADMIN_EMAIL`, `OPENCMS_ADMIN_PASSWORD`, `OPENCMS_ADMIN_NAME`, `OPENCMS_ADMIN_FORCE_RESET` |
 
+- Không có `internalUrl` / `OPENCMS_INTERNAL_URL`: BFF luôn gọi provider ở `http://127.0.0.1:${PORT ?? 4000}` (kèm `X-Forwarded-Proto/Host` của URL công khai), nên không cần cấu hình thêm sau reverse proxy TLS.
 - Refresh token **không dài hơn** session tuyệt đối. Nếu cấu hình như vậy, server dùng giá trị nhỏ hơn và log cảnh báo.
 - `AuthSettingsProvider.getTtls()` được gọi ở mỗi lần dùng. TTL của `oidc-provider` được khai báo dạng hàm gọi vào provider này.
 - Phase sau sẽ thêm `DbAuthSettingsProvider`, dùng config làm mặc định.
@@ -157,7 +157,7 @@ auth_audit_events
 ## 6. Luồng
 
 ### 6.1 Khởi động
-1. Kiểm tra migration (cơ chế hiện có). Kiểm tra có `OPENCMS_SECRET` và `OPENCMS_PUBLIC_URL`; thiếu thì từ chối khởi động.
+1. Kiểm tra migration (cơ chế hiện có). Kiểm tra có `OPENCMS_SECRET`, và `OPENCMS_PUBLIC_URL` khi `NODE_ENV=production`; thiếu thì từ chối khởi động.
 2. Nếu chưa có signing key active thì sinh ES256, mã hoá rồi lưu vào `auth_signing_keys`.
 3. Upsert client `opencms-admin`. Đây là confidential client, secret được dẫn xuất từ `OPENCMS_SECRET`. Thông số: `redirect_uris = [publicUrl + /api/auth/callback]`, `post_logout_redirect_uris = [publicUrl + /admin/login]`, grants `authorization_code` và `refresh_token`, bắt buộc PKCE.
 4. **Force reset:** nếu `OPENCMS_ADMIN_FORCE_RESET=true` và có email + mật khẩu env:
@@ -283,7 +283,7 @@ Kiểm tra "super_admin active cuối cùng" chạy trong cùng transaction vớ
 
 ## 8. Lỗi
 
-Định dạng chung cho `/api/**`: `{ "error": { "code": string, "message": string } }`.
+Định dạng chung cho `/api/**`: `{ "error": { "code": string, "message": string, "issues"?: unknown[] } }`. `issues` chỉ có khi lỗi mang chi tiết theo từng mục (ví dụ schema không hợp lệ ở Content Type Builder).
 
 | code | HTTP | Khi nào |
 |---|---|---|

@@ -20,10 +20,25 @@ schema files ──► validate ──► diff with migrations/_snapshot.json �
 
 | Layer | What | Who owns it |
 |---|---|---|
-| **Core** (`packages/*`) | `@opencms/schema`: DSL, field registry, physical mapping · `@opencms/codegen`: diff engine, migration + code generator · `@opencms/db`: system migrations, migrator · `@opencms/core`: NestJS module (content engine, APIs, builder) · `opencms-cli`: the `opencms` command · `apps/admin`: Next.js admin | this repo, published to npm |
+| **Core** (`packages/*`) | `@opencms/schema`: DSL, field registry, physical mapping · `@opencms/codegen`: diff engine, migration + code generator · `@opencms/db`: system migrations, migrator · `@opencms/core`: NestJS module (content engine, APIs, builder) and the embedded admin UI (Vite + React, served at `/admin`) · `@opencms/oauth2`: login and user management · `opencms-cli`: the `opencms` command, incl. `opencms init` | this repo, published to npm |
 | **Implementation** (`examples/my-store`) | `src/content-types/**/*.schema.ts` (source of truth), `src/generated/*` (generated, never edit), `src/extensions/*` (your hooks, never overwritten), `migrations/*` | your project |
 
 ## Quick start
+
+You need Node 22+ and a Postgres database.
+
+```bash
+npx opencms-cli init my-cms --db-url postgres://postgres:postgres@localhost:5432/my_cms
+cd my-cms
+pnpm dev                                  # migrates, then serves on http://localhost:4000
+```
+
+`init` writes the project (config, `src/main.ts`, `.env` with a random `OPENCMS_SECRET`), installs
+dependencies (`--no-install` to skip, `--pm pnpm|npm|yarn` to choose) and never overwrites a non-empty
+directory. Open <http://localhost:4000/admin>: on a fresh database it asks you to create the first
+super_admin. One origin serves everything: UI `/admin`, API `/api`, auth `/oauth2`, delivery API `/api/content`.
+
+Working on this monorepo instead:
 
 ```bash
 pnpm install && pnpm build
@@ -31,10 +46,12 @@ docker compose up -d                      # Postgres 16 on :5432
 
 cd examples/my-store
 pnpm opencms migrate:up                   # core system tables + project tables
-pnpm dev                                  # API on http://localhost:4000
-
-cd ../../apps/admin && pnpm dev           # admin on http://localhost:3000
+pnpm dev                                  # http://localhost:4000/admin
+OPENCMS_ADMIN_DEV=1 pnpm dev              # admin UI with Vite HMR (edit packages/core/admin/src)
 ```
+
+`pnpm build` in `packages/core` bundles the admin into `dist/admin`; without it `/admin` answers 503.
+See [`packages/core/README.md`](packages/core/README.md) for the module options.
 
 ## Defining a content type
 
@@ -105,7 +122,8 @@ The API **refuses to start** while any migration is pending (unless `autoMigrate
 
 ## Admin UI (Content Type Builder)
 
-With `schemaEditable: true` (the default outside production) the builder calls
+The admin is part of `@opencms/core` (no separate app to run or deploy) and requires a signed-in user
+(see [`@opencms/oauth2`](packages/oauth2/README.md)). With `schemaEditable: true` (the default outside production) the builder calls
 `POST /api/admin/content-types`, which:
 
 1. writes `src/content-types/<apiId>/<apiId>.schema.ts`
@@ -129,7 +147,15 @@ In production, set `schemaEditable: false`: schema changes go through git and `o
 | `GET/POST /api/admin/assets` · `/api/admin/taxonomies[/:slug/terms]` | system data |
 
 Filtering and sorting are only allowed on `indexed`/`unique` fields, so every storefront query hits an index.
-Set `OPENCMS_ADMIN_TOKEN` to require `Authorization: Bearer <token>` on `/api/admin/*`.
+`/api/admin/*` requires a session (`super_admin` role); `/api/content/*` is public. Every `/api/**` failure
+answers `{ "error": { "code", "message", "issues"? } }`. Browsers on other origins can read
+`/api/content/**` (GET only, no credentials) if their origin is listed in `cors.origins`.
+
+## Breaking changes
+
+See [`CHANGELOG.md`](CHANGELOG.md). In short: `adminToken` / `OPENCMS_ADMIN_TOKEN` are gone (sign in
+with a user instead), `/api/admin` no longer sends CORS headers, `/api/**` errors use a new body, and
+`OPENCMS_INTERNAL_URL` is removed.
 
 ## Extensions
 
@@ -145,7 +171,7 @@ export default defineHooks('product', {
 
 - v0.2: markets/sites/currencies as first-class entities, RBAC scoped by market + locale, webhooks, asset upload with storage adapters (local/S3)
 - v0.3: widget schema + page builder, Next.js preview (draft mode), `@opencms/sdk` + React widget renderer
-- v0.4: plugin API (custom field kinds, storage), scheduled publishing, translation workflow, `opencms init` scaffolder
+- v0.4: plugin API (custom field kinds, storage), scheduled publishing, translation workflow, ~~`opencms init` scaffolder~~ (done)
 
 ## License
 
