@@ -14,7 +14,7 @@ export interface ApiDeps {
 }
 
 interface ErrorBody {
-  error?: { code?: string; message?: string; issues?: unknown[] };
+  error?: { code?: string; message?: string; issues?: unknown[]; userCount?: number };
 }
 
 /**
@@ -46,6 +46,7 @@ export async function api<T>(path: string, init: ApiInit = {}, deps: ApiDeps = {
     payload.error?.message ?? res.statusText,
     payload.error?.issues ?? [],
     res.headers.get('Retry-After') !== null && Number.isFinite(retryAfter) ? retryAfter : undefined,
+    payload.error?.userCount,
   );
   if (res.status === 401 && error.code === 'unauthenticated' && redirectOn401 !== false) {
     const location = deps.location ?? globalThis.location;

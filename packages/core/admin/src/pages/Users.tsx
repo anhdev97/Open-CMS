@@ -21,12 +21,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { t } from '@/i18n/en';
 import { ApiError } from '@/lib/api-error';
+import {
+  listRoles,
+  roleError,
+  roleErrorMessage,
+  roleIdsFromNames,
+  setUserRoles,
+  type AdminRole,
+} from '@/lib/roles';
 import {
   createUser,
   deleteUser,
@@ -44,8 +54,54 @@ type Identity = AdminUser['identities'][number];
 
 type Dialogs =
   | { kind: 'create' }
-  | { kind: 'reset' | 'disable' | 'enable' | 'delete'; user: AdminUser }
+  | { kind: 'editRoles' | 'reset' | 'disable' | 'enable' | 'delete'; user: AdminUser }
   | { kind: 'unlink'; user: AdminUser; identity: Identity };
+
+function assignRolesErrorMessage(err: unknown): string {
+  if (err instanceof ApiError && err.code === 'last_super_admin') return userErrorMessage(err);
+  return roleErrorMessage(err);
+}
+
+function RoleCheckboxList({
+  roles,
+  selected,
+  onChange,
+  disabled,
+}: {
+  roles: AdminRole[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="grid gap-3">
+      {roles.map((role) => {
+        const checked = selected.includes(role.id);
+        return (
+          <div key={role.id} className="flex items-center gap-2">
+            <Checkbox
+              id={`role-${role.id}`}
+              checked={checked}
+              disabled={disabled}
+              onCheckedChange={(c) => {
+                const on = c === true;
+                onChange(on ? [...selected, role.id] : selected.filter((id) => id !== role.id));
+              }}
+            />
+            <Label htmlFor={`role-${role.id}`} className="flex flex-1 cursor-pointer items-center gap-2 font-normal">
+              {role.name}
+              {role.isSystem && (
+                <Badge variant="secondary" className="text-xs">
+                  {t('roles.systemBadge')}
+                </Badge>
+              )}
+            </Label>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 const createSchema = z.object({
   email: z
@@ -62,18 +118,40 @@ const resetSchema = z.object({ password: z.string().min(1, t('users.create.passw
 
 function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [formError, setFormError] = useState<Error | null>(null);
+  const [rolesLoadError, setRolesLoadError] = useState<Error | null>(null);
+  const [allRoles, setAllRoles] = useState<AdminRole[]>([]);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const form = useForm<CreateValues>({
     resolver: zodResolver(createSchema),
     defaultValues: { email: '', name: '', password: '' },
   });
 
+  useEffect(() => {
+    listRoles()
+      .then((roles) => {
+        setAllRoles(roles);
+        setRolesLoadError(null);
+      })
+      .catch((err) => {
+        setAllRoles([]);
+        setRolesLoadError(roleError(err));
+      });
+  }, []);
+
   async function onSubmit({ email, name, password }: CreateValues) {
     setFormError(null);
     try {
-      await createUser({ email, name, ...(password ? { password } : {}) });
-      toast.success(t('users.create.created'));
-      onDone();
-      onClose();
+      const created = await createUser({ email, name, ...(password ? { password } : {}) });
+      try {
+        await setUserRoles(created.id, selectedRoleIds);
+        toast.success(t('users.create.created'));
+        onDone();
+        onClose();
+      } catch (e) {
+        toast.error(assignRolesErrorMessage(e));
+        onDone();
+        onClose();
+      }
     } catch (e) {
       if (e instanceof ApiError && e.code === 'email_taken') form.setError('email', { message: userErrorMessage(e) });
       else if (e instanceof ApiError && e.code === 'weak_password') form.setError('password', { message: e.message });
@@ -91,6 +169,7 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
         <Form {...form}>
           <form className="grid gap-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
             <ErrorAlert error={formError} />
+            <ErrorAlert error={rolesLoadError} />
             <FormField
               control={form.control}
               name="email"
@@ -131,6 +210,12 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
                 </FormItem>
               )}
             />
+            {allRoles.length > 0 && (
+              <div className="grid gap-2">
+                <p className="text-sm font-medium leading-none">{t('users.create.roles')}</p>
+                <RoleCheckboxList roles={allRoles} selected={selectedRoleIds} onChange={setSelectedRoleIds} />
+              </div>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={onClose}>
                 {t('common.cancel')}
@@ -141,6 +226,84 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
             </DialogFooter>
           </form>
         </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditRolesDialog({ user, onClose, onDone }: { user: AdminUser; onClose: () => void; onDone: () => void }) {
+  const [formError, setFormError] = useState<Error | null>(null);
+  const [rolesLoadError, setRolesLoadError] = useState<Error | null>(null);
+  const [allRoles, setAllRoles] = useState<AdminRole[]>([]);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
+  const [loadingRoles, setLoadingRoles] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const rolesReady = !loadingRoles && rolesLoadError === null;
+
+  useEffect(() => {
+    setLoadingRoles(true);
+    setRolesLoadError(null);
+    listRoles()
+      .then((roles) => {
+        setAllRoles(roles);
+        setSelectedRoleIds(roleIdsFromNames(roles, user.roles));
+      })
+      .catch((err) => {
+        setAllRoles([]);
+        setRolesLoadError(roleError(err));
+      })
+      .finally(() => setLoadingRoles(false));
+  }, [user.id, user.roles]);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+    setSubmitting(true);
+    try {
+      await setUserRoles(user.id, selectedRoleIds);
+      toast.success(t('users.editRoles.done'));
+      onDone();
+      onClose();
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'last_super_admin') {
+        toast.error(userErrorMessage(err));
+      } else {
+        setFormError(roleError(err));
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t('users.editRoles.title', { email: user.email })}</DialogTitle>
+          <DialogDescription>{t('users.editRoles.description')}</DialogDescription>
+        </DialogHeader>
+        <form className="grid gap-4" onSubmit={onSubmit} noValidate>
+          <ErrorAlert error={formError} />
+          <ErrorAlert error={rolesLoadError} />
+          {loadingRoles ? (
+            <Skeleton className="h-24 w-full" />
+          ) : rolesLoadError ? null : (
+            <RoleCheckboxList
+              roles={allRoles}
+              selected={selectedRoleIds}
+              onChange={setSelectedRoleIds}
+              disabled={submitting}
+            />
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" disabled={submitting || !rolesReady}>
+              {submitting ? t('users.editRoles.submitting') : t('users.editRoles.submit')}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
@@ -278,6 +441,7 @@ export function Users() {
                   <TableHead>{t('users.name')}</TableHead>
                   <TableHead>{t('users.email')}</TableHead>
                   <TableHead>{t('users.status')}</TableHead>
+                  <TableHead>{t('users.roles')}</TableHead>
                   <TableHead>{t('users.lastLogin')}</TableHead>
                   <TableHead>{t('users.sso')}</TableHead>
                   <TableHead className="text-right">
@@ -301,6 +465,19 @@ export function Users() {
                       <TableCell className="text-muted-foreground">{u.email}</TableCell>
                       <TableCell>
                         <StatusBadge status={u.status === 'disabled' ? 'disabled' : 'active'} />
+                      </TableCell>
+                      <TableCell>
+                        {u.roles.length === 0 ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {u.roles.map((role) => (
+                              <Badge key={role} variant="secondary">
+                                {role}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : t('users.never')}
@@ -335,6 +512,9 @@ export function Users() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => setDialog({ kind: 'editRoles', user: u })}>
+                              {t('users.editRoles.menu')}
+                            </DropdownMenuItem>
                             <DropdownMenuItem onSelect={() => setDialog({ kind: 'reset', user: u })}>
                               {t('users.reset.menu')}
                             </DropdownMenuItem>
@@ -369,6 +549,7 @@ export function Users() {
       )}
 
       {dialog?.kind === 'create' && <CreateUserDialog onClose={close} onDone={load} />}
+      {dialog?.kind === 'editRoles' && <EditRolesDialog user={dialog.user} onClose={close} onDone={load} />}
       {dialog?.kind === 'reset' && <ResetPasswordDialog user={dialog.user} isMe={dialog.user.id === me.id} onClose={close} />}
 
       <ConfirmDialog

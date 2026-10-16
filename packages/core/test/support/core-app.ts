@@ -23,6 +23,7 @@ export interface CoreTestApp {
 export interface CoreTestAppOptions {
   contentTypes?: ContentTypeDefinition[];
   admin?: OpenCmsModuleOptions['admin'];
+  storefront?: OpenCmsModuleOptions['storefront'];
   cors?: OpenCmsModuleOptions['cors'];
   /** false: leave the database empty and without autoMigrate, so startup must refuse. Default true. */
   migrate?: boolean;
@@ -77,6 +78,7 @@ export async function createCoreTestApp(opts: CoreTestAppOptions = {}): Promise<
           contentTypes: opts.contentTypes ?? [],
           env,
           admin: opts.admin,
+          storefront: opts.storefront,
           cors: opts.cors,
           schemaEditable: true,
           autoMigrate: opts.migrate !== false,

@@ -60,16 +60,16 @@ export class UserService {
     const roles = await exec
       .selectFrom('auth_user_roles as ur')
       .innerJoin('auth_roles as r', 'r.id', 'ur.role_id')
-      .select('r.key')
+      .select('r.name')
       .where('ur.user_id', '=', row.id)
-      .orderBy('r.key')
+      .orderBy('r.name')
       .execute();
     return {
       id: row.id,
       email: row.email,
       name: row.name,
       status: row.status as 'active' | 'disabled',
-      roles: roles.map((r) => r.key),
+      roles: roles.map((r) => r.name),
       passwordHash: row.password_hash,
       lastLoginAt: row.last_login_at,
     };
@@ -98,7 +98,7 @@ export class UserService {
         if ((e as { code?: string }).code === '23505') throw new AuthError('email_taken', 409);
         throw e;
       }
-      await sql`insert into auth_user_roles (user_id, role_id) select ${id}, id from auth_roles where key = ${SUPER_ADMIN}`.execute(t);
+      await sql`insert into auth_user_roles (user_id, role_id) select ${id}, id from auth_roles where name = ${SUPER_ADMIN}`.execute(t);
       await this.audit.record({ type: 'user_created', userId: id, actorId: input.actorId, meta: { email } }, t);
       return id;
     };
@@ -132,7 +132,7 @@ export class UserService {
       .innerJoin('auth_user_roles as ur', 'ur.user_id', 'u.id')
       .innerJoin('auth_roles as r', 'r.id', 'ur.role_id')
       .select('u.id')
-      .where('r.key', '=', SUPER_ADMIN)
+      .where('r.name', '=', SUPER_ADMIN)
       .where('u.status', '=', 'active')
       .execute();
     return rows.length === 1 && rows[0].id === userId;
