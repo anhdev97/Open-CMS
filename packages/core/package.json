@@ -18,6 +18,7 @@
     "@opencms/oauth2": "workspace:*",
     "@opencms/schema": "workspace:*",
     "express": "^5.2.1",
+    "http-proxy": "^1.18.1",
     "kysely": "^0.28.0",
     "zod": "^3.25.0"
   },
@@ -34,6 +35,7 @@
     "@nestjs/platform-express": "^11.2.5",
     "@tailwindcss/vite": "^4.3.3",
     "@types/express": "^5.0.6",
+    "@types/http-proxy": "^1.17.17",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",

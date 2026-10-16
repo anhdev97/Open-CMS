@@ -5,9 +5,9 @@
   "description": "Example opencms project (implementation layer): content types, generated code and migrations",
   "scripts": {
     "opencms": "opencms",
-    "dev": "opencms migrate:up && tsx src/main.ts",
-    "start": "node dist/main.js",
-    "build": "tsc -p tsconfig.json",
+    "dev": "opencms migrate:up && concurrently -k -n nest,next -c blue,magenta \"tsx src/main.ts\" \"next dev -H 127.0.0.1 -p 3000\"",
+    "build": "tsc -p tsconfig.json && next build",
+    "start": "opencms migrate:up && concurrently -k -n nest,next -c blue,magenta \"node dist/src/main.js\" \"next start -H 127.0.0.1 -p 3000\"",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -17,10 +17,16 @@
     "@opencms/core": "workspace:*",
     "@opencms/schema": "workspace:*",
     "kysely": "^0.28.0",
+    "next": "^15.5.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.0"
   },
   "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "concurrently": "^9.0.0",
     "opencms-cli": "workspace:*",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"

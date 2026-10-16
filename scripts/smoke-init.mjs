@@ -3,7 +3,7 @@
 // boot it and walk the admin setup/login/logout chain over HTTP. Exit code 0 = pass, 1 = fail.
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -128,6 +128,17 @@ async function main() {
   const port = await freePort();
   run('node', [join(repo, 'packages/cli/bin/opencms.js'), 'init', app, '--link', repo, '--no-install', '--db-url', dbUrl.toString(), '--port', String(port)]);
   ok('opencms init (linked, --no-install)');
+
+  const required = ['app/layout.tsx', 'app/page.tsx', 'app/lib/cms.ts', 'next.config.ts', 'tsconfig.next.json', 'src/main.ts', 'src/app.module.ts'];
+  for (const f of required) {
+    assert(existsSync(join(app, f)), `missing ${f}`);
+  }
+  const pkg = JSON.parse(readFileSync(join(app, 'package.json'), 'utf8'));
+  assert(pkg.scripts.dev.includes('next dev'), 'dev script must start next');
+  assert(pkg.scripts.build.includes('next build'), 'build script must run next build');
+  assert(pkg.scripts.start.includes('next start'), 'start script must start next');
+  assert(pkg.dependencies.next, 'next dependency missing');
+  ok('storefront scaffold files + scripts present');
 
   // pnpm: use the repo's pinned version via corepack; plain `pnpm` outside the repo may try another version
   const corepack = spawnSync('corepack', ['--version'], { stdio: 'ignore' });

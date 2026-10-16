@@ -37,6 +37,16 @@ const RANGES = {
   kysely: '^0.28.0',
 } as const;
 const DEV_RANGES = { '@types/node': '^22.0.0', tsx: '^4.19.0', typescript: '^5.6.0' } as const;
+const NEXT_RANGES = {
+  next: '^15.5.0',
+  react: '^19.0.0',
+  'react-dom': '^19.0.0',
+} as const;
+const NEXT_DEV_RANGES = {
+  concurrently: '^9.0.0',
+  '@types/react': '^19.0.0',
+  '@types/react-dom': '^19.0.0',
+} as const;
 
 /** Packages the app must share with the linked core (two copies of Nest break DI). */
 const SHARED_WITH_CORE = Object.keys(RANGES);
@@ -98,17 +108,24 @@ export async function runInit(dir: string, opts: InitOptions): Promise<InitResul
           return [n, real ? link(real) : RANGES[n as keyof typeof RANGES]];
         }),
       ),
+      ...NEXT_RANGES,
     };
-    devDeps = { 'opencms-cli': link(`${repo}/packages/cli`), ...DEV_RANGES };
+    devDeps = { 'opencms-cli': link(`${repo}/packages/cli`), ...DEV_RANGES, ...NEXT_DEV_RANGES };
   } else {
     const v = `^${opts.cliVersion}`;
-    deps = { '@opencms/core': v, '@opencms/schema': v, ...RANGES };
-    devDeps = { 'opencms-cli': v, ...DEV_RANGES };
+    deps = { '@opencms/core': v, '@opencms/schema': v, ...RANGES, ...NEXT_RANGES };
+    devDeps = { 'opencms-cli': v, ...DEV_RANGES, ...NEXT_DEV_RANGES };
   }
 
   const files = new Map<string, string>([
     ['package.json', t.packageJson(name, deps, devDeps)],
     ['tsconfig.json', t.tsconfigJson()],
+    ['app/layout.tsx', t.appLayoutTsx(name)],
+    ['app/page.tsx', t.appPageTsx(name)],
+    ['app/lib/cms.ts', t.appCmsTs()],
+    ['next.config.ts', t.nextConfigTs()],
+    ['tsconfig.next.json', t.tsconfigNextJson()],
+    ['next-env.d.ts', t.nextEnvDts()],
     ['opencms.config.ts', t.configTs()],
     ['src/main.ts', t.mainTs()],
     ['src/app.module.ts', t.appModuleTs()],
