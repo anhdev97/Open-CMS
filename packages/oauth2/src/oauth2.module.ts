@@ -25,7 +25,9 @@ import { ConfigAuthSettingsProvider } from './settings/settings.provider';
 import { BootstrapService } from './setup/bootstrap.service';
 import { SetupController } from './setup/setup.controller';
 import { SetupState } from './setup/setup-state';
+import { RolesController } from './roles/roles.controller';
 import { RoleService } from './roles/role.service';
+import { UserRolesController } from './roles/user-roles.controller';
 import { PasswordController } from './users/password.controller';
 import { UserService } from './users/user.service';
 import { UsersController } from './users/users.controller';
@@ -53,7 +55,16 @@ export class OAuth2Module {
     return {
       module: OAuth2Module,
       global: true,
-      controllers: [SetupController, InteractionController, IdpController, AuthController, UsersController, PasswordController],
+      controllers: [
+        SetupController,
+        InteractionController,
+        IdpController,
+        AuthController,
+        UsersController,
+        PasswordController,
+        RolesController,
+        UserRolesController,
+      ],
       providers: [
         { provide: OAUTH2_DB, useExisting: opts.dbToken },
         // Throws ConfigError on a missing/short secret or missing public URL → app refuses to start.
