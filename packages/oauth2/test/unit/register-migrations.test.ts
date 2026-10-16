@@ -9,6 +9,7 @@ describe('register-migrations', () => {
     await import('../../src/register-migrations');
     const { allCoreMigrations } = await import('@opencms/db');
     expect(Object.keys(allCoreMigrations())).toContain('oauth2_0001_init');
+    expect(Object.keys(allCoreMigrations())).toContain('oauth2_0002_roles');
     const req = createRequire(__filename);
     const after = Object.keys(req.cache).filter((k) => k.includes('/@nestjs/'));
     expect(after.filter((k) => !before.includes(k))).toEqual([]);
