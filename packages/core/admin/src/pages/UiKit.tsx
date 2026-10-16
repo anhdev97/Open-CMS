@@ -388,7 +388,7 @@ export function UiKit() {
         {/* transform-gpu makes this box the containing block of the sidebar's fixed positioning */}
         <div className="h-128 transform-gpu overflow-auto rounded-lg border">
           <MemoryRouter>
-            <AppLayout user={{ name: 'Ada Lovelace', email: 'ada@example.com' }}>
+            <AppLayout user={{ name: 'Ada Lovelace', email: 'ada@example.com', roles: ['super_admin'] }}>
               <PageHeader title={t('ui.sampleTitle')} description={t('ui.sampleDescription')} />
             </AppLayout>
           </MemoryRouter>

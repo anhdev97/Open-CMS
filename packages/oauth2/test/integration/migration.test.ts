@@ -43,7 +43,7 @@ describe('oauth2_0001_init', () => {
 
   it('seeds exactly one super_admin role', async () => {
     const rows = await db.selectFrom('auth_roles').selectAll().execute();
-    expect(rows.map((r) => [r.key, r.name])).toEqual([['super_admin', 'Super Admin']]);
+    expect(rows.map((r) => [r.name, r.is_system])).toEqual([['super_admin', true]]);
   });
 
   it('enforces case-insensitive unique email', async () => {
@@ -57,7 +57,7 @@ describe('oauth2_0001_init', () => {
 
   it('cascades user deletion to roles, identities and sessions', async () => {
     const u = await db.insertInto('auth_users').values({ email: 'd@x.com', name: 'D' }).returning('id').executeTakeFirstOrThrow();
-    const role = await db.selectFrom('auth_roles').select('id').where('key', '=', 'super_admin').executeTakeFirstOrThrow();
+    const role = await db.selectFrom('auth_roles').select('id').where('name', '=', 'super_admin').executeTakeFirstOrThrow();
     await db.insertInto('auth_user_roles').values({ user_id: u.id, role_id: role.id }).execute();
     await db.insertInto('auth_user_identities').values({ user_id: u.id, provider: 'p', subject: 's' }).execute();
     await db.deleteFrom('auth_users').where('id', '=', u.id).execute();
@@ -93,10 +93,13 @@ describe('oauth2_0001_init', () => {
   });
 
   it('down drops all 9 tables', async () => {
-    // down only the oauth2 migration (it is last in key order)
-    const res = await coreMigrator(db).migrateDown();
-    expect(res.error).toBeUndefined();
-    expect(res.results?.[0]?.migrationName).toBe('oauth2_0001_init');
+    const m = coreMigrator(db);
+    const res2 = await m.migrateDown();
+    expect(res2.error).toBeUndefined();
+    expect(res2.results?.[0]?.migrationName).toBe('oauth2_0002_roles');
+    const res1 = await m.migrateDown();
+    expect(res1.error).toBeUndefined();
+    expect(res1.results?.[0]?.migrationName).toBe('oauth2_0001_init');
     expect(await existing(db)).toEqual([]);
   });
 });

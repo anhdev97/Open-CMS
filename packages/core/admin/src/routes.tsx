@@ -16,6 +16,7 @@ export const routes: RouteObject[] = [
       { path: 'content/:apiId', lazy: async () => ({ Component: (await import('./pages/Content')).Content }) },
       { path: 'builder', lazy: async () => ({ Component: (await import('./pages/Builder')).Builder }) },
       { path: 'users', lazy: async () => ({ Component: (await import('./pages/Users')).Users }) },
+      { path: 'roles', lazy: async () => ({ Component: (await import('./pages/Roles')).Roles }) },
       { path: 'account', lazy: async () => ({ Component: (await import('./pages/Account')).Account }) },
       { path: '*', lazy: async () => ({ Component: (await import('./pages/NotFound')).NotFound }) },
     ],

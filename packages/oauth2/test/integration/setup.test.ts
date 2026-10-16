@@ -81,43 +81,48 @@ describe('setup wizard API', () => {
 });
 
 describe('setup wizard flow', () => {
-  it('GET required true -> POST normalized email 201 -> GET required false', async () => {
-    const ctx = await startTestDb();
-    const cfg = loadConfig({ OPENCMS_SECRET: Buffer.alloc(32, 7).toString('base64'), OPENCMS_PUBLIC_URL: ORIGIN });
-    const mod = await Test.createTestingModule({
-      controllers: [SetupController],
-      providers: [
-        { provide: OAUTH2_DB, useValue: ctx.db },
-        { provide: OAUTH2_CONFIG, useValue: cfg },
-        { provide: GRANT_REVOKER, useValue: { revokeAllGrants: vi.fn(async () => {}) } },
-        { provide: RATE_LIMITER, useValue: new InMemoryRateLimiter() },
-        { provide: PasswordService, useValue: new PasswordService({ minLength: 12 }) },
-        AuditService,
-        {
-          provide: UserService,
-          useFactory: (db: any, a: AuditService) =>
-            new UserService(db, new PasswordService({ minLength: 12 }), a, { revokeAllGrants: async () => {} }),
-          inject: [OAUTH2_DB, AuditService],
-        },
-        SetupState,
-      ],
-    }).compile();
-    const app = mod.createNestApplication();
-    app.useGlobalFilters(new AuthExceptionFilter());
-    await app.init();
-    try {
-      const s = () => request(app.getHttpServer());
-      expect((await s().get('/api/auth/setup')).body).toEqual({ required: true });
-      const r = await s().post('/api/auth/setup').set('Origin', ORIGIN).send({ email: 'Admin@X.com ', name: 'Root', password: PW });
-      expect(r.status).toBe(201);
-      expect(r.body.email).toBe('admin@x.com');
-      expect(typeof r.body.id).toBe('string');
-      expect((await s().get('/api/auth/setup')).body).toEqual({ required: false });
-      const ev = await ctx.db.selectFrom('auth_audit_events').select('type').where('type', '=', 'setup_completed').execute();
-      expect(ev).toHaveLength(1);
-    } finally {
-      await app.close();
-      await ctx.stop();
-    }
-  });
+  // Boots its own DB + Nest app inside the test (not beforeAll); needs headroom under CI load.
+  it(
+    'GET required true -> POST normalized email 201 -> GET required false',
+    async () => {
+      const ctx = await startTestDb();
+      const cfg = loadConfig({ OPENCMS_SECRET: Buffer.alloc(32, 7).toString('base64'), OPENCMS_PUBLIC_URL: ORIGIN });
+      const mod = await Test.createTestingModule({
+        controllers: [SetupController],
+        providers: [
+          { provide: OAUTH2_DB, useValue: ctx.db },
+          { provide: OAUTH2_CONFIG, useValue: cfg },
+          { provide: GRANT_REVOKER, useValue: { revokeAllGrants: vi.fn(async () => {}) } },
+          { provide: RATE_LIMITER, useValue: new InMemoryRateLimiter() },
+          { provide: PasswordService, useValue: new PasswordService({ minLength: 12 }) },
+          AuditService,
+          {
+            provide: UserService,
+            useFactory: (db: any, a: AuditService) =>
+              new UserService(db, new PasswordService({ minLength: 12 }), a, { revokeAllGrants: async () => {} }),
+            inject: [OAUTH2_DB, AuditService],
+          },
+          SetupState,
+        ],
+      }).compile();
+      const app = mod.createNestApplication();
+      app.useGlobalFilters(new AuthExceptionFilter());
+      await app.init();
+      try {
+        const s = () => request(app.getHttpServer());
+        expect((await s().get('/api/auth/setup')).body).toEqual({ required: true });
+        const r = await s().post('/api/auth/setup').set('Origin', ORIGIN).send({ email: 'Admin@X.com ', name: 'Root', password: PW });
+        expect(r.status).toBe(201);
+        expect(r.body.email).toBe('admin@x.com');
+        expect(typeof r.body.id).toBe('string');
+        expect((await s().get('/api/auth/setup')).body).toEqual({ required: false });
+        const ev = await ctx.db.selectFrom('auth_audit_events').select('type').where('type', '=', 'setup_completed').execute();
+        expect(ev).toHaveLength(1);
+      } finally {
+        await app.close();
+        await ctx.stop();
+      }
+    },
+    20_000,
+  );
 });

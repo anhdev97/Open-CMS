@@ -7,6 +7,7 @@ export class ApiError extends Error {
     public issues: unknown[] = [],
     /** Seconds from a `Retry-After` header (429), when present. */
     public retryAfterSec?: number,
+    public userCount?: number,
   ) {
     super(message);
     this.name = 'ApiError';
