@@ -118,6 +118,7 @@ const resetSchema = z.object({ password: z.string().min(1, t('users.create.passw
 
 function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [formError, setFormError] = useState<Error | null>(null);
+  const [rolesLoadError, setRolesLoadError] = useState<Error | null>(null);
   const [allRoles, setAllRoles] = useState<AdminRole[]>([]);
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const form = useForm<CreateValues>({
@@ -126,7 +127,15 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
   });
 
   useEffect(() => {
-    listRoles().then(setAllRoles, () => setAllRoles([]));
+    listRoles()
+      .then((roles) => {
+        setAllRoles(roles);
+        setRolesLoadError(null);
+      })
+      .catch((err) => {
+        setAllRoles([]);
+        setRolesLoadError(roleError(err));
+      });
   }, []);
 
   async function onSubmit({ email, name, password }: CreateValues) {
@@ -160,6 +169,7 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
         <Form {...form}>
           <form className="grid gap-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
             <ErrorAlert error={formError} />
+            <ErrorAlert error={rolesLoadError} />
             <FormField
               control={form.control}
               name="email"
@@ -223,17 +233,24 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
 
 function EditRolesDialog({ user, onClose, onDone }: { user: AdminUser; onClose: () => void; onDone: () => void }) {
   const [formError, setFormError] = useState<Error | null>(null);
+  const [rolesLoadError, setRolesLoadError] = useState<Error | null>(null);
   const [allRoles, setAllRoles] = useState<AdminRole[]>([]);
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const rolesReady = !loadingRoles && rolesLoadError === null;
 
   useEffect(() => {
     setLoadingRoles(true);
+    setRolesLoadError(null);
     listRoles()
       .then((roles) => {
         setAllRoles(roles);
         setSelectedRoleIds(roleIdsFromNames(roles, user.roles));
+      })
+      .catch((err) => {
+        setAllRoles([]);
+        setRolesLoadError(roleError(err));
       })
       .finally(() => setLoadingRoles(false));
   }, [user.id, user.roles]);
@@ -267,9 +284,10 @@ function EditRolesDialog({ user, onClose, onDone }: { user: AdminUser; onClose: 
         </DialogHeader>
         <form className="grid gap-4" onSubmit={onSubmit} noValidate>
           <ErrorAlert error={formError} />
+          <ErrorAlert error={rolesLoadError} />
           {loadingRoles ? (
             <Skeleton className="h-24 w-full" />
-          ) : (
+          ) : rolesLoadError ? null : (
             <RoleCheckboxList
               roles={allRoles}
               selected={selectedRoleIds}
@@ -281,7 +299,7 @@ function EditRolesDialog({ user, onClose, onDone }: { user: AdminUser; onClose: 
             <Button type="button" variant="outline" onClick={onClose}>
               {t('common.cancel')}
             </Button>
-            <Button type="submit" disabled={submitting || loadingRoles}>
+            <Button type="submit" disabled={submitting || !rolesReady}>
               {submitting ? t('users.editRoles.submitting') : t('users.editRoles.submit')}
             </Button>
           </DialogFooter>
