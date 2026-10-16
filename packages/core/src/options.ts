@@ -1,6 +1,7 @@
 import type { Kysely } from 'kysely';
 import type { AuthFileConfig } from '@opencms/oauth2';
 import type { ContentTypeDefinition, OpenCmsConfig, ResolvedConfig } from '@opencms/schema';
+import type { StorefrontModuleOptions } from './storefront/resolve-storefront';
 
 export const OPENCMS_OPTIONS = Symbol('OPENCMS_OPTIONS');
 export const OPENCMS_DB = Symbol('OPENCMS_DB');
@@ -68,6 +69,11 @@ export interface OpenCmsModuleOptions {
   cors?: { origins: string[] };
   /** Environment for the auth module. Default `process.env`. */
   env?: NodeJS.ProcessEnv;
+  /**
+   * Nest → Next.js storefront reverse-proxy. When enabled, non-excluded paths are
+   * forwarded to `targetUrl` (real `next dev` / `next start`). Default enabled=true.
+   */
+  storefront?: StorefrontModuleOptions;
 }
 
 export interface ResolvedOpenCmsOptions extends Omit<OpenCmsModuleOptions, 'config'> {
