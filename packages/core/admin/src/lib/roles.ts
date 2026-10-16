@@ -13,6 +13,12 @@ export interface AdminRole {
 
 export const listRoles = () => api<{ data: AdminRole[] }>('/api/admin/roles').then((r) => r.data);
 
+/** Map role names (e.g. from AdminUser.roles) to ids using the current role catalog. */
+export function roleIdsFromNames(all: AdminRole[], names: string[]): string[] {
+  const set = new Set(names);
+  return all.filter((r) => set.has(r.name)).map((r) => r.id);
+}
+
 export const createRole = (input: { name: string; description?: string }) =>
   api<AdminRole>('/api/admin/roles', { method: 'POST', json: input });
 

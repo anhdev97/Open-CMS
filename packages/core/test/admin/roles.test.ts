@@ -1,6 +1,34 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../../admin/src/lib/api-error';
-import { roleError, roleErrorMessage } from '../../admin/src/lib/roles';
+import { roleError, roleErrorMessage, roleIdsFromNames, type AdminRole } from '../../admin/src/lib/roles';
+
+const sampleRoles: AdminRole[] = [
+  {
+    id: '1',
+    name: 'super_admin',
+    description: '',
+    isSystem: true,
+    createdAt: '',
+    updatedAt: '',
+  },
+  {
+    id: '2',
+    name: 'editor',
+    description: '',
+    isSystem: false,
+    createdAt: '',
+    updatedAt: '',
+  },
+];
+
+describe('roleIdsFromNames', () => {
+  it('maps known names to ids and ignores unknown names', () => {
+    expect(roleIdsFromNames(sampleRoles, ['editor', 'missing', 'super_admin'])).toEqual(['1', '2']);
+  });
+  it('returns empty when names is empty', () => {
+    expect(roleIdsFromNames(sampleRoles, [])).toEqual([]);
+  });
+});
 
 describe('roleErrorMessage', () => {
   it('formats role_in_use with count', () => {
