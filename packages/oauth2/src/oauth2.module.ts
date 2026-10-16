@@ -25,6 +25,7 @@ import { ConfigAuthSettingsProvider } from './settings/settings.provider';
 import { BootstrapService } from './setup/bootstrap.service';
 import { SetupController } from './setup/setup.controller';
 import { SetupState } from './setup/setup-state';
+import { RoleService } from './roles/role.service';
 import { PasswordController } from './users/password.controller';
 import { UserService } from './users/user.service';
 import { UsersController } from './users/users.controller';
@@ -74,6 +75,7 @@ export class OAuth2Module {
           inject: [OAUTH2_CONFIG],
         },
         AuditService,
+        RoleService,
         UserService,
         { provide: GRANT_REVOKER, useExisting: ProviderService },
         SetupState,
@@ -108,6 +110,7 @@ export class OAuth2Module {
         GRANT_REVOKER,
         PasswordService,
         AuditService,
+        RoleService,
         UserService,
         SetupState,
         BootstrapService,
