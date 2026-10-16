@@ -120,9 +120,10 @@ describe('runInit', () => {
     expect(pkg.devDependencies['@types/node']).toBe('^22.0.0');
     expect(read(dir, 'README.md')).toContain('Install with dev dependencies');
     expect(pkg.scripts).toEqual({
-      dev: 'opencms migrate:up && concurrently -k -n nest,next -c blue,magenta "tsx src/main.ts" "next dev -p 3000"',
+      dev: 'opencms migrate:up && concurrently -k -n nest,next -c blue,magenta "tsx src/main.ts" "next dev -H 127.0.0.1 -p 3000"',
       build: 'tsc -p tsconfig.json && next build',
-      start: 'opencms migrate:up && concurrently -k -n nest,next -c blue,magenta "node dist/src/main.js" "next start -p 3000"',
+      start:
+        'opencms migrate:up && concurrently -k -n nest,next -c blue,magenta "node dist/src/main.js" "next start -H 127.0.0.1 -p 3000"',
       opencms: 'opencms',
     });
     expect(pkg.dependencies.next).toBe('^15.5.0');
@@ -136,8 +137,12 @@ describe('runInit', () => {
     await runInit(dir, base);
     expect(read(dir, 'app/page.tsx')).toContain('/admin');
     expect(read(dir, 'app/page.tsx')).not.toMatch(/getEntries/);
-    expect(read(dir, 'app/lib/cms.ts')).toContain('/api/content/');
-    expect(read(dir, 'app/lib/cms.ts')).toContain('export async function getEntries');
+    const cms = read(dir, 'app/lib/cms.ts');
+    expect(cms).toContain('/api/content/');
+    expect(cms).toContain('export async function getEntries');
+    expect(cms).toContain("process.env.OPENCMS_PUBLIC_URL?.trim().replace(/\\/+$/, '')");
+    expect(cms).toContain('`http://127.0.0.1:${process.env.PORT || 4000}`');
+    expect(cms).toContain('new URL(path, origin).toString()');
     expect(JSON.parse(read(dir, 'tsconfig.json')).include).toEqual(['src', 'opencms.config.ts']);
     expect(read(dir, 'next.config.ts')).toContain("tsconfigPath: 'tsconfig.next.json'");
     expect(read(dir, 'src/app.module.ts')).toContain('storefront:');

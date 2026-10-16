@@ -5,9 +5,9 @@
   "description": "Example opencms project (implementation layer): content types, generated code and migrations",
   "scripts": {
     "opencms": "opencms",
-    "dev": "opencms migrate:up && concurrently -k -n nest,next -c blue,magenta \"tsx src/main.ts\" \"next dev -p 3000\"",
+    "dev": "opencms migrate:up && concurrently -k -n nest,next -c blue,magenta \"tsx src/main.ts\" \"next dev -H 127.0.0.1 -p 3000\"",
     "build": "tsc -p tsconfig.json && next build",
-    "start": "opencms migrate:up && concurrently -k -n nest,next -c blue,magenta \"node dist/src/main.js\" \"next start -p 3000\"",
+    "start": "opencms migrate:up && concurrently -k -n nest,next -c blue,magenta \"node dist/src/main.js\" \"next start -H 127.0.0.1 -p 3000\"",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

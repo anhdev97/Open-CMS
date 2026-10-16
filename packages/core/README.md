@@ -54,6 +54,11 @@ Environment overrides (applied when resolving options at startup):
 If Next is down or unreachable, proxied requests get **502** with a plain-text message that names the
 configured target and suggests starting `next dev` / `next start`.
 
+The generated `package.json` binds Next to `127.0.0.1` and pins both `next dev` and `next start` to
+`-p 3000`. `OPENCMS_STOREFRONT_PORT` changes only the Nest proxy target; it does not change Next's listen
+port. If you change that variable (or Next's port), update `-p` in both scripts to the same value or Nest
+will proxy storefront requests to a dead port and return 502.
+
 ## Options
 
 | Option | Default | |
