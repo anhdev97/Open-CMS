@@ -6,19 +6,22 @@ export type AuthErrorCode =
   | 'unauthenticated' | 'setup_required' | 'setup_already_completed' | 'invalid_credentials'
   | 'account_disabled' | 'forbidden' | 'origin_mismatch' | 'validation_failed' | 'weak_password'
   | 'not_found' | 'email_taken' | 'last_super_admin' | 'rate_limited'
-  | 'idp_account_not_found' | 'idp_email_unverified' | 'login_expired' | 'invalid_state';
+  | 'idp_account_not_found' | 'idp_email_unverified' | 'login_expired' | 'invalid_state'
+  | 'role_name_taken' | 'role_in_use' | 'system_role_immutable';
 
 export class AuthError extends Error {
   retryAfterSec?: number;
+  userCount?: number;
   constructor(
     public readonly code: AuthErrorCode,
     public readonly status: number,
     message?: string,
-    opts?: { retryAfterSec?: number },
+    opts?: { retryAfterSec?: number; userCount?: number },
   ) {
     super(message ?? code);
     this.name = 'AuthError';
     this.retryAfterSec = opts?.retryAfterSec;
+    this.userCount = opts?.userCount;
   }
 }
 
@@ -29,13 +32,24 @@ export class ConfigError extends Error {
   }
 }
 
-function sendError(host: ArgumentsHost, status: number, code: string, message: string, issues?: unknown[]): void {
-  host.switchToHttp().getResponse().status(status).json({ error: issues === undefined ? { code, message } : { code, message, issues } });
+function sendError(
+  host: ArgumentsHost,
+  status: number,
+  code: string,
+  message: string,
+  extras?: { issues?: unknown[]; userCount?: number },
+): void {
+  const error: Record<string, unknown> = { code, message };
+  if (extras?.issues !== undefined) error.issues = extras.issues;
+  if (extras?.userCount !== undefined) error.userCount = extras.userCount;
+  host.switchToHttp().getResponse().status(status).json({ error });
 }
 
 function renderAuthError(err: AuthError, host: ArgumentsHost): void {
   if (err.retryAfterSec !== undefined) host.switchToHttp().getResponse().setHeader('Retry-After', String(err.retryAfterSec));
-  sendError(host, err.status, err.code, err.message);
+  sendError(host, err.status, err.code, err.message, {
+    userCount: err.userCount,
+  });
 }
 
 @Catch(AuthError)
@@ -88,8 +102,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
       }
       const { issues, message } = body as { issues?: unknown; message?: unknown };
       const list = Array.isArray(issues) ? issues : undefined;
-      if (Array.isArray(message)) return sendError(host, status, codeForStatus(status), message.join('; '), list ?? message);
-      return sendError(host, status, codeForStatus(status), exception.message, list);
+      if (Array.isArray(message)) return sendError(host, status, codeForStatus(status), message.join('; '), { issues: list ?? message });
+      return sendError(host, status, codeForStatus(status), exception.message, list !== undefined ? { issues: list } : undefined);
     }
     const clientStatus = clientStatusOf(exception);
     if (clientStatus) return sendError(host, clientStatus, codeForStatus(clientStatus), STATUS_CODES[clientStatus] ?? 'Error');

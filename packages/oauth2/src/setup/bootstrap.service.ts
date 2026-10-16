@@ -83,7 +83,7 @@ export class BootstrapService {
           .set({ status: 'active', updated_at: new Date() })
           .where('id', '=', user.id)
           .execute();
-        await sql`insert into auth_user_roles (user_id, role_id) select ${user.id}, id from auth_roles where key = 'super_admin' on conflict do nothing`.execute(
+        await sql`insert into auth_user_roles (user_id, role_id) select ${user.id}, id from auth_roles where name = 'super_admin' on conflict do nothing`.execute(
           trx,
         );
         await this.users.revokeAll(user.id, undefined, trx);

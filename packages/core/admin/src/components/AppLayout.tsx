@@ -1,4 +1,14 @@
-import { BoxesIcon, ChevronsUpDownIcon, DatabaseIcon, LogOutIcon, PaletteIcon, UserIcon, UsersIcon, WrenchIcon } from 'lucide-react';
+import {
+  BoxesIcon,
+  ChevronsUpDownIcon,
+  DatabaseIcon,
+  LogOutIcon,
+  PaletteIcon,
+  ShieldIcon,
+  UserIcon,
+  UsersIcon,
+  WrenchIcon,
+} from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -37,6 +47,7 @@ import { api } from '../lib/api';
 export interface LayoutUser {
   name?: string | null;
   email: string;
+  roles: string[];
 }
 
 interface ContentTypeLink {
@@ -49,10 +60,14 @@ async function loadContentTypes(): Promise<ContentTypeLink[]> {
   return (await api<{ data: ContentTypeLink[] }>('/api/admin/content-types')).data;
 }
 
-const NAV = [
+const BASE_NAV = [
   { to: '/', label: 'nav.contentTypes', icon: DatabaseIcon },
   { to: '/builder', label: 'nav.builder', icon: WrenchIcon },
+] as const;
+
+const SUPER_ADMIN_NAV = [
   { to: '/users', label: 'nav.users', icon: UsersIcon },
+  { to: '/roles', label: 'nav.roles', icon: ShieldIcon },
 ] as const;
 
 function useContentTypes() {
@@ -75,9 +90,11 @@ function useContentTypes() {
   return { types, failed };
 }
 
-function AppSidebar() {
+function AppSidebar({ user }: { user: LayoutUser }) {
   const { pathname } = useLocation();
   const { types, failed } = useContentTypes();
+  const isSuperAdmin = user.roles.includes('super_admin');
+  const nav = [...BASE_NAV, ...(isSuperAdmin ? SUPER_ADMIN_NAV : [])];
   const { isMobile, setOpenMobile } = useSidebar();
   // On mobile the sidebar is a sheet: close it once a link is followed.
   const closeOnNavigate = () => {
@@ -103,7 +120,7 @@ function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {NAV.map(({ to, label, icon: Icon }) => (
+              {nav.map(({ to, label, icon: Icon }) => (
                 <SidebarMenuItem key={to}>
                   <SidebarMenuButton asChild isActive={isActive(to)}>
                     <Link to={to} aria-current={isActive(to) ? 'page' : undefined} onClick={closeOnNavigate}>
@@ -215,7 +232,7 @@ export function AppLayout({ user, onLogout, children }: AppLayoutProps) {
       >
         {t('nav.skipToContent')}
       </a>
-      <AppSidebar />
+      <AppSidebar user={user} />
       <SidebarInset>
         <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur">
           <SidebarTrigger />

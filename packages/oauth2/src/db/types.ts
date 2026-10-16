@@ -17,8 +17,11 @@ export interface AuthUsersTable {
 
 export interface AuthRolesTable {
   id: Generated<string>;
-  key: string;
   name: string;
+  description: Generated<string>;
+  is_system: Generated<boolean>;
+  created_at: Timestamp;
+  updated_at: Timestamp;
 }
 
 export interface AuthUserRolesTable {

@@ -45,6 +45,15 @@ describe('api', () => {
     await expect(api('/api/x', {}, s)).rejects.toMatchObject({ status: 502, code: 'error', message: 'Bad Gateway', issues: [] });
   });
 
+  it('exposes userCount from the error body', async () => {
+    const s = setup(json(409, { error: { code: 'role_in_use', message: 'in use', userCount: 3 } }));
+    await expect(api('/api/admin/roles/r1', { method: 'DELETE' }, s)).rejects.toMatchObject({
+      status: 409,
+      code: 'role_in_use',
+      userCount: 3,
+    });
+  });
+
   it('exposes Retry-After as retryAfterSec', async () => {
     const s = setup(json(429, { error: { code: 'rate_limited', message: 'slow' } }, { 'Retry-After': '30' }));
     await expect(api('/oauth2/interaction/u/login', { method: 'POST' }, s)).rejects.toMatchObject({ status: 429, retryAfterSec: 30 });

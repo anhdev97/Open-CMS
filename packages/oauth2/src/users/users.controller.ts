@@ -63,9 +63,9 @@ export class UsersController {
       this.db
         .selectFrom('auth_user_roles as ur')
         .innerJoin('auth_roles as r', 'r.id', 'ur.role_id')
-        .select(['ur.user_id', 'r.key'])
+        .select(['ur.user_id', 'r.name'])
         .where('ur.user_id', 'in', userIds)
-        .orderBy('r.key')
+        .orderBy('r.name')
         .execute(),
       this.db
         .selectFrom('auth_user_identities')
@@ -80,7 +80,7 @@ export class UsersController {
       email: u.email,
       name: u.name,
       status: u.status,
-      roles: roles.filter((r) => r.user_id === u.id).map((r) => r.key),
+      roles: roles.filter((r) => r.user_id === u.id).map((r) => r.name),
       lastLoginAt: u.last_login_at,
       identities: identities
         .filter((i) => i.user_id === u.id)
