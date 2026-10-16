@@ -29,7 +29,30 @@ await app.listen(Number(process.env.PORT ?? 4000));
 leaves `/oauth2` (the OIDC provider) alone; Nest's built-in parser would consume the provider's request
 bodies and the login flow breaks.
 
-Fixed paths, none configurable: UI `/admin`, API `/api`, auth `/oauth2`, delivery API `/api/content`.
+Fixed paths, none configurable: storefront `/`, UI `/admin`, API `/api`, auth `/oauth2`, delivery API `/api/content`.
+
+## Storefront
+
+When `storefront.enabled` is true (the default), `@opencms/core` reverse-proxies every request whose path is
+**not** under `/admin`, `/api`, or `/oauth2` to a real Next.js server (`next dev` / `next start`). The browser
+still uses one origin (typically `http://localhost:4000`): `/` is the storefront, `/admin` is the admin UI.
+
+| Option | Default | |
+|---|---|---|
+| `storefront.enabled` | `true` | turn the proxy off; excluded paths behave as before, everything else is handled by Nest (usually 404) |
+| `storefront.port` | `3000` | local Next port when `targetUrl` is unset; proxy target becomes `http://127.0.0.1:${port}` |
+| `storefront.targetUrl` | derived from `port` | full origin of the Next server (overrides `port` when set) |
+
+Environment overrides (applied when resolving options at startup):
+
+| Variable | |
+|---|---|
+| `OPENCMS_STOREFRONT_ENABLED` | `true` / `false` overrides `storefront.enabled` |
+| `OPENCMS_STOREFRONT_URL` | overrides `targetUrl` (and ignores `OPENCMS_STOREFRONT_PORT`) |
+| `OPENCMS_STOREFRONT_PORT` | overrides `storefront.port` when `OPENCMS_STOREFRONT_URL` is unset |
+
+If Next is down or unreachable, proxied requests get **502** with a plain-text message that names the
+configured target and suggests starting `next dev` / `next start`.
 
 ## Options
 
@@ -42,6 +65,9 @@ Fixed paths, none configurable: UI `/admin`, API `/api`, auth `/oauth2`, deliver
 | `admin.enabled` | `true` | serve the admin UI at `/admin`; `false` leaves `/admin` unregistered (404). The auth flow still redirects to `/admin/login` (and `/admin/setup`), so with `false` the host must serve its own UI there |
 | `cors.origins` | none | exact origins (no wildcard) allowed to read `/api/content/**` cross-origin |
 | `env` | `process.env` | environment for the auth module (tests) |
+| `storefront.enabled` | `true` | Nest → Next reverse-proxy for non-excluded paths (see **Storefront** above) |
+| `storefront.port` | `3000` | default Next port when `targetUrl` is unset |
+| `storefront.targetUrl` | `http://127.0.0.1:${port}` | Next origin the proxy forwards to |
 
 CORS applies to `GET`, `HEAD`, `OPTIONS` on `/api/content/**` only, without credentials. No other route
 sends CORS headers; the admin UI is same-origin.

@@ -32,6 +32,8 @@
   installs dependencies, flags `--pm`, `--no-install`, `--db-url`, `--port`, `--link`.
 - Every `opencms` command loads the project's `.env`.
 - `scripts/smoke-init.mjs`, run in CI: scaffolds a project, boots it and walks setup, login and logout over HTTP.
+- Storefront init: `opencms init` scaffolds a Next.js App Router app in `app/` beside Nest `src/`, with `lib/cms.ts` and scripts that run Nest + Next via `concurrently`.
+- `@opencms/core` reverse-proxies non-excluded paths to a real Next.js server when `storefront.enabled` is true (`OPENCMS_STOREFRONT_*` env overrides). Upstream down → 502 with a clear message.
 
 ### Fixed
 

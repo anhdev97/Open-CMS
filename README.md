@@ -34,10 +34,13 @@ docker compose up -d                      # Postgres 16 with the database init c
 pnpm run dev                              # migrates, then serves on http://localhost:4000
 ```
 
-`init` writes the project (config, `src/main.ts`, `.env` with a random `OPENCMS_SECRET`), installs
+`init` writes the project (Nest `src/`, Next `app/`, config, `.env` with a random `OPENCMS_SECRET`), installs
 dependencies (`--no-install` to skip, `--pm pnpm|npm|yarn` to choose) and never overwrites a non-empty
-directory. Open <http://localhost:4000/admin>: on a fresh database it asks you to create the first
-super_admin. Open it at the public URL (`OPENCMS_PUBLIC_URL`, default `http://localhost:4000`): another address such as `127.0.0.1` fails with `origin_mismatch`. One origin serves everything: UI `/admin`, API `/api`, auth `/oauth2`, delivery API `/api/content`.
+directory. After `pnpm run dev`, open <http://localhost:4000/> for the storefront and
+<http://localhost:4000/admin> for the admin UI: on a fresh database the admin asks you to create the first
+super_admin. Open both at the public URL (`OPENCMS_PUBLIC_URL`, default `http://localhost:4000`): another
+address such as `127.0.0.1` fails with `origin_mismatch`. One origin serves everything: storefront `/`,
+UI `/admin`, API `/api`, auth `/oauth2`, delivery API `/api/content`.
 
 Working on this monorepo instead:
 
