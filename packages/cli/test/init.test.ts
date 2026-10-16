@@ -53,8 +53,13 @@ describe('runInit', () => {
       '.env.example',
       '.gitignore',
       'README.md',
+      'app/layout.tsx',
+      'app/lib/cms.ts',
+      'app/page.tsx',
       'docker-compose.yml',
       'migrations/_snapshot.json',
+      'next-env.d.ts',
+      'next.config.ts',
       'opencms.config.ts',
       'package.json',
       'src/app.module.ts',
@@ -67,6 +72,7 @@ describe('runInit', () => {
       'src/generated/validators.ts',
       'src/main.ts',
       'tsconfig.json',
+      'tsconfig.next.json',
     ];
     expect(all.sort()).toEqual(expected);
     expect(r.files).toEqual(expected);
@@ -114,11 +120,29 @@ describe('runInit', () => {
     expect(pkg.devDependencies['@types/node']).toBe('^22.0.0');
     expect(read(dir, 'README.md')).toContain('Install with dev dependencies');
     expect(pkg.scripts).toEqual({
-      dev: 'opencms migrate:up && tsx src/main.ts',
-      build: 'tsc -p tsconfig.json',
-      start: 'opencms migrate:up && node dist/src/main.js',
+      dev: 'opencms migrate:up && concurrently -k -n nest,next -c blue,magenta "tsx src/main.ts" "next dev -p 3000"',
+      build: 'tsc -p tsconfig.json && next build',
+      start: 'opencms migrate:up && concurrently -k -n nest,next -c blue,magenta "node dist/src/main.js" "next start -p 3000"',
       opencms: 'opencms',
     });
+    expect(pkg.dependencies.next).toBe('^15.5.0');
+    expect(pkg.dependencies.react).toBe('^19.0.0');
+    expect(pkg.dependencies['react-dom']).toBe('^19.0.0');
+    expect(pkg.devDependencies.concurrently).toBe('^9.0.0');
+  });
+
+  it('scaffolds a hybrid homepage and cms helper without calling the API from page.tsx', async () => {
+    const dir = path.join(tmp, 'shop');
+    await runInit(dir, base);
+    expect(read(dir, 'app/page.tsx')).toContain('/admin');
+    expect(read(dir, 'app/page.tsx')).not.toMatch(/getEntries/);
+    expect(read(dir, 'app/lib/cms.ts')).toContain('/api/content/');
+    expect(read(dir, 'app/lib/cms.ts')).toContain('export async function getEntries');
+    expect(JSON.parse(read(dir, 'tsconfig.json')).include).toEqual(['src', 'opencms.config.ts']);
+    expect(read(dir, 'next.config.ts')).toContain("tsconfigPath: 'tsconfig.next.json'");
+    expect(read(dir, 'src/app.module.ts')).toContain('storefront:');
+    expect(read(dir, 'src/app.module.ts')).toContain('enabled: true');
+    expect(read(dir, '.gitignore')).toContain('.next');
   });
 
   it('links internal packages and core-owned dependencies with --link', async () => {
