@@ -40,8 +40,8 @@ oidc-provider reads its own requests as designed.
 
 ### Migrations
 
-Importing `@opencms/oauth2` registers its core migration (`oauth2_0001_init`) with `@opencms/db`'s
-`coreMigrator()`. Any process that runs migrations must therefore load the package first:
+Importing `@opencms/oauth2` registers its core migrations (`oauth2_0001_init`, `oauth2_0002_roles`) with
+`@opencms/db`'s `coreMigrator()`. Any process that runs migrations must therefore load the package first:
 
 - The `opencms` CLI and `@opencms/core` do this themselves (`import '@opencms/oauth2/migrations'`, a
   Nest-free side-effect entry), so `opencms migrate:up` / `migrate:status`, `autoMigrate` and the Content
@@ -88,11 +88,35 @@ oldest when full.
 | `GET /api/auth/me`, `POST /api/auth/logout` | Current user / end the session |
 | `POST /api/auth/password` | Change own password |
 | `GET/POST /api/admin/users`, `PATCH/DELETE /api/admin/users/:id`, `POST /api/admin/users/:id/password`, `DELETE /api/admin/users/:id/identities/:identityId` | User management (super_admin) |
+| `GET/POST /api/admin/roles`, `GET/PATCH/DELETE /api/admin/roles/:id`, `GET/PUT /api/admin/users/:id/roles`, `POST/DELETE /api/admin/users/:id/roles/:roleId` | Realm roles (super_admin); see below |
 | `/oauth2/*` | The OIDC provider (discovery, auth, token, jwks, end_session) and login interaction (`/oauth2/interaction/:uid`) |
 | `/oauth2/interaction/:uid/idp/:provider`, `/oauth2/idp/:provider/callback` | External IdP sign-in |
 
 Errors under `/api/**` look like `{ "error": { "code", "message", "issues"? } }`; failures inside the redirect chain
 answer `302 /admin/login?error=<code>`.
+
+## Realm roles
+
+Migration `oauth2_0002_roles` replaces the legacy `auth_roles.key` column with `name`, `description`, and
+`is_system`. Only `super_admin` is seeded (`is_system: true`); create additional roles through the API.
+
+| Route | Purpose |
+|---|---|
+| `GET /api/admin/roles` | List roles (`{ data: Role[] }`) |
+| `POST /api/admin/roles` | Create role (`{ name, description? }` → 201) |
+| `GET /api/admin/roles/:id` | Get one role |
+| `PATCH /api/admin/roles/:id` | Update `name` and/or `description` |
+| `DELETE /api/admin/roles/:id` | Delete role (204) |
+| `GET /api/admin/users/:id/roles` | Roles assigned to a user |
+| `PUT /api/admin/users/:id/roles` | Replace assignments (`{ roleIds: string[] }`) |
+| `POST /api/admin/users/:id/roles/:roleId` | Assign one role (204) |
+| `DELETE /api/admin/users/:id/roles/:roleId` | Unassign one role (204) |
+
+Role JSON uses camelCase (`isSystem`, ISO `createdAt` / `updatedAt`). System roles (`isSystem: true`) cannot be
+renamed or deleted (`403 system_role_immutable`); their description may still be updated. Deleting a role that
+still has users answers `409 role_in_use` with `userCount`. Assigning or revoking roles does not invalidate
+sessions: `AuthGuard` re-reads `auth_user_roles` on each request, so `GET /api/auth/me` and `@RequireRole`
+reflect changes without forcing a new login.
 
 ## Setup flow
 
