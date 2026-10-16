@@ -10,6 +10,7 @@ import { OAuth2Module, type CoreReady } from '@opencms/oauth2';
 import { resolveConfig } from '@opencms/schema';
 import * as path from 'node:path';
 import { createAdminDevHandler, createAdminSpaHandler, DEFAULT_ADMIN_DIST_DIR, type AdminDevHandler } from './http/admin-spa.middleware';
+import { createStorefrontProxy } from './http/storefront-proxy.middleware';
 import { ContentCorsMiddleware } from './http/content-cors.middleware';
 import { JsonBodyParserMiddleware } from './http/body-parser.middleware';
 import { AdminContentController, ContentController } from './content.controllers';
@@ -18,6 +19,7 @@ import { EntryRepository } from './entry.repository';
 import { CORE_READY_CORE, OPENCMS_DB, OPENCMS_OPTIONS, type OpenCmsModuleOptions, type ResolvedOpenCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
 import { SchemaBuilderService, SchemaController } from './schema-builder';
+import { resolveStorefront } from './storefront/resolve-storefront';
 import { SystemController } from './system.controller';
 
 /** A `CoreReady` holder (not a promise: Nest would await that at DI time) settled by OpenCmsModule.onModuleInit. */
@@ -50,6 +52,7 @@ class DeferredCoreReady implements CoreReady {
 export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger('OpenCms');
   private adminDev?: AdminDevHandler;
+  private storefrontProxy?: ReturnType<typeof createStorefrontProxy>;
 
   constructor(
     @Inject(OPENCMS_OPTIONS) private readonly options: ResolvedOpenCmsOptions,
@@ -103,6 +106,7 @@ export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShu
       await this.ensureMigrated();
       this.ready.resolve();
       await this.mountAdmin();
+      this.mountStorefront();
     } catch (e) {
       this.ready.reject(e);
       throw e;
@@ -128,6 +132,20 @@ export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShu
     adapter.getInstance().use('/admin', handler);
   }
 
+  private mountStorefront(): void {
+    const env = this.options.env ?? process.env;
+    const resolved = resolveStorefront(this.options.storefront, env);
+    if (!resolved.enabled) return;
+    const proxy = createStorefrontProxy({ targetUrl: resolved.targetUrl });
+    this.storefrontProxy = proxy;
+    const adapter = this.httpHost.httpAdapter;
+    adapter.getInstance().use(proxy.handler);
+    proxy.attach(adapter.getHttpServer());
+    const port = env.PORT ?? '4000';
+    const publicUrl = (env.OPENCMS_PUBLIC_URL ?? `http://localhost:${port}`).replace(/\/+$/, '');
+    this.logger.log(`Storefront proxied from ${publicUrl}/ → ${resolved.targetUrl}`);
+  }
+
   private async ensureMigrated(): Promise<void> {
     const dir = this.options.config.migrationsDir;
     const pending = await pendingMigrations(this.db, dir);
@@ -145,6 +163,7 @@ export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShu
 
   async onApplicationShutdown(): Promise<void> {
     await this.adminDev?.close();
+    this.storefrontProxy?.close();
     await this.db.destroy();
   }
 }
