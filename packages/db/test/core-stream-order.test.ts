@@ -9,6 +9,21 @@ const noop: Migration = { async up() {}, async down() {} };
 const NO_PROJECT_MIGRATIONS = '/nonexistent-opencms-migrations';
 
 /**
+ * `Pool.end()` / `db.destroy()` resolves once Terminate is sent, not once backends exit.
+ * Dropping `WITH (FORCE)` before sessions leave can emit FATAL 57P01 after the pool detaches
+ * its error listener (uncaught in vitest). Wait until no session remains, matching oauth2 test support.
+ */
+async function dropDatabase(admin: Pool, name: string): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  for (;;) {
+    const { rows } = await admin.query('select count(*)::int as n from pg_stat_activity where datname = $1', [name]);
+    if (rows[0].n === 0 || Date.now() > deadline) break;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  await admin.query(`drop database if exists ${name} with (force)`);
+}
+
+/**
  * I3: contributed migrations (e.g. `oauth2_0001_init`) sort after every `000N_*` built-in, so the next
  * built-in core migration lands "before" an already executed one. The core stream must still apply it.
  */
@@ -25,8 +40,11 @@ describe('core migration stream with contributed sources', () => {
   });
   afterAll(async () => {
     await db?.destroy();
-    await admin.query(`drop database if exists ${name} with (force)`);
-    await admin.end();
+    try {
+      await dropDatabase(admin, name);
+    } finally {
+      await admin.end();
+    }
   });
 
   it('applies a later built-in 0002_* after oauth2_0001_init has already run', async () => {
