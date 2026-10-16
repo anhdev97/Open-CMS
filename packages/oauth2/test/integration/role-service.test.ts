@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { RoleService } from '../../src/roles/role.service';
 import { UserService } from '../../src/users/user.service';
 import { createTestApp, type TestApp } from '../support/app';
@@ -15,6 +15,11 @@ describe('RoleService', () => {
   }, 60_000);
   afterAll(async () => {
     await t.close();
+  });
+
+  beforeEach(async () => {
+    await t.db.deleteFrom('auth_user_roles').execute();
+    await t.db.deleteFrom('auth_users').execute();
   });
 
   it('CRUD: create list get patch description rename delete', async () => {
@@ -59,6 +64,41 @@ describe('RoleService', () => {
       code: 'role_in_use',
       status: 409,
       userCount: 1,
+    });
+  });
+
+  it('assign is idempotent; listForUser returns roles', async () => {
+    const role = await roles.create({ name: 'viewer_role' });
+    const u = await users.create({ email: 'v@x.com', name: 'V', password: 'correct horse battery' });
+    await roles.assign(u.id, role.id);
+    await roles.assign(u.id, role.id);
+    const list = await roles.listForUser(u.id);
+    expect(list.map((r) => r.name).sort()).toEqual(['super_admin', 'viewer_role']);
+  });
+
+  it('replace roles and unassign; last_super_admin blocked', async () => {
+    const editor = await roles.create({ name: 'ed2' });
+    const a = await users.create({ email: 'a1@x.com', name: 'A', password: 'correct horse battery' });
+    const b = await users.create({ email: 'b1@x.com', name: 'B', password: 'correct horse battery' });
+    // a and b both have super_admin from create
+    const sa = (await roles.list()).find((r) => r.name === 'super_admin')!;
+    await roles.replaceUserRoles(a.id, [editor.id]);
+    expect((await roles.listForUser(a.id)).map((r) => r.name)).toEqual(['ed2']);
+    await expect(roles.unassign(b.id, sa.id)).rejects.toMatchObject({ code: 'last_super_admin', status: 409 });
+    await expect(roles.replaceUserRoles(b.id, [editor.id])).rejects.toMatchObject({
+      code: 'last_super_admin',
+      status: 409,
+    });
+  });
+
+  it('assign unknown user or role → not_found', async () => {
+    const role = await roles.create({ name: 'xrole' });
+    await expect(roles.assign('00000000-0000-4000-8000-000000000099', role.id)).rejects.toMatchObject({
+      code: 'not_found',
+    });
+    const u = await users.create({ email: 'u2@x.com', name: 'U', password: 'correct horse battery' });
+    await expect(roles.assign(u.id, '00000000-0000-4000-8000-000000000099')).rejects.toMatchObject({
+      code: 'not_found',
     });
   });
 });
