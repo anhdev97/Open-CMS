@@ -2,7 +2,14 @@ import { randomBytes } from 'node:crypto';
 import { spawn as nodeSpawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { emptySnapshot, generateCode, writeGeneratedFiles, writeSnapshot } from '@opencms/codegen';
+import {
+  emptySnapshot,
+  generateCode,
+  printContentGroupsFile,
+  printLocalesFile,
+  writeGeneratedFiles,
+  writeSnapshot,
+} from '@opencms/codegen';
 import { dbNameFor, packageNameFor } from './names';
 import * as t from './templates';
 
@@ -142,11 +149,14 @@ export async function runInit(dir: string, opts: InitOptions): Promise<InitResul
     ['app/(admin)/layout.tsx', t.adminLayoutTsx()],
     ['app/(admin)/admin/[[...slug]]/page.tsx', t.adminPageTsx()],
     ['app/(site)/layout.tsx', t.siteLayoutTsx(name)],
+    ['app/(site)/messages.ts', t.siteMessagesTs()],
     ['app/(site)/page.tsx', t.sitePageTsx(name)],
     ['src/root.ts', t.rootTs()],
     ['opencms.config.ts', t.configTs()],
     ['src/main.ts', t.mainTs()],
     ['src/app.module.ts', t.appModuleTs()],
+    ['src/locales.ts', printLocalesFile({ defaultLocale: 'en-US', locales: ['en-US'] })],
+    ['src/content-groups.ts', printContentGroupsFile([])],
     ['src/content-types/.gitkeep', ''],
     ['src/extensions/index.ts', t.extensionsTs()],
     ['.env', t.envFile({ dbUrl, port, secret: randomBytes(32).toString('base64url') })],

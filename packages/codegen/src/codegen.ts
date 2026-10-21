@@ -7,6 +7,7 @@ import * as path from 'node:path';
 import type { ContentTypeDefinition, FieldDefinition, PhysicalColumn } from '@opencms/schema';
 import {
   fieldStorage,
+  localizedText,
   isMultiRelation,
   l10nBaseColumns,
   l10nTable,
@@ -74,7 +75,7 @@ function renderTypes(defs: ContentTypeDefinition[]): string {
   ];
   for (const def of defs) {
     const name = pascal(def.apiId);
-    out.push(`/** ${def.displayName} (${def.apiId}) */`);
+    out.push(`/** ${localizedText(def.displayName, 'en-US', def.apiId)} (${def.apiId}) */`);
     out.push(`export interface ${name} extends EntryMeta {`);
     for (const field of def.fields) {
       out.push(fieldDoc(field));

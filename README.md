@@ -87,7 +87,8 @@ import { defineContentType, f } from '@opencms/schema';
 export default defineContentType({
   id: 'ct_product01',            // stable: never change it
   apiId: 'product',              // -> table ct_product, REST /api/content/product
-  displayName: 'Product',
+  displayName: { 'en-US': 'Product', 'vi-VN': 'Sản phẩm' }, // or a plain string (= en-US)
+  group: 'shop',                 // optional: sidebar group from src/content-groups.ts
   fields: {
     name:   f.text({ id: 'fld_prod_name', required: true, localizable: true, indexed: true }),
     slug:   f.slug({ id: 'fld_prod_slug', required: true, unique: true, from: 'name' }),
@@ -164,17 +165,50 @@ In production, set `schemaEditable: false`: schema changes go through git and `o
 
 | | |
 |---|---|
-| `GET /api/content/:type?locale=vi-VN&fallback=en&filter[featured]=true&sort=name:asc&limit=20` | published entries (storefront) |
+| `GET /api/content/:type?locale=vi-VN&fallback=en-US&filter[featured]=true&sort=name:asc&limit=20` | published entries (storefront) |
 | `GET /api/content/:type/:documentId?locale=` | one published entry |
 | `GET/POST /api/admin/content/:type` · `PATCH/DELETE /api/admin/content/:type/:id` | drafts |
 | `POST /api/admin/content/:type/:id/publish` · `/unpublish` · `GET …/versions` | publishing |
 | `GET/POST /api/admin/content-types` · `POST …/plan` · `DELETE …/:id` | schema builder |
 | `GET/POST /api/admin/assets` · `/api/admin/taxonomies[/:slug/terms]` | system data |
+| `GET/PUT /api/admin/locales` | website languages (`src/locales.ts`; `PUT` only with `schemaEditable`) |
+| `GET/PUT /api/admin/content-groups` | sidebar groups of content types (`src/content-groups.ts`; `PUT` only with `schemaEditable`) |
+| `PATCH /api/auth/me` `{ locale }` | admin language of the signed-in user (`null` = follow the browser) |
 
+A `locale` or `fallback` that is not enabled in `locales` answers 400 `locale_not_enabled`.
 Filtering and sorting are only allowed on `indexed`/`unique` fields, so every storefront query hits an index.
 `/api/admin/*` requires a session (`super_admin` role); `/api/content/*` is public. Every `/api/**` failure
 answers `{ "error": { "code", "message", "issues"? } }`. Browsers on other origins can read
 `/api/content/**` (GET only, no credentials) if their origin is listed in `cors.origins`.
+
+## Languages and content groups
+
+Admin Settings has three pages: Users, Content types (with a Groups tab) and Languages. Content groups and
+website languages are files in your project, like content types:
+
+```ts
+// src/locales.ts: written by Settings > Languages (dev only)
+import { defineLocales } from '@opencms/schema';
+export default defineLocales({ defaultLocale: 'en-US', locales: ['en-US', 'vi-VN'] });
+
+// src/content-groups.ts: written by Settings > Content types > Groups (dev only)
+import { defineContentGroups } from '@opencms/schema';
+export default defineContentGroups([{ key: 'shop', title: { 'en-US': 'Shop', 'vi-VN': 'Cửa hàng' }, order: 10 }]);
+
+// opencms.config.ts
+import locales from './src/locales';
+export default defineConfig({ database: { url: process.env.DATABASE_URL! }, ...locales });
+```
+
+Pass the groups to the module: `OpenCmsModule.forRoot({ ..., contentGroups })` (`import contentGroups from './content-groups'`).
+Supported locales: `en-US` (English, the default and the fallback everywhere), `vi-VN` (Tiếng Việt), `fr-FR`
+(Français), `id-ID` (Bahasa Indonesia). The admin UI is translated into all four; each user picks a language
+on the Account page. The vi/fr/id admin translations are machine-made and need review by native speakers.
+
+Website strings use the same helpers as the admin (`defineMessages`, `createTranslator`, `formatDateTime`,
+`formatNumber`, `localizedText`, `matchLocale`): import them from `@opencms/core` in server components and from
+`@opencms/core/admin` in client components (`'use client'`), which also has `useLocale`, `useTranslator`,
+`useFormat`. See [`packages/core/README.md`](packages/core/README.md#i18n).
 
 ## Breaking changes
 
@@ -182,6 +216,7 @@ See [`CHANGELOG.md`](CHANGELOG.md). In short: `adminToken` / `OPENCMS_ADMIN_TOKE
 with a user instead), `/api/admin` no longer sends CORS headers, `/api/**` errors use a new body, and
 `OPENCMS_INTERNAL_URL` is removed. The admin moved from a bundled SPA to Next App Router modules and the old
 admin options are replaced by the `web` option; existing projects need the migration steps in the changelog.
+Locale codes are now region codes (`en-US`, not `en`); the core migrates existing content rows automatically.
 
 ## Extensions
 

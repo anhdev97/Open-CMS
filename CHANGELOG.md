@@ -4,6 +4,16 @@
 
 ### Breaking changes
 
+- **Locale codes are region codes.** Supported: `en-US`, `vi-VN`, `fr-FR`, `id-ID` (`en-US` is the default and the
+  fallback). Short codes such as `en` / `vi` are rejected when the config is resolved (the error lists the supported
+  codes), and so are an empty or duplicated `locales` and a `defaultLocale` outside `locales`. Fix the config:
+  move `defaultLocale` / `locales` into `src/locales.ts` (`export default defineLocales({ defaultLocale: 'en-US',
+  locales: ['en-US', 'vi-VN'] })`) and spread it in `opencms.config.ts` (`...locales`), or keep them inline with
+  the new codes. Existing content is converted automatically: the core migration `0002_region_locales` rewrites
+  `locale` in every `*_l10n` table (`en`→`en-US`, `vi`→`vi-VN`, `fr`→`fr-FR`, `id`→`id-ID`); a row whose new
+  code would collide with an existing `(entry_id, locale)` is left as is and logged. API clients must send the
+  new codes (`?locale=vi-VN&fallback=en-US`); a locale that is not enabled answers 400 `locale_not_enabled`.
+
 - **The admin is Next App Router modules, not a Vite SPA.** One Next app in your project serves the admin
   (`/admin`) and your website (`/`) from inside the Nest process. Removed: `OPENCMS_ADMIN_DEV`, the
   `admin.enabled` / `admin.distDir` options (use `web: { enabled, dir, dev }`; `admin.enabled: false`
@@ -39,6 +49,16 @@
   itself (oidc-provider needs the raw `/oauth2` requests).
 
 ### Added
+
+- Admin Settings (Users, Content types with a Groups tab, Languages) and a two-level sidebar that groups content
+  types by `src/content-groups.ts` (`defineContentGroups`, `group` on a content type, `contentGroups` option).
+  Localized `displayName` (`string` or `{ 'en-US': …, … }`).
+- Admin UI in English, Tiếng Việt, Français and Bahasa Indonesia (vi/fr/id machine-translated, to be reviewed);
+  per-user language (`PATCH /api/auth/me { locale }`).
+- Website languages managed from Settings > Languages (`src/locales.ts`, `GET/PUT /api/admin/locales`).
+- Public i18n helpers from `@opencms/core` (server) and `@opencms/core/admin` (client + hooks). In server
+  components `@opencms/core` resolves (`react-server` condition) to a NestJS-free module.
+- `opencms init` writes `src/locales.ts` (`en-US`), an empty `src/content-groups.ts` and `app/(site)/messages.ts`.
 
 - Admin UI embedded in `@opencms/core`, served at `/admin` by the same Nest process (Vite + React +
   Tailwind, built into `packages/core/dist/admin`). Content, Content Type Builder, users and account screens.

@@ -14,6 +14,7 @@ NestJS module of opencms: the content engine, the delivery and admin APIs, the C
       root: path.resolve(__dirname, '..'),
       config,           // opencms.config.ts
       contentTypes,     // src/generated
+      contentGroups,    // src/content-groups.ts (optional)
       hooks,            // src/extensions
     }),
   ],
@@ -38,7 +39,8 @@ Fixed paths, none configurable: UI `/admin`, API `/api`, auth `/oauth2`, deliver
 | Option | Default | |
 |---|---|---|
 | `root`, `config`, `contentTypes`, `hooks` | | project root, resolved config, generated registry, entry hooks |
-| `schemaEditable` | `NODE_ENV !== 'production'` | Content Type Builder writes schema files and migrations |
+| `contentGroups` | none | `import contentGroups from './content-groups'`: sidebar groups; a content type's `group` must name one of them |
+| `schemaEditable` | `NODE_ENV !== 'production'` | Content Type Builder writes schema files and migrations; Settings may rewrite `src/locales.ts` and `src/content-groups.ts` |
 | `autoMigrate` | `false` | apply pending migrations at startup instead of refusing to start |
 | `auth` | `{}` | non-secret auth settings (`@opencms/oauth2`: TTLs, password policy, rate limit, OIDC IdP) |
 | `web` | `{ enabled: true, dir: process.cwd(), dev: NODE_ENV !== 'production' }` | serve the project's Next app (admin at `/admin`, website at `/`) from Nest. `enabled: false` is API-only and never loads `next`; `/admin` is then 404, and the auth flow still redirects to `/admin/login`, so the host must serve its own UI there |
@@ -77,6 +79,50 @@ Working on the admin inside this monorepo: `pnpm --filter @opencms/core dev:admi
 `pnpm --filter my-store dev`. `dev:admin` does not copy `theme.css`; run `pnpm --filter @opencms/core build`
 once on a fresh checkout first.
 
+## i18n
+
+One API, two entries. Server code (Nest, server components of the website) imports from `@opencms/core`;
+client components (`'use client'`) import from `@opencms/core/admin`. A client component must never import
+`@opencms/core`: its main entry is the Nest module. In a server component Next resolves `@opencms/core` with
+the `react-server` condition to a small module that has only the functions below, so NestJS is not bundled
+(no `serverExternalPackages` needed).
+
+| | `@opencms/core` | `@opencms/core/admin` |
+|---|---|---|
+| `SUPPORTED_LOCALES` (`{ code, name }[]`, native names), `Locale`, `isLocale(v)` | ✓ | ✓ |
+| `matchLocale(input)`: exact code, then language (`vi` → `vi-VN`), case-insensitive, `Accept-Language` with `q=`; otherwise `en-US` | ✓ | ✓ |
+| `localizedText(value, locale, fallback?)`: string or `{ 'en-US': …, … }` → locale, then `en-US`, then `fallback` | ✓ | ✓ |
+| `defineMessages({ 'en-US': {...}, 'vi-VN': {...} })`: typing helper, `en-US` required, others partial | ✓ | ✓ |
+| `createTranslator(messages, locale)` → `t(key, vars?)`: locale → `en-US` → the key; `{name}` placeholders | ✓ | ✓ |
+| `formatDateTime(value, locale, opts?)`, `formatNumber(value, locale, opts?)`: `Intl` wrappers | ✓ | ✓ |
+| `useLocale()`, `useTranslator(messages)`, `useFormat()`: bound to the admin's current language | | ✓ |
+
+```ts
+// app/(site)/messages.ts
+import { defineMessages } from '@opencms/core';
+export const messages = defineMessages({
+  'en-US': { home: { title: 'Welcome, {name}' } },
+  'vi-VN': { home: { title: 'Chào mừng, {name}' } },
+});
+
+// app/(site)/page.tsx (server component)
+import { createTranslator } from '@opencms/core';
+import locales from '../../src/locales';
+import { messages } from './messages';
+const t = createTranslator(messages, locales.defaultLocale);
+t('home.title', { name: 'Ann' });
+```
+
+Project strings are added next to the core's; they do not override the admin's own strings.
+
+Website languages: `GET /api/admin/locales` → `{ supported, locales, defaultLocale, editable, entryCounts }`;
+`PUT /api/admin/locales` `{ locales, defaultLocale, confirmDisable? }` rewrites `src/locales.ts` (only with
+`schemaEditable` and an existing `src/locales.ts`, else 403). Disabling a locale that still has entries
+answers 409 `locale_has_entries` until it is listed in `confirmDisable`; its rows are kept, not deleted.
+Content groups: `GET/PUT /api/admin/content-groups` rewrites `src/content-groups.ts`; removing a group still
+used by a content type answers 409 `group_in_use`. Content APIs reject a `locale`/`fallback` that is not
+enabled with 400 `locale_not_enabled`.
+
 ## Breaking changes
 
 - `adminToken` and `OPENCMS_ADMIN_TOKEN` are removed; `/api/admin/*` needs a signed-in `super_admin` session.
@@ -85,5 +131,6 @@ once on a fresh checkout first.
 - `OPENCMS_INTERNAL_URL` is removed (the BFF calls `http://127.0.0.1:${PORT ?? 4000}`).
 - The Nest app must be created with `bodyParser: false`.
 - The admin is now Next modules and the old admin options and dev variable are replaced by `web` (migration steps in the changelog).
+- Locale codes are `en-US`, `vi-VN`, `fr-FR`, `id-ID`; short codes (`en`) fail config validation. Content rows are migrated by the core migration `0002_region_locales`.
 
 See the root `CHANGELOG.md`.

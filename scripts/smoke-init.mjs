@@ -3,7 +3,7 @@
 // boot it and build it, run it in production and walk the site/admin checks and the setup/login/logout chain over HTTP. Exit code 0 = pass, 1 = fail.
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -128,6 +128,9 @@ async function main() {
   const port = await freePort();
   run('node', [join(repo, 'packages/cli/bin/opencms.js'), 'init', app, '--link', repo, '--no-install', '--db-url', dbUrl.toString(), '--port', String(port)]);
   ok('opencms init (linked, --no-install)');
+  for (const f of ['src/locales.ts', 'src/content-groups.ts', 'app/(site)/messages.ts']) assert(existsSync(join(app, f)), `init did not write ${f}`);
+  assert(readFileSync(join(app, 'src/locales.ts'), 'utf8').includes("locales: ['en-US']"), 'src/locales.ts is not en-US only');
+  ok('src/locales.ts (en-US), src/content-groups.ts, app/(site)/messages.ts present');
 
   // pnpm: use the repo's pinned version via corepack; plain `pnpm` outside the repo may try another version
   const corepack = spawnSync('corepack', ['--version'], { stdio: 'ignore' });
@@ -190,6 +193,9 @@ async function main() {
   assert((siteRes.headers.get('content-type') ?? '').startsWith('text/html'), 'GET / is not text/html');
   assert(siteHtml.includes('data-opencms-site'), 'GET / lacks data-opencms-site');
   assert(!siteRes.headers.has('content-security-policy'), 'GET / must not carry a Content-Security-Policy');
+  const tagline = 'A website and its OpenCMS admin, served by one Next.js app.';
+  assert(readFileSync(join(app, 'app/(site)/messages.ts'), 'utf8').includes(tagline), 'messages.ts lacks the en-US tagline');
+  assert(siteHtml.includes(tagline), 'GET / lacks the en-US string of app/(site)/messages.ts');
 
   const slashRes = await send('/admin/');
   assert(slashRes.status === 308, `GET /admin/ -> ${slashRes.status} (expected 308)`);
@@ -217,7 +223,7 @@ async function main() {
   const me0 = await send('/api/auth/me');
   const me0Body = await me0.json();
   assert(me0.status === 409 && me0Body.error?.code === 'setup_required', `GET /api/auth/me before setup -> ${me0.status} ${JSON.stringify(me0Body)}`);
-  ok('/ site, /admin/ -> 308, /admin nonce+noindex, static immutable; GET /api/auth/me -> 409 setup_required');
+  ok('/ site (en-US messages), /admin/ -> 308, /admin nonce+noindex, static immutable; GET /api/auth/me -> 409 setup_required');
 
   // 3. first super_admin
   const setup = await post('/api/auth/setup', { email, name: 'Smoke Admin', password: pw });
@@ -249,6 +255,13 @@ async function main() {
   const me1Body = await me1.json();
   assert(me1.status === 200, `GET /api/auth/me after login -> ${me1.status} ${JSON.stringify(me1Body)}`);
   ok('login chain complete; GET /api/auth/me -> 200');
+
+  const loc = await send('/api/admin/locales');
+  const locBody = await loc.json();
+  assert(loc.status === 200, `GET /api/admin/locales -> ${loc.status} ${JSON.stringify(locBody)}`);
+  assert(JSON.stringify(locBody.locales) === JSON.stringify(['en-US']) && locBody.defaultLocale === 'en-US', `GET /api/admin/locales -> ${JSON.stringify(locBody)}`);
+  assert(locBody.editable === false, `GET /api/admin/locales in production must not be editable: ${JSON.stringify(locBody)}`);
+  ok("GET /api/admin/locales -> locales: ['en-US'], not editable in production");
 
   // 5. logout; the next login must ask for the password again
   const logout = await post('/api/auth/logout', {});

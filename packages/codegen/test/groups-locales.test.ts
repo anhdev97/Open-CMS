@@ -9,6 +9,7 @@ import {
   localesFile,
   printContentGroupsFile,
   printLocalesFile,
+  generateCode,
   printSchemaFile,
 } from '../src';
 
@@ -76,5 +77,12 @@ describe('assertValidSchema groups', () => {
   it('passes for a known group, and when groups are not supplied', () => {
     expect(() => assertValidSchema([def({ group: 'shop' })], [{ key: 'shop', title: { 'en-US': 'Shop' } }])).not.toThrow();
     expect(() => assertValidSchema([def({ group: 'shop' })])).not.toThrow();
+  });
+
+  it('types.ts doc comments use the en-US display name of a localized map', () => {
+    const files = generateCode([def({ displayName: { 'en-US': 'Product', 'vi-VN': 'Sản phẩm' } })], '/g');
+    const types = files.find((x) => x.path.endsWith('types.ts'))!.content;
+    expect(types).toContain('/** Product (product) */');
+    expect(types).not.toContain('[object Object]');
   });
 });

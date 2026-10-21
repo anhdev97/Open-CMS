@@ -9,14 +9,4 @@ export * from './schema-write-queue';
 export * from './content-groups';
 export * from './system.controller';
 export * from './locales';
-export {
-  SUPPORTED_LOCALES,
-  isLocale,
-  matchLocale,
-  localizedText,
-  defineMessages,
-  createTranslator,
-  formatDateTime,
-  formatNumber,
-} from '@opencms/schema';
-export type { Locale } from '@opencms/schema';
+export * from './i18n';

@@ -5,7 +5,10 @@
     {
       "id": "ct_brand0001",
       "apiId": "brand",
-      "displayName": "Brand",
+      "displayName": {
+        "en-US": "Brand",
+        "vi-VN": "Thương hiệu"
+      },
       "fields": [
         {
           "id": "fld_brand_name",
@@ -43,12 +46,16 @@
             ]
           }
         }
-      ]
+      ],
+      "group": "shop"
     },
     {
       "id": "ct_product01",
       "apiId": "product",
-      "displayName": "Product",
+      "displayName": {
+        "en-US": "Product",
+        "vi-VN": "Sản phẩm"
+      },
       "fields": [
         {
           "id": "fld_prod_name",
@@ -154,7 +161,8 @@
           "unique": false,
           "options": {}
         }
-      ]
+      ],
+      "group": "shop"
     }
   ]
 }
