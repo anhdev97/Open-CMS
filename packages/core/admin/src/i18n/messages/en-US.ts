@@ -288,6 +288,8 @@ export const enUS = {
     },
   },
   home: {
+    settingsWelcomeTitle: 'Welcome',
+    settingsWelcomeDescription: 'Choose an item from Settings to get started.',
     title: 'Content types',
     description: 'Model your content and manage its entries.',
     newType: 'New content type',

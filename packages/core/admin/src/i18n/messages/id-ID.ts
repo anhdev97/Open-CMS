@@ -290,6 +290,8 @@ const idID: Messages = {
     },
   },
   home: {
+    settingsWelcomeTitle: 'Selamat datang',
+    settingsWelcomeDescription: 'Pilih salah satu item di Pengaturan untuk memulai.',
     title: 'Tipe konten',
     description: 'Modelkan konten Anda dan kelola entrinya.',
     newType: 'Tipe konten baru',

@@ -101,7 +101,11 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
           <DialogDescription>{t('users.create.description')}</DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form className="grid gap-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
+          <form
+            className="grid gap-4"
+            onSubmit={form.handleSubmit(onSubmit, () => setGroupsError(groupIds.length === 0))}
+            noValidate
+          >
             <ErrorAlert error={formError} />
             <FormField
               control={form.control}

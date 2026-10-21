@@ -290,6 +290,8 @@ const viVN: Messages = {
     },
   },
   home: {
+    settingsWelcomeTitle: 'Chào mừng bạn',
+    settingsWelcomeDescription: 'Hãy chọn một mục trong Cài đặt để bắt đầu.',
     title: 'Loại nội dung',
     description: 'Mô hình hóa nội dung và quản lý các bản ghi của nó.',
     newType: 'Loại nội dung mới',

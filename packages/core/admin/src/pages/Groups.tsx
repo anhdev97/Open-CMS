@@ -21,6 +21,8 @@ import {
   deleteGroup,
   groupError,
   groupName,
+  groupUpdateInput,
+  isSeedGroupKey,
   listGroups,
   PERMISSION_SECTIONS,
   updateGroup,
@@ -34,8 +36,9 @@ type Dialogs = { kind: 'edit'; group: AdminGroup | null } | { kind: 'delete'; gr
 function GroupDialog({ group, onClose, onDone }: { group: AdminGroup | null; onClose: () => void; onDone: () => void }) {
   const isNew = group === null;
   const readOnly = group?.system === true;
+  const nameLocked = readOnly || (group !== null && isSeedGroupKey(group.key));
   const [key, setKey] = useState(group?.key ?? '');
-  const [name, setName] = useState(group ? groupName(group) : '');
+  const [name, setName] = useState(group ? (nameLocked ? groupName(group) : group.name) : '');
   const [roles, setRoles] = useState<Permission[]>(readOnly ? [...PERMISSIONS] : (group?.roles ?? []));
   const [errors, setErrors] = useState<{ key?: string; name?: string }>({});
   const [formError, setFormError] = useState<Error | null>(null);
@@ -50,14 +53,14 @@ function GroupDialog({ group, onClose, onDone }: { group: AdminGroup | null; onC
     const next: { key?: string; name?: string } = {};
     if (isNew && !KEY_RE.test(key)) next.key = t('permGroups.keyInvalid');
     const trimmed = name.trim();
-    if (trimmed.length < 1 || trimmed.length > 100) next.name = t('permGroups.nameInvalid');
+    if (!nameLocked && (trimmed.length < 1 || trimmed.length > 100)) next.name = t('permGroups.nameInvalid');
     setErrors(next);
     if (next.key || next.name) return;
     setBusy(true);
     setFormError(null);
     try {
       if (isNew) await createGroup({ key, name: trimmed, roles });
-      else await updateGroup(group.id, { name: trimmed, roles });
+      else await updateGroup(group.id, groupUpdateInput(group, name, roles));
       toast.success(t('permGroups.saved'));
       onDone();
       onClose();
@@ -101,7 +104,7 @@ function GroupDialog({ group, onClose, onDone }: { group: AdminGroup | null; onC
             <Input
               id="group-name"
               value={name}
-              disabled={readOnly}
+              disabled={nameLocked}
               autoComplete="off"
               aria-invalid={errors.name ? true : undefined}
               aria-describedby={errors.name ? 'group-name-error' : undefined}

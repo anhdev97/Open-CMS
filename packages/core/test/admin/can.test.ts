@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PERMISSIONS } from '@opencms/schema';
-import { can, routePermission, visibleSettingsItems } from '../../admin/src/lib/can';
+import { can, landingState, routePermission, visibleSettingsItems } from '../../admin/src/lib/can';
 import { settingsItems } from '../../admin/src/navigation';
 import { matchRoute } from '../../admin/src/router/match';
 
@@ -48,5 +48,18 @@ describe('visibleSettingsItems', () => {
   });
   it('is empty when nothing is allowed (caller hides the Settings group)', () => {
     expect(visibleSettingsItems(settingsItems, ['content.read'])).toEqual([]);
+  });
+});
+
+describe('landingState', () => {
+  it('shows content with content.read', () => {
+    expect(landingState(['content.read'])).toBe('content');
+  });
+  it('shows the settings welcome for settings-only users', () => {
+    expect(landingState(['settings.users'])).toBe('settings');
+  });
+  it('is forbidden with nothing usable', () => {
+    expect(landingState([])).toBe('forbidden');
+    expect(landingState(['content.create'])).toBe('forbidden');
   });
 });

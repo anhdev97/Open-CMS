@@ -16,6 +16,19 @@ export interface AdminGroup {
 /** Seed group keys that have translated names (`groups.<key>`). */
 const SEED_KEYS = ['super-admin', 'contenter', 'reviewer'];
 
+export const isSeedGroupKey = (key: string) => SEED_KEYS.includes(key);
+
+/** PATCH body: `name` only when the user changed it (seed groups keep their stored name; their shown name is a translation). */
+export function groupUpdateInput(
+  group: Pick<AdminGroup, 'key' | 'name'>,
+  name: string,
+  roles: Permission[],
+): { name?: string; roles: Permission[] } {
+  const trimmed = name.trim();
+  const changed = !isSeedGroupKey(group.key) && trimmed !== group.name;
+  return changed ? { name: trimmed, roles } : { roles };
+}
+
 /** Display name: seed groups use the translation for their key, custom groups keep their own name. */
 export function groupName(g: { key: string; name: string }): string {
   return SEED_KEYS.includes(g.key) ? t(`groups.${g.key}`) : g.name;

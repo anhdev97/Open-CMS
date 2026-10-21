@@ -1,4 +1,4 @@
-import { BoxesIcon, PlusIcon } from 'lucide-react';
+import { BoxesIcon, PlusIcon, SettingsIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorAlert } from '../components/ErrorAlert';
@@ -9,8 +9,9 @@ import { Card, CardContent } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { useAuth } from '../auth/AuthContext';
-import { can, useCan } from '../lib/can';
+import { landingState, useCan, visibleSettingsItems } from '../lib/can';
 import { Link } from '../lib/nav';
+import { settingsItems } from '../navigation';
 import { Forbidden } from './Forbidden';
 import { localizedText } from '@opencms/schema';
 import { getActiveLocale, t } from '../i18n';
@@ -18,10 +19,35 @@ import { api } from '../lib/api';
 import type { ApiError } from '../lib/api-error';
 import type { ContentTypeDefinition, Meta } from '../lib/types';
 
-/** Without `content.read` (including zero permissions) there is nothing to list: show only the forbidden notice. */
+function SettingsWelcome({ permissions }: { permissions: readonly string[] }) {
+  return (
+    <EmptyState
+      icon={SettingsIcon}
+      title={t('home.settingsWelcomeTitle')}
+      description={t('home.settingsWelcomeDescription')}
+      action={
+        <div className="flex flex-wrap justify-center gap-2">
+          {visibleSettingsItems(settingsItems, permissions).map(({ to, label, icon: Icon }) => (
+            <Button key={to} asChild variant="outline">
+              <Link to={to}>
+                <Icon aria-hidden="true" />
+                {t(label)}
+              </Link>
+            </Button>
+          ))}
+        </div>
+      }
+    />
+  );
+}
+
+/** Content list, a Settings welcome, or (no usable permission) only the forbidden notice. */
 export function Home() {
   const { user } = useAuth();
-  return can(user.permissions, 'content.read') ? <HomeContent /> : <Forbidden />;
+  const state = landingState(user.permissions);
+  if (state === 'content') return <HomeContent />;
+  if (state === 'settings') return <SettingsWelcome permissions={user.permissions} />;
+  return <Forbidden />;
 }
 
 function HomeContent() {

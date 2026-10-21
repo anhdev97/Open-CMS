@@ -290,6 +290,8 @@ const frFR: Messages = {
     },
   },
   home: {
+    settingsWelcomeTitle: 'Bienvenue',
+    settingsWelcomeDescription: 'Choisissez un élément dans Paramètres pour commencer.',
     title: 'Types de contenu',
     description: 'Modélisez votre contenu et gérez ses entrées.',
     newType: 'Nouveau type de contenu',

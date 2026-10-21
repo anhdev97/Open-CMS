@@ -1,5 +1,6 @@
 import type { Permission } from '@opencms/schema';
 import { useAuth } from '../auth/AuthContext';
+import { settingsItems } from '../navigation';
 import type { RouteId } from '../router/match';
 
 /** True when the effective permission list holds `p`. Pure. */
@@ -29,4 +30,12 @@ export function routePermission(id: RouteId): Permission | undefined {
 /** Settings items the user may open; empty means the caller hides the whole Settings group. */
 export function visibleSettingsItems<T extends { permission?: Permission }>(items: readonly T[], perms: readonly string[]): T[] {
   return items.filter((i) => !i.permission || can(perms, i.permission));
+}
+
+export type LandingState = 'content' | 'settings' | 'forbidden';
+
+/** What Home shows: the content list, a Settings welcome, or the forbidden notice. */
+export function landingState(perms: readonly string[]): LandingState {
+  if (can(perms, 'content.read')) return 'content';
+  return visibleSettingsItems(settingsItems, perms).length > 0 ? 'settings' : 'forbidden';
 }
