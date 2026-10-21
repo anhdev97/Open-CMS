@@ -235,9 +235,11 @@ function ContentView({ apiId }: { apiId: string }) {
                 ))}
               </SelectContent>
             </Select>
-            <Button asChild variant="outline" size="sm">
-              <Link to={`/settings/content-types?type=${def.apiId}`}>{t('content.editSchema')}</Link>
-            </Button>
+            {user.permissions.includes('settings.content-types') && (
+              <Button asChild variant="outline" size="sm">
+                <Link to={`/settings/content-types?type=${def.apiId}`}>{t('content.editSchema')}</Link>
+              </Button>
+            )}
             {user.permissions.includes('content.create') && (
               <Button size="sm" onClick={() => openEntry(null)}>
                 <PlusIcon aria-hidden="true" />

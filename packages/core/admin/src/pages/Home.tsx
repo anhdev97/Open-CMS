@@ -93,12 +93,16 @@ function HomeContent() {
       {meta && (
         <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>{t('home.locales', { locales: meta.locales.join(', '), default: meta.defaultLocale })}</span>
-          <span aria-hidden="true">·</span>
-          <span>{t('home.schemaEditing')}</span>
-          {meta.schemaEditable ? (
-            <Badge variant="success">{t('home.schemaEnabled')}</Badge>
-          ) : (
-            <Badge variant="warning">{t('home.schemaReadOnly')}</Badge>
+          {canEditTypes && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span>{t('home.schemaEditing')}</span>
+              {meta.schemaEditable ? (
+                <Badge variant="success">{t('home.schemaEnabled')}</Badge>
+              ) : (
+                <Badge variant="warning">{t('home.schemaReadOnly')}</Badge>
+              )}
+            </>
           )}
         </p>
       )}
@@ -156,9 +160,11 @@ function HomeContent() {
                   <TableHead>{t('home.name')}</TableHead>
                   <TableHead>{t('home.apiId')}</TableHead>
                   <TableHead>{t('home.fields')}</TableHead>
-                  <TableHead className="text-right">
-                    <span className="sr-only">{t('home.editSchema')}</span>
-                  </TableHead>
+                  {canEditTypes && (
+                    <TableHead className="text-right">
+                      <span className="sr-only">{t('home.editSchema')}</span>
+                    </TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -179,13 +185,13 @@ function HomeContent() {
                         ))}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right">
-                      {canEditTypes && (
+                    {canEditTypes && (
+                      <TableCell className="text-right">
                         <Button asChild variant="ghost" size="sm">
                           <Link to={`/settings/content-types?type=${type.apiId}`}>{t('home.editSchema')}</Link>
                         </Button>
-                      )}
-                    </TableCell>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
