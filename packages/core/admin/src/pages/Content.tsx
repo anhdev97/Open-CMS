@@ -20,6 +20,7 @@ import { getActiveLocale, t } from '../i18n';
 import { useFormat } from '../i18n/hooks';
 import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
+import { pickEditorLocale } from '../lib/locales';
 import type { ContentTypeDefinition, Meta } from '../lib/types';
 
 type Entry = Record<string, any> & { documentId: string; status: string; publishedAt: string | null; hasUnpublishedChanges?: boolean };
@@ -46,15 +47,20 @@ function ContentView({ apiId }: { apiId: string }) {
   const [formGen, setFormGen] = useState(0);
 
   useEffect(() => {
-    api<Meta>('/api/admin/meta')
-      .then((m) => {
-        setMeta(m);
-        setLocale((l) => l || m.defaultLocale);
-      })
-      .catch(setError);
+    // Meta is refetched when languages change; a now-disabled selected locale falls back to the default.
+    const loadMeta = () =>
+      api<Meta>('/api/admin/meta')
+        .then((m) => {
+          setMeta(m);
+          setLocale((l) => pickEditorLocale(l, m.locales, m.defaultLocale));
+        })
+        .catch(setError);
+    loadMeta();
+    window.addEventListener('opencms:schema-changed', loadMeta);
     api<{ data: ContentTypeDefinition }>(`/api/admin/content-types/${apiId}`)
       .then((r) => setDef(r.data))
       .catch(setError);
+    return () => window.removeEventListener('opencms:schema-changed', loadMeta);
   }, [apiId]);
 
   const reload = useCallback(() => {

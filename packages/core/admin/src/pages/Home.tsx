@@ -24,7 +24,10 @@ export function Home() {
     api<{ data: ContentTypeDefinition[] }>('/api/admin/content-types')
       .then((r) => setTypes(r.data))
       .catch(setError);
-    api<Meta>('/api/admin/meta').then(setMeta).catch(setError);
+    const load = () => api<Meta>('/api/admin/meta').then(setMeta).catch(setError);
+    load();
+    window.addEventListener('opencms:schema-changed', load);
+    return () => window.removeEventListener('opencms:schema-changed', load);
   }, []);
 
   return (
