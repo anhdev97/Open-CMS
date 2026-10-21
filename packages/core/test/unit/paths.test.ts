@@ -11,10 +11,10 @@ describe('isBackendPath', () => {
 });
 
 describe('isAdminPath', () => {
-  it.each(['/admin', '/admin/', '/admin/content/x', '/ADMIN'])('%s is admin', (p) => {
+  it.each(['/admin', '/admin/', '/admin/content/x', '/ADMIN', '/%61dmin/x', '/%41DMIN', '//admin/x', '/admin%2Fx', '/%E0%A4%A'])('%s is admin', (p) => {
     expect(isAdminPath(p)).toBe(true);
   });
-  it.each(['/administrator', '/admins', '/', '/api/admin'])('%s is not admin', (p) => {
+  it.each(['/administrator', '/admins', '/', '/api/admin', '/%61dministrator'])('%s is not admin', (p) => {
     expect(isAdminPath(p)).toBe(false);
   });
 });

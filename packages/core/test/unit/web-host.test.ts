@@ -117,6 +117,16 @@ describe('createWebHost', () => {
     expect(a.headers.get('x-robots-tag')).toBe('noindex');
   });
 
+  it('treats an encoded admin path as admin', async () => {
+    const h = harness();
+    const s = await serve(h, { dev: false, dir: tmpDir(true) });
+    await s.host.prepare();
+    const res = await s.get('/%61dmin/x');
+    expect(res.headers.get('content-security-policy')).toContain("'nonce-");
+    expect(res.headers.get('x-frame-options')).toBe('DENY');
+    expect(h.app.reqHeaders[0]).toBe(res.headers.get('content-security-policy'));
+  });
+
   it('answers 503 and warns once when production build is missing, never loading next', async () => {
     const h = harness();
     const { host, get } = await serve(h, { dev: false });
