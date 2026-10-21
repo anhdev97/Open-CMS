@@ -35,8 +35,20 @@ const RANGES = {
   'reflect-metadata': '^0.2.2',
   rxjs: '^7.8.0',
   kysely: '^0.28.0',
+  next: '^16.4.2',
+  react: '^19.3.1',
+  'react-dom': '^19.3.1',
 } as const;
-const DEV_RANGES = { '@types/node': '^22.0.0', tsx: '^4.19.0', typescript: '^5.6.0' } as const;
+const DEV_RANGES = {
+  '@tailwindcss/postcss': '^4.3.3',
+  '@types/node': '^22.0.0',
+  '@types/react': '^19.3.0',
+  '@types/react-dom': '^19.3.0',
+  postcss: '^8.5.30',
+  tailwindcss: '^4.3.3',
+  tsx: '^4.19.0',
+  typescript: '^5.6.0',
+} as const;
 
 /** Packages the app must share with the linked core (two copies of Nest break DI). */
 const SHARED_WITH_CORE = Object.keys(RANGES);
@@ -64,6 +76,16 @@ export function resolveFromCore(repo: string, name: string): string | undefined 
   }
 }
 
+/** Nearest directory that contains both absolute paths (compared by path segments). */
+export function commonAncestor(a: string, b: string): string {
+  const pa = path.resolve(a).split(path.sep);
+  const pb = path.resolve(b).split(path.sep);
+  let i = 0;
+  while (i < pa.length && i < pb.length && pa[i] === pb[i]) i++;
+  const common = pa.slice(0, i).join(path.sep);
+  return common === '' ? path.sep : common;
+}
+
 function defaultSpawn(cmd: string, args: string[], cwd: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const child = nodeSpawn(cmd, args, { cwd, stdio: 'inherit', shell: process.platform === 'win32' });
@@ -85,10 +107,12 @@ export async function runInit(dir: string, opts: InitOptions): Promise<InitResul
 
   let deps: Record<string, string>;
   let devDeps: Record<string, string>;
+  let linkRoot: string | undefined;
   if (opts.link) {
     const repo = path.resolve(opts.link);
     const link = (p: string) => `link:${p}`;
     deps = {
+      'cross-env': '^10.1.0',
       '@opencms/core': link(`${repo}/packages/core`),
       '@opencms/schema': link(`${repo}/packages/schema`),
       // Share core's own copy of each, otherwise two Nest instances break DI. Not a checkout: plain ranges.
@@ -100,15 +124,26 @@ export async function runInit(dir: string, opts: InitOptions): Promise<InitResul
       ),
     };
     devDeps = { 'opencms-cli': link(`${repo}/packages/cli`), ...DEV_RANGES };
+    linkRoot = commonAncestor(target, repo);
   } else {
     const v = `^${opts.cliVersion}`;
-    deps = { '@opencms/core': v, '@opencms/schema': v, ...RANGES };
+    deps = { '@opencms/core': v, '@opencms/schema': v, ...RANGES, 'cross-env': '^10.1.0' };
     devDeps = { 'opencms-cli': v, ...DEV_RANGES };
   }
 
   const files = new Map<string, string>([
     ['package.json', t.packageJson(name, deps, devDeps)],
-    ['tsconfig.json', t.tsconfigJson()],
+    ['tsconfig.json', t.tsconfigNextJson()],
+    ['tsconfig.server.json', t.tsconfigServerJson()],
+    ['next.config.ts', t.nextConfigTs(linkRoot ? { root: linkRoot } : undefined)],
+    ['next-env.d.ts', t.nextEnvDts()],
+    ['postcss.config.mjs', t.postcssConfig()],
+    ['app/globals.css', t.globalsCss()],
+    ['app/(admin)/layout.tsx', t.adminLayoutTsx()],
+    ['app/(admin)/admin/[[...slug]]/page.tsx', t.adminPageTsx()],
+    ['app/(site)/layout.tsx', t.siteLayoutTsx(name)],
+    ['app/(site)/page.tsx', t.sitePageTsx(name)],
+    ['src/root.ts', t.rootTs()],
     ['opencms.config.ts', t.configTs()],
     ['src/main.ts', t.mainTs()],
     ['src/app.module.ts', t.appModuleTs()],
