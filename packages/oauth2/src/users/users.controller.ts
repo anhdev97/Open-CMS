@@ -1,7 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post } from '@nestjs/common';
 import type { Kysely } from 'kysely';
 import { z } from 'zod';
-import { AuditService } from '../audit/audit.service';
 import { OAUTH2_DB } from '../constants';
 import type { AuthTables } from '../db/types';
 import { AuthError } from '../errors';
@@ -51,13 +50,14 @@ const patchSchema = z
 
 const passwordSchema = z.object({ password: z.string() }).strict();
 
+const actorOf = (u: RequestUser) => ({ id: u.id, isSuperAdmin: u.isSuperAdmin, permissions: u.permissions });
+
 @RequirePermission('settings.users')
 @Controller('api/admin/users')
 export class UsersController {
   constructor(
     @Inject(OAUTH2_DB) private readonly db: Kysely<AuthTables>,
     @Inject(UserService) private readonly users: UserService,
-    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   /** Users + groups + identities in three queries total (no per-user lookups). */
@@ -111,7 +111,7 @@ export class UsersController {
   @HttpCode(201)
   async create(@Body() body: unknown, @CurrentUser() actor: RequestUser): Promise<{ data: UserView }> {
     const input = parseBody(createSchema, body);
-    const created = await this.users.create({ ...input, actorId: actor.id, actorIsSuperAdmin: actor.isSuperAdmin });
+    const created = await this.users.create({ ...input, actorId: actor.id, actor: actorOf(actor) });
     return { data: await this.view(created.id) };
   }
 
@@ -119,7 +119,7 @@ export class UsersController {
   async update(@Param('id') rawId: string, @Body() body: unknown, @CurrentUser() actor: RequestUser): Promise<{ data: UserView }> {
     const id = uuid(rawId);
     const input = parseBody(patchSchema, body);
-    await this.users.update(id, input, { id: actor.id, isSuperAdmin: actor.isSuperAdmin });
+    await this.users.update(id, input, actorOf(actor));
     return { data: await this.view(id) };
   }
 
@@ -128,15 +128,13 @@ export class UsersController {
   async resetPassword(@Param('id') rawId: string, @Body() body: unknown, @CurrentUser() actor: RequestUser): Promise<void> {
     const id = uuid(rawId);
     const { password } = parseBody(passwordSchema, body);
-    await this.users.setPassword(id, password);
-    await this.users.revokeAll(id);
-    await this.audit.record({ type: 'password_reset_by_admin', userId: id, actorId: actor.id });
+    await this.users.resetPassword(id, password, actorOf(actor));
   }
 
   @Delete(':id')
   @HttpCode(204)
   async remove(@Param('id') rawId: string, @CurrentUser() actor: RequestUser): Promise<void> {
-    await this.users.delete(uuid(rawId), actor.id);
+    await this.users.delete(uuid(rawId), actorOf(actor));
   }
 
   @Delete(':id/identities/:identityId')

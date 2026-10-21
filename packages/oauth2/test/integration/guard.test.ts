@@ -13,6 +13,9 @@ import { UserService } from '../../src/users/user.service';
 import { createTestApp, type TestApp } from '../support/app';
 import { loginAs, restartLogin } from '../support/login';
 
+/** A super-admin actor. */
+const su = (id: string) => ({ id, isSuperAdmin: true, permissions: [...PERMISSIONS] });
+
 const PW = 'correct horse battery';
 const auth = { rateLimit: { loginPerEmail: { limit: 1000 }, loginPerIp: { limit: 1000 } } };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -254,12 +257,12 @@ describe('AuthGuard, me, logout (default TTLs)', () => {
     const other = await users.create({ email: 'second@x.com', name: 'Second', password: PW });
     const { sessionCookie } = await loginAs(t, 'second@x.com', PW);
     expect((await api('/api/auth/me', { cookie: sessionCookie })).status).toBe(200);
-    await users.setStatus(other.id, 'disabled', adminId);
+    await users.setStatus(other.id, 'disabled', su(adminId));
     const r = await api('/api/test/whoami', { cookie: sessionCookie });
     expect(r.status).toBe(401);
     expect(r.body.error.code).toBe('unauthenticated');
     expect(clearsSession(r)).toBe(true);
-    await users.setStatus(other.id, 'active', adminId);
+    await users.setStatus(other.id, 'active', su(adminId));
   });
 
   it('user disabled behind the store (session row still there) → 401 and the session is destroyed', async () => {

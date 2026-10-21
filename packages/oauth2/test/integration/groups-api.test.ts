@@ -255,11 +255,54 @@ describe('groups API', () => {
       const demote = await api(`/api/admin/users/${other.id}`, { cookie: ua, method: 'PATCH', body: { groupIds: [contenter] } });
       expect(demote.status).toBe(403);
       expect((await users.findById(other.id))?.isSuperAdmin).toBe(true);
-      // Ordinary groups stay assignable.
-      const ok = await api('/api/admin/users', { cookie: ua, method: 'POST', body: { email: 'esc-ok@x.com', name: 'OK', groupIds: [contenter] } });
-      expect(ok.status).toBe(201);
+      // R7(b): any group change of a super-admin target is refused, even one keeping super-admin.
       const keep = await api(`/api/admin/users/${other.id}`, { cookie: ua, method: 'PATCH', body: { groupIds: [sa, contenter] } });
+      expect(keep.status).toBe(403);
+      expect((await users.findById(other.id))?.groups.map((g) => g.key)).toEqual(['super-admin']);
+    });
+
+    it('R7(a): a non-super-admin may only add/remove groups whose roles are within their own permissions', async () => {
+      const contenter = await groupId(t, 'contenter');
+      const small = await newGroup(t, 'esc-small', ['settings.users']);
+      const empty = await newGroup(t, 'esc-empty', []);
+      const create = await api('/api/admin/users', { cookie: ua, method: 'POST', body: { email: 'r7-c@x.com', name: 'C', groupIds: [contenter] } });
+      expect(create.status).toBe(403);
+      expect(create.body.error.code).toBe('forbidden');
+      expect(await users.findByEmail('r7-c@x.com')).toBeUndefined();
+      const ok = await api('/api/admin/users', { cookie: ua, method: 'POST', body: { email: 'r7-ok@x.com', name: 'OK', groupIds: [small, empty] } });
+      expect(ok.status).toBe(201);
+      // Adding a group beyond the actor's permissions.
+      const add = await api(`/api/admin/users/${ok.body.data.id}`, { cookie: ua, method: 'PATCH', body: { groupIds: [small, contenter] } });
+      expect(add.status).toBe(403);
+      expect(add.body.error.code).toBe('forbidden');
+      // Removing a group beyond the actor's permissions.
+      const holder = await users.create({ email: 'r7-h@x.com', name: 'H', password: PW, groupIds: [contenter] });
+      const remove = await api(`/api/admin/users/${holder.id}`, { cookie: ua, method: 'PATCH', body: { groupIds: [empty] } });
+      expect(remove.status).toBe(403);
+      expect((await users.findById(holder.id))?.groups.map((g) => g.key)).toEqual(['contenter']);
+      // Only the symmetric difference counts: keeping contenter while adding an allowed group is fine.
+      const keep = await api(`/api/admin/users/${holder.id}`, { cookie: ua, method: 'PATCH', body: { groupIds: [contenter, empty] } });
       expect(keep.status).toBe(200);
+      expect(keep.body.data.groups.map((g: any) => g.key)).toEqual(['contenter', 'esc-empty']);
+    });
+
+    it('R7(b): a non-super-admin cannot disable, delete or reset the password of a super admin', async () => {
+      const target = await users.create({ email: 'r7-sa@x.com', name: 'SA', password: PW });
+      for (const [method, path, body] of [
+        ['PATCH', `/api/admin/users/${target.id}`, { status: 'disabled' }],
+        ['DELETE', `/api/admin/users/${target.id}`, undefined],
+        ['POST', `/api/admin/users/${target.id}/password`, { password: 'brand new passphrase' }],
+      ] as const) {
+        const r = await api(path, { cookie: ua, method, body });
+        expect(r.status, `${method} ${path}`).toBe(403);
+        expect(r.body.error.code).toBe('forbidden');
+      }
+      const after = await users.findById(target.id);
+      expect(after?.status).toBe('active');
+      expect(await t.app.get(UserService).findByEmail('r7-sa@x.com')).toBeTruthy();
+      expect(await login(t, 'r7-sa@x.com')).toBeTruthy(); // password unchanged
+      // A super admin may do it.
+      expect((await api(`/api/admin/users/${target.id}/password`, { cookie: admin, method: 'POST', body: { password: 'brand new passphrase' } })).status).toBe(204);
     });
 
     it('a non-super-admin with settings.groups cannot grant a permission they lack', async () => {
@@ -310,16 +353,20 @@ describe('last super admin', () => {
     expect(both.status).toBe(409);
     expect((await users.findById(solo.id))?.name).toBe('Solo');
 
-    // A non-super-admin user manager tries to disable / delete the last super admin.
-    const managers = await newGroup(t, 'managers', ['settings.users']);
-    await users.create({ email: 'mgr@x.com', name: 'Mgr', password: PW, groupIds: [managers] });
-    const m = await login(t, 'mgr@x.com');
-    const dis = await api(`/api/admin/users/${solo.id}`, { cookie: m, method: 'PATCH', body: { status: 'disabled' } });
+    // Disable over HTTP by the super admin themselves.
+    const dis = await api(`/api/admin/users/${solo.id}`, { cookie: c, method: 'PATCH', body: { status: 'disabled' } });
     expect(dis.status).toBe(409);
     expect(dis.body.error.code).toBe('last_super_admin');
-    const del = await api(`/api/admin/users/${solo.id}`, { cookie: m, method: 'DELETE' });
-    expect(del.status).toBe(409);
-    expect(del.body.error.code).toBe('last_super_admin');
+    // A non-super-admin user manager gets 403 (R7) before the last_super_admin check.
+    const managers = await newGroup(t, 'managers', ['settings.users']);
+    const mgr = await users.create({ email: 'mgr@x.com', name: 'Mgr', password: PW, groupIds: [managers] });
+    const m = await login(t, 'mgr@x.com');
+    expect((await api(`/api/admin/users/${solo.id}`, { cookie: m, method: 'PATCH', body: { status: 'disabled' } })).body.error.code).toBe('forbidden');
+    expect((await api(`/api/admin/users/${solo.id}`, { cookie: m, method: 'DELETE' })).body.error.code).toBe('forbidden');
+    // Delete of the last super admin by another (super-admin) actor is unreachable over HTTP: service level.
+    const asSuper = { id: mgr.id, isSuperAdmin: true, permissions: [...PERMISSIONS] };
+    await expect(users.delete(solo.id, asSuper)).rejects.toMatchObject({ code: 'last_super_admin', status: 409 });
+    await expect(users.setStatus(solo.id, 'disabled', asSuper)).rejects.toMatchObject({ code: 'last_super_admin', status: 409 });
     expect((await users.findById(solo.id))?.status).toBe('active');
   });
 
@@ -344,8 +391,8 @@ describe('last super admin', () => {
     const keeper = left[0]!;
     const other = await users.create({ email: 'sa-c@x.com', name: 'C', password: PW });
     const settled = await Promise.allSettled([
-      users.update(keeper.id, { groupIds: [contenter] }, { id: other.id, isSuperAdmin: true }),
-      users.setStatus(other.id, 'disabled', keeper.id),
+      users.update(keeper.id, { groupIds: [contenter] }, { id: other.id, isSuperAdmin: true, permissions: [...PERMISSIONS] }),
+      users.setStatus(other.id, 'disabled', { id: keeper.id, isSuperAdmin: true, permissions: [...PERMISSIONS] }),
     ]);
     expect(settled.filter((s) => s.status === 'fulfilled')).toHaveLength(1);
     const rejected = settled.find((s) => s.status === 'rejected') as PromiseRejectedResult;

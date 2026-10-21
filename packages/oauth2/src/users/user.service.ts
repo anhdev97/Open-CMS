@@ -36,7 +36,33 @@ const SUPER_ADMIN = SUPER_ADMIN_GROUP;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const unknownGroup = () => new AuthError('validation_failed', 422, 'groupIds: unknown group');
-const escalation = () => new AuthError('forbidden', 403, 'Only a super admin can add or remove super-admin members');
+
+/** Who performs a user-management write (from the request's `RequestUser`). */
+export interface UserActor {
+  id: string;
+  isSuperAdmin: boolean;
+  permissions: readonly Permission[];
+}
+
+type GroupRef = { id: string; key: string; system: boolean; roles: string[] };
+
+/**
+ * Ruling R7(a): a non-super-admin may only add or remove groups that are not `system` and whose roles all lie
+ * within the actor's own permissions → otherwise 403 `forbidden`.
+ */
+function assertCanAssign(actor: UserActor, changed: readonly GroupRef[]): void {
+  if (actor.isSuperAdmin) return;
+  for (const g of changed) {
+    if (g.system) throw new AuthError('forbidden', 403, 'Only a super admin can add or remove super-admin members');
+    const missing = g.roles.find((r) => !actor.permissions.includes(r as Permission));
+    if (missing) throw new AuthError('forbidden', 403, `Cannot assign group ${g.key}: missing permission ${missing}`);
+  }
+}
+
+/** Ruling R7(b): a non-super-admin may not change groups of, disable, delete or reset the password of a super admin. */
+function assertCanManage(actor: UserActor, targetIsSuperAdmin: boolean): void {
+  if (targetIsSuperAdmin && !actor.isSuperAdmin) throw new AuthError('forbidden', 403, 'Only a super admin can manage a super admin');
+}
 
 @Injectable()
 export class UserService {
@@ -90,11 +116,11 @@ export class UserService {
 
   /**
    * Creates a user. Without `groupIds` the user joins `super-admin` (setup wizard, env bootstrap); the users API
-   * always passes `groupIds` (≥ 1, validated by the controller). Assigning a `system` group requires
-   * `actorIsSuperAdmin` (privilege escalation rule) → 403 `forbidden`; an unknown group id → 422.
+   * always passes `groupIds` (≥ 1, validated by the controller) and `actor`, whose groups are then limited by
+   * ruling R7(a) → 403 `forbidden`. Internal callers without `actor` are trusted. Unknown group id → 422.
    */
   async create(
-    input: { email: string; name: string; password?: string; actorId?: string; groupIds?: string[]; actorIsSuperAdmin?: boolean },
+    input: { email: string; name: string; password?: string; actorId?: string; groupIds?: string[]; actor?: UserActor },
     trx?: Trx,
   ): Promise<AuthUser> {
     const email = normalizeEmail(input.email);
@@ -105,7 +131,7 @@ export class UserService {
     }
     const run = async (t: Trx): Promise<string> => {
       const groups = input.groupIds === undefined ? undefined : await this.resolveGroups(input.groupIds, t);
-      if (groups?.some((g) => g.system) && input.actorIsSuperAdmin !== true) throw escalation();
+      if (groups && input.actor) assertCanAssign(input.actor, groups);
       let id: string;
       try {
         const row = await t
@@ -198,11 +224,11 @@ export class UserService {
    * De-duplicated groups of `ids`, sorted by key, share-locked so a concurrent group delete waits for this
    * transaction; any unknown (or malformed) id → 422 `validation_failed`.
    */
-  private async resolveGroups(ids: string[], trx: Trx): Promise<{ id: string; key: string; system: boolean }[]> {
+  private async resolveGroups(ids: string[], trx: Trx): Promise<GroupRef[]> {
     const unique = [...new Set(ids)];
     if (unique.some((id) => !UUID.test(id))) throw unknownGroup();
     if (unique.length === 0) return [];
-    const rows = await trx.selectFrom('auth_groups').select(['id', 'key', 'system']).where('id', 'in', unique).orderBy('key').forShare().execute();
+    const rows = await trx.selectFrom('auth_groups').select(['id', 'key', 'system', 'roles']).where('id', 'in', unique).orderBy('key').forShare().execute();
     if (rows.length !== unique.length) throw unknownGroup();
     return rows;
   }
@@ -211,32 +237,26 @@ export class UserService {
    * Applies `patch` to the user in one transaction under the setup advisory lock (the lock every path that can
    * shrink the set of active super admins takes: groups, status, delete), so two concurrent requests cannot both
    * remove the last super admins. A change that takes the number of active `super-admin` members to 0 rolls
-   * back with 409 `last_super_admin` (spec B §3.3). Adding or removing a `system` group membership requires
-   * `actor.isSuperAdmin` → 403 `forbidden` (privilege escalation rule).
+   * back with 409 `last_super_admin` (spec B §3.3). Ruling R7 (403 `forbidden`) is checked first, against the
+   * locked target: a non-super-admin may not change groups or status of a super admin (R7b), and may only add or
+   * remove groups within their own permissions (R7a, every group of the symmetric difference current/next).
    */
   async update(
     userId: string,
     patch: { name?: string; status?: 'active' | 'disabled'; groupIds?: string[] },
-    actor: { id: string; isSuperAdmin: boolean },
+    actor: UserActor,
   ): Promise<void> {
     await this.withSetupLock(async (trx) => {
-      const exists = await trx.selectFrom('auth_users').select('id').where('id', '=', userId).forUpdate().executeTakeFirst();
-      if (!exists) throw new AuthError('not_found', 404, 'User not found');
+      const current = await this.lockTarget(userId, trx);
+      if (patch.groupIds !== undefined || patch.status !== undefined) assertCanManage(actor, current.some((g) => g.system));
       const before = await this.activeSuperAdmins(trx);
 
       if (patch.groupIds !== undefined) {
         const next = await this.resolveGroups(patch.groupIds, trx);
-        const current = await trx
-          .selectFrom('auth_user_groups as ug')
-          .innerJoin('auth_groups as g', 'g.id', 'ug.group_id')
-          .select(['g.id', 'g.key', 'g.system'])
-          .where('ug.user_id', '=', userId)
-          .orderBy('g.key')
-          .execute();
-        const systemOf = (gs: { id: string; system: boolean }[]) => gs.filter((g) => g.system).map((g) => g.id).sort().join();
-        if (systemOf(current) !== systemOf(next) && !actor.isSuperAdmin) throw escalation();
-        const ids = (gs: { id: string }[]) => gs.map((g) => g.id).sort().join();
-        if (ids(current) !== ids(next)) {
+        const has = (gs: GroupRef[], id: string) => gs.some((g) => g.id === id);
+        const changed = [...current.filter((g) => !has(next, g.id)), ...next.filter((g) => !has(current, g.id))];
+        assertCanAssign(actor, changed);
+        if (changed.length) {
           await trx.deleteFrom('auth_user_groups').where('user_id', '=', userId).execute();
           if (next.length) await trx.insertInto('auth_user_groups').values(next.map((g) => ({ user_id: userId, group_id: g.id }))).execute();
           await this.audit.record(
@@ -255,23 +275,48 @@ export class UserService {
       }
 
       if (before > 0 && (await this.activeSuperAdmins(trx)) === 0) throw new AuthError('last_super_admin', 409);
-      // Last: grant revocation is not part of the transaction.
+      // After every check that can throw: the session rows are deleted inside this transaction, but the provider
+      // grants are revoked outside it (separate storage calls), so they are not rolled back if the commit fails.
       if (patch.status === 'disabled') await this.revokeAll(userId, undefined, trx);
     });
   }
 
-  async setStatus(userId: string, status: 'active' | 'disabled', actorId: string): Promise<void> {
-    // Status changes never touch group membership, so the escalation rule does not apply.
-    await this.update(userId, { status }, { id: actorId, isSuperAdmin: false });
+  async setStatus(userId: string, status: 'active' | 'disabled', actor: UserActor): Promise<void> {
+    await this.update(userId, { status }, actor);
   }
 
-  async delete(userId: string, actorId: string): Promise<void> {
-    if (userId === actorId) throw new AuthError('forbidden', 403, 'Cannot delete yourself');
+  /** Locks the target user row (404 if missing) and returns their groups. */
+  private async lockTarget(userId: string, trx: Trx): Promise<GroupRef[]> {
+    const exists = await trx.selectFrom('auth_users').select('id').where('id', '=', userId).forUpdate().executeTakeFirst();
+    if (!exists) throw new AuthError('not_found', 404, 'User not found');
+    return trx
+      .selectFrom('auth_user_groups as ug')
+      .innerJoin('auth_groups as g', 'g.id', 'ug.group_id')
+      .select(['g.id', 'g.key', 'g.system', 'g.roles'])
+      .where('ug.user_id', '=', userId)
+      .orderBy('g.key')
+      .execute();
+  }
+
+  /**
+   * Admin password reset: sets the password and revokes every session/grant of the target, audited. A
+   * non-super-admin may not reset a super admin's password (R7b, checked against the locked target).
+   */
+  async resetPassword(userId: string, password: string, actor: UserActor): Promise<void> {
     await this.withSetupLock(async (trx) => {
-      const exists = await trx.selectFrom('auth_users').select('id').where('id', '=', userId).executeTakeFirst();
-      if (!exists) throw new AuthError('not_found', 404, 'User not found');
+      assertCanManage(actor, (await this.lockTarget(userId, trx)).some((g) => g.system));
+      await this.setPassword(userId, password, trx);
+      await this.audit.record({ type: 'password_reset_by_admin', userId, actorId: actor.id }, trx);
+      await this.revokeAll(userId, undefined, trx);
+    });
+  }
+
+  async delete(userId: string, actor: UserActor): Promise<void> {
+    if (userId === actor.id) throw new AuthError('forbidden', 403, 'Cannot delete yourself');
+    await this.withSetupLock(async (trx) => {
+      assertCanManage(actor, (await this.lockTarget(userId, trx)).some((g) => g.system));
       if (await this.isLastActiveSuperAdmin(userId, trx)) throw new AuthError('last_super_admin', 409);
-      await this.audit.record({ type: 'user_deleted', userId, actorId }, trx);
+      await this.audit.record({ type: 'user_deleted', userId, actorId: actor.id }, trx);
       await trx.deleteFrom('auth_users').where('id', '=', userId).execute();
       await this.revoker.revokeAllGrants(userId);
     });
