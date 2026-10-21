@@ -16,6 +16,8 @@ export interface MessageTree {
   [key: string]: string | MessageTree;
 }
 export type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };
+/** Same shape as T, string leaves widened to `string`, every key optional. */
+export type WidenPartial<T> = T extends string ? string : { [K in keyof T]?: WidenPartial<T[K]> };
 export type MessageBundle = { 'en-US': MessageTree } & Partial<Record<Locale, MessageTree>>;
 
 const CODES: readonly string[] = SUPPORTED_LOCALES.map((l) => l.code);
@@ -63,7 +65,7 @@ export function localizedText(v: string | LocalizedText | undefined, locale: Loc
 
 /** Typing helper only: en-US is required, other locales may be partial. */
 export function defineMessages<M extends MessageTree>(
-  m: { 'en-US': M } & Partial<Record<Locale, DeepPartial<M>>>,
+  m: { 'en-US': M } & Partial<Record<Exclude<Locale, 'en-US'>, WidenPartial<M>>>,
 ): typeof m {
   return m;
 }
