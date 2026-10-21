@@ -93,7 +93,7 @@ packages/core/
   - `"./admin"` → `dist/admin/index.js`
   - `"./admin/layout"` → `dist/admin/layout.js`
   - `"./admin/theme.css"` → `dist/admin/styles/theme.css`
-- `dist/admin/package.json` = `{ "type": "module" }` để Node/bundler hiểu ESM trong package CommonJS.
+- `dist/admin` là ESM (cú pháp `import`/`export`, import không có đuôi file) nhưng **không** đặt `type: module`: chỉ bundler của Next đọc các file này, và webpack/Turbopack bắt buộc import có đuôi file trong package `type: module`. Alias `@/` của admin đổi thành import tương đối vì `tsc` không viết lại alias khi emit.
 - `peerDependencies` thêm `next ^16`, `react ^19`, `react-dom ^19`, đánh dấu `optional` trong `peerDependenciesMeta` (project chỉ dùng API thì không cần).
 - `devDependencies` thêm `next` (để typecheck/build admin). Bỏ `vite`, `@vitejs/plugin-react`, `@tailwindcss/vite`, `react-router`.
 - Script: `build` = `tsc -p tsconfig.json && tsc -p admin/tsconfig.json && <copy theme.css>`; `dev:admin` = `tsc -w -p admin/tsconfig.json`.
@@ -244,10 +244,11 @@ Mục tiêu: các trang chỉ đổi import, không đổi logic.
 
 - Dependencies thêm: `next`, `react`, `react-dom`, `cross-env`. DevDependencies thêm: `tailwindcss`, `@tailwindcss/postcss`, `postcss`, `@types/react`, `@types/react-dom`.
 - Scripts:
-  - `dev`: `opencms migrate:up && tsx src/main.ts` (không đổi)
+  - `dev`: `opencms migrate:up && tsx --tsconfig tsconfig.server.json src/main.ts` (tsx đọc `experimentalDecorators` từ tsconfig, nên phải trỏ vào tsconfig của Nest chứ không phải của Next)
   - `build`: `tsc -p tsconfig.server.json && next build`
   - `start`: `cross-env NODE_ENV=production opencms migrate:up && cross-env NODE_ENV=production node dist/src/main.js`
 - `--link`: link thêm `next`, `react`, `react-dom` từ `node_modules` của core (cùng cơ chế R5 hiện tại) để chỉ có một bản.
+- Chỉ khi `--link`: `next.config.ts` đặt `turbopack.root` và `outputFileTracingRoot` là thư mục cha chung gần nhất của project và repo, vì Turbopack từ chối file (symlink tới core) nằm ngoài root.
 
 ### 6.3 Log và README
 
