@@ -66,7 +66,7 @@ const idID: Messages = {
     contentTypesSettings: 'Tipe konten',
     languages: 'Bahasa',
     settings: 'Pengaturan',
-    ungrouped: 'Lainnya',
+    home: 'Beranda',
     main: 'Navigasi utama',
     contentTypes: 'Tipe konten',
     builder: 'Pembangun',

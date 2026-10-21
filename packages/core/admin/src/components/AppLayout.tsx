@@ -1,4 +1,4 @@
-import { BoxesIcon, ChevronRightIcon, ChevronsUpDownIcon, DatabaseIcon, LogOutIcon, PaletteIcon, UserIcon } from 'lucide-react';
+import { BoxesIcon, ChevronRightIcon, ChevronsUpDownIcon, HomeIcon, LogOutIcon, PaletteIcon, UserIcon } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ContentGroupDefinition, LocalizedText } from '@opencms/schema';
 import { ThemeToggle } from './ThemeToggle';
@@ -188,7 +188,7 @@ function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu>{link('/', t('nav.contentTypes'), <DatabaseIcon aria-hidden="true" />)}</SidebarMenu>
+            <SidebarMenu>{link('/', t('nav.home'), <HomeIcon aria-hidden="true" />)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
         {types === null && !failed && (
@@ -214,7 +214,7 @@ function AppSidebar() {
             <NavGroup
               key={g.key}
               id={g.key}
-              title={g.key === UNGROUPED_KEY ? t('nav.ungrouped') : g.title}
+              title={g.key === UNGROUPED_KEY ? t('nav.content') : g.title}
               open={isOpen(g.key, holds)}
               onToggle={() => toggle(g.key, holds)}
             >

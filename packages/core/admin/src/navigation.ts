@@ -10,7 +10,7 @@ export interface SettingsItem {
 }
 
 export const settingsItems: SettingsItem[] = [
-  { to: '/settings/content-types', label: 'nav.contentTypesSettings', icon: WrenchIcon },
   { to: '/settings/users', label: 'nav.users', icon: UsersIcon },
+  { to: '/settings/content-types', label: 'nav.contentTypesSettings', icon: WrenchIcon },
   { to: '/settings/languages', label: 'nav.languages', icon: LanguagesIcon },
 ];

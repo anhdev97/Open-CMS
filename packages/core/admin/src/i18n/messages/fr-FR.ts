@@ -66,7 +66,7 @@ const frFR: Messages = {
     contentTypesSettings: 'Types de contenu',
     languages: 'Langues',
     settings: 'Paramètres',
-    ungrouped: 'Autres',
+    home: 'Accueil',
     main: 'Navigation principale',
     contentTypes: 'Types de contenu',
     builder: 'Constructeur',

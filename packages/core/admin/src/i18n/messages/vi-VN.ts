@@ -66,7 +66,7 @@ const viVN: Messages = {
     contentTypesSettings: 'Loại nội dung',
     languages: 'Ngôn ngữ',
     settings: 'Cài đặt',
-    ungrouped: 'Khác',
+    home: 'Trang chủ',
     main: 'Điều hướng chính',
     contentTypes: 'Loại nội dung',
     builder: 'Trình xây dựng',

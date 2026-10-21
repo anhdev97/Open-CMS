@@ -64,7 +64,7 @@ export const enUS = {
     contentTypesSettings: 'Content types',
     languages: 'Languages',
     settings: 'Settings',
-    ungrouped: 'Other',
+    home: 'Home',
     main: 'Main navigation',
     contentTypes: 'Content types',
     builder: 'Builder',
