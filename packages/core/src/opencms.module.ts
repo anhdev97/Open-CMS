@@ -108,7 +108,7 @@ export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShu
     }
   }
 
-  /** Mounted from onModuleInit, i.e. before Nest registers its routes and its 404 handler. */
+  /** Mounted from onModuleInit: Nest has already registered its routes, only its 404/exception handlers come after, which is why backend paths fall through to Nest. */
   private async mountWeb(): Promise<void> {
     const web = this.options.web;
     if (web?.enabled === false) return;

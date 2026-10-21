@@ -86,6 +86,9 @@ export function createWebHost(opts: WebHostOptions): WebHost {
       // Next reads the nonce from the request's CSP header and stamps it on its inline scripts.
       req.headers['content-security-policy'] = csp;
       res.set({ ...ADMIN_SECURITY_HEADERS, 'Content-Security-Policy': csp });
+    } else {
+      // A client-chosen CSP must never reach Next, which would read a nonce out of it.
+      delete req.headers['content-security-policy'];
     }
     requestHandler(req, res).catch((e: unknown) => {
       logger.error(`Web UI request failed: ${messageOf(e)}`);
@@ -98,7 +101,12 @@ export function createWebHost(opts: WebHostOptions): WebHost {
     server.on('upgrade', (req, socket, head) => {
       const p = (req.url ?? '').split('?')[0];
       if (!upgradeHandler || !p.startsWith('/_next/')) return;
-      upgradeHandler(req, socket, head);
+      const handle = upgradeHandler;
+      new Promise((resolve) => resolve(handle(req, socket, head)))
+        .catch((e: unknown) => {
+          logger.error(`Web UI upgrade failed: ${messageOf(e)}`);
+          socket.destroy();
+        });
     });
   }
 

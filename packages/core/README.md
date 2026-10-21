@@ -27,7 +27,9 @@ await app.listen(Number(process.env.PORT ?? 4000));
 
 **`bodyParser: false` is required.** `@opencms/core` registers the JSON and urlencoded parsers itself and
 leaves `/oauth2` (the OIDC provider) alone; Nest's built-in parser would consume the provider's request
-bodies and the login flow breaks.
+bodies and the login flow breaks. The parsers only run for backend paths (`/api`, `/oauth2/interaction`):
+host-added controllers must live under `/api`, or the host applies its own body parser to its own paths,
+otherwise `req.body` is `undefined`.
 
 Fixed paths, none configurable: UI `/admin`, API `/api`, auth `/oauth2`, delivery API `/api/content`.
 

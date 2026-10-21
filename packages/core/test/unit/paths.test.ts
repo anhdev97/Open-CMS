@@ -11,10 +11,10 @@ describe('isBackendPath', () => {
 });
 
 describe('isAdminPath', () => {
-  it.each(['/admin', '/admin/', '/admin/content/x', '/ADMIN', '/%61dmin/x', '/%41DMIN', '//admin/x', '/admin%2Fx', '/%E0%A4%A'])('%s is admin', (p) => {
+  it.each(['/admin', '/admin/', '/admin/content/x', '/ADMIN', '/%61dmin/x', '/%41DMIN', '//admin/x', '/admin%2Fx', '/%E0%A4%A', '/x/../admin', '/x/%2e%2e/admin/login', '/./admin', '/a/b/../../admin/x', '/x/%2E%2E/admin', '/x/..%2Fadmin'])('%s is admin', (p) => {
     expect(isAdminPath(p)).toBe(true);
   });
-  it.each(['/administrator', '/admins', '/', '/api/admin', '/%61dministrator'])('%s is not admin', (p) => {
+  it.each(['/administrator', '/admins', '/', '/api/admin', '/%61dministrator', '/x/../administrator', '/x/./admin', '/admin/../x'])('%s is not admin', (p) => {
     expect(isAdminPath(p)).toBe(false);
   });
 });

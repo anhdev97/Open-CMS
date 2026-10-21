@@ -118,7 +118,7 @@ web?: {
 ### 4.2 Định tuyến
 
 - **Path backend:** `/api`, `/api/*`, `/oauth2`, `/oauth2/*`, so khớp không phân biệt hoa thường (Express routing cũng vậy). `/apix`, `/oauth2x` **không** phải backend.
-- Middleware `webHandler` gắn bằng `adapter.getInstance().use(...)` trong `onModuleInit` (cùng thời điểm `mountAdmin` hiện tại, trước khi Nest đăng ký route và 404 handler):
+- Middleware `webHandler` gắn bằng `adapter.getInstance().use(...)` trong `onModuleInit` (cùng thời điểm `mountAdmin` hiện tại, sau khi Nest đã đăng ký route, trước 404/exception handler của Nest — nhờ thứ tự này `/api` rơi xuống Nest):
   - Path backend → `next()`; Nest xử lý như hiện tại (route không tồn tại vẫn 404 JSON của `ApiExceptionFilter`).
   - Path khác → `nextHandler(req, res)` (handler của Next, tự parse URL).
 - `JsonBodyParserMiddleware` chỉ chạy cho path backend (thêm điều kiện; giữ ngoại lệ `/oauth2/*` trừ `/oauth2/interaction/*`). Next tự đọc body của route handler/server action.

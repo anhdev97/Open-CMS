@@ -17,6 +17,10 @@
   `tailwindcss`, `@tailwindcss/postcss`, `postcss`, `@types/react`, `@types/react-dom`); add `.next/` to
   `.gitignore`; point `web.dir` at the project root if the process does not start there.
 
+- **Request bodies are parsed only for backend paths** (`/api`, `/oauth2/interaction`). Nest controllers you add
+  outside `/api` (e.g. `POST /webhooks/x`) get `req.body === undefined`: mount them under `/api`, or apply your
+  own body parser to your own paths (the app is still created with `bodyParser: false`).
+
 - **`adminToken` option and `OPENCMS_ADMIN_TOKEN` are removed.** `/api/admin/*` is now protected by the
   session of a signed-in user (`@opencms/oauth2`). Remove the option and the variable; create the first
   super_admin at `/admin` (or seed it with `OPENCMS_ADMIN_EMAIL` / `OPENCMS_ADMIN_PASSWORD`).

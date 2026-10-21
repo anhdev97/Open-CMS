@@ -58,7 +58,7 @@ function tmpDir(buildId = false): string {
   return d;
 }
 
-async function serve(h: Harness, opts: { dev: boolean; dir?: string }) {
+async function serve(h: Harness, opts: { dev: boolean; dir?: string; headers?: Record<string, string> }) {
   const host = createWebHost({ dir: opts.dir ?? tmpDir(), dev: opts.dev, logger: h.logger, loadNext: h.loadNext as unknown as LoadNext });
   const expressApp = express();
   expressApp.use(host.handler);
@@ -68,7 +68,11 @@ async function serve(h: Harness, opts: { dev: boolean; dir?: string }) {
   servers.push(server);
   const port = (server.address() as AddressInfo).port;
   const get = (p: string) => fetch(`http://127.0.0.1:${port}${p}`);
-  return { host, server, get };
+  const rawGet = (p: string) =>
+    new Promise<http.IncomingMessage>((resolve, reject) => {
+      http.get({ host: '127.0.0.1', port, path: p, headers: opts.headers }, (res) => { res.resume(); resolve(res); }).on('error', reject);
+    });
+  return { host, server, get, rawGet };
 }
 
 describe('createWebHost', () => {
@@ -167,6 +171,38 @@ describe('createWebHost', () => {
     await host.prepare();
     expect((await get('/')).status).toBe(500);
     expect(h.logger.error).toHaveBeenCalledWith(expect.stringContaining('render failed'));
+  });
+
+  it('applies the admin CSP and security headers to dot-segment paths Next resolves to /admin', async () => {
+    const h = harness();
+    const { host, rawGet } = await serve(h, { dev: true });
+    await host.prepare();
+    const res = await rawGet('/x/../admin');
+    expect(res.headers['content-security-policy']).toContain("'nonce-");
+    expect(res.headers['x-frame-options']).toBe('DENY');
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['x-robots-tag']).toBe('noindex');
+  });
+
+  it('drops a client-supplied CSP request header on non-admin paths', async () => {
+    const h = harness();
+    const { host, rawGet } = await serve(h, { dev: true, headers: { 'content-security-policy': "script-src 'nonce-evil'" } });
+    await host.prepare();
+    await rawGet('/');
+    expect(h.app.reqHeaders).toEqual([undefined]);
+  });
+
+  it('logs and destroys the socket when the upgrade handler rejects', async () => {
+    const h = harness({ getUpgradeHandler: () => async () => { throw new Error('upgrade boom'); } });
+    const { host } = await serve(h, { dev: true });
+    await host.prepare();
+    const server = new EventEmitter() as unknown as http.Server;
+    host.attachUpgrade(server);
+    const socket = { destroy: vi.fn() };
+    server.emit('upgrade', { url: '/_next/webpack-hmr' }, socket, Buffer.alloc(0));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(h.logger.error).toHaveBeenCalledWith(expect.stringContaining('upgrade boom'));
+    expect(socket.destroy).toHaveBeenCalled();
   });
 
   it('attachUpgrade claims only /_next/ upgrades', async () => {
