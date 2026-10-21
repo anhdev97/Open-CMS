@@ -75,6 +75,7 @@ const viVN: Messages = {
     noContentTypes: 'Chưa có loại nội dung nào',
     loadFailed: 'Không thể tải các loại nội dung',
     skipToContent: 'Bỏ qua đến nội dung',
+    toggleSidebar: 'Ẩn/hiện thanh bên',
   },
   languages: {
     title: 'Ngôn ngữ',

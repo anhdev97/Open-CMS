@@ -75,6 +75,7 @@ const frFR: Messages = {
     noContentTypes: 'Aucun type de contenu pour le moment',
     loadFailed: 'Impossible de charger les types de contenu',
     skipToContent: 'Aller au contenu',
+    toggleSidebar: 'Afficher/masquer la barre latérale',
   },
   languages: {
     title: 'Langues',

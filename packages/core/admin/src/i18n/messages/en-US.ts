@@ -73,6 +73,7 @@ export const enUS = {
     noContentTypes: 'No content types yet',
     loadFailed: 'Could not load content types',
     skipToContent: 'Skip to content',
+    toggleSidebar: 'Toggle sidebar',
   },
   languages: {
     title: 'Languages',

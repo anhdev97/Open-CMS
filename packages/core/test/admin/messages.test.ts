@@ -36,3 +36,13 @@ describe.each(Object.entries(bundles))('%s bundle', (_code, load) => {
     expect(same / Object.keys(base).length).toBeLessThanOrEqual(0.25);
   });
 });
+
+describe('sidebar chrome', () => {
+  it('labels the sidebar toggle through the translator, not hard-coded English', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync(new URL('../../admin/src/components/ui/sidebar.tsx', import.meta.url), 'utf8');
+    expect(src).not.toContain('Toggle Sidebar');
+    expect(src).toContain("t('nav.toggleSidebar')");
+    expect(base['nav.toggleSidebar']).toBe('Toggle sidebar');
+  });
+});

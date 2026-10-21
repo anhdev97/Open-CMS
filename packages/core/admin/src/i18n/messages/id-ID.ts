@@ -75,6 +75,7 @@ const idID: Messages = {
     noContentTypes: 'Belum ada tipe konten',
     loadFailed: 'Tidak dapat memuat tipe konten',
     skipToContent: 'Lewati ke konten',
+    toggleSidebar: 'Tampilkan/sembunyikan bilah sisi',
   },
   languages: {
     title: 'Bahasa',
