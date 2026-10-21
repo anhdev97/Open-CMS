@@ -1,6 +1,7 @@
 import type { Kysely } from 'kysely';
 import type { AuthFileConfig } from '@opencms/oauth2';
 import type { ContentTypeDefinition, OpenCmsConfig, ResolvedConfig } from '@opencms/schema';
+import type { LoadNext } from './web';
 
 export const OPENCMS_OPTIONS = Symbol('OPENCMS_OPTIONS');
 export const OPENCMS_DB = Symbol('OPENCMS_DB');
@@ -58,11 +59,15 @@ export interface OpenCmsModuleOptions {
   autoMigrate?: boolean;
   /** Non-secret `auth` section (see @opencms/oauth2). Secrets come from the environment. */
   auth?: Partial<AuthFileConfig>;
-  admin?: {
-    /** Serve the embedded admin UI at /admin. Default true. */
+  web?: {
+    /** Serve the project's Next app (the admin UI under /admin, the site elsewhere). Default true. */
     enabled?: boolean;
-    /** Directory with the built admin UI. Undocumented; for tests. */
-    distDir?: string;
+    /** Directory of the Next app. Default `process.cwd()`. */
+    dir?: string;
+    /** Run Next in dev mode. Default `NODE_ENV !== 'production'`. */
+    dev?: boolean;
+    /** Undocumented; for tests. */
+    loadNext?: LoadNext;
   };
   /** Exact origins allowed to read `/api/content/**` cross-origin (GET, HEAD, OPTIONS; no credentials). */
   cors?: { origins: string[] };

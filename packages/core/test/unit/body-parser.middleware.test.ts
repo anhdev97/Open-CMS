@@ -27,4 +27,16 @@ describe('JsonBodyParserMiddleware skips', () => {
     expect(() => run(req)).not.toThrow();
     expect(req).toHaveProperty('body');
   });
+
+  it.each(['/', '/admin/x', '/ADMIN'])('web path %s: no body read, whatever the content type', (path) => {
+    const req = { path, headers: { 'content-type': 'application/json' }, method: 'POST', get: () => 'application/json' };
+    expect(run(req)).toHaveBeenCalledWith();
+    expect(req).not.toHaveProperty('body');
+  });
+
+  it.each(['/api/x', '/oauth2/interaction/x'])('still parses backend path %s', (path) => {
+    const req = { path, headers: {}, method: 'POST', get: () => undefined };
+    expect(() => run(req)).not.toThrow();
+    expect(req).toHaveProperty('body');
+  });
 });
