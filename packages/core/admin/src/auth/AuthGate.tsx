@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { Locale } from '@opencms/schema';
 import { toast } from 'sonner';
 import { AppLayout } from '../components/AppLayout';
 import { ErrorAlert } from '../components/ErrorAlert';
@@ -55,9 +56,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const setUserLocale = useCallback((locale: Locale | null) => {
+    setState((s) => (s.status === 'ready' ? { status: 'ready', user: { ...s.user, locale } } : s));
+  }, []);
+
   const value = useMemo<AuthContextValue | null>(
-    () => (state.status === 'ready' ? { user: state.user, logout } : null),
-    [state, logout],
+    () => (state.status === 'ready' ? { user: state.user, logout, setUserLocale } : null),
+    [state, logout, setUserLocale],
   );
 
   if (state.status === 'error') {

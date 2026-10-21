@@ -14,6 +14,8 @@ export interface AuthContextValue {
   user: AuthUser;
   /** `POST /api/auth/logout`, then sends the whole page to the returned `redirectTo`. */
   logout: () => Promise<void>;
+  /** Updates the saved admin language in the cached user (after a successful `PATCH /api/auth/me`). */
+  setUserLocale: (locale: Locale | null) => void;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);

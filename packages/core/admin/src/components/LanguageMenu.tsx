@@ -1,4 +1,5 @@
 import { SUPPORTED_LOCALES, isLocale } from '@opencms/schema';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useLocale } from '../i18n/hooks';
 import { setAdminLocale } from '../i18n/I18nProvider';
 import { t } from '../i18n';
@@ -7,22 +8,22 @@ import { t } from '../i18n';
 export function LanguageMenu({ className }: { className?: string }) {
   const locale = useLocale();
   return (
-    <select
-      aria-label={t('account.language')}
-      className={
-        'h-9 rounded-md border border-input bg-background px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ' +
-        (className ?? '')
-      }
+    <Select
       value={locale}
-      onChange={(e) => {
-        if (isLocale(e.target.value)) void setAdminLocale(e.target.value);
+      onValueChange={(v) => {
+        if (isLocale(v)) void setAdminLocale(v);
       }}
     >
-      {SUPPORTED_LOCALES.map((l) => (
-        <option key={l.code} value={l.code} lang={l.code}>
-          {l.name}
-        </option>
-      ))}
-    </select>
+      <SelectTrigger aria-label={t('account.language')} className={className}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {SUPPORTED_LOCALES.map((l) => (
+          <SelectItem key={l.code} value={l.code} lang={l.code}>
+            {l.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

@@ -12,6 +12,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/form';
 import { Input } from '../components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Label } from '../components/ui/label';
 import { t } from '../i18n';
 import { setAdminLocale } from '../i18n/I18nProvider';
@@ -150,9 +151,10 @@ function ThemeCard() {
   );
 }
 
-const BROWSER_DEFAULT = '';
+// Radix Select items cannot have an empty value.
+const BROWSER_DEFAULT = 'browser';
 
-function LanguageCard({ initial }: { initial: Locale | null }) {
+function LanguageCard({ initial, onSaved }: { initial: Locale | null; onSaved: (l: Locale | null) => void }) {
   const [value, setValue] = useState<string>(initial ?? BROWSER_DEFAULT);
   const [error, setError] = useState<Error | null>(null);
   const [saving, setSaving] = useState(false);
@@ -164,6 +166,7 @@ function LanguageCard({ initial }: { initial: Locale | null }) {
     try {
       await api('/api/auth/me', { method: 'PATCH', json: { locale } });
       setValue(next);
+      onSaved(locale);
       if (locale) {
         await setAdminLocale(locale);
       } else {
@@ -192,27 +195,26 @@ function LanguageCard({ initial }: { initial: Locale | null }) {
       </CardHeader>
       <CardContent className="grid max-w-md gap-3">
         <ErrorAlert error={error} />
-        <select
-          aria-label={t('account.language')}
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          value={value}
-          disabled={saving}
-          onChange={(e) => void onChange(e.target.value)}
-        >
-          <option value={BROWSER_DEFAULT}>{t('account.browserDefault')}</option>
-          {SUPPORTED_LOCALES.map((l) => (
-            <option key={l.code} value={l.code} lang={l.code}>
-              {l.name}
-            </option>
-          ))}
-        </select>
+        <Select value={value} disabled={saving} onValueChange={(v) => void onChange(v)}>
+          <SelectTrigger aria-label={t('account.language')} className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={BROWSER_DEFAULT}>{t('account.browserDefault')}</SelectItem>
+            {SUPPORTED_LOCALES.map((l) => (
+              <SelectItem key={l.code} value={l.code} lang={l.code}>
+                {l.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </CardContent>
     </Card>
   );
 }
 
 export function Account() {
-  const { user } = useAuth();
+  const { user, setUserLocale } = useAuth();
   return (
     <div className="space-y-6">
       <PageHeader title={t('account.title')} description={t('account.description')} />
@@ -236,7 +238,7 @@ export function Account() {
       </Card>
 
       <ChangePasswordCard email={user.email} />
-      <LanguageCard initial={user.locale ?? null} />
+      <LanguageCard initial={user.locale ?? null} onSaved={setUserLocale} />
       <ThemeCard />
     </div>
   );
