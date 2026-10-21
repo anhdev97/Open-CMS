@@ -157,7 +157,7 @@ function ContentView({ apiId }: { apiId: string }) {
               </SelectContent>
             </Select>
             <Button asChild variant="outline" size="sm">
-              <Link to={`/builder?type=${def.apiId}`}>{t('content.editSchema')}</Link>
+              <Link to={`/settings/content-types?type=${def.apiId}`}>{t('content.editSchema')}</Link>
             </Button>
             <Button size="sm" onClick={() => openEntry(null)}>
               <PlusIcon aria-hidden="true" />

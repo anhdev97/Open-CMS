@@ -61,6 +61,10 @@ export const enUS = {
     home: 'Back to content types',
   },
   nav: {
+    contentTypesSettings: 'Content types',
+    languages: 'Languages',
+    settings: 'Settings',
+    ungrouped: 'Other',
     main: 'Main navigation',
     contentTypes: 'Content types',
     builder: 'Builder',
@@ -69,6 +73,10 @@ export const enUS = {
     noContentTypes: 'No content types yet',
     loadFailed: 'Could not load content types',
     skipToContent: 'Skip to content',
+  },
+  languages: {
+    title: 'Languages',
+    description: 'Choose which languages your content is available in.',
   },
   account: {
     menu: 'Account menu',

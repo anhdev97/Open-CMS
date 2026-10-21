@@ -33,7 +33,7 @@ export function Home() {
         description={t('home.description')}
         actions={
           <Button asChild>
-            <Link to="/builder">
+            <Link to="/settings/content-types">
               <PlusIcon aria-hidden="true" />
               {t('home.newType')}
             </Link>
@@ -71,7 +71,7 @@ export function Home() {
           description={t('home.emptyDescription')}
           action={
             <Button asChild>
-              <Link to="/builder">{t('home.newType')}</Link>
+              <Link to="/settings/content-types">{t('home.newType')}</Link>
             </Button>
           }
         />
@@ -111,7 +111,7 @@ export function Home() {
                     </TableCell>
                     <TableCell className="text-right">
                       <Button asChild variant="ghost" size="sm">
-                        <Link to={`/builder?type=${type.apiId}`}>{t('home.editSchema')}</Link>
+                        <Link to={`/settings/content-types?type=${type.apiId}`}>{t('home.editSchema')}</Link>
                       </Button>
                     </TableCell>
                   </TableRow>

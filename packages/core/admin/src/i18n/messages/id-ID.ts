@@ -63,6 +63,10 @@ const idID: Messages = {
     home: 'Kembali ke tipe konten',
   },
   nav: {
+    contentTypesSettings: 'Tipe konten',
+    languages: 'Bahasa',
+    settings: 'Pengaturan',
+    ungrouped: 'Lainnya',
     main: 'Navigasi utama',
     contentTypes: 'Tipe konten',
     builder: 'Pembangun',
@@ -71,6 +75,10 @@ const idID: Messages = {
     noContentTypes: 'Belum ada tipe konten',
     loadFailed: 'Tidak dapat memuat tipe konten',
     skipToContent: 'Lewati ke konten',
+  },
+  languages: {
+    title: 'Bahasa',
+    description: 'Pilih bahasa yang tersedia untuk konten Anda.',
   },
   account: {
     menu: 'Menu akun',

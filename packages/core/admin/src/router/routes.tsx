@@ -2,9 +2,15 @@
 
 import dynamic from 'next/dynamic';
 import type { ComponentType } from 'react';
+import { Redirect, useAdminSearch } from '../lib/nav';
 import type { RouteId } from './match';
 
 const page = (load: () => Promise<ComponentType>) => dynamic(load, { ssr: false });
+
+const redirectTo = (to: string): ComponentType =>
+  function RedirectRoute() {
+    return <Redirect to={`${to}${useAdminSearch()}`} />;
+  };
 
 /** One lazily loaded chunk per page. */
 export const pages: Record<RouteId, ComponentType> = {
@@ -13,8 +19,11 @@ export const pages: Record<RouteId, ComponentType> = {
   login: page(() => import('../pages/Login').then((m) => m.Login)),
   home: page(() => import('../pages/Home').then((m) => m.Home)),
   content: page(() => import('../pages/Content').then((m) => m.Content)),
-  builder: page(() => import('../pages/Builder').then((m) => m.Builder)),
-  users: page(() => import('../pages/Users').then((m) => m.Users)),
+  settingsContentTypes: page(() => import('../pages/Builder').then((m) => m.Builder)),
+  settingsUsers: page(() => import('../pages/Users').then((m) => m.Users)),
+  settingsLanguages: page(() => import('../pages/Languages').then((m) => m.Languages)),
+  redirectUsers: redirectTo('/settings/users'),
+  redirectBuilder: redirectTo('/settings/content-types'),
   account: page(() => import('../pages/Account').then((m) => m.Account)),
   notFound: page(() => import('../pages/NotFound').then((m) => m.NotFound)),
 };

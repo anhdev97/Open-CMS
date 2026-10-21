@@ -270,7 +270,7 @@ export function Builder() {
       toast.success(t('builder.savedToast'));
       if (selected !== draft.apiId) {
         savedApiId.current = draft.apiId;
-        navigate(`/builder?type=${draft.apiId}`, { replace: true });
+        navigate(`/settings/content-types?type=${draft.apiId}`, { replace: true });
       }
     });
 
@@ -281,7 +281,7 @@ export function Builder() {
       setResult(r);
       window.dispatchEvent(new Event('opencms:schema-changed'));
       toast.success(t('builder.archivedToast'));
-      navigate('/builder', { replace: true });
+      navigate('/settings/content-types', { replace: true });
     });
 
   const editable = meta?.schemaEditable ?? false;
@@ -293,7 +293,7 @@ export function Builder() {
         title={t('builder.title')}
         description={t('builder.description')}
         actions={
-          <Select value={selected ?? NONE} onValueChange={(v) => navigate(v === NONE ? '/builder' : `/builder?type=${v}`)}>
+          <Select value={selected ?? NONE} onValueChange={(v) => navigate(v === NONE ? '/settings/content-types' : `/settings/content-types?type=${v}`)}>
             <SelectTrigger size="sm" aria-label={t('builder.pickType')}>
               <SelectValue />
             </SelectTrigger>

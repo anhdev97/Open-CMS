@@ -63,6 +63,10 @@ const viVN: Messages = {
     home: 'Quay lại loại nội dung',
   },
   nav: {
+    contentTypesSettings: 'Loại nội dung',
+    languages: 'Ngôn ngữ',
+    settings: 'Cài đặt',
+    ungrouped: 'Khác',
     main: 'Điều hướng chính',
     contentTypes: 'Loại nội dung',
     builder: 'Trình xây dựng',
@@ -71,6 +75,10 @@ const viVN: Messages = {
     noContentTypes: 'Chưa có loại nội dung nào',
     loadFailed: 'Không thể tải các loại nội dung',
     skipToContent: 'Bỏ qua đến nội dung',
+  },
+  languages: {
+    title: 'Ngôn ngữ',
+    description: 'Chọn các ngôn ngữ mà nội dung của bạn có sẵn.',
   },
   account: {
     menu: 'Menu tài khoản',

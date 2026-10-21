@@ -63,6 +63,10 @@ const frFR: Messages = {
     home: 'Retour aux types de contenu',
   },
   nav: {
+    contentTypesSettings: 'Types de contenu',
+    languages: 'Langues',
+    settings: 'Paramètres',
+    ungrouped: 'Autres',
     main: 'Navigation principale',
     contentTypes: 'Types de contenu',
     builder: 'Constructeur',
@@ -71,6 +75,10 @@ const frFR: Messages = {
     noContentTypes: 'Aucun type de contenu pour le moment',
     loadFailed: 'Impossible de charger les types de contenu',
     skipToContent: 'Aller au contenu',
+  },
+  languages: {
+    title: 'Langues',
+    description: 'Choisissez les langues dans lesquelles votre contenu est disponible.',
   },
   account: {
     menu: 'Menu du compte',
