@@ -230,6 +230,9 @@ importers:
       '@opencms/db':
         specifier: workspace:*
         version: link:../db
+      '@opencms/schema':
+        specifier: workspace:*
+        version: link:../schema
       argon2:
         specifier: ^0.45.1
         version: 0.45.1

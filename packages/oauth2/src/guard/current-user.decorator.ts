@@ -1,3 +1,4 @@
+import type { Locale } from '@opencms/schema';
 import { createParamDecorator, SetMetadata, type ExecutionContext } from '@nestjs/common';
 
 /** What the guard attaches as `request.user` (spec §6.5 step 6). */
@@ -6,6 +7,8 @@ export interface RequestUser {
   email: string;
   name: string;
   roles: string[];
+  /** Admin UI language; null = not chosen. */
+  locale: Locale | null;
 }
 
 /** Attached as `request.authSession`: identifies the BFF session of the request (e.g. for revokeAll except it). */

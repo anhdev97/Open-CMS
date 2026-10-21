@@ -11,6 +11,7 @@ export interface AuthUsersTable {
   password_hash: string | null;
   status: Generated<string>; // 'active' | 'disabled'
   last_login_at: NullableTimestamp;
+  locale: string | null;
   created_at: Timestamp;
   updated_at: Timestamp;
 }

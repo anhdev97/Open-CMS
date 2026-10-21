@@ -93,8 +93,12 @@ describe('oauth2_0001_init', () => {
   });
 
   it('down drops all 9 tables', async () => {
-    // down only the oauth2 migration (it is last in key order)
-    const res = await coreMigrator(db).migrateDown();
+    // oauth2 migrations are last in key order: undo 0002 (locale), then 0001
+    const m = coreMigrator(db);
+    const first = await m.migrateDown();
+    expect(first.error).toBeUndefined();
+    expect(first.results?.[0]?.migrationName).toBe('oauth2_0002_user_locale');
+    const res = await m.migrateDown();
     expect(res.error).toBeUndefined();
     expect(res.results?.[0]?.migrationName).toBe('oauth2_0001_init');
     expect(await existing(db)).toEqual([]);

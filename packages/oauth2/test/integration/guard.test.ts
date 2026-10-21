@@ -141,11 +141,11 @@ describe('AuthGuard, me, logout (default TTLs)', () => {
     expect(bogus.status).toBe(401);
   });
 
-  it('after login → me 200 { id, email, name, roles }; @CurrentUser() gets the same user', async () => {
+  it('after login → me 200 { id, email, name, roles, locale }; @CurrentUser() gets the same user', async () => {
     const { sessionCookie } = await loginAs(t, 'admin@x.com', PW);
     const me = await api('/api/auth/me', { cookie: sessionCookie });
     expect(me.status).toBe(200);
-    expect(me.body).toEqual({ id: adminId, email: 'admin@x.com', name: 'Admin', roles: ['super_admin'] });
+    expect(me.body).toEqual({ id: adminId, email: 'admin@x.com', name: 'Admin', roles: ['super_admin'], locale: null });
     const w = await api('/api/test/whoami', { cookie: sessionCookie });
     expect(w.status).toBe(200);
     expect(w.body).toEqual(me.body);

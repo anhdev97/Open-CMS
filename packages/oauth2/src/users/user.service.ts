@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { isLocale, type Locale } from '@opencms/schema';
 import { sql, type Kysely, type Transaction } from 'kysely';
 import { AuditService } from '../audit/audit.service';
 import { AUTH_SETUP_LOCK, GRANT_REVOKER, OAUTH2_DB } from '../constants';
@@ -17,6 +18,7 @@ export type AuthUser = {
   roles: string[];
   passwordHash: string | null;
   lastLoginAt: Date | null;
+  locale: Locale | null;
 };
 
 export interface GrantRevoker {
@@ -72,6 +74,7 @@ export class UserService {
       roles: roles.map((r) => r.key),
       passwordHash: row.password_hash,
       lastLoginAt: row.last_login_at,
+      locale: isLocale(row.locale) ? row.locale : null,
     };
   }
 
@@ -104,6 +107,22 @@ export class UserService {
     };
     const id = trx ? await run(trx) : await this.db.transaction().execute(run);
     return (await this.findById(id, trx))!;
+  }
+
+  /** Sets (or clears with null) the user's admin UI language. */
+  async setLocale(userId: string, locale: Locale | null, ctx: { ip?: string; userAgent?: string } = {}): Promise<void> {
+    await this.db.transaction().execute(async (t) => {
+      const r = await t
+        .updateTable('auth_users')
+        .set({ locale, updated_at: new Date() })
+        .where('id', '=', userId)
+        .executeTakeFirst();
+      if (!r.numUpdatedRows) throw new AuthError('not_found', 404, 'User not found');
+      await this.audit.record(
+        { type: 'user.locale.update', userId, actorId: userId, ip: ctx.ip, userAgent: ctx.userAgent, meta: { locale } },
+        t,
+      );
+    });
   }
 
   async setPassword(userId: string, password: string, trx?: Trx): Promise<void> {

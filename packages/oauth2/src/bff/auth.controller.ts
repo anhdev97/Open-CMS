@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { Controller, Get, HttpCode, Inject, Logger, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Logger, Patch, Post, Req, Res } from '@nestjs/common';
+import { isLocale, type Locale } from '@opencms/schema';
+import { z } from 'zod';
 import type { Request, Response } from 'express';
 import { AuditService } from '../audit/audit.service';
 import type { OAuth2Config } from '../config/schema';
@@ -9,6 +11,7 @@ import type { RequestUser } from '../guard/current-user.decorator';
 import { Public } from '../guard/public.decorator';
 import { SessionAuthenticator, type AuthenticatedRequest } from '../guard/session-auth.service';
 import { deriveKey, open, seal } from '../security/crypto';
+import { parseBody } from '../security/validate';
 import { sanitizeReturnTo } from '../security/return-to';
 import { SetupState } from '../setup/setup-state';
 import type { AuthSettingsProvider } from '../settings/settings.provider';
@@ -26,6 +29,10 @@ interface LoginState {
   verifier: string;
   returnTo: string;
 }
+
+const localeBody = z.object({
+  locale: z.string().nullable().refine((v) => v === null || isLocale(v), { message: 'Unsupported locale' }),
+});
 
 const random = () => randomBytes(32).toString('base64url');
 const loginError = (code: string) => `/admin/login?error=${code}`;
@@ -149,6 +156,18 @@ export class AuthController {
     res.setHeader('Cache-Control', 'no-store');
     if (await this.setup.isRequired()) throw new AuthError('setup_required', 409, 'Setup is required');
     return this.auth.authenticate(req, res);
+  }
+
+  /** Guarded (session + Origin): updates the caller's admin language; answers like `GET /me`. */
+  @Patch('me')
+  async updateMe(@Req() req: AuthenticatedRequest, @Body() body: unknown): Promise<RequestUser> {
+    const { locale } = parseBody(localeBody, body ?? {});
+    await this.users.setLocale(req.user!.id, locale as Locale | null, {
+      ip: req.ip,
+      userAgent: first(req.headers['user-agent']),
+    });
+    const user = (await this.users.findById(req.user!.id))!;
+    return { ...req.user!, locale: user.locale };
   }
 
   @Post('logout')
