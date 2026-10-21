@@ -1,6 +1,6 @@
 import type { Kysely } from 'kysely';
 import type { AuthFileConfig } from '@opencms/oauth2';
-import type { ContentTypeDefinition, OpenCmsConfig, ResolvedConfig } from '@opencms/schema';
+import type { ContentGroupDefinition, ContentTypeDefinition, OpenCmsConfig, ResolvedConfig } from '@opencms/schema';
 import type { LoadNext } from './web';
 
 export const OPENCMS_OPTIONS = Symbol('OPENCMS_OPTIONS');
@@ -49,6 +49,8 @@ export interface OpenCmsModuleOptions {
   config: OpenCmsConfig;
   /** The generated registry: `import { contentTypes } from './generated'`. */
   contentTypes: ContentTypeDefinition[];
+  /** `import contentGroups from './content-groups'`. Default: none. */
+  contentGroups?: ContentGroupDefinition[];
   hooks?: HookRegistration[];
   /**
    * Enables the Content Type Builder API (writes schema files, generates

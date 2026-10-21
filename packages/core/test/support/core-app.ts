@@ -7,7 +7,7 @@ import * as path from 'node:path';
 import { Module, type INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { sql, type Kysely } from 'kysely';
-import type { ContentTypeDefinition } from '@opencms/schema';
+import type { ContentGroupDefinition, ContentTypeDefinition } from '@opencms/schema';
 import { startTestDb } from '../../../oauth2/test/support/db';
 import { OpenCmsModule, type OpenCmsModuleOptions } from '../../src';
 
@@ -17,11 +17,16 @@ export interface CoreTestApp {
   url: string;
   baseUrl: string;
   db: Kysely<any>;
+  /** Writable project root (a temp dir). */
+  root: string;
   close(): Promise<void>;
 }
 
 export interface CoreTestAppOptions {
   contentTypes?: ContentTypeDefinition[];
+  contentGroups?: ContentGroupDefinition[];
+  /** Default true. */
+  schemaEditable?: boolean;
   /** Default `{ enabled: false }`: most tests have no Next app. */
   web?: OpenCmsModuleOptions['web'];
   cors?: OpenCmsModuleOptions['cors'];
@@ -79,7 +84,8 @@ export async function createCoreTestApp(opts: CoreTestAppOptions = {}): Promise<
           env,
           web: opts.web ?? { enabled: false },
           cors: opts.cors,
-          schemaEditable: true,
+          contentGroups: opts.contentGroups,
+          schemaEditable: opts.schemaEditable ?? true,
           autoMigrate: opts.migrate !== false,
         }),
       ],
@@ -89,7 +95,7 @@ export async function createCoreTestApp(opts: CoreTestAppOptions = {}): Promise<
     await app.init();
     await app.listen(port, '127.0.0.1');
     const started = app;
-    return { app: started, url: env.OPENCMS_PUBLIC_URL!.replace(/\/+$/, ''), baseUrl: base, db: testDb.db, close: cleanup };
+    return { app: started, url: env.OPENCMS_PUBLIC_URL!.replace(/\/+$/, ''), baseUrl: base, db: testDb.db, root, close: cleanup };
   } catch (e) {
     await cleanup();
     throw e;

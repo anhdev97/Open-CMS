@@ -25,6 +25,7 @@ import type { ContentTypeDefinition } from '@opencms/schema';
 import { FIELD_KINDS, SchemaValidationError, newId } from '@opencms/schema';
 import { OPENCMS_DB, OPENCMS_OPTIONS, type ResolvedOpenCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
+import { SchemaWriteQueue } from './schema-write-queue';
 
 function toHttp(e: unknown): never {
   if (e instanceof SchemaValidationError || e instanceof DiffError) {
@@ -35,25 +36,17 @@ function toHttp(e: unknown): never {
 
 @Injectable()
 export class SchemaBuilderService {
-  private queue: Promise<unknown> = Promise.resolve();
-
   constructor(
     @Inject(OPENCMS_OPTIONS) private readonly options: ResolvedOpenCmsOptions,
     @Inject(OPENCMS_DB) private readonly db: Kysely<any>,
     @Inject(ContentRegistry) private readonly registry: ContentRegistry,
+    @Inject(SchemaWriteQueue) private readonly queue: SchemaWriteQueue,
   ) {}
 
-  private assertEditable() {
+  assertEditable() {
     if (!this.options.schemaEditable) {
       throw new ForbiddenException('Schema editing is disabled (production mode). Change schema files in git and deploy migrations.');
     }
-  }
-
-  /** Schema changes are serialized: one migration at a time. */
-  private exclusive<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(fn, fn);
-    this.queue = run.catch(() => undefined);
-    return run;
   }
 
   async preview(change: { upsert?: ContentTypeDefinition; removeId?: string }) {
@@ -67,7 +60,7 @@ export class SchemaBuilderService {
 
   apply(change: { upsert?: ContentTypeDefinition; removeId?: string }) {
     this.assertEditable();
-    return this.exclusive(async () => {
+    return this.queue.run(async () => {
       const config = this.options.config;
       const before = captureProjectFiles(config);
       try {
@@ -118,6 +111,7 @@ export class SchemaController {
       schemaEditable: this.options.schemaEditable,
       defaultLocale: this.options.config.defaultLocale,
       locales: this.options.config.locales,
+      groups: this.registry.groups(),
       fieldKinds: FIELD_KINDS,
       newIds: { contentType: newId('ct'), fields: Array.from({ length: 20 }, () => newId('fld')) },
     };

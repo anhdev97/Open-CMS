@@ -86,10 +86,11 @@ export class ApiExceptionFilter implements ExceptionFilter {
       if (typeof body !== 'object' || body === null) {
         return sendError(host, status, codeForStatus(status), exception.message);
       }
-      const { issues, message } = body as { issues?: unknown; message?: unknown };
+      const { issues, message, code } = body as { issues?: unknown; message?: unknown; code?: unknown };
+      const errCode = typeof code === 'string' ? code : codeForStatus(status);
       const list = Array.isArray(issues) ? issues : undefined;
-      if (Array.isArray(message)) return sendError(host, status, codeForStatus(status), message.join('; '), list ?? message);
-      return sendError(host, status, codeForStatus(status), exception.message, list);
+      if (Array.isArray(message)) return sendError(host, status, errCode, message.join('; '), list ?? message);
+      return sendError(host, status, errCode, exception.message, list);
     }
     const clientStatus = clientStatusOf(exception);
     if (clientStatus) return sendError(host, clientStatus, codeForStatus(clientStatus), STATUS_CODES[clientStatus] ?? 'Error');
