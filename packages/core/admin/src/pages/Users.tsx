@@ -4,29 +4,29 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { useAuth } from '@/auth/AuthContext';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { EmptyState } from '@/components/EmptyState';
-import { ErrorAlert } from '@/components/ErrorAlert';
-import { PageHeader } from '@/components/PageHeader';
-import { StatusBadge } from '@/components/StatusBadge';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useAuth } from '../auth/AuthContext';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { EmptyState } from '../components/EmptyState';
+import { ErrorAlert } from '../components/ErrorAlert';
+import { PageHeader } from '../components/PageHeader';
+import { StatusBadge } from '../components/StatusBadge';
+import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
+import { Card, CardContent } from '../components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { t } from '@/i18n/en';
-import { ApiError } from '@/lib/api-error';
+} from '../components/ui/dropdown-menu';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/form';
+import { Input } from '../components/ui/input';
+import { Skeleton } from '../components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { t } from '../i18n/en';
+import { ApiError } from '../lib/api-error';
 import {
   createUser,
   deleteUser,
@@ -38,7 +38,7 @@ import {
   userError,
   userErrorMessage,
   type AdminUser,
-} from '@/lib/users';
+} from '../lib/users';
 
 type Identity = AdminUser['identities'][number];
 

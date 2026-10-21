@@ -1,8 +1,7 @@
 import { BoxesIcon, ChevronsUpDownIcon, DatabaseIcon, LogOutIcon, PaletteIcon, UserIcon, UsersIcon, WrenchIcon } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link, useLocation } from 'react-router';
-import { ThemeToggle } from '@/components/ThemeToggle';
-import { Button } from '@/components/ui/button';
+import { ThemeToggle } from './ThemeToggle';
+import { Button } from './ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,7 +12,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from './ui/dropdown-menu';
 import {
   Sidebar,
   SidebarContent,
@@ -30,8 +29,9 @@ import {
   SidebarRail,
   SidebarTrigger,
   useSidebar,
-} from '@/components/ui/sidebar';
-import { t } from '@/i18n/en';
+} from './ui/sidebar';
+import { t } from '../i18n/en';
+import { Link, useAdminPathname } from '../lib/nav';
 import { api } from '../lib/api';
 
 export interface LayoutUser {
@@ -76,7 +76,7 @@ function useContentTypes() {
 }
 
 function AppSidebar() {
-  const { pathname } = useLocation();
+  const pathname = useAdminPathname();
   const { types, failed } = useContentTypes();
   const { isMobile, setOpenMobile } = useSidebar();
   // On mobile the sidebar is a sheet: close it once a link is followed.

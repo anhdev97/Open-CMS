@@ -9,7 +9,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && vite build --config admin/vite.config.mts",
+    "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p admin/tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -40,6 +40,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.57.0",
+    "next": "^16.4.2",
     "radix-ui": "^1.8.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

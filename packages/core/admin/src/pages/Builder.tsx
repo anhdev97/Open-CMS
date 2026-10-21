@@ -1,20 +1,20 @@
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { ErrorAlert } from '@/components/ErrorAlert';
-import { PageHeader } from '@/components/PageHeader';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { t } from '@/i18n/en';
-import { api } from '@/lib/api';
-import { ApiError } from '@/lib/api-error';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { ErrorAlert } from '../components/ErrorAlert';
+import { PageHeader } from '../components/PageHeader';
+import { Alert, AlertDescription } from '../components/ui/alert';
+import { Button } from '../components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Checkbox } from '../components/ui/checkbox';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { useAdminNavigate, useAdminSearch } from '../lib/nav';
+import { t } from '../i18n/en';
+import { api } from '../lib/api';
+import { ApiError } from '../lib/api-error';
 import {
   newId,
   type ApplyResponse,
@@ -23,7 +23,7 @@ import {
   type FieldKind,
   type Meta,
   type PlanResponse,
-} from '@/lib/types';
+} from '../lib/types';
 
 const NONE = '__none__';
 const ALL_KINDS: FieldKind[] = [
@@ -184,8 +184,8 @@ function FieldOptions({ field, types, fields, onChange }: {
 }
 
 export function Builder() {
-  const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const navigate = useAdminNavigate();
+  const params = new URLSearchParams(useAdminSearch());
   const selected = params.get('type');
   const [meta, setMeta] = useState<Meta | null>(null);
   const [types, setTypes] = useState<ContentTypeDefinition[]>([]);

@@ -2,16 +2,16 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { CircleAlertIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useLocation } from 'react-router';
 import { z } from 'zod';
-import { ErrorAlert } from '@/components/ErrorAlert';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { t } from '@/i18n/en';
+import { ErrorAlert } from '../components/ErrorAlert';
+import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
+import { Button } from '../components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/form';
+import { Input } from '../components/ui/input';
+import { Skeleton } from '../components/ui/skeleton';
+import { useAdminSearch } from '../lib/nav';
+import { t } from '../i18n/en';
 import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
 import { errorMessage, loginPageAction, originMismatchMessage } from '../lib/auth-flow';
@@ -127,7 +127,7 @@ function LoginForm({ uid, interaction }: { uid: string; interaction: Interaction
 }
 
 export function Login() {
-  const { search } = useLocation();
+  const search = useAdminSearch();
   const action = useMemo(() => loginPageAction(search), [search]);
   const uid = action.kind === 'show' ? action.uid : null;
   const errorCode = action.kind === 'restart' ? null : (action.error ?? null);

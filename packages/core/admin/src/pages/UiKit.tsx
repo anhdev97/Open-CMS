@@ -2,21 +2,20 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { InboxIcon, MoonIcon, PlusIcon, SunIcon, Trash2Icon } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
-import { MemoryRouter } from 'react-router';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { AppLayout } from '@/components/AppLayout';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { EmptyState } from '@/components/EmptyState';
-import { ErrorAlert } from '@/components/ErrorAlert';
-import { PageHeader } from '@/components/PageHeader';
-import { StatusBadge, type Status } from '@/components/StatusBadge';
-import { ThemeToggle } from '@/components/ThemeToggle';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
+import { AppLayout } from '../components/AppLayout';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { EmptyState } from '../components/EmptyState';
+import { ErrorAlert } from '../components/ErrorAlert';
+import { PageHeader } from '../components/PageHeader';
+import { StatusBadge, type Status } from '../components/StatusBadge';
+import { ThemeToggle } from '../components/ThemeToggle';
+import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
+import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Checkbox } from '../components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -25,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
+} from '../components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,22 +32,22 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Switch } from '@/components/ui/switch';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Textarea } from '@/components/ui/textarea';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { t } from '@/i18n/en';
-import { ApiError } from '@/lib/api-error';
-import { setTheme } from '@/lib/theme';
+} from '../components/ui/dropdown-menu';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/form';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '../components/ui/sheet';
+import { Separator } from '../components/ui/separator';
+import { Skeleton } from '../components/ui/skeleton';
+import { Switch } from '../components/ui/switch';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Textarea } from '../components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip';
+import { t } from '../i18n/en';
+import { ApiError } from '../lib/api-error';
+import { setTheme } from '../lib/theme';
 
 const STATUSES: Status[] = ['draft', 'published', 'changed', 'active', 'disabled'];
 
@@ -387,11 +386,9 @@ export function UiKit() {
         <p className="text-sm text-muted-foreground">{t('uiKit.layoutNote')}</p>
         {/* transform-gpu makes this box the containing block of the sidebar's fixed positioning */}
         <div className="h-128 transform-gpu overflow-auto rounded-lg border">
-          <MemoryRouter>
-            <AppLayout user={{ name: 'Ada Lovelace', email: 'ada@example.com' }}>
-              <PageHeader title={t('ui.sampleTitle')} description={t('ui.sampleDescription')} />
-            </AppLayout>
-          </MemoryRouter>
+          <AppLayout user={{ name: 'Ada Lovelace', email: 'ada@example.com' }}>
+            <PageHeader title={t('ui.sampleTitle')} description={t('ui.sampleDescription')} />
+          </AppLayout>
         </div>
       </section>
     </main>
