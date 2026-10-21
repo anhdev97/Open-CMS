@@ -73,7 +73,6 @@ export class GroupsController {
 @Controller('api/admin/permissions')
 export class PermissionsController {
   @Get()
-  @RequirePermission('settings.groups')
   list(): { data: readonly Permission[] } {
     return { data: [...PERMISSIONS] };
   }

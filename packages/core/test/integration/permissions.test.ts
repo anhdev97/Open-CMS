@@ -140,8 +140,7 @@ describe('permission mapping (spec B §4.2) and the review flag', () => {
       ['/api/admin/content-types/note', { method: 'DELETE' }],
       ['/api/admin/content-types/plan', { method: 'POST', body: '{}' }],
       ['/api/admin/content-groups'],
-      ['/api/admin/assets'],
-      ['/api/admin/taxonomies'],
+      ['/api/admin/taxonomies', { method: 'POST', body: '{}' }],
     ];
     for (const [p, init] of rows) {
       for (const who of [contenter, reviewer, nobody]) {
@@ -157,6 +156,28 @@ describe('permission mapping (spec B §4.2) and the review flag', () => {
     for (const who of [contenter, reviewer, nobody]) {
       expect((await who('/api/admin/content-types')).status).toBe(200);
       expect((await who('/api/admin/content-types/note')).status).toBe(200);
+    }
+  });
+
+  it('assets and taxonomy terms follow content permissions (R10)', async () => {
+    const asset = JSON.stringify({ filename: 'a.png', url: 'https://x.example/a.png' });
+    expect((await admin('/api/admin/taxonomies', { method: 'POST', body: JSON.stringify({ slug: 'tags', name: 'Tags' }) })).status).toBe(201);
+    for (const who of [contenter, reviewer]) {
+      expect((await who('/api/admin/assets')).status).toBe(200);
+      expect((await who('/api/admin/taxonomies')).status).toBe(200);
+      expect((await who('/api/admin/taxonomies/tags/terms')).status).toBe(200);
+    }
+    expect((await contenter('/api/admin/assets', { method: 'POST', body: asset })).status).toBe(201);
+    expect((await contenter('/api/admin/taxonomies/tags/terms', { method: 'POST', body: JSON.stringify({ slug: 't', name: { 'en-US': 'T' } }) })).status).toBe(201);
+    for (const [p, init, perm] of [
+      ['/api/admin/assets', undefined, 'content.read'],
+      ['/api/admin/taxonomies/tags/terms', undefined, 'content.read'],
+      ['/api/admin/assets', { method: 'POST', body: asset }, 'content.update'],
+      ['/api/admin/taxonomies/tags/terms', { method: 'POST', body: '{}' }, 'content.update'],
+    ] as const) {
+      const r = await nobody(p, init as RequestInit | undefined);
+      expect(r.status, p).toBe(403);
+      expect(r.body).toEqual(forbidden(perm));
     }
   });
 
