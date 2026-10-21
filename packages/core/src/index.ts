@@ -8,3 +8,4 @@ export * from './schema-builder';
 export * from './schema-write-queue';
 export * from './content-groups';
 export * from './system.controller';
+export * from './locales';

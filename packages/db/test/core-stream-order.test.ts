@@ -29,15 +29,15 @@ describe('core migration stream with contributed sources', () => {
     await admin.end();
   });
 
-  it('applies a later built-in 0002_* after oauth2_0001_init has already run', async () => {
+  it('applies a later built-in 0003_* after oauth2_0001_init has already run', async () => {
     registerCoreMigrations({ oauth2_0001_init: noop });
     const first = await migrateUp(db, NO_PROJECT_MIGRATIONS);
-    expect(first.map((r) => r.name)).toEqual(['0001_system_tables', 'oauth2_0001_init']);
+    expect(first.map((r) => r.name)).toEqual(['0001_system_tables', '0002_region_locales', 'oauth2_0001_init']);
 
     let ran = false;
-    registerCoreMigrations({ '0002_future_core': { async up() { ran = true; }, async down() {} } });
+    registerCoreMigrations({ '0003_future_core': { async up() { ran = true; }, async down() {} } });
     const second = await migrateUp(db, NO_PROJECT_MIGRATIONS);
-    expect(second.map((r) => [r.name, r.status])).toEqual([['0002_future_core', 'Success']]);
+    expect(second.map((r) => [r.name, r.status])).toEqual([['0003_future_core', 'Success']]);
     expect(ran).toBe(true);
   });
 });

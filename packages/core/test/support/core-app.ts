@@ -33,6 +33,8 @@ export interface CoreTestAppOptions {
   /** false: leave the database empty and without autoMigrate, so startup must refuse. Default true. */
   migrate?: boolean;
   env?: Record<string, string>;
+  locales?: string[];
+  defaultLocale?: string;
 }
 
 async function freePort(): Promise<number> {
@@ -79,7 +81,7 @@ export async function createCoreTestApp(opts: CoreTestAppOptions = {}): Promise<
       imports: [
         OpenCmsModule.forRoot({
           root,
-          config: { database: { url: testDb.url } },
+          config: { database: { url: testDb.url }, ...(opts.locales ? { locales: opts.locales as any } : {}), ...(opts.defaultLocale ? { defaultLocale: opts.defaultLocale as any } : {}) },
           contentTypes: opts.contentTypes ?? [],
           env,
           web: opts.web ?? { enabled: false },

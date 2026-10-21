@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { Kysely } from 'kysely';
-import type { ContentTypeDefinition } from '@opencms/schema';
+import type { ContentTypeDefinition, Locale } from '@opencms/schema';
 import { EntryRepository, type ListQuery, type Status } from './entry.repository';
 import { OPENCMS_DB, OPENCMS_OPTIONS, type HookContext, type ResolvedOpenCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
@@ -33,6 +33,9 @@ export class EntriesService {
   private locale(locale?: string): string {
     const l = locale || this.options.config.defaultLocale;
     if (!/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(l)) throw new BadRequestException(`Invalid locale "${l}"`);
+    if (!this.options.config.locales.includes(l as Locale)) {
+      throw new BadRequestException({ code: 'locale_not_enabled', message: `Locale "${l}" is not enabled` });
+    }
     return l;
   }
 

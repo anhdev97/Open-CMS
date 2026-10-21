@@ -75,6 +75,37 @@ export const coreMigrations: Record<string, Migration> = {
       await db.schema.dropTable(SYSTEM_TABLES.assets).execute();
     },
   },
+  '0002_region_locales': {
+    /**
+     * Short locale codes become region codes in every `*_l10n` table. Rows are keyed by (entry_id, locale):
+     * a row whose renamed key already exists is left as it is and reported.
+     */
+    async up(db) {
+      const renames: [string, string][] = [['en', 'en-US'], ['vi', 'vi-VN'], ['fr', 'fr-FR'], ['id', 'id-ID']];
+      const tables = await sql<{ table_name: string }>`
+        select t.table_name from information_schema.tables t
+        join information_schema.columns c on c.table_schema = t.table_schema and c.table_name = t.table_name and c.column_name = 'locale'
+        where t.table_schema = current_schema() and t.table_type = 'BASE TABLE' and t.table_name like '%\_l10n'
+        order by t.table_name`.execute(db);
+      let changed = 0;
+      for (const { table_name: table } of tables.rows) {
+        for (const [from, to] of renames) {
+          const res = await sql`
+            update ${sql.id(table)} o set locale = ${to}
+            where o.locale = ${from}
+              and not exists (select 1 from ${sql.id(table)} n where n.entry_id = o.entry_id and n.locale = ${to})`.execute(db);
+          changed += Number(res.numAffectedRows ?? 0);
+          const left = await sql<{ n: string }>`select count(*)::text as n from ${sql.id(table)} where locale = ${from}`.execute(db);
+          const n = Number(left.rows[0]?.n ?? 0);
+          if (n > 0) console.warn(`[opencms] 0002_region_locales: ${table}: ${n} "${from}" row(s) kept, "${to}" already exists for the same entry`);
+        }
+      }
+      console.log(`[opencms] 0002_region_locales: renamed ${changed} locale row(s)`);
+    },
+    async down() {
+      // Not reversible: the old short codes are not recorded.
+    },
+  },
 };
 
 /* ----------------------------- project ---------------------------- */

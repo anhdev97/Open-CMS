@@ -12,7 +12,7 @@ const NOT_BUILT = 'Web UI chưa được build. Chạy `pnpm build` rồi khởi
 
 interface Harness {
   loadNext: ReturnType<typeof vi.fn>;
-  app: NextAppLike & { handled: string[]; reqHeaders: Array<string | string[] | undefined>; upgrades: string[] };
+  app: NextAppLike & { handled: string[]; reqHeaders: Array<string | string[] | undefined>; reportOnly: Array<string | string[] | undefined>; upgrades: string[] };
   logger: { log: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> };
 }
 
@@ -20,11 +20,13 @@ function harness(over: Partial<NextAppLike> = {}): Harness {
   const app = {
     handled: [] as string[],
     reqHeaders: [] as Array<string | string[] | undefined>,
+    reportOnly: [] as Array<string | string[] | undefined>,
     upgrades: [] as string[],
     prepare: vi.fn(async () => {}),
     getRequestHandler: () => async (req: http.IncomingMessage, res: http.ServerResponse) => {
       app.handled.push(req.url ?? '');
       app.reqHeaders.push(req.headers['content-security-policy']);
+      app.reportOnly.push(req.headers['content-security-policy-report-only']);
       res.statusCode = 200;
       res.end('next');
     },
@@ -190,6 +192,14 @@ describe('createWebHost', () => {
     await host.prepare();
     await rawGet('/');
     expect(h.app.reqHeaders).toEqual([undefined]);
+  });
+
+  it('drops a client-supplied CSP report-only request header on non-admin paths', async () => {
+    const h = harness();
+    const { host, rawGet } = await serve(h, { dev: true, headers: { 'content-security-policy-report-only': "script-src 'nonce-evil'" } });
+    await host.prepare();
+    await rawGet('/');
+    expect(h.app.reportOnly).toEqual([undefined]);
   });
 
   it('logs and destroys the socket when the upgrade handler rejects', async () => {
