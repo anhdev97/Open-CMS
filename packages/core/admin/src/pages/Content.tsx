@@ -15,7 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Link, useAdminParams } from '../lib/nav';
-import { t } from '../i18n';
+import { localizedText } from '@opencms/schema';
+import { getActiveLocale, t } from '../i18n';
 import { useFormat } from '../i18n/hooks';
 import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
@@ -140,7 +141,7 @@ function ContentView({ apiId }: { apiId: string }) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={def.displayName}
+        title={localizedText(def.displayName, getActiveLocale(), def.apiId)}
         description={def.description}
         actions={
           <>

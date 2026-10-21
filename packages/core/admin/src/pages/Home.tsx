@@ -9,7 +9,8 @@ import { Card, CardContent } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Link } from '../lib/nav';
-import { t } from '../i18n';
+import { localizedText } from '@opencms/schema';
+import { getActiveLocale, t } from '../i18n';
 import { api } from '../lib/api';
 import type { ApiError } from '../lib/api-error';
 import type { ContentTypeDefinition, Meta } from '../lib/types';
@@ -96,7 +97,7 @@ export function Home() {
                   <TableRow key={type.id}>
                     <TableCell className="font-medium">
                       <Button asChild variant="link" className="h-auto p-0 font-medium">
-                        <Link to={`/content/${type.apiId}`}>{type.displayName}</Link>
+                        <Link to={`/content/${type.apiId}`}>{localizedText(type.displayName, getActiveLocale(), type.apiId)}</Link>
                       </Button>
                     </TableCell>
                     <TableCell className="font-mono text-muted-foreground">{type.apiId}</TableCell>
