@@ -1,5 +1,5 @@
-import { Badge } from '@/components/ui/badge';
-import { t } from '@/i18n/en';
+import { Badge } from './ui/badge';
+import { t } from '../i18n/en';
 
 export type Status = 'draft' | 'published' | 'changed' | 'active' | 'disabled';
 

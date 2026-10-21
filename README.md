@@ -20,7 +20,7 @@ schema files ──► validate ──► diff with migrations/_snapshot.json �
 
 | Layer | What | Who owns it |
 |---|---|---|
-| **Core** (`packages/*`) | `@opencms/schema`: DSL, field registry, physical mapping · `@opencms/codegen`: diff engine, migration + code generator · `@opencms/db`: system migrations, migrator · `@opencms/core`: NestJS module (content engine, APIs, builder) and the embedded admin UI (Vite + React, served at `/admin`) · `@opencms/oauth2`: login and user management · `opencms-cli`: the `opencms` command, incl. `opencms init` | this repo, published to npm |
+| **Core** (`packages/*`) | `@opencms/schema`: DSL, field registry, physical mapping · `@opencms/codegen`: diff engine, migration + code generator · `@opencms/db`: system migrations, migrator · `@opencms/core`: NestJS module (content engine, APIs, builder) and the admin UI as Next App Router modules (`@opencms/core/admin`), served at `/admin` by a Next app embedded in the Nest process · `@opencms/oauth2`: login and user management · `opencms-cli`: the `opencms` command, incl. `opencms init` | this repo, published to npm |
 | **Implementation** (`examples/my-store`) | `src/content-types/**/*.schema.ts` (source of truth), `src/generated/*` (generated, never edit), `src/extensions/*` (your hooks, never overwritten), `migrations/*` | your project |
 
 ## Quick start
@@ -49,11 +49,33 @@ cd examples/my-store
 cp .env.example .env                      # then set OPENCMS_SECRET, e.g. (32 random bytes):
                                           #   node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 pnpm opencms migrate:up                   # core system tables + project tables
-pnpm dev                                  # http://localhost:4000/admin
-OPENCMS_ADMIN_DEV=1 pnpm dev              # admin UI with Vite HMR (edit packages/core/admin/src)
+pnpm dev                                  # http://localhost:4000/admin (website at /)
+
+# editing the admin UI (packages/core/admin/src): in a second terminal
+pnpm --filter @opencms/core dev:admin     # tsc -w into packages/core/dist/admin; Next dev hot-reloads it
 ```
 
-`pnpm build` in `packages/core` bundles the admin into `dist/admin`; without it `/admin` answers 503.
+`dev:admin` does not copy `theme.css`, so on a fresh checkout run `pnpm --filter @opencms/core build` once
+before it.
+
+### Architecture
+
+One Next.js app lives in your project (`app/(admin)` for the admin, `app/(site)` for your website) and runs
+inside the same NestJS process: Nest answers `/api/**` and `/oauth2/**`, and hands every other path to Next.
+The admin is shipped by `@opencms/core` as modules your `app/` re-exports; `/admin/**` gets a per-request CSP
+nonce and `X-Robots-Tag: noindex`, `/` gets no CSP. Turn the Next side off with
+`OpenCmsModule.forRoot({ web: { enabled: false } })` (API-only).
+
+### Production
+
+```bash
+pnpm build                                # tsc (Nest) + next build
+NODE_ENV=production OPENCMS_PUBLIC_URL=https://cms.example.com pnpm start
+```
+
+`NODE_ENV=production` and `OPENCMS_PUBLIC_URL` are required, and `build` must run before `start`; without a
+build, web routes answer 503. `.next/cache` lives on local disk, so run a single instance (several instances
+need a shared `cacheHandler`).
 See [`packages/core/README.md`](packages/core/README.md) for the module options.
 
 ## Defining a content type
@@ -125,7 +147,7 @@ The API **refuses to start** while any migration is pending (unless `autoMigrate
 
 ## Admin UI (Content Type Builder)
 
-The admin is part of `@opencms/core` (no separate app to run or deploy) and requires a signed-in user
+The admin is part of `@opencms/core` and runs inside your project's Next app (no separate app to deploy) and requires a signed-in user
 (see [`@opencms/oauth2`](packages/oauth2/README.md)). With `schemaEditable: true` (the default outside production) the builder calls
 `POST /api/admin/content-types`, which:
 
@@ -158,7 +180,8 @@ answers `{ "error": { "code", "message", "issues"? } }`. Browsers on other origi
 
 See [`CHANGELOG.md`](CHANGELOG.md). In short: `adminToken` / `OPENCMS_ADMIN_TOKEN` are gone (sign in
 with a user instead), `/api/admin` no longer sends CORS headers, `/api/**` errors use a new body, and
-`OPENCMS_INTERNAL_URL` is removed.
+`OPENCMS_INTERNAL_URL` is removed. The admin moved from a bundled SPA to Next App Router modules and the old
+admin options are replaced by the `web` option; existing projects need the migration steps in the changelog.
 
 ## Extensions
 

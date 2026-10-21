@@ -4,7 +4,6 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import ts from 'typescript';
 import { runInit } from '../src/init';
-import { FIND_ROOT_SNIPPET } from '../src/init/templates';
 import { dbNameFor, packageNameFor } from '../src/init/names';
 
 let tmp: string;
@@ -49,14 +48,22 @@ describe('runInit', () => {
       fs.readdirSync(d, { withFileTypes: true }).forEach((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : all.push(path.relative(dir, path.join(d, e.name)))));
     walk(dir);
     const expected = [
+      'app/(admin)/admin/[[...slug]]/page.tsx',
+      'app/(admin)/layout.tsx',
+      'app/(site)/layout.tsx',
+      'app/(site)/page.tsx',
+      'app/globals.css',
       '.env',
       '.env.example',
       '.gitignore',
       'README.md',
       'docker-compose.yml',
       'migrations/_snapshot.json',
+      'next-env.d.ts',
+      'next.config.ts',
       'opencms.config.ts',
       'package.json',
+      'postcss.config.mjs',
       'src/app.module.ts',
       'src/content-types/.gitkeep',
       'src/extensions/index.ts',
@@ -66,8 +73,11 @@ describe('runInit', () => {
       'src/generated/types.ts',
       'src/generated/validators.ts',
       'src/main.ts',
+      'src/root.ts',
       'tsconfig.json',
+      'tsconfig.server.json',
     ];
+    expected.sort();
     expect(all.sort()).toEqual(expected);
     expect(r.files).toEqual(expected);
   });
@@ -113,19 +123,53 @@ describe('runInit', () => {
     expect(pkg.devDependencies['opencms-cli']).toBe('^1.2.3');
     expect(pkg.devDependencies['@types/node']).toBe('^22.0.0');
     expect(read(dir, 'README.md')).toContain('Install with dev dependencies');
+    expect(pkg.dependencies).toMatchObject({ next: '^16.4.2', react: '^19.3.1', 'react-dom': '^19.3.1', 'cross-env': '^10.1.0' });
+    expect(pkg.devDependencies).toMatchObject({
+      tailwindcss: '^4.3.3',
+      '@tailwindcss/postcss': '^4.3.3',
+      postcss: '^8.5.30',
+      '@types/react': '^19.3.0',
+      '@types/react-dom': '^19.3.0',
+    });
     expect(pkg.scripts).toEqual({
-      dev: 'opencms migrate:up && tsx src/main.ts',
-      build: 'tsc -p tsconfig.json',
-      start: 'opencms migrate:up && node dist/src/main.js',
+      dev: 'opencms migrate:up && tsx --tsconfig tsconfig.server.json src/main.ts',
+      build: 'tsc -p tsconfig.server.json && next build',
+      start: 'cross-env NODE_ENV=production opencms migrate:up && cross-env NODE_ENV=production node dist/src/main.js',
       opencms: 'opencms',
     });
+    const readme = read(dir, 'README.md');
+    expect(readme).toContain('web: { enabled: false }');
+    expect(readme).toContain('.next/cache');
+  });
+
+  it('scaffolds the Next app and the two tsconfigs', async () => {
+    const dir = path.join(tmp, 'My Shop');
+    await runInit(dir, base);
+    const server = JSON.parse(read(dir, 'tsconfig.server.json'));
+    expect(server.compilerOptions.experimentalDecorators).toBe(true);
+    expect(server.include).toEqual(['src', 'opencms.config.ts']);
+    const next = JSON.parse(read(dir, 'tsconfig.json'));
+    expect(next.compilerOptions.jsx).toBe('react-jsx');
+    expect(next.compilerOptions.moduleResolution).toBe('bundler');
+    expect(next.compilerOptions.plugins).toEqual([{ name: 'next' }]);
+    expect(read(dir, '.gitignore')).toContain('.next/');
+    expect(read(dir, 'app/(admin)/layout.tsx')).toContain("from '@opencms/core/admin/layout'");
+    expect(read(dir, 'app/(admin)/admin/[[...slug]]/page.tsx')).toContain("from '@opencms/core/admin'");
+    expect(read(dir, 'app/(site)/layout.tsx')).toContain("title: 'my-shop'");
+    expect(read(dir, 'app/(site)/page.tsx')).toContain('data-opencms-site');
+    expect(read(dir, 'app/(site)/page.tsx')).toContain('>my-shop</h1>');
+    expect(read(dir, 'app/globals.css')).toContain('@opencms/core/admin/theme.css');
+    expect(read(dir, 'postcss.config.mjs')).toContain('@tailwindcss/postcss');
+    const cfg = read(dir, 'next.config.ts');
+    expect(cfg).not.toContain('turbopack');
+    expect(cfg).not.toContain('outputFileTracingRoot');
   });
 
   it('links internal packages and core-owned dependencies with --link', async () => {
     const repo = path.join(tmp, 'repo');
     const core = path.join(repo, 'packages', 'core', 'node_modules');
     const store = path.join(tmp, 'store');
-    for (const n of ['@nestjs/common', '@nestjs/core', '@nestjs/platform-express', 'reflect-metadata', 'rxjs', 'kysely']) {
+    for (const n of ['@nestjs/common', '@nestjs/core', '@nestjs/platform-express', 'reflect-metadata', 'rxjs', 'kysely', 'next', 'react', 'react-dom']) {
       fs.mkdirSync(path.join(store, n), { recursive: true });
       fs.mkdirSync(path.dirname(path.join(core, n)), { recursive: true });
       fs.symlinkSync(path.join(store, n), path.join(core, n));
@@ -139,6 +183,12 @@ describe('runInit', () => {
     expect(pkg.devDependencies['@types/node']).toBe('^22.0.0');
     expect(pkg.dependencies['@nestjs/core']).toBe(`link:${fs.realpathSync(path.join(store, '@nestjs/core'))}`);
     expect(pkg.dependencies.rxjs).toBe(`link:${fs.realpathSync(path.join(store, 'rxjs'))}`);
+    for (const n of ['next', 'react', 'react-dom']) {
+      expect(pkg.dependencies[n]).toBe(`link:${fs.realpathSync(path.join(store, n))}`);
+    }
+    const cfg = read(dir, 'next.config.ts');
+    expect(cfg).toContain(`turbopack: { root: ${JSON.stringify(tmp)} }`);
+    expect(cfg).toContain(`outputFileTracingRoot: ${JSON.stringify(tmp)}`);
   });
 
   it('falls back to ranges for core-owned deps when the link path is not a checkout', async () => {
@@ -190,7 +240,10 @@ describe('runInit', () => {
     expect(main).toContain('enableShutdownHooks');
     expect(main).toContain('process.env.PORT ?? 4000');
     expect(main).toContain('OpenCMS ready at');
+    expect(main).toContain('Admin: ');
+    expect(main).toContain('process.exit(1)');
     expect(main).not.toContain('enableCors');
+    expect(read(dir, 'src/app.module.ts')).toContain('web: { dir: projectRoot }');
   });
 
   it('refuses a path that is an existing file', async () => {
@@ -203,14 +256,15 @@ describe('runInit', () => {
     const dir = path.join(tmp, 'app');
     await runInit(dir, base);
     for (const f of ['src/main.ts', 'src/app.module.ts']) {
-      expect(read(dir, f)).toContain(FIND_ROOT_SNIPPET);
+      expect(read(dir, f)).toContain("import { findProjectRoot } from './root';");
       expect(read(dir, f)).not.toContain("path.resolve(__dirname, '..')");
     }
-    const js = ts.transpileModule(`${FIND_ROOT_SNIPPET}\nmodule.exports = findProjectRoot;`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-    const findRoot = new Function('fs', 'path', 'process', 'module', `${js}; return module.exports;`)(fs, path, process, { exports: {} }) as (d: string) => string;
+    const js = ts.transpileModule(read(dir, 'src/root.ts'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+    const mod = { exports: {} as { findProjectRoot: (d: string) => string } };
+    new Function('require', 'module', 'exports', 'process', js)(require, mod, mod.exports, process);
     const real = fs.realpathSync(dir);
     fs.mkdirSync(path.join(dir, 'dist', 'src'), { recursive: true });
-    expect(findRoot(path.join(real, 'src'))).toBe(real);
-    expect(findRoot(path.join(real, 'dist', 'src'))).toBe(real);
+    expect(mod.exports.findProjectRoot(path.join(real, 'src'))).toBe(real);
+    expect(mod.exports.findProjectRoot(path.join(real, 'dist', 'src'))).toBe(real);
   });
 });

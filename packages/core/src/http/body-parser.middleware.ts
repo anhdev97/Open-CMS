@@ -1,4 +1,5 @@
 import { Injectable, type NestMiddleware } from '@nestjs/common';
+import { isBackendPath } from '../web/paths';
 import express, { type NextFunction, type Request, type Response } from 'express';
 
 const json = express.json({ limit: '1mb' });
@@ -23,14 +24,15 @@ function failed(req: Request, next: NextFunction, err: unknown): void {
 }
 
 /**
- * Core's body parser for everything except oidc-provider's `/oauth2/**` endpoints: oidc-provider reads its own request bodies and
+ * Core's body parser for the backend (`/api/**`, `/oauth2/interaction/**`), not for the web app's paths or oidc-provider's `/oauth2/**` endpoints: oidc-provider reads its own request bodies and
  * warns when a parser got there first. Hosts create the app with `bodyParser: false`. A body already set
  * by a host parser is left alone. Parser failures go to `next(err)` so the API exception filter shapes them.
  */
 @Injectable()
 export class JsonBodyParserMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction): void {
-    if (req.body !== undefined || isProviderPath(req.path)) return next();
+    // The Next app reads its own request bodies (Server Actions, route handlers).
+    if (req.body !== undefined || !isBackendPath(req.path) || isProviderPath(req.path)) return next();
     json(req, res, (err?: unknown) => {
       if (err) return failed(req, next, err);
       urlencoded(req, res, (err2?: unknown) => (err2 ? failed(req, next, err2) : next()));

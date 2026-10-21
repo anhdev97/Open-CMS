@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Smoke test for `opencms init` (spec §8): scaffold a project linked to this repo, install, migrate,
-// boot it and walk the admin setup/login/logout chain over HTTP. Exit code 0 = pass, 1 = fail.
+// boot it and build it, run it in production and walk the site/admin checks and the setup/login/logout chain over HTTP. Exit code 0 = pass, 1 = fail.
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
@@ -136,22 +136,27 @@ async function main() {
   ok('dependencies installed');
 
   // Registry-install approximation: with symlinks preserved, @types/node must come from the project's own devDependencies.
-  run('node', [join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.json', '--noEmit', '--preserveSymlinks'], { cwd: app });
-  ok('generated project type-checks (tsc --noEmit --preserveSymlinks)');
+  run('node', [join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.server.json', '--noEmit', '--preserveSymlinks'], { cwd: app });
+  ok('generated project type-checks (tsc -p tsconfig.server.json --noEmit --preserveSymlinks)');
 
   const env = { ...process.env, PORT: String(port) };
   delete env.NODE_ENV;
   delete env.OPENCMS_PUBLIC_URL;
   delete env.DATABASE_URL;
+  // the project's `build` script: Nest (tsc) then Next
+  run('node', [join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.server.json'], { cwd: app, env });
+  run('node', [join(app, 'node_modules/next/dist/bin/next'), 'build'], { cwd: app, env });
+  ok('project build (tsc -p tsconfig.server.json + next build)');
   run('node', [join(app, 'node_modules/opencms-cli/bin/opencms.js'), 'migrate:up'], { cwd: app, env });
   ok('opencms migrate:up');
 
-  server = spawn('node', [join(app, 'node_modules/tsx/dist/cli.mjs'), 'src/main.ts'], { cwd: app, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const publicUrl = `http://localhost:${port}`;
+  const prodEnv = { ...env, NODE_ENV: 'production', OPENCMS_PUBLIC_URL: publicUrl };
+  server = spawn('node', ['dist/src/main.js'], { cwd: app, env: prodEnv, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
   for (const s of [server.stdout, server.stderr]) s.on('data', (d) => (serverLog += d));
   let exitedEarly = false;
   server.once('exit', () => (exitedEarly = true));
 
-  const publicUrl = `http://localhost:${port}`;
   const deadline = Date.now() + 60_000;
   for (;;) {
     if (exitedEarly) throw new Error('server exited during startup');
@@ -178,16 +183,41 @@ async function main() {
     return new URL(res.headers.get('location'), publicUrl);
   };
 
-  // 2. admin shell + setup_required
-  const adminRes = await send('/admin/');
+  // 2. website, admin shell (CSP nonce, noindex), static assets, setup_required
+  const siteRes = await send('/');
+  const siteHtml = await siteRes.text();
+  assert(siteRes.status === 200, `GET / -> ${siteRes.status}`);
+  assert((siteRes.headers.get('content-type') ?? '').startsWith('text/html'), 'GET / is not text/html');
+  assert(siteHtml.includes('data-opencms-site'), 'GET / lacks data-opencms-site');
+  assert(!siteRes.headers.has('content-security-policy'), 'GET / must not carry a Content-Security-Policy');
+
+  const slashRes = await send('/admin/');
+  assert(slashRes.status === 308, `GET /admin/ -> ${slashRes.status} (expected 308)`);
+  assert((slashRes.headers.get('location') ?? '').endsWith('/admin'), `GET /admin/ location: ${slashRes.headers.get('location')}`);
+
+  const adminRes = await send('/admin');
   const html = await adminRes.text();
-  assert(adminRes.status === 200, `GET /admin/ -> ${adminRes.status}`);
-  assert((adminRes.headers.get('content-type') ?? '').startsWith('text/html'), 'GET /admin/ is not text/html');
-  assert(html.includes('<div id="root">'), 'GET /admin/ lacks <div id="root">');
+  assert(adminRes.status === 200, `GET /admin -> ${adminRes.status}`);
+  assert((adminRes.headers.get('content-type') ?? '').startsWith('text/html'), 'GET /admin is not text/html');
+  const csp = adminRes.headers.get('content-security-policy') ?? '';
+  const nonce = /'nonce-([^']+)'/.exec(csp)?.[1];
+  assert(nonce, `GET /admin CSP has no nonce: ${csp}`);
+  const scripts = html.match(/<script\b[^>]*>/g) ?? [];
+  assert(scripts.length > 0, 'GET /admin has no <script>');
+  for (const tag of scripts) assert(tag.includes(`nonce="${nonce}"`), `script without the CSP nonce: ${tag}`);
+  assert((adminRes.headers.get('x-robots-tag') ?? '').includes('noindex'), 'GET /admin lacks X-Robots-Tag: noindex');
+  assert(html.includes('data-opencms-admin'), 'GET /admin lacks data-opencms-admin');
+
+  const asset = /\/_next\/static\/[^"'\s)\\]+/.exec(html)?.[0];
+  assert(asset, 'GET /admin references no /_next/static/ URL');
+  const assetRes = await send(asset);
+  await assetRes.arrayBuffer();
+  assert(assetRes.status === 200, `GET ${asset} -> ${assetRes.status}`);
+  assert((assetRes.headers.get('cache-control') ?? '').includes('immutable'), `GET ${asset} cache-control: ${assetRes.headers.get('cache-control')}`);
   const me0 = await send('/api/auth/me');
   const me0Body = await me0.json();
   assert(me0.status === 409 && me0Body.error?.code === 'setup_required', `GET /api/auth/me before setup -> ${me0.status} ${JSON.stringify(me0Body)}`);
-  ok('GET /admin/ is the SPA shell; GET /api/auth/me -> 409 setup_required');
+  ok('/ site, /admin/ -> 308, /admin nonce+noindex, static immutable; GET /api/auth/me -> 409 setup_required');
 
   // 3. first super_admin
   const setup = await post('/api/auth/setup', { email, name: 'Smoke Admin', password: pw });

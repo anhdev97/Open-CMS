@@ -1,10 +1,10 @@
 # OpenCMS admin design system
 
-The admin SPA is built from shadcn components (`src/components/ui/`) and a few OpenCMS components (`src/components/`), styled with Tailwind v4 and the tokens in `src/styles/globals.css`. Open `/admin/_ui` (start the host app with `OPENCMS_ADMIN_DEV=1`) to see every component and variant in light and dark.
+The admin is a set of Next App Router modules (`@opencms/core/admin`, `/admin/layout`, `/admin/theme.css`) built from shadcn components (`src/components/ui/`) and a few OpenCMS components (`src/components/`), styled with Tailwind v4 and the tokens in `src/styles/theme.css`. Open `/admin/_ui` (served only when the host runs in dev mode) to see every component and variant in light and dark.
 
 ## Tokens
 
-All colours are CSS variables in `src/styles/globals.css`, mapped to Tailwind utilities (`bg-primary`, `text-muted-foreground`, `border-border`, ...). `--radius` is `0.5rem`; the radius steps follow shadcn (`sm = radius - 4px`, `md = radius - 2px`, `lg = radius`, `xl = radius + 4px`). Shadows are Tailwind defaults: cards use `shadow-xs`, dialogs `shadow-lg`.
+All colours are CSS variables in `src/styles/theme.css`, mapped to Tailwind utilities (`bg-primary`, `text-muted-foreground`, `border-border`, ...). `--radius` is `0.5rem`; the radius steps follow shadcn (`sm = radius - 4px`, `md = radius - 2px`, `lg = radius`, `xl = radius + 4px`). Shadows are Tailwind defaults: cards use `shadow-xs`, dialogs `shadow-lg`.
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
@@ -41,7 +41,7 @@ All colours are CSS variables in `src/styles/globals.css`, mapped to Tailwind ut
 
 ## Dark mode
 
-The default follows `prefers-color-scheme`. `ThemeToggle` stores the choice in `localStorage['opencms-theme']` (read and written inside try/catch) and sets the `.dark` class on `<html>`. A small inline script in `index.html` sets the class before first paint so the page never flashes. Use `src/lib/theme.ts` (`getTheme`, `setTheme`, `applyTheme`) rather than touching the class directly.
+The default follows `prefers-color-scheme`. `ThemeToggle` stores the choice in `localStorage['opencms-theme']` (read and written inside try/catch) and sets the `.dark` class on `<html>`. A small inline script in `src/layout.tsx` (nonce taken from the CSP header) sets the class before first paint so the page never flashes. Use `src/lib/theme.ts` (`getTheme`, `setTheme`, `applyTheme`) rather than touching the class directly.
 
 ## Adding a component
 
@@ -56,12 +56,16 @@ Commit the generated file unchanged, then show it on the `/_ui` page (`src/pages
 ## Rules
 
 - Pages are composed only from `components/ui` and `components/*`.
-- No hex or `rgb()` colours in TSX or CSS outside `globals.css`. Use utilities mapped from the tokens (`bg-primary`, `text-muted-foreground`, ...).
+- No hex or `rgb()` colours in TSX or CSS outside `theme.css`. Use utilities mapped from the tokens (`bg-primary`, `text-muted-foreground`, ...).
 - No arbitrary Tailwind values (`[13px]`) unless a comment next to them says why.
 - Icons come only from `lucide-react`.
 - Every interactive element works with the keyboard and shows a visible focus ring (`focus-visible:`, never plain `focus:`, with `ring-offset-background`).
 - UI text is English and lives only in `src/i18n/en.ts`, read through `t()`.
-- Modules imported by root vitest tests (`lib/api.ts` once the API client is added, `lib/api-error.ts`, `lib/format-issue.ts`, `i18n/en.ts`, ...) use relative imports only, never the `@/` alias.
+- Modules imported by root vitest tests (`lib/api.ts` once the API client is added, `lib/api-error.ts`, `lib/format-issue.ts`, `i18n/en.ts`, ...) use relative imports only; the `@/` alias no longer exists because `tsc` does not rewrite it on emit.
+
+## Dev workflow
+
+Run `pnpm --filter @opencms/core dev:admin` (`tsc -w`, emits to `dist/admin`) next to the example host app (`examples/my-store`), whose Next dev server bundles the admin from `dist/admin`. Edit `src/`, `tsc` re-emits, Next hot-reloads. `pnpm --filter @opencms/core build` produces the full output including `theme.css`; `dev:admin` does not copy `theme.css`, so on a fresh checkout run that build once before `dev:admin`.
 
 ## Note for plugins
 

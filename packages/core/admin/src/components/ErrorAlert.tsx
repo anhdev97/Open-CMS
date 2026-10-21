@@ -1,7 +1,7 @@
 import { CircleAlertIcon } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import type { ApiError } from '@/lib/api-error';
-import { formatIssue } from '@/lib/format-issue';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import type { ApiError } from '../lib/api-error';
+import { formatIssue } from '../lib/format-issue';
 
 /** Shows an API (or plain) error: its message, plus every issue as `path: message`. Renders nothing for `null`. */
 export function ErrorAlert({ error }: { error: ApiError | Error | null }) {

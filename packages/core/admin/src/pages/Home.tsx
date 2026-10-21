@@ -1,18 +1,18 @@
 import { BoxesIcon, PlusIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
-import { EmptyState } from '@/components/EmptyState';
-import { ErrorAlert } from '@/components/ErrorAlert';
-import { PageHeader } from '@/components/PageHeader';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { t } from '@/i18n/en';
-import { api } from '@/lib/api';
-import type { ApiError } from '@/lib/api-error';
-import type { ContentTypeDefinition, Meta } from '@/lib/types';
+import { EmptyState } from '../components/EmptyState';
+import { ErrorAlert } from '../components/ErrorAlert';
+import { PageHeader } from '../components/PageHeader';
+import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
+import { Card, CardContent } from '../components/ui/card';
+import { Skeleton } from '../components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { Link } from '../lib/nav';
+import { t } from '../i18n/en';
+import { api } from '../lib/api';
+import type { ApiError } from '../lib/api-error';
+import type { ContentTypeDefinition, Meta } from '../lib/types';
 
 export function Home() {
   const [types, setTypes] = useState<ContentTypeDefinition[] | null>(null);

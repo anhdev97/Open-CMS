@@ -1,15 +1,15 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router';
 import { z } from 'zod';
-import { ErrorAlert } from '@/components/ErrorAlert';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { t } from '@/i18n/en';
+import { ErrorAlert } from '../components/ErrorAlert';
+import { Button } from '../components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/form';
+import { Input } from '../components/ui/input';
+import { Skeleton } from '../components/ui/skeleton';
+import { useAdminNavigate } from '../lib/nav';
+import { t } from '../i18n/en';
 import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
 import { originMismatchMessage, PASSWORD_MAX, PASSWORD_MIN, setupFieldErrors, validateSetup } from '../lib/auth-flow';
@@ -25,7 +25,7 @@ const schema = z
 type Values = z.infer<typeof schema>;
 
 export function Setup() {
-  const navigate = useNavigate();
+  const navigate = useAdminNavigate();
   const [ready, setReady] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [loadError, setLoadError] = useState<Error | null>(null);

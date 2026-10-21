@@ -27,7 +27,9 @@ await app.listen(Number(process.env.PORT ?? 4000));
 
 **`bodyParser: false` is required.** `@opencms/core` registers the JSON and urlencoded parsers itself and
 leaves `/oauth2` (the OIDC provider) alone; Nest's built-in parser would consume the provider's request
-bodies and the login flow breaks.
+bodies and the login flow breaks. The parsers only run for backend paths (`/api`, `/oauth2/interaction`):
+host-added controllers must live under `/api`, or the host applies its own body parser to its own paths,
+otherwise `req.body` is `undefined`.
 
 Fixed paths, none configurable: UI `/admin`, API `/api`, auth `/oauth2`, delivery API `/api/content`.
 
@@ -39,7 +41,7 @@ Fixed paths, none configurable: UI `/admin`, API `/api`, auth `/oauth2`, deliver
 | `schemaEditable` | `NODE_ENV !== 'production'` | Content Type Builder writes schema files and migrations |
 | `autoMigrate` | `false` | apply pending migrations at startup instead of refusing to start |
 | `auth` | `{}` | non-secret auth settings (`@opencms/oauth2`: TTLs, password policy, rate limit, OIDC IdP) |
-| `admin.enabled` | `true` | serve the admin UI at `/admin`; `false` leaves `/admin` unregistered (404). The auth flow still redirects to `/admin/login` (and `/admin/setup`), so with `false` the host must serve its own UI there |
+| `web` | `{ enabled: true, dir: process.cwd(), dev: NODE_ENV !== 'production' }` | serve the project's Next app (admin at `/admin`, website at `/`) from Nest. `enabled: false` is API-only and never loads `next`; `/admin` is then 404, and the auth flow still redirects to `/admin/login`, so the host must serve its own UI there |
 | `cors.origins` | none | exact origins (no wildcard) allowed to read `/api/content/**` cross-origin |
 | `env` | `process.env` | environment for the auth module (tests) |
 
@@ -57,14 +59,23 @@ The browser must reach the admin at the public URL (`OPENCMS_PUBLIC_URL`, defaul
 | `OPENCMS_SECRET` | required, at least 32 bytes (`opencms init` generates one) |
 | `OPENCMS_PUBLIC_URL` | optional in dev (default `http://localhost:${PORT ?? 4000}`), required when `NODE_ENV=production` |
 | `OPENCMS_ADMIN_EMAIL`, `OPENCMS_ADMIN_PASSWORD` | seed the first super_admin without the setup page |
-| `OPENCMS_ADMIN_DEV` | `1` serves the admin through Vite (HMR) instead of `dist/admin`; for working on the UI inside this monorepo |
 
-## Admin build
+## Admin and website (Next inside Nest)
 
-`pnpm build` runs `tsc` and then `vite build`, which writes the admin to `dist/admin` (served with immutable
-caching for `/admin/assets/*`, `index.html` as the SPA fallback). If `dist/admin` is missing the server logs
-one warning and `/admin` answers 503 until the package is built. Frontend libraries are `devDependencies`:
-they are bundled, not installed by consumers.
+The project runs one Next app (`app/(admin)` + `app/(site)`) inside the Nest process. Nest handles `/api/**`
+and `/oauth2/**`; everything else goes to Next, loaded from the project (`next`, `react`, `react-dom` are
+optional peer dependencies, not needed with `web.enabled: false`). The admin ships as `@opencms/core/admin`,
+`@opencms/core/admin/layout` and `@opencms/core/admin/theme.css` (ESM in `dist/admin`, bundled by the
+project's Next). `/admin/**` is served with a CSP using a per-request nonce plus `X-Robots-Tag: noindex`;
+`/` gets no CSP.
+
+Production needs `NODE_ENV=production`, `OPENCMS_PUBLIC_URL` and a built `.next` (`pnpm build` in the project,
+before `pnpm start`). Without a build, web routes answer 503 (`Web UI chưa được build. Chạy \`pnpm build\` rồi khởi động lại.`).
+`.next/cache` is on local disk, so run a single instance.
+
+Working on the admin inside this monorepo: `pnpm --filter @opencms/core dev:admin` (`tsc -w`) next to
+`pnpm --filter my-store dev`. `dev:admin` does not copy `theme.css`; run `pnpm --filter @opencms/core build`
+once on a fresh checkout first.
 
 ## Breaking changes
 
@@ -73,5 +84,6 @@ they are bundled, not installed by consumers.
 - Errors under `/api/**` are `{ "error": { "code", "message", "issues"? } }`.
 - `OPENCMS_INTERNAL_URL` is removed (the BFF calls `http://127.0.0.1:${PORT ?? 4000}`).
 - The Nest app must be created with `bodyParser: false`.
+- The admin is now Next modules and the old admin options and dev variable are replaced by `web` (migration steps in the changelog).
 
 See the root `CHANGELOG.md`.

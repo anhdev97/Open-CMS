@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Outlet, useNavigate } from 'react-router';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
-import { AppLayout } from '@/components/AppLayout';
-import { ErrorAlert } from '@/components/ErrorAlert';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { t } from '@/i18n/en';
+import { AppLayout } from '../components/AppLayout';
+import { ErrorAlert } from '../components/ErrorAlert';
+import { Button } from '../components/ui/button';
+import { Skeleton } from '../components/ui/skeleton';
+import { t } from '../i18n/en';
 import { api } from '../lib/api';
+import { useAdminNavigate } from '../lib/nav';
 import { ApiError } from '../lib/api-error';
 import { loginUrl } from '../lib/auth-flow';
 import { AuthContext, type AuthContextValue, type AuthUser } from './AuthContext';
@@ -14,8 +14,8 @@ import { AuthContext, type AuthContextValue, type AuthUser } from './AuthContext
 type State = { status: 'loading' } | { status: 'ready'; user: AuthUser } | { status: 'error'; error: Error };
 
 /** Wraps every route except `/setup` and `/login` (spec §5.2): checks the session, then renders the layout. */
-export function AuthGate() {
-  const navigate = useNavigate();
+export function AuthGate({ children }: { children: ReactNode }) {
+  const navigate = useAdminNavigate();
   const [state, setState] = useState<State>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
 
@@ -27,7 +27,7 @@ export function AuthGate() {
       (error: unknown) => {
         if (!live) return;
         if (error instanceof ApiError && error.status === 409 && error.code === 'setup_required') {
-          void navigate('/setup', { replace: true });
+          navigate('/setup', { replace: true });
         } else if (error instanceof ApiError && error.status === 401) {
           window.location.assign(loginUrl(window.location));
         } else {
@@ -86,7 +86,7 @@ export function AuthGate() {
   return (
     <AuthContext.Provider value={value}>
       <AppLayout user={value.user} onLogout={() => void value.logout()}>
-        <Outlet />
+        {children}
       </AppLayout>
     </AuthContext.Provider>
   );

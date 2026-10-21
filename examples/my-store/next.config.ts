@@ -1,0 +1,13 @@
+import * as path from 'node:path';
+import type { NextConfig } from 'next';
+
+// In the monorepo @opencms/core is a workspace symlink outside this directory; Turbopack and output
+// tracing only follow files under their root, so both point at the repo root.
+const monorepoRoot = path.resolve(__dirname, '../..');
+
+const nextConfig: NextConfig = {
+  turbopack: { root: monorepoRoot },
+  outputFileTracingRoot: monorepoRoot,
+};
+
+export default nextConfig;

@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { t } from '@/i18n/en';
-import { api } from '@/lib/api';
-import type { FieldDefinition } from '@/lib/types';
+import { Checkbox } from './ui/checkbox';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Textarea } from './ui/textarea';
+import { t } from '../i18n/en';
+import { api } from '../lib/api';
+import type { FieldDefinition } from '../lib/types';
 
 type Option = { value: string; label: string };
 const optionCache = new Map<string, Promise<Option[]>>();

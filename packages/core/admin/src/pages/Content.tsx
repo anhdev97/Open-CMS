@@ -1,30 +1,30 @@
 import { FileTextIcon, PlusIcon } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { EmptyState } from '@/components/EmptyState';
-import { ErrorAlert } from '@/components/ErrorAlert';
-import { FieldInput } from '@/components/FieldInput';
-import { PageHeader } from '@/components/PageHeader';
-import { StatusBadge } from '@/components/StatusBadge';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { t } from '@/i18n/en';
-import { api } from '@/lib/api';
-import { ApiError } from '@/lib/api-error';
-import type { ContentTypeDefinition, Meta } from '@/lib/types';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { EmptyState } from '../components/EmptyState';
+import { ErrorAlert } from '../components/ErrorAlert';
+import { FieldInput } from '../components/FieldInput';
+import { PageHeader } from '../components/PageHeader';
+import { StatusBadge } from '../components/StatusBadge';
+import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Label } from '../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Skeleton } from '../components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { Link, useAdminParams } from '../lib/nav';
+import { t } from '../i18n/en';
+import { api } from '../lib/api';
+import { ApiError } from '../lib/api-error';
+import type { ContentTypeDefinition, Meta } from '../lib/types';
 
 type Entry = Record<string, any> & { documentId: string; status: string; publishedAt: string | null; hasUnpublishedChanges?: boolean };
 
 /** Keyed by `apiId` so moving between content types starts from clean state. */
 export function Content() {
-  const { apiId = '' } = useParams<{ apiId: string }>();
+  const { apiId = '' } = useAdminParams();
   return <ContentView key={apiId} apiId={apiId} />;
 }
 
