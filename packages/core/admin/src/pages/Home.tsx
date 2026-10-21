@@ -8,14 +8,24 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { useAuth } from '../auth/AuthContext';
+import { can, useCan } from '../lib/can';
 import { Link } from '../lib/nav';
+import { Forbidden } from './Forbidden';
 import { localizedText } from '@opencms/schema';
 import { getActiveLocale, t } from '../i18n';
 import { api } from '../lib/api';
 import type { ApiError } from '../lib/api-error';
 import type { ContentTypeDefinition, Meta } from '../lib/types';
 
+/** Without `content.read` (including zero permissions) there is nothing to list: show only the forbidden notice. */
 export function Home() {
+  const { user } = useAuth();
+  return can(user.permissions, 'content.read') ? <HomeContent /> : <Forbidden />;
+}
+
+function HomeContent() {
+  const canEditTypes = useCan()('settings.content-types');
   const [types, setTypes] = useState<ContentTypeDefinition[] | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [error, setError] = useState<ApiError | Error | null>(null);
@@ -36,12 +46,14 @@ export function Home() {
         title={t('home.title')}
         description={t('home.description')}
         actions={
-          <Button asChild>
-            <Link to="/settings/content-types">
-              <PlusIcon aria-hidden="true" />
-              {t('home.newType')}
-            </Link>
-          </Button>
+          canEditTypes && (
+            <Button asChild>
+              <Link to="/settings/content-types">
+                <PlusIcon aria-hidden="true" />
+                {t('home.newType')}
+              </Link>
+            </Button>
+          )
         }
       />
 
@@ -74,9 +86,11 @@ export function Home() {
           title={t('home.emptyTitle')}
           description={t('home.emptyDescription')}
           action={
-            <Button asChild>
-              <Link to="/settings/content-types">{t('home.newType')}</Link>
-            </Button>
+            canEditTypes ? (
+              <Button asChild>
+                <Link to="/settings/content-types">{t('home.newType')}</Link>
+              </Button>
+            ) : undefined
           }
         />
       )}
@@ -114,9 +128,11 @@ export function Home() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button asChild variant="ghost" size="sm">
-                        <Link to={`/settings/content-types?type=${type.apiId}`}>{t('home.editSchema')}</Link>
-                      </Button>
+                      {canEditTypes && (
+                        <Button asChild variant="ghost" size="sm">
+                          <Link to={`/settings/content-types?type=${type.apiId}`}>{t('home.editSchema')}</Link>
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

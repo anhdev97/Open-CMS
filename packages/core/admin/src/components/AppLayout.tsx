@@ -37,6 +37,8 @@ import { api } from '../lib/api';
 import { useLocale } from '../i18n/hooks';
 import { buildSidebarTree, UNGROUPED_KEY, type SidebarTypeInput } from '../lib/sidebar-tree';
 import { settingsItems } from '../navigation';
+import { useAuth } from '../auth/AuthContext';
+import { can, visibleSettingsItems } from '../lib/can';
 import { cn } from '../lib/utils';
 
 const NAV_STORAGE_KEY = 'opencms-nav';
@@ -79,11 +81,12 @@ async function loadGroups(): Promise<ContentGroupDefinition[]> {
   return (await api<{ groups?: ContentGroupDefinition[] }>('/api/admin/meta')).groups ?? [];
 }
 
-function useContentTypes() {
+function useContentTypes(enabled: boolean) {
   const [types, setTypes] = useState<ContentTypeLink[] | null>(null);
   const [groups, setGroups] = useState<ContentGroupDefinition[]>([]);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
+    if (!enabled) return;
     let live = true;
     const load = () => {
       loadGroups().then(
@@ -101,7 +104,7 @@ function useContentTypes() {
       live = false;
       window.removeEventListener('opencms:schema-changed', load);
     };
-  }, []);
+  }, [enabled]);
   return { types, groups, failed };
 }
 
@@ -137,7 +140,10 @@ function NavGroup({
 function AppSidebar() {
   const pathname = useAdminPathname();
   const locale = useLocale();
-  const { types, groups, failed } = useContentTypes();
+  const { user } = useAuth();
+  const canRead = can(user.permissions, 'content.read');
+  const visibleSettings = useMemo(() => visibleSettingsItems(settingsItems, user.permissions), [user.permissions]);
+  const { types, groups, failed } = useContentTypes(canRead);
   const { isMobile, setOpenMobile } = useSidebar();
   const [stored, setStored] = useState<Record<string, boolean>>({});
   useEffect(() => setStored(readOpen()), []);
@@ -151,7 +157,7 @@ function AppSidebar() {
     () => buildSidebarTree((types ?? []) as SidebarTypeInput[], groups, locale),
     [types, groups, locale],
   );
-  const settingsActive = settingsItems.some((i) => isActive(i.to));
+  const settingsActive = visibleSettings.some((i) => isActive(i.to));
   // A group is open when stored open (default open) or when it holds the current page.
   const isOpen = (key: string, holdsCurrent: boolean) => holdsCurrent || (stored[key] ?? true);
   const toggle = (key: string, holdsCurrent: boolean) => {
@@ -191,7 +197,7 @@ function AppSidebar() {
             <SidebarMenu>{link('/', t('nav.home'), <HomeIcon aria-hidden="true" />)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-        {types === null && !failed && (
+        {canRead && types === null && !failed && (
           <SidebarGroup>
             <SidebarMenu>
               {[0, 1, 2].map((i) => (
@@ -202,13 +208,13 @@ function AppSidebar() {
             </SidebarMenu>
           </SidebarGroup>
         )}
-        {failed && (
+        {canRead && failed && (
           <p className="px-4 py-1.5 text-xs text-destructive" role="status">
             {t('nav.loadFailed')}
           </p>
         )}
-        {types?.length === 0 && <p className="px-4 py-1.5 text-xs text-muted-foreground">{t('nav.noContentTypes')}</p>}
-        {tree.map((g) => {
+        {canRead && types?.length === 0 && <p className="px-4 py-1.5 text-xs text-muted-foreground">{t('nav.noContentTypes')}</p>}
+        {canRead && tree.map((g) => {
           const holds = g.items.some((i) => isActive(`/content/${i.apiId}`));
           return (
             <NavGroup
@@ -222,14 +228,16 @@ function AppSidebar() {
             </NavGroup>
           );
         })}
+        {visibleSettings.length > 0 && (
         <NavGroup
           id="settings"
           title={t('nav.settings')}
           open={isOpen(SETTINGS_KEY, settingsActive)}
           onToggle={() => toggle(SETTINGS_KEY, settingsActive)}
         >
-          {settingsItems.map(({ to, label, icon: Icon }) => link(to, t(label), <Icon aria-hidden="true" />))}
+          {visibleSettings.map(({ to, label, icon: Icon }) => link(to, t(label), <Icon aria-hidden="true" />))}
         </NavGroup>
+        )}
       </SidebarContent>
       <SidebarRail />
     </Sidebar>

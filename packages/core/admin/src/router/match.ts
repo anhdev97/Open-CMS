@@ -1,4 +1,4 @@
-export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'content' | 'settingsUsers' | 'settingsContentTypes' | 'settingsLanguages' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
+export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'content' | 'settingsUsers' | 'settingsGroups' | 'settingsContentTypes' | 'settingsLanguages' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
 
 export interface RouteMatch {
   id: RouteId;
@@ -10,6 +10,7 @@ const SIMPLE: Record<string, RouteId> = { builder: 'redirectBuilder', users: 're
 
 const SETTINGS: Record<string, RouteId> = {
   users: 'settingsUsers',
+  groups: 'settingsGroups',
   'content-types': 'settingsContentTypes',
   languages: 'settingsLanguages',
 };

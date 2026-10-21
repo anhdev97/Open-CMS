@@ -21,6 +21,7 @@ export const pages: Record<RouteId, ComponentType> = {
   content: page(() => import('../pages/Content').then((m) => m.Content)),
   settingsContentTypes: page(() => import('../pages/Builder').then((m) => m.Builder)),
   settingsUsers: page(() => import('../pages/Users').then((m) => m.Users)),
+  settingsGroups: page(() => import('../pages/Groups').then((m) => m.Groups)),
   settingsLanguages: page(() => import('../pages/Languages').then((m) => m.Languages)),
   redirectUsers: redirectTo('/settings/users'),
   redirectBuilder: redirectTo('/settings/content-types'),

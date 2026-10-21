@@ -36,6 +36,9 @@ export const listUsers = () => api<{ data: AdminUser[] }>(base).then((r) => r.da
 export const createUser = (input: { email: string; name: string; password?: string; groupIds: string[] }) =>
   api<{ data: AdminUser }>(base, { method: 'POST', json: input }).then((r) => r.data);
 
+export const setUserGroups = (id: string, groupIds: string[]) =>
+  api<{ data: AdminUser }>(`${base}/${id}`, { method: 'PATCH', json: { groupIds } }).then((r) => r.data);
+
 export const setUserStatus = (id: string, status: 'active' | 'disabled') =>
   api<{ data: AdminUser }>(`${base}/${id}`, { method: 'PATCH', json: { status } }).then((r) => r.data);
 

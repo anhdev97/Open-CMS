@@ -19,6 +19,7 @@ import { setAdminLocale } from '../i18n/I18nProvider';
 import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
 import { PASSWORD_MAX, PASSWORD_MIN, validateSetup } from '../lib/auth-flow';
+import { groupName } from '../lib/groups';
 import { getTheme, setTheme, type Theme } from '../lib/theme';
 import { changePassword } from '../lib/users';
 
@@ -229,10 +230,10 @@ export function Account() {
             <dd className="sm:col-span-2">{user.name || t('content.noValue')}</dd>
             <dt className="text-muted-foreground">{t('account.email')}</dt>
             <dd className="sm:col-span-2">{user.email}</dd>
-            <dt className="text-muted-foreground">{t('account.roles')}</dt>
+            <dt className="text-muted-foreground">{t('account.groups')}</dt>
             <dd className="flex flex-wrap gap-1 sm:col-span-2">
               {user.groups.length === 0
-                ? t('account.noRoles')
+                ? t('account.noGroups')
                 : user.groups.map((g) => <Badge key={g.key} variant="secondary">{g.name}</Badge>)}
             </dd>
           </dl>
