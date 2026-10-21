@@ -55,8 +55,15 @@ function HomeContent() {
   const [types, setTypes] = useState<ContentTypeDefinition[] | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [error, setError] = useState<ApiError | Error | null>(null);
+  const [pending, setPending] = useState<{ count: number; byType: Record<string, number> } | null>(null);
+  const canPublish = useCan()('content.publish');
 
   useEffect(() => {
+    if (canPublish) {
+      api<{ count: number; byType: Record<string, number> }>('/api/admin/workflow/pending-count')
+        .then(setPending)
+        .catch(() => setPending(null));
+    }
     api<{ data: ContentTypeDefinition[] }>('/api/admin/content-types')
       .then((r) => setTypes(r.data))
       .catch(setError);
@@ -97,6 +104,25 @@ function HomeContent() {
       )}
 
       <ErrorAlert error={error} />
+
+      {pending && pending.count > 0 && (
+        <Card role="status">
+          <CardContent className="space-y-2">
+            <p className="font-medium">{pending.count === 1 ? t('home.pendingOne') : t('home.pending', { count: pending.count })}</p>
+            <div className="flex flex-wrap gap-2">
+              {types
+                ?.filter((ty) => (pending.byType[ty.apiId] ?? 0) > 0)
+                .map((ty) => (
+                  <Button key={ty.id} asChild variant="outline" size="sm">
+                    <Link to={`/content/${ty.apiId}`}>
+                      {localizedText(ty.displayName, getActiveLocale(), ty.apiId)} · {pending.byType[ty.apiId]}
+                    </Link>
+                  </Button>
+                ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {types === null && !error && (
         <div className="space-y-2" aria-hidden="true">

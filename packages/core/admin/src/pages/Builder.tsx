@@ -7,6 +7,7 @@ import { PageHeader } from '../components/PageHeader';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Switch } from '../components/ui/switch';
 import { Checkbox } from '../components/ui/checkbox';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -309,6 +310,14 @@ export function Builder() {
     });
     setPlan(null);
   };
+  // Only `true` is persisted; turning it off removes the key.
+  const setReview = (on: boolean) => {
+    setDraft((d) => {
+      const { review: _drop, ...rest } = d;
+      return on ? { ...rest, review: true } : rest;
+    });
+    setPlan(null);
+  };
   const groups = meta?.groups ?? [];
   const table = `ct_${draft.apiId.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase() || '…'}`;
 
@@ -399,6 +408,17 @@ export function Builder() {
                   ))}
                 </div>
               </fieldset>
+              <div className="flex items-start gap-3">
+                <Switch id="type-review" checked={!!draft.review} onCheckedChange={setReview} aria-describedby="type-review-hint" />
+                <div className="space-y-0.5">
+                  <Label htmlFor="type-review" className="font-normal">
+                    {t('builder.review')}
+                  </Label>
+                  <p id="type-review-hint" className="text-xs text-muted-foreground">
+                    {t('builder.reviewHint')}
+                  </p>
+                </div>
+              </div>
               <p className="font-mono text-xs text-muted-foreground">
                 {t('builder.idLine', { id: draft.id, table })}
                 {!isNew && original!.apiId !== draft.apiId && ` · ${t('builder.renameWarning')}`}

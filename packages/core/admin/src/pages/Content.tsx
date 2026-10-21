@@ -7,13 +7,18 @@ import { ErrorAlert } from '../components/ErrorAlert';
 import { FieldInput } from '../components/FieldInput';
 import { PageHeader } from '../components/PageHeader';
 import { StatusBadge } from '../components/StatusBadge';
+import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Skeleton } from '../components/ui/skeleton';
+import { Textarea } from '../components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { useAuth } from '../auth/AuthContext';
+import { entryActions, formLocked, type EntryAction, type WorkflowState } from '../lib/entry-actions';
 import { Link, useAdminParams } from '../lib/nav';
 import { localizedText } from '@opencms/schema';
 import { getActiveLocale, t } from '../i18n';
@@ -23,7 +28,24 @@ import { ApiError } from '../lib/api-error';
 import { pickEditorLocale } from '../lib/locales';
 import type { ContentTypeDefinition, Meta } from '../lib/types';
 
-type Entry = Record<string, any> & { documentId: string; status: string; publishedAt: string | null; hasUnpublishedChanges?: boolean };
+type WorkflowInfo = { state: WorkflowState; submittedBy: { id: string; name: string } | null; submittedAt: string | null; note: string | null };
+type Entry = Record<string, any> & {
+  documentId: string;
+  status: string;
+  publishedAt: string | null;
+  hasUnpublishedChanges?: boolean;
+  workflow?: WorkflowInfo | null;
+};
+
+const WORKFLOW_ERRORS = ['in_review_locked', 'invalid_transition', 'forbidden'];
+
+/** Known workflow error codes get the active-locale message; anything else passes through. */
+function workflowError(e: unknown): ApiError | Error {
+  if (e instanceof ApiError && WORKFLOW_ERRORS.includes(e.code)) {
+    return new ApiError(e.status, e.code, t(`content.errors.${e.code}`), e.issues, e.retryAfterSec);
+  }
+  return e instanceof Error ? e : new Error(String(e));
+}
 
 /** Keyed by `apiId` so moving between content types starts from clean state. */
 export function Content() {
@@ -33,6 +55,7 @@ export function Content() {
 
 function ContentView({ apiId }: { apiId: string }) {
   const { formatDateTime } = useFormat();
+  const { user } = useAuth();
   const [def, setDef] = useState<ContentTypeDefinition | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [locale, setLocale] = useState('');
@@ -42,6 +65,9 @@ function ContentView({ apiId }: { apiId: string }) {
   const [form, setForm] = useState<Record<string, any>>({});
   const [error, setError] = useState<ApiError | Error | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [pendingOnly, setPendingOnly] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectNote, setRejectNote] = useState('');
   // Bumped whenever the form is replaced from the server (open, locale switch), so the editor card remounts with
   // the new values; uncontrolled-text inputs such as JSON would otherwise keep showing the previous ones.
   const [formGen, setFormGen] = useState(0);
@@ -65,13 +91,13 @@ function ContentView({ apiId }: { apiId: string }) {
 
   const reload = useCallback(() => {
     if (!locale) return;
-    api<{ data: Entry[]; meta: { total: number } }>(`/api/admin/content/${apiId}?locale=${locale}&limit=50`)
+    api<{ data: Entry[]; meta: { total: number } }>(`/api/admin/content/${apiId}?locale=${locale}&limit=50${pendingOnly ? '&workflow=in_review' : ''}`)
       .then((r) => {
         setEntries(r.data);
         setTotal(r.meta.total);
       })
       .catch(setError);
-  }, [apiId, locale]);
+  }, [apiId, locale, pendingOnly]);
   useEffect(reload, [reload]);
 
   const titleField = def?.fields.find((f) => ['text', 'slug'].includes(f.kind))?.name;
@@ -100,7 +126,7 @@ function ContentView({ apiId }: { apiId: string }) {
       toast.success(ok);
       reload();
     } catch (e) {
-      setError(e instanceof ApiError ? e : e instanceof Error ? e : new Error(String(e)));
+      setError(workflowError(e));
     }
   };
 
@@ -120,6 +146,23 @@ function ContentView({ apiId }: { apiId: string }) {
       await api(`/api/admin/content/${apiId}/${id}/publish`, { method: 'POST' });
       await refreshEditing(id);
     }, t('content.published'));
+  const approve = (id: string) =>
+    act(async () => {
+      await api(`/api/admin/content/${apiId}/${id}/approve`, { method: 'POST' });
+      await refreshEditing(id);
+    }, t('content.approved'));
+  const transition = (id: string, action: 'submit' | 'withdraw', ok: string) =>
+    act(async () => {
+      await api(`/api/admin/content/${apiId}/${id}/${action}`, { method: 'POST' });
+      await refreshEditing(id);
+    }, ok);
+  const reject = (id: string) =>
+    act(async () => {
+      await api(`/api/admin/content/${apiId}/${id}/reject`, { method: 'POST', json: { note: rejectNote.trim() } });
+      setRejecting(false);
+      setRejectNote('');
+      await refreshEditing(id);
+    }, t('content.rejected'));
   const unpublish = (id: string) =>
     act(async () => {
       await api(`/api/admin/content/${apiId}/${id}/unpublish`, { method: 'POST' });
@@ -142,6 +185,24 @@ function ContentView({ apiId }: { apiId: string }) {
     );
   }
 
+  const actionInput = editing && {
+    review: !!def.review,
+    workflow: editing.workflow ?? null,
+    published: !!editing.publishedAt,
+    permissions: user.permissions,
+    userId: user.id,
+  };
+  const isNew = !!editing && !editing.documentId;
+  const actions: EntryAction[] =
+    !editing || !actionInput
+      ? []
+      : isNew
+        ? user.permissions.includes('content.create') ? ['save'] : []
+        : entryActions(actionInput);
+  const locked = !!actionInput && !isNew && formLocked(actionInput);
+  const rejection = editing?.workflow?.state === 'draft' && editing.workflow.note ? editing.workflow : null;
+  const statusOf = (e: Entry) => (e.workflow?.state === 'in_review' && def.review ? 'in_review' : e.publishedAt ? 'published' : 'draft');
+
   const count = total === 1 ? t('content.entryCountOne') : t('content.entryCount', { count: total });
 
   return (
@@ -151,6 +212,17 @@ function ContentView({ apiId }: { apiId: string }) {
         description={def.description}
         actions={
           <>
+            {def.review && user.permissions.includes('content.publish') && (
+              <Select value={pendingOnly ? 'pending' : 'all'} onValueChange={(v) => setPendingOnly(v === 'pending')}>
+                <SelectTrigger size="sm" aria-label={t('content.filter')}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('content.filterAll')}</SelectItem>
+                  <SelectItem value="pending">{t('content.filterPending')}</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             <Select value={locale} onValueChange={setLocale}>
               <SelectTrigger size="sm" aria-label={t('content.locale')}>
                 <SelectValue />
@@ -166,10 +238,12 @@ function ContentView({ apiId }: { apiId: string }) {
             <Button asChild variant="outline" size="sm">
               <Link to={`/settings/content-types?type=${def.apiId}`}>{t('content.editSchema')}</Link>
             </Button>
-            <Button size="sm" onClick={() => openEntry(null)}>
-              <PlusIcon aria-hidden="true" />
-              {t('content.newEntry')}
-            </Button>
+            {user.permissions.includes('content.create') && (
+              <Button size="sm" onClick={() => openEntry(null)}>
+                <PlusIcon aria-hidden="true" />
+                {t('content.newEntry')}
+              </Button>
+            )}
           </>
         }
       />
@@ -196,9 +270,11 @@ function ContentView({ apiId }: { apiId: string }) {
                   title={t('content.emptyTitle')}
                   description={t('content.emptyDescription')}
                   action={
-                    <Button size="sm" onClick={() => openEntry(null)}>
-                      {t('content.newEntry')}
-                    </Button>
+                    user.permissions.includes('content.create') && !pendingOnly ? (
+                      <Button size="sm" onClick={() => openEntry(null)}>
+                        {t('content.newEntry')}
+                      </Button>
+                    ) : undefined
                   }
                 />
               </div>
@@ -223,7 +299,7 @@ function ContentView({ apiId }: { apiId: string }) {
                       <TableCell className="font-mono">{e.locale ?? t('content.noValue')}</TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
-                          <StatusBadge status={e.publishedAt ? 'published' : 'draft'} />
+                          <StatusBadge status={statusOf(e)} />
                           {e.publishedAt && e.hasUnpublishedChanges && <StatusBadge status="changed" />}
                         </div>
                       </TableCell>
@@ -243,38 +319,77 @@ function ContentView({ apiId }: { apiId: string }) {
               <span className="font-mono text-sm text-muted-foreground">{locale}</span>
             </CardHeader>
             <CardContent className="space-y-4">
-              {def.fields.map((f) => {
-                const id = `field-${f.id}`;
-                return (
-                  <div key={f.id} className="space-y-2">
-                    <Label id={`${id}-label`} htmlFor={id}>
-                      {f.label ?? f.name}
-                      {f.required && (
-                        <>
-                          <span aria-hidden="true"> *</span>
-                          <span className="sr-only"> {t('field.required')}</span>
-                        </>
-                      )}
-                      {f.localizable && <Badge variant="outline">{locale}</Badge>}
-                    </Label>
-                    <FieldInput id={id} field={f} value={form[f.name]} onChange={(v) => setForm((s) => ({ ...s, [f.name]: v }))} />
-                  </div>
-                );
-              })}
+              {rejection && (
+                <Alert variant="destructive" role="status">
+                  <AlertTitle>{t('content.rejectedBanner', { name: rejection.submittedBy?.name ?? t('content.noValue') })}</AlertTitle>
+                  <AlertDescription>{rejection.note}</AlertDescription>
+                </Alert>
+              )}
+              {def.review && editing.workflow?.state === 'in_review' && (
+                <Alert role="status">
+                  <AlertTitle>
+                    {t('content.inReviewBanner', {
+                      name: editing.workflow.submittedBy?.name ?? t('content.noValue'),
+                      date: editing.workflow.submittedAt ? formatDateTime(editing.workflow.submittedAt) : t('content.noValue'),
+                    })}
+                  </AlertTitle>
+                  {locked && <AlertDescription>{t('content.lockedHint')}</AlertDescription>}
+                </Alert>
+              )}
+              <fieldset disabled={locked} className="m-0 min-w-0 space-y-4 border-0 p-0">
+                {def.fields.map((f) => {
+                  const id = `field-${f.id}`;
+                  return (
+                    <div key={f.id} className="space-y-2">
+                      <Label id={`${id}-label`} htmlFor={id}>
+                        {f.label ?? f.name}
+                        {f.required && (
+                          <>
+                            <span aria-hidden="true"> *</span>
+                            <span className="sr-only"> {t('field.required')}</span>
+                          </>
+                        )}
+                        {f.localizable && <Badge variant="outline">{locale}</Badge>}
+                      </Label>
+                      <FieldInput id={id} field={f} value={form[f.name]} onChange={(v) => setForm((s) => ({ ...s, [f.name]: v }))} />
+                    </div>
+                  );
+                })}
+              </fieldset>
               <div className="flex flex-wrap items-center gap-2 pt-2">
-                <Button onClick={save}>{t('content.saveDraft')}</Button>
-                {editing.documentId && (
+                {actions.includes('save') && <Button onClick={save}>{t('content.saveDraft')}</Button>}
+                {actions.includes('submit') && (
+                  <Button variant="outline" onClick={() => transition(editing.documentId, 'submit', t('content.submitted'))}>
+                    {t('content.submit')}
+                  </Button>
+                )}
+                {actions.includes('publish') && (
                   <Button variant="outline" onClick={() => publish(editing.documentId)}>
                     {t('content.publish')}
                   </Button>
                 )}
-                {editing.documentId && editing.publishedAt && (
+                {actions.includes('approve') && (
+                  <Button variant="outline" onClick={() => approve(editing.documentId)}>
+                    {t('content.approve')}
+                  </Button>
+                )}
+                {actions.includes('reject') && (
+                  <Button variant="outline" onClick={() => setRejecting(true)}>
+                    {t('content.reject')}
+                  </Button>
+                )}
+                {actions.includes('withdraw') && (
+                  <Button variant="outline" onClick={() => transition(editing.documentId, 'withdraw', t('content.withdrawn'))}>
+                    {t('content.withdraw')}
+                  </Button>
+                )}
+                {actions.includes('unpublish') && (
                   <Button variant="outline" onClick={() => unpublish(editing.documentId)}>
                     {t('content.unpublish')}
                   </Button>
                 )}
                 <span className="grow" />
-                {editing.documentId && (
+                {editing.documentId && user.permissions.includes('content.delete') && (
                   <Button variant="destructive" onClick={() => setConfirmDelete(true)}>
                     {t('content.delete')}
                   </Button>
@@ -284,6 +399,33 @@ function ContentView({ apiId }: { apiId: string }) {
           </Card>
         )}
       </div>
+
+      <Dialog
+        open={rejecting}
+        onOpenChange={(o) => {
+          setRejecting(o);
+          if (!o) setRejectNote('');
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('content.rejectTitle')}</DialogTitle>
+            <DialogDescription>{t('content.rejectDescription')}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="reject-note">{t('content.rejectNote')}</Label>
+            <Textarea id="reject-note" value={rejectNote} maxLength={1000} onChange={(e) => setRejectNote(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejecting(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button disabled={rejectNote.trim() === ''} onClick={() => editing && reject(editing.documentId)}>
+              {t('content.reject')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={confirmDelete}

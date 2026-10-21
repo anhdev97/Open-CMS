@@ -24,6 +24,8 @@ export interface ContentTypeDefinition {
   displayName: string | LocalizedText;
   group?: string;
   description?: string;
+  /** Entries need a reviewer's approval before they are published (only `true` is stored). */
+  review?: boolean;
   fields: FieldDefinition[];
 }
 
