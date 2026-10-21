@@ -6,7 +6,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Body, ConflictException, Controller, ForbiddenException, Get, Inject, Injectable, Put, UnprocessableEntityException } from '@nestjs/common';
 import { sql, type Kysely } from 'kysely';
-import { RequireRole } from '@opencms/oauth2';
+import { RequirePermission } from '@opencms/oauth2';
 import { localesFile, printLocalesFile } from '@opencms/codegen';
 import { SUPPORTED_LOCALES, isLocale, l10nTable, validateLocaleSettings, type Locale } from '@opencms/schema';
 import { OPENCMS_DB, OPENCMS_OPTIONS, type ResolvedOpenCmsOptions } from './options';
@@ -75,7 +75,7 @@ export class LocalesService {
   }
 }
 
-@RequireRole('super_admin')
+@RequirePermission('settings.languages')
 @Controller('api/admin')
 export class LocalesController {
   constructor(@Inject(LocalesService) private readonly service: LocalesService) {}

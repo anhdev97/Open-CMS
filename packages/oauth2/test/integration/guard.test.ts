@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { OidcClient } from '../../src/bff/oidc-client';
 import { SessionStore } from '../../src/bff/session.store';
 import { OAUTH2_CONFIG } from '../../src/constants';
-import { CurrentUser, RequirePermission, RequireRole, type RequestUser } from '../../src/guard/current-user.decorator';
+import { CurrentUser, RequirePermission, type RequestUser } from '../../src/guard/current-user.decorator';
 import { PERMISSIONS } from '../../src/permissions';
 import { adminClientSecret } from '../../src/provider/provider.factory';
 import { sha256 } from '../../src/security/crypto';
@@ -33,19 +33,6 @@ class ProbeController {
     return { ok: true, id: user.id };
   }
 
-  @RequireRole('nonexistent')
-  @Get('needs-role')
-  needsRole(): { ok: true } {
-    return { ok: true };
-  }
-
-  /** Compat shim (removed in Task 14): the legacy key maps to isSuperAdmin. */
-  @RequireRole('super_admin')
-  @Get('needs-super-admin')
-  needsSuperAdmin(): { ok: true } {
-    return { ok: true };
-  }
-
   @RequirePermission('settings.users')
   @Get('needs-users')
   needsUsers(): { ok: true } {
@@ -59,6 +46,22 @@ class ProbeController {
   }
 }
 
+/** Class-level + method-level requirements merge: the method adds to the class (de-duplicated). */
+@RequirePermission('content.read')
+@Controller('api/test-merge')
+class MergedController {
+  @Get('plain')
+  plain(): { ok: true } {
+    return { ok: true };
+  }
+
+  @RequirePermission('content.publish')
+  @Get('publish')
+  publish(): { ok: true } {
+    return { ok: true };
+  }
+}
+
 /** A host-app route outside /api: the guard must leave it alone. */
 @Controller('host')
 class HostController {
@@ -68,7 +71,7 @@ class HostController {
   }
 }
 
-const controllers = [ProbeController, HostController];
+const controllers = [ProbeController, MergedController, HostController];
 
 interface Call {
   status: number;
@@ -182,17 +185,9 @@ describe('AuthGuard, me, logout (default TTLs)', () => {
     expect(w.body).toEqual(me.body);
   });
 
-  it('@RequireRole with a missing role → 403 forbidden', async () => {
-    const { sessionCookie } = await loginAs(t, 'admin@x.com', PW);
-    const r = await api('/api/test/needs-role', { cookie: sessionCookie });
-    expect(r.status).toBe(403);
-    expect(r.body.error.code).toBe('forbidden');
-  });
-
   it('@RequirePermission: super admin passes; contenter gets 403 with the missing permission; permissions recomputed per request', async () => {
     const admin = (await loginAs(t, 'admin@x.com', PW)).sessionCookie;
     expect((await api('/api/test/needs-users', { cookie: admin })).status).toBe(200);
-    expect((await api('/api/test/needs-super-admin', { cookie: admin })).status).toBe(200);
 
     const c = await t.app.get(UserService).create({ email: 'contenter@x.com', name: 'C', password: PW });
     await t.db.deleteFrom('auth_user_groups').where('user_id', '=', c.id).execute();
@@ -211,7 +206,19 @@ describe('AuthGuard, me, logout (default TTLs)', () => {
     expect(r.body).toEqual({ error: { code: 'forbidden', message: 'Missing permission: settings.users' } });
     const rp = await api('/api/test/needs-read-publish', { cookie });
     expect(rp.body).toEqual({ error: { code: 'forbidden', message: 'Missing permission: content.publish' } });
-    expect((await api('/api/test/needs-super-admin', { cookie })).status).toBe(403);
+    // Class + method decorators merge: the class requirement still applies on a method that adds another.
+    expect((await api('/api/test-merge/plain', { cookie })).status).toBe(200);
+    const mp = await api('/api/test-merge/publish', { cookie });
+    expect(mp.status).toBe(403);
+    expect(mp.body.error.message).toBe('Missing permission: content.publish');
+    // Only content.publish, no content.read: the method's own requirement passes but the class's still blocks.
+    await sql`delete from auth_user_groups where user_id = ${c.id}`.execute(t.db);
+    await sql`insert into auth_groups (key, name, roles) values ('publish-only', 'Publish only', ${['content.publish']})`.execute(t.db);
+    await sql`insert into auth_user_groups (user_id, group_id) select ${c.id}, id from auth_groups where key = 'publish-only'`.execute(t.db);
+    const merged = await api('/api/test-merge/publish', { cookie });
+    expect(merged.body).toEqual({ error: { code: 'forbidden', message: 'Missing permission: content.read' } });
+    await sql`delete from auth_user_groups where user_id = ${c.id}`.execute(t.db);
+    await sql`insert into auth_user_groups (user_id, group_id) select ${c.id}, id from auth_groups where key = 'contenter'`.execute(t.db);
 
     // Adding reviewer takes effect on the next request (B10).
     await sql`insert into auth_user_groups (user_id, group_id) select ${c.id}, id from auth_groups where key = 'reviewer'`.execute(t.db);
@@ -245,11 +252,10 @@ describe('AuthGuard, me, logout (default TTLs)', () => {
     const echo = await api('/Api/test/echo', { method: 'POST', origin: 'http://evil.example' });
     expect(echo.status).toBe(403);
     expect(echo.body.error.code).toBe('origin_mismatch');
-    expect((await api('/aPI/TEST/needs-role')).status).toBe(401);
+    expect((await api('/aPI/TEST/needs-users')).status).toBe(401);
     const { sessionCookie } = await loginAs(t, 'admin@x.com', PW);
-    const role = await api('/API/Test/Needs-Role', { cookie: sessionCookie });
-    expect(role.status).toBe(403);
-    expect(role.body.error.code).toBe('forbidden');
+    const ok = await api('/API/Test/Needs-Users', { cookie: sessionCookie });
+    expect(ok.status).toBe(200);
   });
 
   it('disabling the user via UserService → next request 401 and cookie cleared', async () => {

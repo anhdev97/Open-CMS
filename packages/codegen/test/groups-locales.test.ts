@@ -86,3 +86,11 @@ describe('assertValidSchema groups', () => {
     expect(types).not.toContain('[object Object]');
   });
 });
+
+describe('printSchemaFile review', () => {
+  it('prints review only when true, and round-trips', () => {
+    expect(printSchemaFile(def({ review: true }))).toContain('review: true,');
+    expect(printSchemaFile(def({ review: false }))).not.toContain('review');
+    expect(printSchemaFile(def())).not.toContain('review');
+  });
+});

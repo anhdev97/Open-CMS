@@ -4,11 +4,11 @@
  */
 import { BadRequestException, Body, Controller, Get, Inject, Param, Post, Query } from '@nestjs/common';
 import type { Kysely } from 'kysely';
-import { RequireRole } from '@opencms/oauth2';
+import { RequirePermission } from '@opencms/oauth2';
 import { SYSTEM_TABLES } from '@opencms/schema';
 import { OPENCMS_DB } from './options';
 
-@RequireRole('super_admin')
+@RequirePermission('settings.content-types')
 @Controller('api/admin')
 export class SystemController {
   constructor(@Inject(OPENCMS_DB) private readonly db: Kysely<any>) {}

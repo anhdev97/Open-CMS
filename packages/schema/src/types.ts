@@ -87,6 +87,8 @@ export interface ContentTypeDefinition {
   apiId: string;
   displayName: string | LocalizedText;
   description?: string;
+  /** Entries need a reviewer (`content.publish`) to be published. Default false; stored only when true. */
+  review?: boolean;
   fields: FieldDefinition[];
 }
 
@@ -96,6 +98,7 @@ export interface ContentTypeInput {
   apiId: string;
   displayName: string | LocalizedText;
   description?: string;
+  review?: boolean;
   fields: Record<string, FieldSpec>;
 }
 

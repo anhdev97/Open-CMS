@@ -71,6 +71,7 @@ export function defineContentType(input: ContentTypeInput): ContentTypeDefinitio
   };
   if (input.group) def.group = input.group;
   if (input.description) def.description = input.description;
+  if (input.review) def.review = true;
   return def;
 }
 
@@ -86,6 +87,7 @@ export function normalizeDefinition(raw: ContentTypeDefinition): ContentTypeDefi
   };
   if (raw.group) def.group = raw.group;
   if (raw.description) def.description = raw.description;
+  if (raw.review) def.review = true;
   return def;
 }
 

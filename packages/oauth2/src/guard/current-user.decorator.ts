@@ -25,19 +25,13 @@ export interface RequestAuthSession {
 export const REQUIRED_PERMISSIONS_KEY = 'oauth2:requiredPermissions';
 
 /**
- * The handler (or every handler of the class) requires **all** of `perms`; checked by AuthGuard →
- * `403 forbidden` "Missing permission: <perm>" (spec B §4.1).
+ * The handler (or every handler of the class) requires **all** of the listed permissions; checked by AuthGuard →
+ * `403 forbidden` "Missing permission: <perm>" (spec B §4.1). Class-level and method-level requirements are
+ * merged (the method adds to the class, it never replaces it), so a method cannot loosen its controller.
+ * At least one permission is required at compile time; a route that needs only a session has no decorator.
  */
-export const RequirePermission = (...perms: Permission[]): MethodDecorator & ClassDecorator =>
-  SetMetadata(REQUIRED_PERMISSIONS_KEY, perms);
-
-export const REQUIRED_ROLES_KEY = 'oauth2:requiredRoles';
-
-/**
- * @deprecated Compat shim until Task 14 moves core to `@RequirePermission`: `'super_admin'` / `'super-admin'`
- * require `isSuperAdmin`; any other key requires membership of the group with that key.
- */
-export const RequireRole = (role: string): MethodDecorator & ClassDecorator => SetMetadata(REQUIRED_ROLES_KEY, [role]);
+export const RequirePermission = (first: Permission, ...rest: Permission[]): MethodDecorator & ClassDecorator =>
+  SetMetadata(REQUIRED_PERMISSIONS_KEY, [first, ...rest]);
 
 /** `request.user` as set by AuthGuard. Undefined on public routes. */
 export const CurrentUser = createParamDecorator(

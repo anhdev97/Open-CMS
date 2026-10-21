@@ -11,7 +11,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { RequireRole } from '@opencms/oauth2';
+import { CurrentUser, RequirePermission, type RequestUser } from '@opencms/oauth2';
 import { EntriesService, type ListParams } from './entries.service';
 
 /** Accepts both `filter[name]=x` flat keys (Express 5) and nested objects (qs). */
@@ -55,18 +55,22 @@ export class ContentController {
   }
 }
 
-/** Management API: drafts, publishing, versions. */
-@RequireRole('super_admin')
+/**
+ * Management API: drafts, publishing, versions. Permissions are per method (spec B §4.2); publish/unpublish
+ * depend on the type's `review` flag and are checked in EntriesService.
+ */
 @Controller('api/admin/content')
 export class AdminContentController {
   constructor(@Inject(EntriesService) private readonly entries: EntriesService) {}
 
+  @RequirePermission('content.read')
   @Get(':apiId')
   list(@Param('apiId') apiId: string, @Query() query: Record<string, unknown>) {
     const status = query.status === 'published' ? 'published' : 'draft';
     return this.entries.list(apiId, { ...parseListQuery(query), status });
   }
 
+  @RequirePermission('content.read')
   @Get(':apiId/:documentId')
   get(
     @Param('apiId') apiId: string,
@@ -77,11 +81,13 @@ export class AdminContentController {
     return this.entries.get(apiId, documentId, status === 'published' ? 'published' : 'draft', locale);
   }
 
+  @RequirePermission('content.create')
   @Post(':apiId')
   create(@Param('apiId') apiId: string, @Body() body: unknown, @Query('locale') locale?: string) {
     return this.entries.create(apiId, body, locale);
   }
 
+  @RequirePermission('content.update')
   @Patch(':apiId/:documentId')
   update(
     @Param('apiId') apiId: string,
@@ -94,21 +100,23 @@ export class AdminContentController {
 
   @Post(':apiId/:documentId/publish')
   @HttpCode(200)
-  publish(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string) {
-    return this.entries.publish(apiId, documentId);
+  publish(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string, @CurrentUser() user: RequestUser) {
+    return this.entries.publish(apiId, documentId, user);
   }
 
   @Post(':apiId/:documentId/unpublish')
   @HttpCode(200)
-  unpublish(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string) {
-    return this.entries.unpublish(apiId, documentId);
+  unpublish(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string, @CurrentUser() user: RequestUser) {
+    return this.entries.unpublish(apiId, documentId, user);
   }
 
+  @RequirePermission('content.delete')
   @Delete(':apiId/:documentId')
   remove(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string) {
     return this.entries.remove(apiId, documentId);
   }
 
+  @RequirePermission('content.read')
   @Get(':apiId/:documentId/versions')
   versions(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string) {
     return this.entries.versions(apiId, documentId);

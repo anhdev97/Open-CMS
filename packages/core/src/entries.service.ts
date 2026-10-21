@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { Kysely } from 'kysely';
 import type { ContentTypeDefinition, Locale } from '@opencms/schema';
+import { AuthError, type RequestUser } from '@opencms/oauth2';
 import { EntryRepository, type ListQuery, type Status } from './entry.repository';
 import { OPENCMS_DB, OPENCMS_OPTIONS, type HookContext, type ResolvedOpenCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
@@ -110,8 +111,22 @@ export class EntriesService {
     return this.get(apiId, documentId, 'draft', loc);
   }
 
-  async publish(apiId: string, documentId: string) {
+  /**
+   * Spec B §4.2: a type with `review: true` is published only with `content.publish`; without review,
+   * `content.update` or `content.publish` suffices. Lives here (not in a decorator) because it depends on the type.
+   */
+  private assertCanPublish(def: ContentTypeDefinition, user: Pick<RequestUser, 'permissions'>): void {
+    const has = (p: string) => user.permissions.includes(p as never);
+    if (def.review) {
+      if (!has('content.publish')) throw new AuthError('forbidden', 403, 'Missing permission: content.publish');
+    } else if (!has('content.update') && !has('content.publish')) {
+      throw new AuthError('forbidden', 403, 'Missing permission: content.update');
+    }
+  }
+
+  async publish(apiId: string, documentId: string, user: Pick<RequestUser, 'permissions'>) {
     const def = this.registry.get(apiId);
+    this.assertCanPublish(def, user);
     const doc = await this.repo.exportDocument(def, documentId, 'draft');
     if (!doc) throw new NotFoundException(`${apiId} ${documentId} not found`);
 
@@ -134,8 +149,9 @@ export class EntriesService {
     return this.get(apiId, documentId, 'published');
   }
 
-  async unpublish(apiId: string, documentId: string) {
+  async unpublish(apiId: string, documentId: string, user: Pick<RequestUser, 'permissions'>) {
     const def = this.registry.get(apiId);
+    this.assertCanPublish(def, user);
     const removed = await this.repo.unpublish(def, documentId);
     if (!removed) throw new NotFoundException(`${apiId} ${documentId} is not published`);
     for (const h of this.registry.hooksFor(apiId)) await h.afterUnpublish?.(documentId, this.ctx(apiId, this.options.config.defaultLocale));

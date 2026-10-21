@@ -60,7 +60,7 @@ The browser must reach the admin at the public URL (`OPENCMS_PUBLIC_URL`, defaul
 | `PORT` | default `4000` |
 | `OPENCMS_SECRET` | required, at least 32 bytes (`opencms init` generates one) |
 | `OPENCMS_PUBLIC_URL` | optional in dev (default `http://localhost:${PORT ?? 4000}`), required when `NODE_ENV=production` |
-| `OPENCMS_ADMIN_EMAIL`, `OPENCMS_ADMIN_PASSWORD` | seed the first super_admin without the setup page |
+| `OPENCMS_ADMIN_EMAIL`, `OPENCMS_ADMIN_PASSWORD` | seed the first Super Admin without the setup page |
 
 ## Admin and website (Next inside Nest)
 
@@ -125,7 +125,7 @@ enabled with 400 `locale_not_enabled`.
 
 ## Breaking changes
 
-- `adminToken` and `OPENCMS_ADMIN_TOKEN` are removed; `/api/admin/*` needs a signed-in `super_admin` session.
+- `adminToken` and `OPENCMS_ADMIN_TOKEN` are removed; `/api/admin/*` needs a signed-in session whose groups grant the matching permission (`content.*`, `settings.*`); `GET /api/admin/meta` and content type reads need only a session.
 - CORS on the admin API is removed; use `cors.origins` for `/api/content/**`.
 - Errors under `/api/**` are `{ "error": { "code", "message", "issues"? } }`.
 - `OPENCMS_INTERNAL_URL` is removed (the BFF calls `http://127.0.0.1:${PORT ?? 4000}`).

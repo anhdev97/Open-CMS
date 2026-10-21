@@ -30,7 +30,6 @@ const patchSchema = z
 const actorOf = (u: RequestUser) => ({ id: u.id, isSuperAdmin: u.isSuperAdmin, permissions: u.permissions });
 
 /** Permission groups (spec B §4.3); every write needs `settings.groups`. */
-@RequirePermission('settings.groups')
 @Controller('api/admin/groups')
 export class GroupsController {
   constructor(@Inject(GroupsService) private readonly groups: GroupsService) {}
@@ -40,7 +39,6 @@ export class GroupsController {
    * user manager must be able to list them.
    */
   @Get()
-  @RequirePermission()
   async list(@CurrentUser() user: RequestUser): Promise<{ data: GroupView[] }> {
     if (!user.permissions.includes('settings.groups') && !user.permissions.includes('settings.users')) {
       throw new AuthError('forbidden', 403, 'Missing permission: settings.groups');

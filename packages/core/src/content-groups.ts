@@ -5,7 +5,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Body, ConflictException, Controller, Get, Inject, Injectable, Put, UnprocessableEntityException } from '@nestjs/common';
-import { RequireRole } from '@opencms/oauth2';
+import { RequirePermission } from '@opencms/oauth2';
 import { contentGroupsFile, printContentGroupsFile } from '@opencms/codegen';
 import { validateContentGroups, type ContentGroupDefinition } from '@opencms/schema';
 import { OPENCMS_OPTIONS, type ResolvedOpenCmsOptions } from './options';
@@ -53,7 +53,7 @@ export class ContentGroupsService {
   }
 }
 
-@RequireRole('super_admin')
+@RequirePermission('settings.content-types')
 @Controller('api/admin')
 export class ContentGroupsController {
   constructor(@Inject(ContentGroupsService) private readonly service: ContentGroupsService) {}

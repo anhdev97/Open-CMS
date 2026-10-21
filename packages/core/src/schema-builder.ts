@@ -18,7 +18,7 @@ import {
   Post,
 } from '@nestjs/common';
 import type { Kysely } from 'kysely';
-import { RequireRole } from '@opencms/oauth2';
+import { RequirePermission } from '@opencms/oauth2';
 import { captureProjectFiles, createMigration, DiffError, previewChange, restoreProjectFiles, writeSchemaChange } from '@opencms/codegen';
 import { migrateUp } from '@opencms/db';
 import type { ContentTypeDefinition } from '@opencms/schema';
@@ -96,7 +96,6 @@ export class SchemaBuilderService {
   }
 }
 
-@RequireRole('super_admin')
 @Controller('api/admin')
 export class SchemaController {
   constructor(
@@ -105,6 +104,7 @@ export class SchemaController {
     @Inject(OPENCMS_OPTIONS) private readonly options: ResolvedOpenCmsOptions,
   ) {}
 
+  /** Read by every admin page (nav, locales, groups): a session is enough, no permission. */
   @Get('meta')
   meta() {
     return {
@@ -117,6 +117,7 @@ export class SchemaController {
     };
   }
 
+  /** Definitions drive the entry forms of every role, so reads need a session only; changes need settings.content-types. */
   @Get('content-types')
   list() {
     return { data: this.registry.all() };
@@ -128,12 +129,14 @@ export class SchemaController {
   }
 
   /** Dry run: what migration would this definition produce? */
+  @RequirePermission('settings.content-types')
   @Post('content-types/plan')
   @HttpCode(200)
   plan(@Body() body: { definition?: ContentTypeDefinition; removeId?: string }) {
     return this.builder.preview({ upsert: body.definition, removeId: body.removeId });
   }
 
+  @RequirePermission('settings.content-types')
   @Post('content-types')
   @HttpCode(200)
   save(@Body() body: { definition: ContentTypeDefinition }) {
@@ -141,6 +144,7 @@ export class SchemaController {
     return this.builder.apply({ upsert: body.definition });
   }
 
+  @RequirePermission('settings.content-types')
   @Delete('content-types/:id')
   remove(@Param('id') id: string) {
     return this.builder.apply({ removeId: id });

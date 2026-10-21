@@ -47,6 +47,8 @@ export function collectSchemaIssues(defs: ContentTypeDefinition[], groups?: Cont
       issues.push(`Content type "${def.apiId}" uses unknown group "${def.group}"`);
     }
 
+    if (def.review !== undefined && typeof def.review !== 'boolean') issues.push(`${where}: review must be a boolean`);
+
     const fieldIds = new Set<string>();
     const fieldNames = new Set<string>();
     const columns = new Map<string, string>(); // "main:col" -> field

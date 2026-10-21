@@ -46,6 +46,7 @@ export function printSchemaFile(def: ContentTypeDefinition): string {
     `  displayName: ${lit(def.displayName, '')},`,
     ...(def.group ? [`  group: ${lit(def.group, '')},`] : []),
     ...(def.description ? [`  description: ${lit(def.description, '')},`] : []),
+    ...(def.review ? ['  review: true,'] : []),
     '  fields: {',
     ...def.fields.map(printField),
     '  },',
