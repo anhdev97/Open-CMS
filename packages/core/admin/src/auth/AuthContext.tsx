@@ -1,3 +1,4 @@
+import type { Locale } from '@opencms/schema';
 import { createContext, useContext } from 'react';
 
 export interface AuthUser {
@@ -5,6 +6,8 @@ export interface AuthUser {
   email: string;
   name: string | null;
   roles: string[];
+  /** Saved admin language; `null` means follow the browser. */
+  locale?: Locale | null;
 }
 
 export interface AuthContextValue {

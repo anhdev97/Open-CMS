@@ -2,6 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { LanguageMenu } from '../components/LanguageMenu';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
@@ -73,7 +74,8 @@ export function Setup() {
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center p-4">
+    <main className="relative flex min-h-svh items-center justify-center p-4">
+      <LanguageMenu className="absolute top-4 right-4" />
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="text-xl">{t('setup.title')}</CardTitle>

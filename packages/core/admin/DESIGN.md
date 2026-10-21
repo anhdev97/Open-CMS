@@ -70,3 +70,7 @@ Run `pnpm --filter @opencms/core dev:admin` (`tsc -w`, emits to `dist/admin`) ne
 ## Note for plugins
 
 The components are built on Tailwind, so a plugin UI that wants to look the same must also use Tailwind with these same tokens. The components are not exported for plugins yet.
+
+## Translations
+
+The `vi-VN`, `fr-FR` and `id-ID` bundles in `src/i18n/messages/` are machine-made. They need review by native speakers before a public release. `messages.test.ts` guards structure only (same keys, same `{placeholders}`, not copies of English), not wording quality.

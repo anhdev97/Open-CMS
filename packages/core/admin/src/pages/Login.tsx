@@ -3,6 +3,7 @@ import { CircleAlertIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { LanguageMenu } from '../components/LanguageMenu';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
 import { Button } from '../components/ui/button';
@@ -157,7 +158,8 @@ export function Login() {
   if (action.kind === 'restart') return null;
 
   return (
-    <main className="flex min-h-svh items-center justify-center p-4">
+    <main className="relative flex min-h-svh items-center justify-center p-4">
+      <LanguageMenu className="absolute top-4 right-4" />
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="text-xl">{t('login.title')}</CardTitle>

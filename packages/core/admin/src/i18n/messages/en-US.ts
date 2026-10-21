@@ -94,6 +94,10 @@ export const enUS = {
     currentRequired: 'Enter your current password',
     appearance: 'Appearance',
     themeLabel: 'Theme',
+    language: 'Interface language',
+    languageHint: 'Applies on every device you sign in from.',
+    browserDefault: 'Browser default',
+    languageSaved: 'Language saved',
   },
   theme: {
     light: 'Light',

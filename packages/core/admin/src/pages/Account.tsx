@@ -1,3 +1,4 @@
+import { SUPPORTED_LOCALES, isLocale, matchLocale, type Locale } from '@opencms/schema';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -13,6 +14,8 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { t } from '../i18n';
+import { setAdminLocale } from '../i18n/I18nProvider';
+import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
 import { PASSWORD_MAX, PASSWORD_MIN, validateSetup } from '../lib/auth-flow';
 import { getTheme, setTheme, type Theme } from '../lib/theme';
@@ -147,6 +150,67 @@ function ThemeCard() {
   );
 }
 
+const BROWSER_DEFAULT = '';
+
+function LanguageCard({ initial }: { initial: Locale | null }) {
+  const [value, setValue] = useState<string>(initial ?? BROWSER_DEFAULT);
+  const [error, setError] = useState<Error | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function onChange(next: string) {
+    const locale: Locale | null = isLocale(next) ? next : null;
+    setError(null);
+    setSaving(true);
+    try {
+      await api('/api/auth/me', { method: 'PATCH', json: { locale } });
+      setValue(next);
+      if (locale) {
+        await setAdminLocale(locale);
+      } else {
+        // Browser default: setAdminLocale persists its argument, so drop the stored choice afterwards;
+        // otherwise it would keep winning over the browser on the next visit.
+        await setAdminLocale(matchLocale(navigator.languages ?? [navigator.language]));
+        try {
+          localStorage.removeItem('opencms-locale');
+        } catch {
+          /* storage unavailable */
+        }
+      }
+      toast.success(t('account.languageSaved'));
+    } catch (e) {
+      setError(e instanceof Error ? e : new Error(String(e)));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('account.language')}</CardTitle>
+        <CardDescription>{t('account.languageHint')}</CardDescription>
+      </CardHeader>
+      <CardContent className="grid max-w-md gap-3">
+        <ErrorAlert error={error} />
+        <select
+          aria-label={t('account.language')}
+          className="h-9 rounded-md border border-input bg-background px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          value={value}
+          disabled={saving}
+          onChange={(e) => void onChange(e.target.value)}
+        >
+          <option value={BROWSER_DEFAULT}>{t('account.browserDefault')}</option>
+          {SUPPORTED_LOCALES.map((l) => (
+            <option key={l.code} value={l.code} lang={l.code}>
+              {l.name}
+            </option>
+          ))}
+        </select>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function Account() {
   const { user } = useAuth();
   return (
@@ -172,6 +236,7 @@ export function Account() {
       </Card>
 
       <ChangePasswordCard email={user.email} />
+      <LanguageCard initial={user.locale ?? null} />
       <ThemeCard />
     </div>
   );
