@@ -115,6 +115,11 @@ t('home.title', { name: 'Ann' });
 
 Project strings are added next to the core's; they do not override the admin's own strings.
 
+Everything under `app/` that runs on the server (server components, route handlers, server actions,
+middleware) gets **only** this i18n API from `@opencms/core` (the `react-server` condition; any other name is
+`undefined` there) and needs the Node runtime, not Edge. The generated `app/(site)/messages.ts` is therefore
+server-only: client components import `defineMessages` from `@opencms/core/admin` instead.
+
 Website languages: `GET /api/admin/locales` → `{ supported, locales, defaultLocale, editable, entryCounts }`;
 `PUT /api/admin/locales` `{ locales, defaultLocale, confirmDisable? }` rewrites `src/locales.ts` (only with
 `schemaEditable` and an existing `src/locales.ts`, else 403). Disabling a locale that still has entries
@@ -122,6 +127,43 @@ answers 409 `locale_has_entries` until it is listed in `confirmDisable`; its row
 Content groups: `GET/PUT /api/admin/content-groups` rewrites `src/content-groups.ts`; removing a group still
 used by a content type answers 409 `group_in_use`. Content APIs reject a `locale`/`fallback` that is not
 enabled with 400 `locale_not_enabled`.
+
+## Permissions and review workflow
+
+Every `/api/admin/**` route checks a permission of the signed-in user (groups and `@RequirePermission` are
+described in [`@opencms/oauth2`](../oauth2/README.md#groups-and-permissions)); missing → 403 `forbidden`.
+
+| Route | Permission |
+|---|---|
+| `GET /api/admin/meta`, `GET /api/admin/content-types(/:apiId)` | session only |
+| `GET /api/admin/content/:apiId(/:documentId)`, `…/versions`, `GET /api/admin/assets`, `GET /api/admin/taxonomies(/:slug/terms)` | `content.read` |
+| `POST /api/admin/content/:apiId` | `content.create` |
+| `PATCH …/:documentId` | `content.update`; while In review also `content.publish`, else 409 `in_review_locked` |
+| `POST /api/admin/assets`, `POST /api/admin/taxonomies/:slug/terms` | `content.update` |
+| `DELETE …/:documentId` | `content.delete` |
+| `POST …/publish`, `…/unpublish` | `review: true` type: `content.publish`; otherwise `content.update` or `content.publish` |
+| `POST …/submit` | `content.submit` |
+| `POST …/withdraw` | the submitter or `content.publish` |
+| `POST …/reject`, `POST …/approve`, `GET /api/admin/workflow/pending-count` | `content.publish` |
+| `POST/DELETE /api/admin/content-types…`, `POST …/plan`, `/api/admin/content-groups`, `POST /api/admin/taxonomies` | `settings.content-types` |
+| `/api/admin/locales` | `settings.languages` |
+
+A content type with `review: true` keeps its review state in the core table `opencms_workflow` (one row per
+document, all locales together; no row = clean draft):
+
+| Endpoint | From → to |
+|---|---|
+| `POST /api/admin/content/:apiId/:documentId/submit` | Draft → In review |
+| `POST …/withdraw` | In review → Draft |
+| `POST …/reject` `{ note }` (1–1000 chars) | In review → Draft, `note` kept for the author until the next submit |
+| `POST …/approve` | In review → published (row deleted); from any other state 409 `invalid_transition` |
+| `POST …/publish` | direct publish by a `content.publish` holder, from Draft or In review (row deleted) |
+
+Invalid transitions answer 409 `invalid_transition`; transitions lock the row, so of two concurrent approvals
+one wins and the other gets 409. Draft entries carry `workflow: { state, submittedBy: { id, name } | null,
+submittedAt, note } | null`. `GET /api/admin/content/:apiId?workflow=in_review` lists entries waiting for
+review; `GET /api/admin/workflow/pending-count` → `{ count, byType }`. Publishing through `approve` runs the
+same hooks as `publish`.
 
 ## Breaking changes
 
@@ -131,6 +173,7 @@ enabled with 400 `locale_not_enabled`.
 - `OPENCMS_INTERNAL_URL` is removed (the BFF calls `http://127.0.0.1:${PORT ?? 4000}`).
 - The Nest app must be created with `bodyParser: false`.
 - The admin is now Next modules and the old admin options and dev variable are replaced by `web` (migration steps in the changelog).
-- Locale codes are `en-US`, `vi-VN`, `fr-FR`, `id-ID`; short codes (`en`) fail config validation. Content rows are migrated by the core migration `0002_region_locales`.
+- Locale codes are `en-US`, `vi-VN`, `fr-FR`, `id-ID`; short codes (`en`) fail config validation. Content rows are migrated by the core migration `0002_region_locales`, applied by `opencms migrate:up` (run by `start`) or `autoMigrate`.
+- Roles became permission groups (tables renamed to `auth_groups`, `auth_user_groups`); routes are guarded with `@RequirePermission` (the role decorator is removed); creating a user needs `groupIds`. Details in the root `CHANGELOG.md`.
 
 See the root `CHANGELOG.md`.

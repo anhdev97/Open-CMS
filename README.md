@@ -37,7 +37,7 @@ pnpm run dev                              # migrates, then serves on http://loca
 `init` writes the project (config, `src/main.ts`, `.env` with a random `OPENCMS_SECRET`), installs
 dependencies (`--no-install` to skip, `--pm pnpm|npm|yarn` to choose) and never overwrites a non-empty
 directory. Open <http://localhost:4000/admin>: on a fresh database it asks you to create the first
-super_admin. Open it at the public URL (`OPENCMS_PUBLIC_URL`, default `http://localhost:4000`): another address such as `127.0.0.1` fails with `origin_mismatch`. One origin serves everything: UI `/admin`, API `/api`, auth `/oauth2`, delivery API `/api/content`.
+Super Admin. Open it at the public URL (`OPENCMS_PUBLIC_URL`, default `http://localhost:4000`): another address such as `127.0.0.1` fails with `origin_mismatch`. One origin serves everything: UI `/admin`, API `/api`, auth `/oauth2`, delivery API `/api/content`.
 
 Working on this monorepo instead:
 
@@ -89,6 +89,7 @@ export default defineContentType({
   apiId: 'product',              // -> table ct_product, REST /api/content/product
   displayName: { 'en-US': 'Product', 'vi-VN': 'Sản phẩm' }, // or a plain string (= en-US)
   group: 'shop',                 // optional: sidebar group from src/content-groups.ts
+  review: true,                  // optional: entries need a reviewer (content.publish) to be published
   fields: {
     name:   f.text({ id: 'fld_prod_name', required: true, localizable: true, indexed: true }),
     slug:   f.slug({ id: 'fld_prod_slug', required: true, unique: true, from: 'name' }),
@@ -169,6 +170,10 @@ In production, set `schemaEditable: false`: schema changes go through git and `o
 | `GET /api/content/:type/:documentId?locale=` | one published entry |
 | `GET/POST /api/admin/content/:type` · `PATCH/DELETE /api/admin/content/:type/:id` | drafts |
 | `POST /api/admin/content/:type/:id/publish` · `/unpublish` · `GET …/versions` | publishing |
+| `POST /api/admin/content/:type/:id/submit` · `/withdraw` · `/reject` `{ note }` · `/approve` | review workflow (`review: true` types) |
+| `GET /api/admin/content/:type?workflow=in_review` · `GET /api/admin/workflow/pending-count` | review queue |
+| `GET/POST /api/admin/users` · `PATCH/DELETE …/:id` · `POST …/:id/password` | users (`groupIds` required on create) |
+| `GET/POST /api/admin/groups` · `PATCH/DELETE …/:id` · `GET /api/admin/permissions` | permission groups |
 | `GET/POST /api/admin/content-types` · `POST …/plan` · `DELETE …/:id` | schema builder |
 | `GET/POST /api/admin/assets` · `/api/admin/taxonomies[/:slug/terms]` | system data |
 | `GET/PUT /api/admin/locales` | website languages (`src/locales.ts`; `PUT` only with `schemaEditable`) |
@@ -177,13 +182,14 @@ In production, set `schemaEditable: false`: schema changes go through git and `o
 
 A `locale` or `fallback` that is not enabled in `locales` answers 400 `locale_not_enabled`.
 Filtering and sorting are only allowed on `indexed`/`unique` fields, so every storefront query hits an index.
-`/api/admin/*` requires a session (`super_admin` role); `/api/content/*` is public. Every `/api/**` failure
+`/api/admin/*` requires a session and, per route, a permission (403 `forbidden` without it; see
+[Users, groups and review](#users-groups-and-review)); `/api/content/*` is public. Every `/api/**` failure
 answers `{ "error": { "code", "message", "issues"? } }`. Browsers on other origins can read
 `/api/content/**` (GET only, no credentials) if their origin is listed in `cors.origins`.
 
 ## Languages and content groups
 
-Admin Settings has three pages: Users, Content types (with a Groups tab) and Languages. Content groups and
+Admin Settings has four pages: Users, Groups, Content types (with a Groups tab) and Languages. Content groups and
 website languages are files in your project, like content types:
 
 ```ts
@@ -210,6 +216,39 @@ Website strings use the same helpers as the admin (`defineMessages`, `createTran
 `@opencms/core/admin` in client components (`'use client'`), which also has `useLocale`, `useTranslator`,
 `useFormat`. See [`packages/core/README.md`](packages/core/README.md#i18n).
 
+Everything under `app/` that runs on the server (server components, route handlers, server actions,
+middleware) resolves `@opencms/core` through the `react-server` export condition to an i18n-only module: it
+gets **only** the i18n API above, every other name of `@opencms/core` is `undefined` there. That code needs
+the Node runtime (not Edge). The generated `app/(site)/messages.ts` is server-only; a client component that
+needs messages imports `defineMessages` from `@opencms/core/admin` and keeps its own messages file.
+
+## Users, groups and review
+
+Access is granted by **permission groups**. A user belongs to one or more groups; their permissions are the
+union of the groups' permissions, recomputed on every request. The permissions are fixed by the framework:
+
+| Permission | Allows |
+|---|---|
+| `content.read` | list/read entries (drafts and published), versions, assets, taxonomies |
+| `content.create` · `content.update` · `content.delete` | create, edit drafts (and upload assets, add terms), delete |
+| `content.submit` | submit for review / withdraw (`review: true` types) |
+| `content.publish` | approve & publish, reject, unpublish, edit while In review, publish directly (any type) |
+| `settings.users` · `settings.groups` · `settings.content-types` · `settings.languages` | the Settings pages |
+
+Seed groups: **Super Admin** (`super-admin`, a system group that always has every permission and cannot be
+edited or deleted; the last active Super Admin cannot be removed), **Contenter** (`content.read/create/update/
+delete/submit`) and **Reviewer** (`content.read/update/publish`). Manage them in Settings > Groups; assign them
+in Settings > Users. A user who is not a Super Admin can neither grant a permission they do not hold (to a
+group or through a group they assign) nor modify a Super Admin user in any way. Details:
+[`packages/oauth2/README.md`](packages/oauth2/README.md#groups-and-permissions).
+
+Content types with `review: true` (the Builder's "Require review before publishing" switch) follow a review workflow:
+Draft → **Submit** (`content.submit`) → In review (locked for the submitter, who may **Withdraw**) →
+**Approve & publish** (`/approve`, `content.publish`) or **Reject** with a note (back to Draft, the note is
+shown to the author until the next submit). A `content.publish` holder can also publish a draft directly.
+Without `review`, `content.update` is enough to publish. The admin shows a Status column, a "Pending review"
+filter and a pending count on the home page for reviewers.
+
 ## Breaking changes
 
 See [`CHANGELOG.md`](CHANGELOG.md). In short: `adminToken` / `OPENCMS_ADMIN_TOKEN` are gone (sign in
@@ -217,6 +256,8 @@ with a user instead), `/api/admin` no longer sends CORS headers, `/api/**` error
 `OPENCMS_INTERNAL_URL` is removed. The admin moved from a bundled SPA to Next App Router modules and the old
 admin options are replaced by the `web` option; existing projects need the migration steps in the changelog.
 Locale codes are now region codes (`en-US`, not `en`); the core migrates existing content rows automatically.
+Roles became permission groups: the auth tables are renamed `auth_groups`/`auth_user_groups`, routes are
+guarded with `@RequirePermission(...)` instead of the role decorator, and creating a user needs `groupIds`.
 
 ## Extensions
 

@@ -88,17 +88,20 @@ Nhãn + mô tả mỗi role có trong bộ dịch 4 ngôn ngữ của admin (`pe
 |---|---|
 | `GET /api/admin/content/:apiId`, `GET …/:documentId`, versions | `content.read` |
 | `POST /api/admin/content/:apiId` | `content.create` |
-| `PUT …/:documentId` | `content.update`; nếu đang In review và không có `content.publish` → 409 `in_review_locked` |
+| `PATCH …/:documentId` | `content.update`; nếu đang In review và không có `content.publish` → 409 `in_review_locked` |
 | `DELETE …/:documentId` | `content.delete` |
-| `POST …/publish`, `…/unpublish` | `review: true` → `content.publish`; `review: false` → `content.update` hoặc `content.publish` (kiểm tra trong service, vì phụ thuộc type) |
+| `POST …/publish`, `…/unpublish` | `review: true` → `content.publish`; `review: false` → `content.update` hoặc `content.publish` (kiểm tra trong service, vì phụ thuộc type). (ruling R11) `publish` là publish thẳng: người có `content.publish` publish được type `review: true` từ Draft hoặc In review (bỏ qua review) |
+| `POST …/approve` (ruling R11) | `content.publish`; chỉ từ In review (ngược lại 409 `invalid_transition`) → published, xoá dòng workflow. Nút "Duyệt & publish" gọi endpoint này; hai approve đồng thời → một 409 |
 | `POST …/submit` | `content.submit`; type `review: true` và đang Draft, ngược lại 409 `invalid_transition` |
 | `POST …/withdraw` | người đã gửi (`submitted_by`) hoặc có `content.publish`; đang In review, ngược lại 409 `invalid_transition` |
 | `POST …/reject` body `{ note: string }` | `content.publish`; đang In review; `note` 1–1000 ký tự (422) |
-| Schema builder, `/api/admin/content-groups` | `settings.content-types` |
+| Schema builder, `/api/admin/content-groups` | `settings.content-types`. (ruling R9) `GET /api/admin/meta`, `GET /api/admin/content-types(/:apiId)` chỉ cần phiên đăng nhập (trình soạn entry của mọi nhóm cần định nghĩa type); plan/lưu/xoá giữ `settings.content-types` |
 | `/api/admin/locales` | `settings.languages` |
 | `/api/admin/users/**` | `settings.users` |
-| `/api/admin/groups/**` | `settings.groups` |
-| `/api/admin/system/**` (system controller hiện có) | `settings.content-types` |
+| `/api/admin/groups/**` | `settings.groups`. (ruling R8) `GET /api/admin/groups` nhận `settings.groups` **hoặc** `settings.users` (form người dùng cần danh sách) |
+| (ruling R10) `GET /api/admin/assets`, `GET /api/admin/taxonomies`, `GET …/taxonomies/:slug/terms` | `content.read` |
+| (ruling R10) `POST /api/admin/assets` (upload), `POST …/taxonomies/:slug/terms` | `content.update` |
+| (ruling R10) `POST /api/admin/taxonomies` (định nghĩa taxonomy) | `settings.content-types` |
 
 ### 4.3 API nhóm (`/api/admin/groups`)
 - `GET` → `[{ id, key, name, roles, system, userCount }]` (Super Admin trả `roles = PERMISSIONS`).
@@ -107,6 +110,11 @@ Nhãn + mô tả mỗi role có trong bộ dịch 4 ngôn ngữ của admin (`pe
 - `DELETE /:id` → nhóm `system` → 409 `system_group`; xoá liên kết user (user có thể còn 0 nhóm).
 - `GET /api/admin/permissions` → `PERMISSIONS`.
 - Users API: tạo user nhận `groupIds: string[]` (≥ 1, 422 nếu rỗng/không tồn tại); `PATCH /api/admin/users/:id` nhận `groupIds?`; danh sách user trả `groups`. Luật Super Admin cuối cùng áp cho cả ba đường.
+- (ruling R7, R7b) Chống leo quyền, áp cho người không phải Super Admin → 403 `forbidden`:
+  - tạo/sửa nhóm: không được **thêm** vào `roles` một quyền mình không có (giữ/bỏ quyền sẵn có thì được);
+  - gán/gỡ nhóm cho user (tạo user hoặc `PATCH groupIds`): chỉ nhóm không `system` và có `roles` nằm trong quyền của mình;
+  - không được sửa (mọi trường, kể cả tên/email), đổi nhóm, vô hiệu hoá, xoá, đặt lại mật khẩu của user thuộc `super-admin`.
+  Kiểm tra R7 chạy trước luật `last_super_admin`.
 - Audit (`AuditService` hiện có): `group.create|update|delete`, `user.groups.update`.
 
 ## 5. Quy trình review
@@ -120,7 +128,7 @@ Nhãn + mô tả mỗi role có trong bộ dịch 4 ngôn ngữ của admin (`pe
 - Submit: upsert `state='in_review', submitted_by, submitted_at=now(), note=NULL, reviewed_*=NULL`.
 - Withdraw: `state='draft'` (giữ `note` NULL).
 - Reject: `state='draft', reviewed_by, reviewed_at=now(), note`.
-- Publish thành công (bất kỳ đường nào): xoá dòng.
+- Publish thành công (bất kỳ đường nào: `publish` thẳng hoặc `approve`, ruling R11): xoá dòng.
 - Xoá entry: xoá dòng.
 - Mọi chuyển trạng thái chạy trong transaction, khoá dòng (`SELECT … FOR UPDATE`, tạo dòng nếu chưa có trong cùng transaction); kiểm tra trạng thái sau khi khoá → hai thao tác đồng thời: một thành công, một 409 `invalid_transition`.
 - Type đổi `review` true → false: dòng `in_review` coi như Draft (bỏ qua khi đọc; xoá ở lần ghi kế tiếp của document).
@@ -140,7 +148,7 @@ Nhãn + mô tả mỗi role có trong bộ dịch 4 ngôn ngữ của admin (`pe
 - Thêm dòng "Nhóm quyền" vào `navigation.ts` (Spec A §3.1).
 
 ### 6.2 Người dùng
-- Cột Nhóm; form tạo/sửa có chọn nhiều nhóm (bắt buộc ≥ 1 khi tạo); lỗi `last_super_admin`, `group_*` hiển thị bản dịch.
+- Cột Nhóm; form tạo/sửa có chọn nhiều nhóm (bắt buộc ≥ 1 khi tạo; (ruling R12) hộp sửa nhóm cũng bắt buộc ≥ 1 để tránh tự khoá — API vẫn nhận `groupIds: []`; muốn bỏ hết quyền thì vô hiệu hoá/xoá user); lỗi `last_super_admin`, `group_*` hiển thị bản dịch.
 
 ### 6.3 Theo quyền
 - Sidebar: mục Cài đặt cần quyền tương ứng; không còn mục nào → ẩn nhóm Cài đặt. Nhóm content type và "Nội dung" cần `content.read`.
@@ -154,7 +162,8 @@ Nhãn + mô tả mỗi role có trong bộ dịch 4 ngôn ngữ của admin (`pe
 | `review: false` | Draft | `content.update` | Lưu · Publish |
 | `review: true` | Draft | `content.submit` | Lưu · Gửi duyệt |
 | `review: true` | In review | người gửi (không có `content.publish`) | Rút lại (form khoá) |
-| `review: true` | In review | `content.publish` | Lưu · Duyệt & publish · Từ chối (hộp ghi chú) |
+| `review: true` | In review | `content.publish` | Lưu · Duyệt & publish (`/approve`) · Từ chối (hộp ghi chú) |
+| `review: true` | Draft | `content.publish` | Lưu · Publish (publish thẳng, ruling R11) |
 | mọi | đã Published | quyền publish tương ứng | Unpublish |
 
 - Ghi chú từ chối hiện thành banner đầu form cho tới lần gửi duyệt kế tiếp.

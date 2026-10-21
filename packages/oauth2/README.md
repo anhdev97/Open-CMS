@@ -40,7 +40,8 @@ oidc-provider reads its own requests as designed.
 
 ### Migrations
 
-Importing `@opencms/oauth2` registers its core migration (`oauth2_0001_init`) with `@opencms/db`'s
+Importing `@opencms/oauth2` registers its core migrations (`oauth2_0001_init`, `oauth2_0002_user_locale`,
+`oauth2_0003_groups`) with `@opencms/db`'s
 `coreMigrator()`. Any process that runs migrations must therefore load the package first:
 
 - The `opencms` CLI and `@opencms/core` do this themselves (`import '@opencms/oauth2/migrations'`, a
@@ -87,18 +88,69 @@ oldest when full.
 | `GET /api/auth/login`, `GET /api/auth/callback` | Start / finish the browser login (BFF) |
 | `GET /api/auth/me`, `POST /api/auth/logout` | Current user / end the session |
 | `POST /api/auth/password` | Change own password |
-| `GET/POST /api/admin/users`, `PATCH/DELETE /api/admin/users/:id`, `POST /api/admin/users/:id/password`, `DELETE /api/admin/users/:id/identities/:identityId` | User management (`settings.users`) |
+| `GET/POST /api/admin/users`, `PATCH/DELETE /api/admin/users/:id`, `POST /api/admin/users/:id/password`, `DELETE /api/admin/users/:id/identities/:identityId` | User management (`settings.users`); create needs `groupIds` (≥ 1), `PATCH` takes `groupIds?` |
+| `GET /api/admin/groups` | Groups with `roles` and `userCount` (`settings.groups` or `settings.users`) |
+| `POST /api/admin/groups`, `PATCH/DELETE /api/admin/groups/:id`, `GET /api/admin/permissions` | Group management (`settings.groups`) |
 | `/oauth2/*` | The OIDC provider (discovery, auth, token, jwks, end_session) and login interaction (`/oauth2/interaction/:uid`) |
 | `/oauth2/interaction/:uid/idp/:provider`, `/oauth2/idp/:provider/callback` | External IdP sign-in |
 
 Errors under `/api/**` look like `{ "error": { "code", "message", "issues"? } }`; failures inside the redirect chain
 answer `302 /admin/login?error=<code>`.
 
+## Groups and permissions
+
+Permissions are a fixed list (`PERMISSIONS` / `Permission`, defined in `@opencms/schema` and re-exported here):
+`content.read`, `content.create`, `content.update`, `content.delete`, `content.submit`, `content.publish`,
+`settings.users`, `settings.groups`, `settings.content-types`, `settings.languages`.
+
+A **group** (`auth_groups`: `key`, `name`, `roles text[]`, `system`) holds a set of permissions; a user
+(`auth_user_groups`) belongs to any number of groups and their effective permissions are the union, recomputed
+on every request. Migration `oauth2_0003_groups` renames the former role tables to `auth_groups` and
+`auth_user_groups` (`role_id` → `group_id`; see the root `CHANGELOG.md`), turns `super_admin` into the system group `super-admin` (existing
+users keep it) and seeds two groups:
+
+| Key | Name | Permissions |
+|---|---|---|
+| `super-admin` | Super Admin | all, including permissions added later (`system`: cannot be edited or deleted) |
+| `contenter` | Contenter | `content.read`, `content.create`, `content.update`, `content.delete`, `content.submit` |
+| `reviewer` | Reviewer | `content.read`, `content.update`, `content.publish` |
+
+The setup wizard and the env admin seed put the user in `super-admin`. Removing the last active Super Admin
+(removing the group, disabling or deleting the user) answers `409 last_super_admin`; the check holds row locks,
+so two concurrent requests cannot both pass. Group keys match `^[a-z][a-z0-9-]{0,63}$` (taken → `409
+group_key_taken`), names are 1–100 characters, unknown permissions → 422, changing a system group → `409
+system_group`. Deleting a group removes it from its users.
+
+Protect your own routes with `@RequirePermission(...)` (all listed permissions are required; on a class it
+applies to every handler, and a method decorator adds to it). Missing → `403 { error: { code: 'forbidden',
+message: 'Missing permission: <perm>' } }`; no session → 401. A route without the decorator needs only a
+session. `@CurrentUser()` gives `{ id, email, name, locale, groups: { key, name }[], permissions, isSuperAdmin }`,
+and `GET /api/auth/me` returns the same.
+
+```ts
+@RequirePermission('content.publish')
+@Post('feeds/rebuild')
+rebuild(@CurrentUser() user: RequestUser) { /* ... */ }
+```
+
+The former role decorator is removed (see the root `CHANGELOG.md`): guard each route with the permission it really needs.
+
+**Escalation rules.** A user who is not a Super Admin (403 `forbidden` otherwise):
+
+- cannot add to a group a permission they do not hold themselves (keeping or removing existing ones is fine);
+- can only assign or remove (on create or `PATCH groupIds`) groups that are not `system` and whose permissions
+  are all within their own;
+- cannot modify a Super Admin user at all: no name/email/status/group change, password reset, identity unlink
+  or delete.
+
+These checks run before the last-Super-Admin rule. Group and user-group changes are audited (`group.create`,
+`group.update`, `group.delete`, `user.groups.update`).
+
 ## Setup flow
 
 1. Start the app against an empty database. `GET /api/auth/setup` returns `{ "required": true }` and every
    protected API answers `409 setup_required`.
-2. `POST /api/auth/setup` with `{ email, name, password }` creates the first super admin. Afterwards it
+2. `POST /api/auth/setup` with `{ email, name, password }` creates the first super admin (group `super-admin`). Afterwards it
    answers `409 setup_already_completed`.
 3. Sign in through `GET /api/auth/login`. Access tokens refresh transparently on the server.
 

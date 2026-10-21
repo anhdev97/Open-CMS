@@ -127,7 +127,7 @@ Một module nguồn duy nhất trong core, xuất qua hai entry hiện có:
 - `formatDateTime(value: Date | string | number, locale, opts?)`, `formatNumber(value, locale, opts?)` — bọc `Intl`.
 - `useLocale()` trả locale admin hiện tại; `useTranslator(messages)` = `createTranslator` gắn locale hiện tại, render lại khi đổi; `useFormat()` trả hai hàm format đã gắn locale.
 - Project **thêm** bộ chuỗi riêng; **không ghi đè** chuỗi của core. Admin core dùng chính các hàm này.
-- Template `next.config.ts` thêm `serverExternalPackages: ['@opencms/core']` để server component import `@opencms/core` mà không bundle Nest. Quy tắc ghi trong README + comment template: client component không import `@opencms/core`, dùng `@opencms/core/admin`.
+- (ruling R6) Không dùng `serverExternalPackages` (làm hỏng bản cài từ tarball và không chạy với package link). `@opencms/core` có export condition `react-server` → `dist/i18n.js` (chỉ API i18n ở trên, không thêm subpath): mọi code dưới `app/` chạy trên server (server component, route handler, server action, middleware) chỉ thấy API i18n — các tên khác của core là `undefined` ở đó — và cần Node runtime (không Edge). `app/(site)/messages.ts` sinh ra là server-only. Quy tắc ghi trong README + comment template: client component không import `@opencms/core`, dùng `@opencms/core/admin` (kể cả `defineMessages`).
 - `init`: sinh `app/(site)/messages.ts` (`defineMessages` có en-US + vi-VN); trang chủ mẫu dùng `createTranslator(messages, defaultLocale)` với `defaultLocale` lấy từ `src/locales.ts`.
 
 ## 6. Ngôn ngữ của website
@@ -175,6 +175,6 @@ export default defineConfig({ database: { url: process.env.DATABASE_URL! }, ...l
 ## 8. Rủi ro và giới hạn
 
 1. Bản dịch máy cho vi/fr/id có thể chưa tự nhiên — cần duyệt trước phát hành.
-2. `serverExternalPackages: ['@opencms/core']` khiến server component nạp core lúc chạy (kèm Nest). Chấp nhận: website chạy cùng process với Nest nên module đã nạp sẵn.
+2. (ruling R6) Code dưới `app/` không với tới export Nest của core (`@opencms/core` → `dist/i18n.js` theo condition `react-server`); không phải use case được hỗ trợ — dữ liệu website lấy qua API/HTTP hoặc service Nest phía server. Middleware/route chạy Edge không được hỗ trợ.
 3. Ghi file (`src/locales.ts`, `src/content-groups.ts`) chỉ an toàn ở dev, một tiến trình; giống Builder.
 4. Migration §6.4 bỏ qua dòng trùng khoá — nếu project đã có cả `en` và `en-US` cho cùng entry, dòng `en` ở lại (log cảnh báo), API không phục vụ nó.

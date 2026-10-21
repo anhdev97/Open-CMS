@@ -166,7 +166,8 @@ export const productDefinition: ContentTypeDefinition = {
       "options": {}
     }
   ],
-  "group": "shop"
+  "group": "shop",
+  "review": true
 };
 
 export const contentTypes: ContentTypeDefinition[] = [brandDefinition, productDefinition];

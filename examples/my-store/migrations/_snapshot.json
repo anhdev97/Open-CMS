@@ -162,7 +162,8 @@
           "options": {}
         }
       ],
-      "group": "shop"
+      "group": "shop",
+      "review": true
     }
   ]
 }

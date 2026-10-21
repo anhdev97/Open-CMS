@@ -7,6 +7,8 @@ export default defineContentType({
   apiId: 'product',
   displayName: { 'en-US': 'Product', 'vi-VN': 'Sản phẩm' },
   group: 'shop',
+  // Product entries go through review: a Contenter submits, a Reviewer approves and publishes.
+  review: true,
   fields: {
     name: f.text({ id: 'fld_prod_name', required: true, localizable: true, indexed: true }),
     slug: f.slug({ id: 'fld_prod_slug', required: true, unique: true, from: 'name' }),
