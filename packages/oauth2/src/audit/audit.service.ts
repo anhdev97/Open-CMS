@@ -9,7 +9,7 @@ export type AuditType =
   | 'password_reset_by_admin' | 'password_changed' | 'idp_linked' | 'user.locale.update'
   | 'group.create' | 'group.update' | 'group.delete' | 'user.groups.update' | 'user.identity.unlink'
   // Review workflow events, recorded by @opencms/core (spec B §5).
-  | 'content.submit' | 'content.withdraw' | 'content.reject' | 'content.publish';
+  | 'content.submit' | 'content.withdraw' | 'content.reject' | 'content.publish' | 'content.approve';
 
 export interface AuditEvent {
   type: AuditType;

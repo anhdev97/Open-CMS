@@ -87,8 +87,11 @@ describe('review workflow (spec B §5)', () => {
     expect(edited.body.data.title).toBe('fixed by reviewer');
     expect(edited.body.data.workflow.state).toBe('in_review');
 
-    // Contenters cannot approve a review type; a second submit is not a transition.
+    // Contenters cannot approve or publish a review type; a second submit is not a transition.
     expect((await post(contenter, `${p}/publish`)).status).toBe(403);
+    const cApprove = await post(contenter, `${p}/approve`);
+    expect(cApprove.status).toBe(403);
+    expect(cApprove.body).toEqual({ error: { code: 'forbidden', message: 'Missing permission: content.publish' } });
     const twice = await post(contenter, `${p}/submit`);
     expect(twice.status).toBe(409);
     expect(twice.body.error.code).toBe('invalid_transition');
@@ -109,7 +112,7 @@ describe('review workflow (spec B §5)', () => {
     expect(again.status).toBe(200);
     expect(again.body.data.workflow).toMatchObject({ state: 'in_review', note: null });
 
-    const approved = await post(reviewer, `${p}/publish`);
+    const approved = await post(reviewer, `${p}/approve`);
     expect(approved.status).toBe(200);
     expect(approved.body.data.status).toBe('published');
     expect(approved.body.data.title).toBe('better title');
@@ -118,11 +121,25 @@ describe('review workflow (spec B §5)', () => {
     expect((await fetch(`${t.baseUrl}/api/content/article/${id}`)).status).toBe(200);
   });
 
-  it('a review type is published only from In review', async () => {
-    const id = (await post(admin, '/api/admin/content/article', { title: 'direct' })).body.data.documentId;
-    const r = await post(reviewer, `/api/admin/content/article/${id}/publish`);
-    expect(r.status).toBe(409);
-    expect(r.body.error.code).toBe('invalid_transition');
+  it('approve needs In review; a content.publish holder may publish directly (R11)', async () => {
+    const id = (await post(contenter, '/api/admin/content/article', { title: 'direct' })).body.data.documentId;
+    const p = `/api/admin/content/article/${id}`;
+    const early = await post(reviewer, `${p}/approve`);
+    expect(early.status).toBe(409);
+    expect(early.body.error.code).toBe('invalid_transition');
+    // Direct publish from draft by a reviewer.
+    const direct = await post(reviewer, `${p}/publish`);
+    expect(direct.status).toBe(200);
+    expect(direct.body.data.status).toBe('published');
+    expect(await wfRows(id)).toEqual([]);
+    // Direct publish of an In review entry by a super admin clears the row.
+    expect((await post(contenter, `${p}/submit`)).status).toBe(200);
+    expect((await post(admin, `${p}/publish`)).status).toBe(200);
+    expect(await wfRows(id)).toEqual([]);
+    expect((await contenter(p)).body.data.workflow).toBeNull();
+    // approve on a type without review is not a transition.
+    const nid = (await post(contenter, '/api/admin/content/note', { title: 'n' })).body.data.documentId;
+    expect((await post(reviewer, `/api/admin/content/note/${nid}/approve`)).body.error.code).toBe('invalid_transition');
   });
 
   it('submit on a review:false type is not a transition', async () => {
@@ -142,10 +159,13 @@ describe('review workflow (spec B §5)', () => {
     expect(early.body.error.code).toBe('invalid_transition');
     expect((await post(contenter, `${p}/submit`)).status).toBe(200);
 
+    const forbiddenPublish = { error: { code: 'forbidden', message: 'Missing permission: content.publish' } };
     const other = await post(contenter2, `${p}/withdraw`);
     expect(other.status).toBe(403);
-    expect(other.body.error.code).toBe('forbidden');
-    expect((await post(nobody, `${p}/withdraw`)).status).toBe(403);
+    expect(other.body).toEqual(forbiddenPublish);
+    const none = await post(nobody, `${p}/withdraw`);
+    expect(none.status).toBe(403);
+    expect(none.body).toEqual(forbiddenPublish);
 
     const mine = await post(contenter, `${p}/withdraw`);
     expect(mine.status).toBe(200);
@@ -160,7 +180,7 @@ describe('review workflow (spec B §5)', () => {
     const id = (await post(contenter, '/api/admin/content/article', { title: 'race' })).body.data.documentId;
     const p = `/api/admin/content/article/${id}`;
     expect((await post(contenter, `${p}/submit`)).status).toBe(200);
-    const results = await Promise.all([post(reviewer, `${p}/publish`), post(admin, `${p}/publish`)]);
+    const results = await Promise.all([post(reviewer, `${p}/approve`), post(admin, `${p}/approve`)]);
     const statuses = results.map((r) => r.status).sort();
     expect(statuses).toEqual([200, 409]);
     expect(results.find((r) => r.status === 409)!.body.error.code).toBe('invalid_transition');
@@ -200,6 +220,10 @@ describe('review workflow (spec B §5)', () => {
     const denied = await contenter('/api/admin/workflow/pending-count');
     expect(denied.status).toBe(403);
     expect(denied.body).toEqual({ error: { code: 'forbidden', message: 'Missing permission: content.publish' } });
+
+    // An orphan In review row (its draft is gone) is not counted.
+    await sql`insert into opencms_workflow (api_id, document_id, state) values ('page', gen_random_uuid(), 'in_review')`.execute(t.db);
+    expect((await reviewer('/api/admin/workflow/pending-count')).body.byType.page).toBe(2);
 
     expect((await post(reviewer, `/api/admin/content/page/${a}/reject`, { note: 'no' })).status).toBe(200);
     expect((await reviewer('/api/admin/workflow/pending-count')).body.byType.page).toBe(1);

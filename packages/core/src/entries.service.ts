@@ -137,12 +137,16 @@ export class EntriesService {
     }
   }
 
-  async publish(apiId: string, documentId: string, user: Pick<RequestUser, 'id' | 'permissions'>) {
+  /**
+   * `publish`: direct publish (a `content.publish` holder may skip review, ruling R11). `approve`: publish what
+   * was submitted; only from In review (409 `invalid_transition`). Both run the same pipeline and clear the row.
+   */
+  async publish(apiId: string, documentId: string, user: Pick<RequestUser, 'id' | 'permissions'>, action: 'publish' | 'approve' = 'publish') {
     const def = this.registry.get(apiId);
     this.assertCanPublish(def, user);
     const doc = await this.repo.exportDocument(def, documentId, 'draft');
     if (!doc) throw new NotFoundException(`${apiId} ${documentId} not found`);
-    await this.workflow.precheckPublish(def, documentId);
+    await this.workflow.precheckPublish(def, documentId, action);
 
     // Required fields: shared ones once, localizable ones in every translation that exists.
     const locales = Object.keys(doc.translations);
@@ -158,7 +162,7 @@ export class EntriesService {
 
     const ctx = this.ctx(apiId, this.options.config.defaultLocale);
     for (const h of this.registry.hooksFor(apiId)) await h.beforePublish?.(doc, ctx);
-    await this.repo.publish(def, documentId, doc, (trx) => this.workflow.guardPublish(trx, def, documentId, user));
+    await this.repo.publish(def, documentId, doc, (trx) => this.workflow.guardPublish(trx, def, documentId, user, action));
     for (const h of this.registry.hooksFor(apiId)) await h.afterPublish?.(doc, ctx);
     return this.get(apiId, documentId, 'published');
   }

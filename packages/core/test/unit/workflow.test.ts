@@ -6,11 +6,13 @@ describe('workflow nextState (spec B §5.2)', () => {
     ['draft', 'submit', 'in_review'],
     ['draft', 'withdraw', null],
     ['draft', 'reject', null],
-    ['draft', 'publish', null],
+    ['draft', 'publish', 'cleared'],
+    ['draft', 'approve', null],
     ['in_review', 'submit', null],
     ['in_review', 'withdraw', 'draft'],
     ['in_review', 'reject', 'draft'],
     ['in_review', 'publish', 'cleared'],
+    ['in_review', 'approve', 'cleared'],
   ];
 
   it.each(table)('%s + %s -> %s', (state, action, expected) => {
@@ -18,6 +20,6 @@ describe('workflow nextState (spec B §5.2)', () => {
   });
 
   it('covers every state x action pair', () => {
-    expect(new Set(table.map(([s, a]) => `${s}:${a}`)).size).toBe(8);
+    expect(new Set(table.map(([s, a]) => `${s}:${a}`)).size).toBe(10);
   });
 });

@@ -32,6 +32,7 @@ const AUDIT: Record<WorkflowAction, AuditType> = {
   withdraw: 'content.withdraw',
   reject: 'content.reject',
   publish: 'content.publish',
+  approve: 'content.approve',
 };
 
 @Injectable()
@@ -100,9 +101,9 @@ export class WorkflowService {
   }
 
   /** submit / withdraw / reject. */
-  async transition(def: ContentTypeDefinition, documentId: string, action: Exclude<WorkflowAction, 'publish'>, user: Actor, note?: unknown) {
+  async transition(def: ContentTypeDefinition, documentId: string, action: Exclude<WorkflowAction, 'publish' | 'approve'>, user: Actor, note?: unknown) {
     if (action === 'withdraw' && !has(user, 'content.submit') && !has(user, 'content.publish')) {
-      throw new AuthError('forbidden', 403, 'Missing permission: content.submit');
+      throw new AuthError('forbidden', 403, 'Missing permission: content.publish');
     }
     let text: string | undefined;
     if (action === 'reject') {
@@ -162,8 +163,11 @@ export class WorkflowService {
   }
 
   /** Fast, unlocked check before validation and hooks; `guardPublish` decides. */
-  async precheckPublish(def: ContentTypeDefinition, documentId: string) {
-    if (!def.review) return;
+  async precheckPublish(def: ContentTypeDefinition, documentId: string, action: 'publish' | 'approve' = 'publish') {
+    if (!def.review) {
+      if (action === 'approve') throw invalid(action, 'draft');
+      return;
+    }
     const row = await this.db
       .selectFrom(T)
       .select('state')
@@ -171,17 +175,22 @@ export class WorkflowService {
       .where('document_id', '=', documentId)
       .executeTakeFirst();
     const state: WorkflowState = row?.state ?? 'draft';
-    if (nextState(state, 'publish') === null) throw invalid('publish', state);
+    if (nextState(state, action) === null) throw invalid(action, state);
   }
 
-  /** Inside the publish transaction: a review type is published only from In review; the row goes away. */
-  async guardPublish(trx: Kysely<any>, def: ContentTypeDefinition, documentId: string, user: Actor) {
-    if (def.review) {
+  /**
+   * Inside the publish transaction. `publish` clears the row from any state (locked, so it serializes with
+   * transitions); `approve` needs In review, so of two concurrent approvals the second sees the row gone (409).
+   */
+  async guardPublish(trx: Kysely<any>, def: ContentTypeDefinition, documentId: string, user: Actor, action: 'publish' | 'approve' = 'publish') {
+    if (!def.review) {
+      if (action === 'approve') throw invalid(action, 'draft');
+    } else {
       const row = await this.lock(trx, def, documentId);
-      if (nextState(row.state, 'publish') === null) throw invalid('publish', row.state);
+      if (nextState(row.state, action) === null) throw invalid(action, row.state);
     }
     await this.clear(trx, def, documentId);
-    await this.record(trx, 'publish', def, documentId, user, { review: !!def.review });
+    await this.record(trx, action, def, documentId, user, { review: !!def.review });
   }
 
   async guardDelete(trx: Kysely<any>, def: ContentTypeDefinition, documentId: string) {
@@ -190,20 +199,29 @@ export class WorkflowService {
 
   /** Spec B §5.3: entries waiting for review, for types that currently have `review: true`. */
   async pendingCount(): Promise<{ count: number; byType: Record<string, number> }> {
-    const reviewed = this.registry.all().filter((d) => d.review).map((d) => d.apiId);
     const byType: Record<string, number> = {};
-    if (!reviewed.length) return { count: 0, byType };
-    const rows = await this.db
-      .selectFrom(T)
-      .select(['api_id', (eb) => eb.fn.countAll<string>().as('n')])
-      .where('state', '=', 'in_review')
-      .where('api_id', 'in', reviewed)
-      .groupBy('api_id')
-      .execute();
     let count = 0;
-    for (const r of rows) {
-      byType[r.api_id] = Number(r.n);
-      count += Number(r.n);
+    for (const def of this.registry.all().filter((d) => d.review)) {
+      // Only rows whose draft still exists (orphans are not counted).
+      const r = await this.db
+        .selectFrom(`${T} as w`)
+        .select((eb) => eb.fn.countAll<string>().as('n'))
+        .where('w.api_id', '=', def.apiId)
+        .where('w.state', '=', 'in_review')
+        .where(({ exists, selectFrom }) =>
+          exists(
+            selectFrom(`${mainTable(def)} as m`)
+              .select(sql.lit(1).as('one'))
+              .whereRef('m.document_id', '=', 'w.document_id')
+              .where('m.status', '=', 'draft'),
+          ),
+        )
+        .executeTakeFirst();
+      const n = Number(r?.n ?? 0);
+      if (n > 0) {
+        byType[def.apiId] = n;
+        count += n;
+      }
     }
     return { count, byType };
   }

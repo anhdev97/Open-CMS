@@ -107,6 +107,14 @@ export class AdminContentController {
     return this.entries.publish(apiId, documentId, user);
   }
 
+  /** Publish an entry that is In review (spec B §6.4 "Approve & publish"). */
+  @RequirePermission('content.publish')
+  @Post(':apiId/:documentId/approve')
+  @HttpCode(200)
+  approve(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string, @CurrentUser() user: RequestUser) {
+    return this.entries.publish(apiId, documentId, user, 'approve');
+  }
+
   @Post(':apiId/:documentId/unpublish')
   @HttpCode(200)
   unpublish(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string, @CurrentUser() user: RequestUser) {
