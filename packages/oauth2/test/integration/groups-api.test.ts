@@ -297,8 +297,19 @@ describe('groups API', () => {
         expect(r.status, `${method} ${path}`).toBe(403);
         expect(r.body.error.code).toBe('forbidden');
       }
+      // Rename is refused too (R7b: no PATCH of any field).
+      const rename = await api(`/api/admin/users/${target.id}`, { cookie: ua, method: 'PATCH', body: { name: 'Hacked' } });
+      expect(rename.status).toBe(403);
+      expect(rename.body.error.code).toBe('forbidden');
+      // PATCH has no email field (strict body): refused for every actor, before any write.
+      const email = await api(`/api/admin/users/${target.id}`, { cookie: ua, method: 'PATCH', body: { email: 'hacked@x.com' } });
+      expect(email.status).toBe(422);
       const after = await users.findById(target.id);
-      expect(after?.status).toBe('active');
+      expect(after).toMatchObject({ status: 'active', name: 'SA', email: 'r7-sa@x.com' });
+      // A super admin can still rename another super admin.
+      const ok = await api(`/api/admin/users/${target.id}`, { cookie: admin, method: 'PATCH', body: { name: 'Renamed SA' } });
+      expect(ok.status).toBe(200);
+      expect(ok.body.data.name).toBe('Renamed SA');
       expect(await t.app.get(UserService).findByEmail('r7-sa@x.com')).toBeTruthy();
       expect(await login(t, 'r7-sa@x.com')).toBeTruthy(); // password unchanged
       // A super admin may do it.

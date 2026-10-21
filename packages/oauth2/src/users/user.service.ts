@@ -59,7 +59,7 @@ function assertCanAssign(actor: UserActor, changed: readonly GroupRef[]): void {
   }
 }
 
-/** Ruling R7(b): a non-super-admin may not change groups of, disable, delete or reset the password of a super admin. */
+/** Ruling R7(b): a non-super-admin may not modify (any field, groups, status), delete or reset the password of a super admin. */
 function assertCanManage(actor: UserActor, targetIsSuperAdmin: boolean): void {
   if (targetIsSuperAdmin && !actor.isSuperAdmin) throw new AuthError('forbidden', 403, 'Only a super admin can manage a super admin');
 }
@@ -238,7 +238,7 @@ export class UserService {
    * shrink the set of active super admins takes: groups, status, delete), so two concurrent requests cannot both
    * remove the last super admins. A change that takes the number of active `super-admin` members to 0 rolls
    * back with 409 `last_super_admin` (spec B §3.3). Ruling R7 (403 `forbidden`) is checked first, against the
-   * locked target: a non-super-admin may not change groups or status of a super admin (R7b), and may only add or
+   * locked target: a non-super-admin may not modify a super admin at all, any field (R7b), and may only add or
    * remove groups within their own permissions (R7a, every group of the symmetric difference current/next).
    */
   async update(
@@ -248,7 +248,7 @@ export class UserService {
   ): Promise<void> {
     await this.withSetupLock(async (trx) => {
       const current = await this.lockTarget(userId, trx);
-      if (patch.groupIds !== undefined || patch.status !== undefined) assertCanManage(actor, current.some((g) => g.system));
+      assertCanManage(actor, current.some((g) => g.system));
       const before = await this.activeSuperAdmins(trx);
 
       if (patch.groupIds !== undefined) {
