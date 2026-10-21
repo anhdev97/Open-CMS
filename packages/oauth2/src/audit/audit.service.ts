@@ -6,7 +6,8 @@ import type { AuthTables } from '../db/types';
 export type AuditType =
   | 'login_succeeded' | 'login_failed' | 'logout' | 'setup_completed' | 'admin_seeded_from_env'
   | 'admin_force_reset' | 'user_created' | 'user_disabled' | 'user_enabled' | 'user_deleted'
-  | 'password_reset_by_admin' | 'password_changed' | 'idp_linked' | 'user.locale.update';
+  | 'password_reset_by_admin' | 'password_changed' | 'idp_linked' | 'user.locale.update'
+  | 'group.create' | 'group.update' | 'group.delete' | 'user.groups.update';
 
 export interface AuditEvent {
   type: AuditType;

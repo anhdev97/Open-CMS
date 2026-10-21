@@ -16,6 +16,7 @@ export * from './setup/setup-state';
 export * from './setup/setup.controller';
 export * from './audit/audit.service';
 export * from './users/user.service';
+export * from './groups/groups.service';
 export * from './security/password';
 export * from './security/rate-limiter';
 export { createKyselyAdapter } from './provider/kysely.adapter';

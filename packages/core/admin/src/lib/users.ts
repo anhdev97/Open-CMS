@@ -8,7 +8,8 @@ export interface AdminUser {
   email: string;
   name: string;
   status: 'active' | 'disabled' | string;
-  roles: string[];
+  /** Sorted by key. */
+  groups: Array<{ id: string; key: string; name: string }>;
   lastLoginAt: string | null;
   identities: Array<{ id: string; provider: string; subject: string; email: string | null }>;
 }
@@ -32,7 +33,7 @@ const base = '/api/admin/users';
 
 export const listUsers = () => api<{ data: AdminUser[] }>(base).then((r) => r.data);
 
-export const createUser = (input: { email: string; name: string; password?: string }) =>
+export const createUser = (input: { email: string; name: string; password?: string; groupIds: string[] }) =>
   api<{ data: AdminUser }>(base, { method: 'POST', json: input }).then((r) => r.data);
 
 export const setUserStatus = (id: string, status: 'active' | 'disabled') =>

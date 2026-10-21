@@ -33,6 +33,10 @@ export interface GrantRevoker {
 }
 
 const SUPER_ADMIN = SUPER_ADMIN_GROUP;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const unknownGroup = () => new AuthError('validation_failed', 422, 'groupIds: unknown group');
+const escalation = () => new AuthError('forbidden', 403, 'Only a super admin can add or remove super-admin members');
 
 @Injectable()
 export class UserService {
@@ -84,8 +88,13 @@ export class UserService {
     };
   }
 
+  /**
+   * Creates a user. Without `groupIds` the user joins `super-admin` (setup wizard, env bootstrap); the users API
+   * always passes `groupIds` (≥ 1, validated by the controller). Assigning a `system` group requires
+   * `actorIsSuperAdmin` (privilege escalation rule) → 403 `forbidden`; an unknown group id → 422.
+   */
   async create(
-    input: { email: string; name: string; password?: string; actorId?: string },
+    input: { email: string; name: string; password?: string; actorId?: string; groupIds?: string[]; actorIsSuperAdmin?: boolean },
     trx?: Trx,
   ): Promise<AuthUser> {
     const email = normalizeEmail(input.email);
@@ -95,6 +104,8 @@ export class UserService {
       passwordHash = await this.passwords.hash(input.password);
     }
     const run = async (t: Trx): Promise<string> => {
+      const groups = input.groupIds === undefined ? undefined : await this.resolveGroups(input.groupIds, t);
+      if (groups?.some((g) => g.system) && input.actorIsSuperAdmin !== true) throw escalation();
       let id: string;
       try {
         const row = await t
@@ -107,8 +118,15 @@ export class UserService {
         if ((e as { code?: string }).code === '23505') throw new AuthError('email_taken', 409);
         throw e;
       }
-      await sql`insert into auth_user_groups (user_id, group_id) select ${id}, id from auth_groups where key = ${SUPER_ADMIN}`.execute(t);
-      await this.audit.record({ type: 'user_created', userId: id, actorId: input.actorId, meta: { email } }, t);
+      if (groups === undefined) {
+        await sql`insert into auth_user_groups (user_id, group_id) select ${id}, id from auth_groups where key = ${SUPER_ADMIN}`.execute(t);
+      } else if (groups.length) {
+        await t.insertInto('auth_user_groups').values(groups.map((g) => ({ user_id: id, group_id: g.id }))).execute();
+      }
+      await this.audit.record(
+        { type: 'user_created', userId: id, actorId: input.actorId, meta: { email, ...(groups ? { groups: groups.map((g) => g.key) } : {}) } },
+        t,
+      );
       return id;
     };
     const id = trx ? await run(trx) : await this.db.transaction().execute(run);
@@ -150,6 +168,19 @@ export class UserService {
     });
   }
 
+  /** Number of active users in `super-admin`. */
+  private async activeSuperAdmins(trx: Trx): Promise<number> {
+    const r = await trx
+      .selectFrom('auth_users as u')
+      .innerJoin('auth_user_groups as ug', 'ug.user_id', 'u.id')
+      .innerJoin('auth_groups as g', 'g.id', 'ug.group_id')
+      .select((eb) => eb.fn.count<string>('u.id').distinct().as('n'))
+      .where('g.key', '=', SUPER_ADMIN)
+      .where('u.status', '=', 'active')
+      .executeTakeFirstOrThrow();
+    return Number(r.n);
+  }
+
   /** True when `userId` is an active super admin and no other active super admin exists. */
   private async isLastActiveSuperAdmin(userId: string, trx: Trx): Promise<boolean> {
     const rows = await trx
@@ -163,20 +194,75 @@ export class UserService {
     return rows.length === 1 && rows[0].id === userId;
   }
 
-  async setStatus(userId: string, status: 'active' | 'disabled', actorId: string): Promise<void> {
+  /**
+   * De-duplicated groups of `ids`, sorted by key, share-locked so a concurrent group delete waits for this
+   * transaction; any unknown (or malformed) id → 422 `validation_failed`.
+   */
+  private async resolveGroups(ids: string[], trx: Trx): Promise<{ id: string; key: string; system: boolean }[]> {
+    const unique = [...new Set(ids)];
+    if (unique.some((id) => !UUID.test(id))) throw unknownGroup();
+    if (unique.length === 0) return [];
+    const rows = await trx.selectFrom('auth_groups').select(['id', 'key', 'system']).where('id', 'in', unique).orderBy('key').forShare().execute();
+    if (rows.length !== unique.length) throw unknownGroup();
+    return rows;
+  }
+
+  /**
+   * Applies `patch` to the user in one transaction under the setup advisory lock (the lock every path that can
+   * shrink the set of active super admins takes: groups, status, delete), so two concurrent requests cannot both
+   * remove the last super admins. A change that takes the number of active `super-admin` members to 0 rolls
+   * back with 409 `last_super_admin` (spec B §3.3). Adding or removing a `system` group membership requires
+   * `actor.isSuperAdmin` → 403 `forbidden` (privilege escalation rule).
+   */
+  async update(
+    userId: string,
+    patch: { name?: string; status?: 'active' | 'disabled'; groupIds?: string[] },
+    actor: { id: string; isSuperAdmin: boolean },
+  ): Promise<void> {
     await this.withSetupLock(async (trx) => {
-      if (status === 'disabled' && (await this.isLastActiveSuperAdmin(userId, trx))) {
-        throw new AuthError('last_super_admin', 409);
+      const exists = await trx.selectFrom('auth_users').select('id').where('id', '=', userId).forUpdate().executeTakeFirst();
+      if (!exists) throw new AuthError('not_found', 404, 'User not found');
+      const before = await this.activeSuperAdmins(trx);
+
+      if (patch.groupIds !== undefined) {
+        const next = await this.resolveGroups(patch.groupIds, trx);
+        const current = await trx
+          .selectFrom('auth_user_groups as ug')
+          .innerJoin('auth_groups as g', 'g.id', 'ug.group_id')
+          .select(['g.id', 'g.key', 'g.system'])
+          .where('ug.user_id', '=', userId)
+          .orderBy('g.key')
+          .execute();
+        const systemOf = (gs: { id: string; system: boolean }[]) => gs.filter((g) => g.system).map((g) => g.id).sort().join();
+        if (systemOf(current) !== systemOf(next) && !actor.isSuperAdmin) throw escalation();
+        const ids = (gs: { id: string }[]) => gs.map((g) => g.id).sort().join();
+        if (ids(current) !== ids(next)) {
+          await trx.deleteFrom('auth_user_groups').where('user_id', '=', userId).execute();
+          if (next.length) await trx.insertInto('auth_user_groups').values(next.map((g) => ({ user_id: userId, group_id: g.id }))).execute();
+          await this.audit.record(
+            { type: 'user.groups.update', userId, actorId: actor.id, meta: { before: current.map((g) => g.key), after: next.map((g) => g.key) } },
+            trx,
+          );
+        }
       }
-      const res = await trx
-        .updateTable('auth_users')
-        .set({ status, updated_at: new Date() })
-        .where('id', '=', userId)
-        .executeTakeFirst();
-      if (Number(res.numUpdatedRows) === 0) throw new AuthError('not_found', 404, 'User not found');
-      if (status === 'disabled') await this.revokeAll(userId, undefined, trx);
-      await this.audit.record({ type: status === 'disabled' ? 'user_disabled' : 'user_enabled', userId, actorId }, trx);
+
+      if (patch.status !== undefined) {
+        await trx.updateTable('auth_users').set({ status: patch.status, updated_at: new Date() }).where('id', '=', userId).execute();
+        await this.audit.record({ type: patch.status === 'disabled' ? 'user_disabled' : 'user_enabled', userId, actorId: actor.id }, trx);
+      }
+      if (patch.name !== undefined) {
+        await trx.updateTable('auth_users').set({ name: patch.name, updated_at: new Date() }).where('id', '=', userId).execute();
+      }
+
+      if (before > 0 && (await this.activeSuperAdmins(trx)) === 0) throw new AuthError('last_super_admin', 409);
+      // Last: grant revocation is not part of the transaction.
+      if (patch.status === 'disabled') await this.revokeAll(userId, undefined, trx);
     });
+  }
+
+  async setStatus(userId: string, status: 'active' | 'disabled', actorId: string): Promise<void> {
+    // Status changes never touch group membership, so the escalation rule does not apply.
+    await this.update(userId, { status }, { id: actorId, isSuperAdmin: false });
   }
 
   async delete(userId: string, actorId: string): Promise<void> {

@@ -15,8 +15,8 @@ export interface UserView {
   email: string;
   name: string;
   status: string;
-  /** Group keys (Task 13 replaces this with `groups`). */
-  roles: string[];
+  /** Sorted by key. */
+  groups: Array<{ id: string; key: string; name: string }>;
   lastLoginAt: Date | null;
   identities: Array<{ id: string; provider: string; subject: string; email: string | null }>;
 }
@@ -34,13 +34,20 @@ const createSchema = z
     email: z.string().transform(normalizeEmail).pipe(z.string().email().max(320)),
     name: z.string().min(1).max(255),
     password: z.string().optional(),
+    groupIds: z.array(z.string().regex(UUID, 'invalid group id')).min(1).max(100),
   })
   .strict();
 
 const patchSchema = z
-  .object({ name: z.string().min(1).max(255).optional(), status: z.enum(['active', 'disabled']).optional() })
+  .object({
+    name: z.string().min(1).max(255).optional(),
+    status: z.enum(['active', 'disabled']).optional(),
+    groupIds: z.array(z.string().regex(UUID, 'invalid group id')).max(100).optional(),
+  })
   .strict()
-  .refine((v) => v.name !== undefined || v.status !== undefined, { message: 'name or status is required' });
+  .refine((v) => v.name !== undefined || v.status !== undefined || v.groupIds !== undefined, {
+    message: 'name, status or groupIds is required',
+  });
 
 const passwordSchema = z.object({ password: z.string() }).strict();
 
@@ -60,11 +67,11 @@ export class UsersController {
     const rows = await uq.execute();
     if (rows.length === 0) return [];
     const userIds = rows.map((r) => r.id);
-    const [roles, identities] = await Promise.all([
+    const [groups, identities] = await Promise.all([
       this.db
         .selectFrom('auth_user_groups as ug')
         .innerJoin('auth_groups as g', 'g.id', 'ug.group_id')
-        .select(['ug.user_id', 'g.key'])
+        .select(['ug.user_id', 'g.id', 'g.key', 'g.name'])
         .where('ug.user_id', 'in', userIds)
         .orderBy('g.key')
         .execute(),
@@ -81,7 +88,7 @@ export class UsersController {
       email: u.email,
       name: u.name,
       status: u.status,
-      roles: roles.filter((r) => r.user_id === u.id).map((r) => r.key),
+      groups: groups.filter((g) => g.user_id === u.id).map((g) => ({ id: g.id, key: g.key, name: g.name })),
       lastLoginAt: u.last_login_at,
       identities: identities
         .filter((i) => i.user_id === u.id)
@@ -104,7 +111,7 @@ export class UsersController {
   @HttpCode(201)
   async create(@Body() body: unknown, @CurrentUser() actor: RequestUser): Promise<{ data: UserView }> {
     const input = parseBody(createSchema, body);
-    const created = await this.users.create({ ...input, actorId: actor.id });
+    const created = await this.users.create({ ...input, actorId: actor.id, actorIsSuperAdmin: actor.isSuperAdmin });
     return { data: await this.view(created.id) };
   }
 
@@ -112,11 +119,7 @@ export class UsersController {
   async update(@Param('id') rawId: string, @Body() body: unknown, @CurrentUser() actor: RequestUser): Promise<{ data: UserView }> {
     const id = uuid(rawId);
     const input = parseBody(patchSchema, body);
-    if (!(await this.users.findById(id))) throw new AuthError('not_found', 404, 'User not found');
-    if (input.status !== undefined) await this.users.setStatus(id, input.status, actor.id);
-    if (input.name !== undefined) {
-      await this.db.updateTable('auth_users').set({ name: input.name, updated_at: new Date() }).where('id', '=', id).execute();
-    }
+    await this.users.update(id, input, { id: actor.id, isSuperAdmin: actor.isSuperAdmin });
     return { data: await this.view(id) };
   }
 

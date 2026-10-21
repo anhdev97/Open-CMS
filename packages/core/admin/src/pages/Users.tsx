@@ -72,7 +72,8 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
   async function onSubmit({ email, name, password }: CreateValues) {
     setFormError(null);
     try {
-      await createUser({ email, name, ...(password ? { password } : {}) });
+      // Task 16 adds the group picker; until then the server answers 422 (groupIds must not be empty).
+      await createUser({ email, name, groupIds: [], ...(password ? { password } : {}) });
       toast.success(t('users.create.created'));
       onDone();
       onClose();
