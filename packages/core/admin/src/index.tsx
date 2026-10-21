@@ -4,9 +4,11 @@ import { useParams } from 'next/navigation';
 import { AuthGate } from './auth/AuthGate';
 import { AdminParamsContext } from './lib/nav';
 import { matchRoute } from './router/match';
+import { useLocale } from './i18n/hooks';
 import { pages } from './router/routes';
 
 export default function AdminApp() {
+  useLocale(); // re-render the route tree (state kept) when the admin language changes
   const { slug } = useParams<{ slug?: string[] }>();
   const { id, params, guarded } = matchRoute(slug);
   const Page = pages[id];

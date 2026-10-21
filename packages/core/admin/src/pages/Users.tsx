@@ -48,23 +48,24 @@ type Dialogs =
   | { kind: 'reset' | 'disable' | 'enable' | 'delete'; user: AdminUser }
   | { kind: 'unlink'; user: AdminUser; identity: Identity };
 
-const createSchema = z.object({
-  email: z
-    .string()
-    .trim()
-    .min(1, t('users.create.emailRequired'))
-    .pipe(z.string().email(t('users.create.emailInvalid'))),
-  name: z.string().trim().min(1, t('users.create.nameRequired')),
-  password: z.string(),
-});
-type CreateValues = z.infer<typeof createSchema>;
+const createSchema = () =>
+  z.object({
+    email: z
+      .string()
+      .trim()
+      .min(1, t('users.create.emailRequired'))
+      .pipe(z.string().email(t('users.create.emailInvalid'))),
+    name: z.string().trim().min(1, t('users.create.nameRequired')),
+    password: z.string(),
+  });
+type CreateValues = z.infer<ReturnType<typeof createSchema>>;
 
-const resetSchema = z.object({ password: z.string().min(1, t('users.create.passwordRequired')) });
+const resetSchema = () => z.object({ password: z.string().min(1, t('users.create.passwordRequired')) });
 
 function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [formError, setFormError] = useState<Error | null>(null);
   const form = useForm<CreateValues>({
-    resolver: zodResolver(createSchema),
+    resolver: zodResolver(createSchema()),
     defaultValues: { email: '', name: '', password: '' },
   });
 
@@ -149,8 +150,8 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
 
 function ResetPasswordDialog({ user, isMe, onClose }: { user: AdminUser; isMe: boolean; onClose: () => void }) {
   const [formError, setFormError] = useState<Error | null>(null);
-  const form = useForm<z.infer<typeof resetSchema>>({
-    resolver: zodResolver(resetSchema),
+  const form = useForm<z.infer<ReturnType<typeof resetSchema>>>({
+    resolver: zodResolver(resetSchema()),
     defaultValues: { password: '' },
   });
 

@@ -63,15 +63,16 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 const SIDES = ['top', 'right', 'bottom', 'left'] as const;
 
-const demoSchema = z.object({
-  name: z.string().min(3, t('uiKit.form.nameTooShort')),
-  email: z.string().email(t('uiKit.form.emailInvalid')),
-});
-type DemoValues = z.infer<typeof demoSchema>;
+const demoSchema = () =>
+  z.object({
+    name: z.string().min(3, t('uiKit.form.nameTooShort')),
+    email: z.string().email(t('uiKit.form.emailInvalid')),
+  });
+type DemoValues = z.infer<ReturnType<typeof demoSchema>>;
 
 function FormDemo() {
   const form = useForm<DemoValues>({
-    resolver: zodResolver(demoSchema),
+    resolver: zodResolver(demoSchema()),
     defaultValues: { name: 'ab', email: 'ok@example.com' },
     mode: 'onChange',
   });

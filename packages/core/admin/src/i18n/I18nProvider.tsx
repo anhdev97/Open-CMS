@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { isLocale, type Locale } from '@opencms/schema';
 import { LocaleContext } from './context';
 import { loadMessages, setActiveMessages } from './index';
-import { resolveAdminLocale } from './resolve';
+import { initialLocaleState } from './resolve';
 
 const STORAGE_KEY = 'opencms-locale';
 
@@ -38,27 +38,27 @@ export async function setAdminLocale(l: Locale): Promise<void> {
 
 export function I18nProvider({ initialLocale, children }: { initialLocale?: Locale; children: ReactNode }) {
   const [locale, setLocale] = useState<Locale>('en-US');
+  // Server and first client render both output nothing, so there is no hydration mismatch and
+  // no flash of the wrong language: children mount once the initial bundle is active.
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     listener = setLocale;
-    const initial =
-      initialLocale ??
-      resolveAdminLocale({
-        stored: readStored(),
-        browser: typeof navigator !== 'undefined' ? (navigator.languages ?? [navigator.language]) : [],
-      });
-    void setAdminLocale(initial);
+    const { locale: initial } = initialLocaleState({
+      initialLocale,
+      stored: readStored(),
+      browser: typeof navigator !== 'undefined' ? (navigator.languages ?? [navigator.language]) : [],
+    });
+    let live = true;
+    void setAdminLocale(initial).finally(() => {
+      if (live) setReady(true);
+    });
     return () => {
+      live = false;
       if (listener === setLocale) listener = null;
     };
   }, [initialLocale]);
 
-  // Keyed subtree: existing `t()` call sites re-run when the active bundle changes.
-  return (
-    <LocaleContext.Provider value={locale}>
-      <div key={locale} style={{ display: 'contents' }}>
-        {children}
-      </div>
-    </LocaleContext.Provider>
-  );
+  // Consumers (the route root calls useLocale) re-render on change; nothing is remounted.
+  return <LocaleContext.Provider value={locale}>{ready ? children : null}</LocaleContext.Provider>;
 }

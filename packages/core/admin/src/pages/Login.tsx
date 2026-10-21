@@ -22,11 +22,12 @@ interface Interaction {
 }
 type InteractionResponse = Interaction | { redirectTo: string };
 
-const schema = z.object({
-  email: z.string().trim().min(1, t('setup.errors.emailRequired')),
-  password: z.string().min(1, t('login.errors.passwordRequired')),
-});
-type Values = z.infer<typeof schema>;
+const schema = () =>
+  z.object({
+    email: z.string().trim().min(1, t('setup.errors.emailRequired')),
+    password: z.string().min(1, t('login.errors.passwordRequired')),
+  });
+type Values = z.infer<ReturnType<typeof schema>>;
 
 function submitErrorText(e: unknown): string | null {
   if (!(e instanceof ApiError)) return null;
@@ -46,7 +47,7 @@ function LoginForm({ uid, interaction }: { uid: string; interaction: Interaction
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [otherError, setOtherError] = useState<Error | null>(null);
   const form = useForm<Values>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema()),
     defaultValues: { email: interaction.loginHint ?? '', password: '' },
   });
   const base = `/oauth2/interaction/${encodeURIComponent(uid)}`;
