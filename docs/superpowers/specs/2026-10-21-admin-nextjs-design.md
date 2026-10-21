@@ -1,6 +1,6 @@
 # opencms: Admin chuyển sang Next.js, một Next app chung cho admin và website, nhúng trong NestJS — Design Spec
 
-**Ngày:** 2026-10-21 · **Trạng thái:** Draft chờ review
+**Ngày:** 2026-10-21 · **Trạng thái:** Approved
 **Nhánh nền:** `main` (38061de, đã gồm `feat/oauth2` + admin nhúng). Các nhánh `feat/storefront-init`, `feat/realm-roles`, `cursor/*` **không** dùng làm nền và không thuộc spec này.
 **Thay thế một phần:** `docs/superpowers/specs/2026-10-15-embedded-admin-init-design.md` — quyết định E2 (Vite + React Router) và E5 (`OPENCMS_ADMIN_DEV`), mục §3 (SPA và middleware phục vụ), §5.1 (React Router), §7.2 (file sinh ra) và §8 (smoke). Các phần còn lại của spec đó (auth wiring, URL E3/E4, màn hình và luồng §5.2–5.5, design system §6) **giữ nguyên**.
 
@@ -151,13 +151,16 @@ Với mỗi request có path `/admin` hoặc `/admin/*` (không phân biệt hoa
 
 ### 5.1 Layout (`@opencms/core/admin/layout`)
 
-File trong project (sinh bởi `init`; config segment phải viết thẳng vì Next không nhận config qua re-export):
+File trong project (sinh bởi `init`). Config segment (`dynamic`) viết thẳng trong file vì Next đọc nó tĩnh; `metadata` và layout được import rồi export lại tường minh thay vì `export … from`, để không phụ thuộc cách Next phân tích re-export:
 
 ```tsx
 // app/(admin)/layout.tsx
 import '../globals.css';
+import AdminLayout, { metadata as adminMetadata } from '@opencms/core/admin/layout';
+
 export const dynamic = 'force-dynamic';
-export { default, metadata } from '@opencms/core/admin/layout';
+export const metadata = adminMetadata;
+export default AdminLayout;
 
 // app/(admin)/admin/[[...slug]]/page.tsx
 export { default } from '@opencms/core/admin';
@@ -277,7 +280,7 @@ Mục tiêu: các trang chỉ đổi import, không đổi logic.
 
 **Smoke (`scripts/smoke-init.mjs`, chạy trong CI):** `init --link` → install → `build` (gồm `next build`) → `start` với `NODE_ENV=production`, rồi kiểm tra:
 - `GET /` 200 `text/html`, chứa marker trang chủ mẫu; không có header `Content-Security-Policy`.
-- `GET /admin/` 200 `text/html`, có CSP chứa `'nonce-`, có `X-Robots-Tag: noindex`, chứa marker của admin layout (thay cho `<div id="root">`).
+- `GET /admin/` 200 `text/html`, có CSP chứa `'nonce-<n>'` và mọi `<script>` trong HTML mang `nonce="<n>"` trùng giá trị đó, có `X-Robots-Tag: noindex`, chứa marker của admin layout (thay cho `<div id="root">`).
 - Một URL `/_next/static/...` lấy từ HTML admin trả 200 với `Cache-Control` có `immutable`.
 - Toàn bộ flow setup → login → `/api/auth/me` → logout như hiện tại.
 - Typecheck project sinh ra: `tsc -p tsconfig.server.json --noEmit --preserveSymlinks` (như hiện tại); phần Next đã được `next build` typecheck.
@@ -286,7 +289,7 @@ Mục tiêu: các trang chỉ đổi import, không đổi logic.
 
 1. **Thời gian boot dev** lâu hơn (Next `prepare()` + compile lần đầu). Chấp nhận; log rõ khi Next sẵn sàng.
 2. **Project bundle mã admin** nên `next build` lâu hơn và Tailwind quét thêm `dist/admin`. Đổi lại là một bộ chung (X3).
-3. **Re-export layout/page** phụ thuộc cách Next xử lý re-export từ package. Nếu Next không nhận `export { default, metadata } from` cho layout, file template sẽ import rồi export lại (`import L, { metadata as m } from …; export const metadata = m; export default L;`). Plan phải kiểm chứng điều này sớm (task đầu tiên đụng Next).
-4. **Nonce qua request header khi dùng custom server** dựa vào việc Next đọc nonce từ request header `content-security-policy`. Plan kiểm chứng sớm; nếu không được, phương án dự phòng là `proxy.ts` (middleware Next) do template sinh, chỉ match `/admin`.
+3. **Re-export từ package**: đã chọn import rồi export tường minh cho layout (§5.1); page chỉ re-export `default`, cách Next hỗ trợ. Plan vẫn kiểm chứng bằng `next build` ở task đầu tiên đụng Next.
+4. **Nonce khi Next chạy trong Nest**: Next lấy nonce từ request header `content-security-policy` lúc render — chính là cơ chế mà cách làm trong tài liệu Next (middleware/`proxy.ts` sinh nonce rồi ghi vào request header) dựa vào. Spec chọn sinh nonce ở Nest (§4.4) vì: một chỗ duy nhất trong core, test được bằng unit test, không đặt logic bảo mật vào file template người dùng có thể sửa, và không thêm middleware runtime của Next. Plan kiểm chứng sớm bằng smoke (`'nonce-…'` trong CSP phải trùng thuộc tính `nonce` trên các `<script>` của trang admin).
 5. **Một instance**: `.next/cache` trên đĩa. Nhiều instance cần `cacheHandler` dùng chung — thuộc spec cache sau này.
 6. **Việc sau (ngoài phạm vi):** `Cache-Control: no-store` cho mọi `/api/**` trừ `/api/content/**`; ISR/tag + `revalidateTag` khi content đổi; HTTP cache cho `/api/content`; website lấy nội dung CMS; kiểm tra phiên phía server cho admin.
