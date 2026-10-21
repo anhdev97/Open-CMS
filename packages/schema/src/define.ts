@@ -69,6 +69,7 @@ export function defineContentType(input: ContentTypeInput): ContentTypeDefinitio
     displayName: input.displayName,
     fields: Object.entries(input.fields).map(([name, spec]) => normalizeField(name, spec)),
   };
+  if (input.group) def.group = input.group;
   if (input.description) def.description = input.description;
   return def;
 }
@@ -83,6 +84,7 @@ export function normalizeDefinition(raw: ContentTypeDefinition): ContentTypeDefi
       normalizeField(fld.name, { ...fld, options: { ...(fld.options ?? {}) } } as FieldSpec),
     ),
   };
+  if (raw.group) def.group = raw.group;
   if (raw.description) def.description = raw.description;
   return def;
 }

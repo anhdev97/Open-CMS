@@ -1,4 +1,5 @@
 import { fieldColumns, isMultiRelation, snake } from './physical';
+import { GROUP_KEY_RE, validateLocalizedText } from './groups';
 import type { ContentTypeDefinition, FieldKind } from './types';
 
 export const FIELD_KINDS: FieldKind[] = [
@@ -37,6 +38,10 @@ export function collectSchemaIssues(defs: ContentTypeDefinition[]): string[] {
     if (seenApiIds.has(def.apiId)) issues.push(`${where}: duplicate apiId`);
     seenApiIds.add(def.apiId);
     if (!def.displayName) issues.push(`${where}: displayName is required`);
+    else if (typeof def.displayName !== 'string') issues.push(...validateLocalizedText(def.displayName, `${where}: displayName`));
+    if (def.group !== undefined && (typeof def.group !== 'string' || !GROUP_KEY_RE.test(def.group))) {
+      issues.push(`${where}: group must match ${GROUP_KEY_RE}`);
+    }
 
     const fieldIds = new Set<string>();
     const fieldNames = new Set<string>();

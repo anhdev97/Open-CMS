@@ -5,6 +5,8 @@
  * migrations, validators and TypeScript types are all derived from it.
  */
 
+import type { Locale, LocalizedText } from './i18n';
+
 export type FieldKind =
   | 'text'
   | 'longText'
@@ -77,19 +79,22 @@ export interface FieldDefinition<K extends FieldKind = FieldKind> {
 }
 
 export interface ContentTypeDefinition {
+  /** Content group key (see `defineContentGroups`). */
+  group?: string;
   /** Stable id, e.g. `ct_8f2a1c`. */
   id: string;
   /** camelCase API id, e.g. `product`. Drives table name `ct_product` and REST path. */
   apiId: string;
-  displayName: string;
+  displayName: string | LocalizedText;
   description?: string;
   fields: FieldDefinition[];
 }
 
 export interface ContentTypeInput {
+  group?: string;
   id: string;
   apiId: string;
-  displayName: string;
+  displayName: string | LocalizedText;
   description?: string;
   fields: Record<string, FieldSpec>;
 }
@@ -102,12 +107,12 @@ export interface OpenCmsConfig {
   generatedDir?: string;
   /** Directory for migration files and `_snapshot.json`. Default `migrations`. */
   migrationsDir?: string;
-  /** Default locale used when a request does not specify one. Default `en`. */
-  defaultLocale?: string;
-  locales?: string[];
+  /** Default locale used when a request does not specify one. Default `en-US`. */
+  defaultLocale?: Locale;
+  locales?: Locale[];
 }
 
 export interface ResolvedConfig extends Required<Omit<OpenCmsConfig, 'locales'>> {
-  locales: string[];
+  locales: Locale[];
   root: string;
 }

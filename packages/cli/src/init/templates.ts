@@ -49,8 +49,8 @@ export const configTs = (): string => `import { defineConfig } from '@opencms/sc
 
 export default defineConfig({
   database: { url: process.env.DATABASE_URL! },
-  defaultLocale: 'en',
-  locales: ['en'],
+  defaultLocale: 'en-US',
+  locales: ['en-US'],
 });
 `;
 

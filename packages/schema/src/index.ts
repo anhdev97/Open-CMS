@@ -4,3 +4,6 @@ export * from './physical';
 export * from './validate';
 export * from './validator';
 export * from './config';
+export * from './i18n';
+export * from './locales';
+export * from './groups';
