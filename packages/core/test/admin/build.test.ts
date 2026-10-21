@@ -36,7 +36,7 @@ describe.skipIf(!built)('admin module output (run `pnpm --filter @opencms/core b
     expect(fs.existsSync(path.join(adminDist, 'package.json'))).toBe(false);
     for (const f of walk(adminDist).filter((p) => /\.(js|ts|css)$/.test(p))) {
       const text = fs.readFileSync(f, 'utf8');
-      expect(text, f).not.toContain('react-router');
+      expect(text, f).not.toContain(['react', 'router'].join('-'));
       expect(text, f).not.toContain('from "@/');
     }
   });

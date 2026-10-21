@@ -65,7 +65,7 @@ Commit the generated file unchanged, then show it on the `/_ui` page (`src/pages
 
 ## Dev workflow
 
-Run `pnpm --filter @opencms/core dev:admin` (`tsc -w`, emits to `dist/admin`) next to the example host app (`examples/my-store`), whose Next dev server bundles the admin from `dist/admin`. Edit `src/`, `tsc` re-emits, Next hot-reloads. `pnpm --filter @opencms/core build` produces the full output including `theme.css`.
+Run `pnpm --filter @opencms/core dev:admin` (`tsc -w`, emits to `dist/admin`) next to the example host app (`examples/my-store`), whose Next dev server bundles the admin from `dist/admin`. Edit `src/`, `tsc` re-emits, Next hot-reloads. `pnpm --filter @opencms/core build` produces the full output including `theme.css`; `dev:admin` does not copy `theme.css`, so on a fresh checkout run that build once before `dev:admin`.
 
 ## Note for plugins
 

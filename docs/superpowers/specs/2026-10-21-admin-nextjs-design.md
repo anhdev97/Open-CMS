@@ -96,7 +96,7 @@ packages/core/
 - `dist/admin` là ESM (cú pháp `import`/`export`, import không có đuôi file) nhưng **không** đặt `type: module`: chỉ bundler của Next đọc các file này, và webpack/Turbopack bắt buộc import có đuôi file trong package `type: module`. Alias `@/` của admin đổi thành import tương đối vì `tsc` không viết lại alias khi emit.
 - `peerDependencies` thêm `next ^16`, `react ^19`, `react-dom ^19`, đánh dấu `optional` trong `peerDependenciesMeta` (project chỉ dùng API thì không cần).
 - `devDependencies` thêm `next` (để typecheck/build admin). Bỏ `vite`, `@vitejs/plugin-react`, `@tailwindcss/vite`, `react-router`.
-- Script: `build` = `tsc -p tsconfig.json && tsc -p admin/tsconfig.json && <copy theme.css>`; `dev:admin` = `tsc -w -p admin/tsconfig.json`.
+- Script: `build` = `tsc -p tsconfig.json && tsc -p admin/tsconfig.json && <copy theme.css>`; `dev:admin` = `tsc -w -p admin/tsconfig.json`. `dev:admin` không copy `theme.css`, nên checkout mới phải chạy `pnpm --filter @opencms/core build` một lần trước `dev:admin`.
 - Các thư viện UI admin dùng lúc chạy (`radix-ui`, `lucide-react`, `sonner`, `react-hook-form`, `@hookform/resolvers`, `class-variance-authority`, `clsx`, `tailwind-merge`) chuyển từ devDependencies sang **dependencies** của core, vì giờ project bundle mã admin từ `dist/admin` và cần resolve được chúng. `tw-animate-css` cũng vào dependencies (được `theme.css` import).
 
 ## 4. Nest gắn Next (`packages/core/src/web/`)
@@ -174,7 +174,7 @@ export { default } from '@opencms/core/admin';
 
 ### 5.2 `AdminApp` và route table
 
-- `@opencms/core/admin` (`'use client'`) export default `AdminApp({ params })`; lấy `slug` từ `params` (Next 16: `params` là Promise → dùng `React.use`).
+- `@opencms/core/admin` (`'use client'`) export default `AdminApp({ params })`; lấy `slug` bằng `useParams()` từ `next/navigation` (không dùng `React.use(params)`).
 - Route table trong `admin/src/router/routes.ts`, giữ đúng các route của `routes.tsx` hiện tại:
 
 | Pattern | Trang | Ghi chú |
@@ -223,6 +223,7 @@ Mục tiêu: các trang chỉ đổi import, không đổi logic.
 ### 5.5 Phát triển core
 
 - `examples/my-store` có `app/` giống template và là môi trường dev của admin.
+- Checkout mới chạy `pnpm --filter @opencms/core build` một lần trước (`dev:admin` không copy `theme.css`).
 - Người phát triển chạy `pnpm --filter @opencms/core dev:admin` (tsc -w) song song `pnpm --filter my-store dev`; Next dev trong my-store nhận thay đổi ở `dist/admin` qua symlink workspace.
 
 ## 6. `opencms init`
@@ -236,7 +237,7 @@ Mục tiêu: các trang chỉ đổi import, không đổi logic.
 - `next.config.ts`: `export default {}` (có type `NextConfig`).
 - `postcss.config.mjs`: plugin `@tailwindcss/postcss`.
 - `next-env.d.ts`.
-- `tsconfig.json` (Next): `jsx: preserve`, `module: esnext`, `moduleResolution: bundler`, `plugins: [{ name: 'next' }]`, `include: ['next-env.d.ts', 'app/**/*', '.next/types/**/*.ts']`.
+- `tsconfig.json` (Next): `jsx: react-jsx` (Next 16 tự ghi giá trị này, không phải `preserve`), `module: esnext`, `moduleResolution: bundler`, `plugins: [{ name: 'next' }]`, `include: ['next-env.d.ts', 'app/**/*', '.next/types/**/*.ts']`.
 - `tsconfig.server.json`: nội dung tsconfig Nest hiện tại (CommonJS, `include: ['src', 'opencms.config.ts']`).
 - `.gitignore` thêm `.next/`.
 
