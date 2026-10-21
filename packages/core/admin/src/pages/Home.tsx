@@ -9,7 +9,7 @@ import { Card, CardContent } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Link } from '../lib/nav';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
 import { api } from '../lib/api';
 import type { ApiError } from '../lib/api-error';
 import type { ContentTypeDefinition, Meta } from '../lib/types';

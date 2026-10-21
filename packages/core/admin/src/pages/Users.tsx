@@ -25,7 +25,8 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
+import { useFormat } from '../i18n/hooks';
 import { ApiError } from '../lib/api-error';
 import {
   createUser,
@@ -208,6 +209,7 @@ function ResetPasswordDialog({ user, isMe, onClose }: { user: AdminUser; isMe: b
 
 export function Users() {
   const { user: me } = useAuth();
+  const { formatDateTime } = useFormat();
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [dialog, setDialog] = useState<Dialogs | null>(null);
@@ -303,7 +305,7 @@ export function Users() {
                         <StatusBadge status={u.status === 'disabled' ? 'disabled' : 'active'} />
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : t('users.never')}
+                        {u.lastLoginAt ? formatDateTime(u.lastLoginAt) : t('users.never')}
                       </TableCell>
                       <TableCell>
                         {u.identities.length === 0 ? (

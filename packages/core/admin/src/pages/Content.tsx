@@ -15,7 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Link, useAdminParams } from '../lib/nav';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
+import { useFormat } from '../i18n/hooks';
 import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
 import type { ContentTypeDefinition, Meta } from '../lib/types';
@@ -29,6 +30,7 @@ export function Content() {
 }
 
 function ContentView({ apiId }: { apiId: string }) {
+  const { formatDateTime } = useFormat();
   const [def, setDef] = useState<ContentTypeDefinition | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [locale, setLocale] = useState('');
@@ -218,7 +220,7 @@ function ContentView({ apiId }: { apiId: string }) {
                           {e.publishedAt && e.hasUnpublishedChanges && <StatusBadge status="changed" />}
                         </div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{new Date(e.updatedAt).toLocaleString()}</TableCell>
+                      <TableCell className="text-muted-foreground">{formatDateTime(e.updatedAt)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

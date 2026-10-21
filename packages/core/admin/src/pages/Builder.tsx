@@ -12,7 +12,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { useAdminNavigate, useAdminSearch } from '../lib/nav';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
 import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
 import {

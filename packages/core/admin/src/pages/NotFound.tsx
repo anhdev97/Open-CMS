@@ -2,7 +2,7 @@ import { FileQuestionIcon } from 'lucide-react';
 import { EmptyState } from '../components/EmptyState';
 import { Button } from '../components/ui/button';
 import { Link } from '../lib/nav';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
 
 export function NotFound() {
   return (

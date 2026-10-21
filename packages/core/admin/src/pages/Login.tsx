@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
 import { useAdminSearch } from '../lib/nav';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
 import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
 import { errorMessage, loginPageAction, originMismatchMessage } from '../lib/auth-flow';

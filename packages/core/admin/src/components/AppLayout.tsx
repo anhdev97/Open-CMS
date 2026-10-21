@@ -30,7 +30,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from './ui/sidebar';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
 import { Link, useAdminPathname } from '../lib/nav';
 import { api } from '../lib/api';
 

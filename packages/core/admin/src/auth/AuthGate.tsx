@@ -4,7 +4,7 @@ import { AppLayout } from '../components/AppLayout';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
 import { api } from '../lib/api';
 import { useAdminNavigate } from '../lib/nav';
 import { ApiError } from '../lib/api-error';

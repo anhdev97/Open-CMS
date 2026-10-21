@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/form';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
 import { ApiError } from '../lib/api-error';
 import { PASSWORD_MAX, PASSWORD_MIN, validateSetup } from '../lib/auth-flow';
 import { getTheme, setTheme, type Theme } from '../lib/theme';

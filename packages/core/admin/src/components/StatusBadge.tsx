@@ -1,5 +1,5 @@
 import { Badge } from './ui/badge';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
 
 export type Status = 'draft' | 'published' | 'changed' | 'active' | 'disabled';
 

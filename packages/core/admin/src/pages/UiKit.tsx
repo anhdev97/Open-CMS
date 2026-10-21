@@ -45,7 +45,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Textarea } from '../components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
 import { ApiError } from '../lib/api-error';
 import { setTheme } from '../lib/theme';
 

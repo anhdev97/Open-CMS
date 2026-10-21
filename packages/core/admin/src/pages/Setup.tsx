@@ -9,7 +9,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
 import { useAdminNavigate } from '../lib/nav';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
 import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
 import { originMismatchMessage, PASSWORD_MAX, PASSWORD_MIN, setupFieldErrors, validateSetup } from '../lib/auth-flow';

@@ -17,3 +17,16 @@ export default function AdminApp() {
   );
   return guarded ? <AuthGate>{page}</AuthGate> : page;
 }
+
+export {
+  SUPPORTED_LOCALES,
+  isLocale,
+  matchLocale,
+  localizedText,
+  defineMessages,
+  createTranslator,
+  formatDateTime,
+  formatNumber,
+} from '@opencms/schema';
+export type { Locale } from '@opencms/schema';
+export { useLocale, useTranslator, useFormat } from './i18n/hooks';

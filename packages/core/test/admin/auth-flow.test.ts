@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../../admin/src/lib/api-error';
 import { errorMessage, originMismatchMessage, loginPageAction, loginUrl, setupFieldErrors, validateSetup } from '../../admin/src/lib/auth-flow';
-import { en } from '../../admin/src/i18n/en';
+import { enUS as en } from '../../admin/src/i18n';
 
 describe('loginUrl', () => {
   it('keeps the /admin path and search as returnTo', () => {
