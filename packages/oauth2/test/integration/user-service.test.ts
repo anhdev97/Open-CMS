@@ -23,10 +23,11 @@ describe('UserService', () => {
   });
   afterAll(() => ctx.stop());
 
-  it('normalizes email, assigns super_admin, rejects duplicates', async () => {
+  it('normalizes email, assigns super-admin, rejects duplicates', async () => {
     const u = await users.create({ email: ' A@X.com ', name: 'A', password: 'correct horse battery', actorId: undefined });
     expect(u.email).toBe('a@x.com');
-    expect(u.roles).toEqual(['super_admin']);
+    expect(u.groups).toEqual([{ key: 'super-admin', name: 'Super Admin' }]);
+    expect(u.isSuperAdmin).toBe(true);
     expect(u.status).toBe('active');
     expect(u.passwordHash).toMatch(/^\$argon2id\$/);
     await expect(users.create({ email: 'a@x.com', name: 'B' })).rejects.toMatchObject({ code: 'email_taken', status: 409 });

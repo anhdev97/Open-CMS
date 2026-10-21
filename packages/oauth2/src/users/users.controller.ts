@@ -5,7 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { OAUTH2_DB } from '../constants';
 import type { AuthTables } from '../db/types';
 import { AuthError } from '../errors';
-import { CurrentUser, RequireRole, type RequestUser } from '../guard/current-user.decorator';
+import { CurrentUser, RequirePermission, type RequestUser } from '../guard/current-user.decorator';
 import { normalizeEmail } from '../security/email';
 import { parseBody } from '../security/validate';
 import { UserService } from './user.service';
@@ -15,6 +15,7 @@ export interface UserView {
   email: string;
   name: string;
   status: string;
+  /** Group keys (Task 13 replaces this with `groups`). */
   roles: string[];
   lastLoginAt: Date | null;
   identities: Array<{ id: string; provider: string; subject: string; email: string | null }>;
@@ -43,7 +44,7 @@ const patchSchema = z
 
 const passwordSchema = z.object({ password: z.string() }).strict();
 
-@RequireRole('super_admin')
+@RequirePermission('settings.users')
 @Controller('api/admin/users')
 export class UsersController {
   constructor(
@@ -52,7 +53,7 @@ export class UsersController {
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
-  /** Users + roles + identities in three queries total (no per-user lookups). */
+  /** Users + groups + identities in three queries total (no per-user lookups). */
   private async views(ids?: string[]): Promise<UserView[]> {
     let uq = this.db.selectFrom('auth_users').select(['id', 'email', 'name', 'status', 'last_login_at']).orderBy('created_at').orderBy('id');
     if (ids) uq = uq.where('id', 'in', ids);
@@ -61,11 +62,11 @@ export class UsersController {
     const userIds = rows.map((r) => r.id);
     const [roles, identities] = await Promise.all([
       this.db
-        .selectFrom('auth_user_roles as ur')
-        .innerJoin('auth_roles as r', 'r.id', 'ur.role_id')
-        .select(['ur.user_id', 'r.key'])
-        .where('ur.user_id', 'in', userIds)
-        .orderBy('r.key')
+        .selectFrom('auth_user_groups as ug')
+        .innerJoin('auth_groups as g', 'g.id', 'ug.group_id')
+        .select(['ug.user_id', 'g.key'])
+        .where('ug.user_id', 'in', userIds)
+        .orderBy('g.key')
         .execute(),
       this.db
         .selectFrom('auth_user_identities')

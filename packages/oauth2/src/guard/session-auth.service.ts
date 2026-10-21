@@ -92,7 +92,15 @@ export class SessionAuthenticator {
     await this.sessions.touch(idHash);
 
     // Step 6.
-    const result: RequestUser = { id: user.id, email: user.email, name: user.name, roles: user.roles, locale: user.locale };
+    const result: RequestUser = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      locale: user.locale,
+      groups: user.groups,
+      permissions: user.permissions,
+      isSuperAdmin: user.isSuperAdmin,
+    };
     req.user = result;
     req.authSession = { idHash };
     return result;

@@ -6,7 +6,7 @@ httpOnly `oc_session` cookie.
 
 - Authorization code + PKCE (S256 only), `refresh_token` grant, single client `opencms-admin`.
 - Local email/password (argon2id) and an optional generic OIDC identity provider.
-- Roles (`super_admin`, ...), user management API, first-run setup, audit events.
+- Permission groups (`super-admin` system group, `contenter`, `reviewer`), `@RequirePermission(...)`, user management API, first-run setup, audit events.
 - Global `AuthGuard` on every `/api/**` route (opt out per handler with `@Public()`).
 - Hourly cleanup of expired sessions and provider payloads.
 
@@ -83,11 +83,11 @@ oldest when full.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/auth/setup`, `POST /api/auth/setup` | First-run state / create the first super_admin (public) |
+| `GET /api/auth/setup`, `POST /api/auth/setup` | First-run state / create the first super admin (public) |
 | `GET /api/auth/login`, `GET /api/auth/callback` | Start / finish the browser login (BFF) |
 | `GET /api/auth/me`, `POST /api/auth/logout` | Current user / end the session |
 | `POST /api/auth/password` | Change own password |
-| `GET/POST /api/admin/users`, `PATCH/DELETE /api/admin/users/:id`, `POST /api/admin/users/:id/password`, `DELETE /api/admin/users/:id/identities/:identityId` | User management (super_admin) |
+| `GET/POST /api/admin/users`, `PATCH/DELETE /api/admin/users/:id`, `POST /api/admin/users/:id/password`, `DELETE /api/admin/users/:id/identities/:identityId` | User management (`settings.users`) |
 | `/oauth2/*` | The OIDC provider (discovery, auth, token, jwks, end_session) and login interaction (`/oauth2/interaction/:uid`) |
 | `/oauth2/interaction/:uid/idp/:provider`, `/oauth2/idp/:provider/callback` | External IdP sign-in |
 
@@ -98,7 +98,7 @@ answer `302 /admin/login?error=<code>`.
 
 1. Start the app against an empty database. `GET /api/auth/setup` returns `{ "required": true }` and every
    protected API answers `409 setup_required`.
-2. `POST /api/auth/setup` with `{ email, name, password }` creates the first super_admin. Afterwards it
+2. `POST /api/auth/setup` with `{ email, name, password }` creates the first super admin. Afterwards it
    answers `409 setup_already_completed`.
 3. Sign in through `GET /api/auth/login`. Access tokens refresh transparently on the server.
 
@@ -106,7 +106,7 @@ Alternatively seed the admin from env (`OPENCMS_ADMIN_EMAIL`, `OPENCMS_ADMIN_PAS
 `OPENCMS_ADMIN_NAME`) at boot.
 
 > **Warning: the setup wizard has no token.** While `auth_users` is empty, whoever reaches
-> `POST /api/auth/setup` first becomes super_admin. The only mitigation is a WARN log on every boot.
+> `POST /api/auth/setup` first becomes super admin. The only mitigation is a WARN log on every boot.
 > In production, seed the admin through the environment variables above so the endpoint is never exposed
 > on an empty database.
 
@@ -138,7 +138,7 @@ case-insensitive, like Express routing, and needs the trailing slash: `/api/cont
 
 ## Recovery
 
-There is no password reset by email. Another super_admin can reset the password, or set
+There is no password reset by email. Another super admin can reset the password, or set
 `OPENCMS_ADMIN_EMAIL`, `OPENCMS_ADMIN_PASSWORD` and `OPENCMS_ADMIN_FORCE_RESET=true` for one boot to reset
 that existing account's password and re-activate it (remove the flag and password variable afterwards, or it resets on every boot).
 

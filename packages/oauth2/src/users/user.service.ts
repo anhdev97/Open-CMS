@@ -7,6 +7,7 @@ import type { AuthTables } from '../db/types';
 import { AuthError } from '../errors';
 import { normalizeEmail } from '../security/email';
 import { PasswordService } from '../security/password';
+import { effectivePermissions, SUPER_ADMIN_GROUP, type Permission } from '../permissions';
 
 export type Trx = Transaction<AuthTables>;
 
@@ -15,7 +16,10 @@ export type AuthUser = {
   email: string;
   name: string;
   status: 'active' | 'disabled';
-  roles: string[];
+  /** Sorted by key. */
+  groups: { key: string; name: string }[];
+  permissions: Permission[];
+  isSuperAdmin: boolean;
   passwordHash: string | null;
   lastLoginAt: Date | null;
   locale: Locale | null;
@@ -28,7 +32,7 @@ export interface GrantRevoker {
   destroyProviderSessions(userId: string): Promise<void>;
 }
 
-const SUPER_ADMIN = 'super_admin';
+const SUPER_ADMIN = SUPER_ADMIN_GROUP;
 
 @Injectable()
 export class UserService {
@@ -59,19 +63,21 @@ export class UserService {
     const exec = trx ?? this.db;
     const row = await filter(exec.selectFrom('auth_users as u').selectAll('u')).executeTakeFirst();
     if (!row) return undefined;
-    const roles = await exec
-      .selectFrom('auth_user_roles as ur')
-      .innerJoin('auth_roles as r', 'r.id', 'ur.role_id')
-      .select('r.key')
-      .where('ur.user_id', '=', row.id)
-      .orderBy('r.key')
+    const groups = await exec
+      .selectFrom('auth_user_groups as ug')
+      .innerJoin('auth_groups as g', 'g.id', 'ug.group_id')
+      .select(['g.key', 'g.name', 'g.system', 'g.roles'])
+      .where('ug.user_id', '=', row.id)
+      .orderBy('g.key')
       .execute();
     return {
       id: row.id,
       email: row.email,
       name: row.name,
       status: row.status as 'active' | 'disabled',
-      roles: roles.map((r) => r.key),
+      groups: groups.map((g) => ({ key: g.key, name: g.name })),
+      permissions: effectivePermissions(groups),
+      isSuperAdmin: groups.some((g) => g.system),
       passwordHash: row.password_hash,
       lastLoginAt: row.last_login_at,
       locale: isLocale(row.locale) ? row.locale : null,
@@ -101,7 +107,7 @@ export class UserService {
         if ((e as { code?: string }).code === '23505') throw new AuthError('email_taken', 409);
         throw e;
       }
-      await sql`insert into auth_user_roles (user_id, role_id) select ${id}, id from auth_roles where key = ${SUPER_ADMIN}`.execute(t);
+      await sql`insert into auth_user_groups (user_id, group_id) select ${id}, id from auth_groups where key = ${SUPER_ADMIN}`.execute(t);
       await this.audit.record({ type: 'user_created', userId: id, actorId: input.actorId, meta: { email } }, t);
       return id;
     };
@@ -144,14 +150,14 @@ export class UserService {
     });
   }
 
-  /** True when `userId` is an active super_admin and no other active super_admin exists. */
+  /** True when `userId` is an active super admin and no other active super admin exists. */
   private async isLastActiveSuperAdmin(userId: string, trx: Trx): Promise<boolean> {
     const rows = await trx
       .selectFrom('auth_users as u')
-      .innerJoin('auth_user_roles as ur', 'ur.user_id', 'u.id')
-      .innerJoin('auth_roles as r', 'r.id', 'ur.role_id')
+      .innerJoin('auth_user_groups as ug', 'ug.user_id', 'u.id')
+      .innerJoin('auth_groups as g', 'g.id', 'ug.group_id')
       .select('u.id')
-      .where('r.key', '=', SUPER_ADMIN)
+      .where('g.key', '=', SUPER_ADMIN)
       .where('u.status', '=', 'active')
       .execute();
     return rows.length === 1 && rows[0].id === userId;

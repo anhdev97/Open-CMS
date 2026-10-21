@@ -6,9 +6,14 @@ import { OAUTH2_CONFIG, PUBLIC_PATH_PREFIXES } from '../constants';
 import { AuthError } from '../errors';
 import { assertSameOrigin } from '../security/origin';
 import { SetupState } from '../setup/setup-state';
-import { REQUIRED_ROLES_KEY } from './current-user.decorator';
+import { REQUIRED_PERMISSIONS_KEY, REQUIRED_ROLES_KEY, type RequestUser } from './current-user.decorator';
+import type { Permission } from '../permissions';
 import { IS_PUBLIC_KEY } from './public.decorator';
 import { SessionAuthenticator, type AuthenticatedRequest } from './session-auth.service';
+
+/** `@RequireRole` compat shim (removed in Task 14). */
+const hasLegacyRole = (user: RequestUser, role: string): boolean =>
+  role === 'super_admin' || role === 'super-admin' ? user.isSuperAdmin : user.groups.some((g) => g.key === role);
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -54,8 +59,12 @@ export class AuthGuard implements CanActivate {
 
     const user = await this.auth.authenticate(req, ctx.switchToHttp().getResponse<Response>());
 
+    const perms = this.reflector.getAllAndOverride<Permission[] | undefined>(REQUIRED_PERMISSIONS_KEY, targets);
+    const missing = perms?.find((p) => !user.permissions.includes(p));
+    if (missing) throw new AuthError('forbidden', 403, `Missing permission: ${missing}`);
+
     const roles = this.reflector.getAllAndOverride<string[] | undefined>(REQUIRED_ROLES_KEY, targets);
-    if (roles?.length && !roles.every((r) => user.roles.includes(r))) {
+    if (roles?.length && !roles.every((r) => hasLegacyRole(user, r))) {
       throw new AuthError('forbidden', 403, 'Missing role');
     }
     return true;

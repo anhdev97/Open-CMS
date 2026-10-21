@@ -231,7 +231,9 @@ export function Account() {
             <dd className="sm:col-span-2">{user.email}</dd>
             <dt className="text-muted-foreground">{t('account.roles')}</dt>
             <dd className="flex flex-wrap gap-1 sm:col-span-2">
-              {user.roles.length === 0 ? t('account.noRoles') : user.roles.map((r) => <Badge key={r} variant="secondary">{r}</Badge>)}
+              {user.groups.length === 0
+                ? t('account.noRoles')
+                : user.groups.map((g) => <Badge key={g.key} variant="secondary">{g.name}</Badge>)}
             </dd>
           </dl>
         </CardContent>

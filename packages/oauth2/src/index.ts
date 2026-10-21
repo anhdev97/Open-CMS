@@ -8,6 +8,7 @@ export { oauth2CoreMigrations } from './db/migrations';
 import './register-migrations';
 export * from './guard/public.decorator';
 export * from './guard/current-user.decorator';
+export * from './permissions';
 export * from './guard/auth.guard';
 export * from './guard/session-auth.service';
 export * from './setup/bootstrap.service';

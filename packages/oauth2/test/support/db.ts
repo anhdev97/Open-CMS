@@ -29,8 +29,11 @@ async function dropDatabase(admin: Pool, name: string): Promise<void> {
   await admin.query(`drop database if exists ${name} with (force)`);
 }
 
-/** Creates a throwaway database, runs all core migrations (incl. oauth2), and returns a Kysely on it. */
-export async function startTestDb(): Promise<TestDb> {
+/**
+ * Creates a throwaway database, runs all core migrations (incl. oauth2), and returns a Kysely on it.
+ * `opts.upTo` stops after that migration (to test a later migration against existing data).
+ */
+export async function startTestDb(opts: { upTo?: string } = {}): Promise<TestDb> {
   registerCoreMigrations(oauth2CoreMigrations);
   const name = `oauth2_test_${randomBytes(6).toString('hex')}`;
   const admin = new Pool({ connectionString: ADMIN_URL, max: 1 });
@@ -41,7 +44,8 @@ export async function startTestDb(): Promise<TestDb> {
   const pool = new Pool({ connectionString: url, max: 10 });
   const db = new Kysely<AuthTables>({ dialect: new PostgresDialect({ pool }) });
   try {
-    const { error } = await coreMigrator(db).migrateToLatest();
+    const migrator = coreMigrator(db);
+    const { error } = opts.upTo ? await migrator.migrateTo(opts.upTo) : await migrator.migrateToLatest();
     if (error) throw error instanceof Error ? error : new Error(String(error));
   } catch (e) {
     await db.destroy();

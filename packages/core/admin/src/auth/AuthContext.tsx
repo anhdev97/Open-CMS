@@ -1,11 +1,15 @@
-import type { Locale } from '@opencms/schema';
+import type { Locale, Permission } from '@opencms/schema';
 import { createContext, useContext } from 'react';
 
 export interface AuthUser {
   id: string;
   email: string;
   name: string | null;
-  roles: string[];
+  /** Permission groups (`GET /api/auth/me`), sorted by key. */
+  groups: { key: string; name: string }[];
+  /** Effective permissions, computed by the server from the groups. */
+  permissions: Permission[];
+  isSuperAdmin: boolean;
   /** Saved admin language; `null` means follow the browser. */
   locale?: Locale | null;
 }

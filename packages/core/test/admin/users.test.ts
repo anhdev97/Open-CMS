@@ -7,7 +7,7 @@ const base: AdminUser = {
   email: 'a@example.com',
   name: 'A',
   status: 'active',
-  roles: ['super_admin'],
+  roles: ['super-admin'],
   lastLoginAt: null,
   identities: [],
 };

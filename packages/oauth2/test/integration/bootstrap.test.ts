@@ -41,7 +41,8 @@ describe('BootstrapService', () => {
     await svc.run();
     expect(await users.countUsers()).toBe(1);
     const u = await users.findByEmail('root@x.com');
-    expect(u?.roles).toEqual(['super_admin']);
+    expect(u?.groups).toEqual([{ key: 'super-admin', name: 'Super Admin' }]);
+    expect(u?.isSuperAdmin).toBe(true);
     expect(u?.name).toBe('Admin');
     expect(await events('admin_seeded_from_env')).toHaveLength(1);
     await svc.run();
@@ -68,7 +69,7 @@ describe('BootstrapService', () => {
     const { users } = make({});
     const u = await users.create({ email: 'a@x.com', name: 'A', password: 'old password long' });
     await db.updateTable('auth_users').set({ status: 'disabled' }).where('id', '=', u.id).execute();
-    await db.deleteFrom('auth_user_roles').where('user_id', '=', u.id).execute();
+    await db.deleteFrom('auth_user_groups').where('user_id', '=', u.id).execute();
     const { users: users2, svc } = make({
       OPENCMS_ADMIN_EMAIL: 'A@x.com',
       OPENCMS_ADMIN_PASSWORD: 'brand new password',
@@ -79,7 +80,7 @@ describe('BootstrapService', () => {
     const after = await users2.findByEmail('a@x.com');
     expect(await passwords.verify(after!.passwordHash!, 'brand new password')).toBe(true);
     expect(after!.status).toBe('active');
-    expect(after!.roles).toEqual(['super_admin']);
+    expect(after!.groups).toEqual([{ key: 'super-admin', name: 'Super Admin' }]);
     expect(revoker.revokeAllGrants).toHaveBeenCalledWith(u.id);
     expect(await events('admin_force_reset')).toHaveLength(1);
     expect(logger.warn.mock.calls.flat().join(' ')).toContain('OPENCMS_ADMIN_FORCE_RESET');

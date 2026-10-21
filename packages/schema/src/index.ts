@@ -7,3 +7,4 @@ export * from './config';
 export * from './i18n';
 export * from './locales';
 export * from './groups';
+export * from './permissions';

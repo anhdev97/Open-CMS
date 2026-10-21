@@ -70,7 +70,7 @@ describe('user management + password change API', () => {
     const r = await api('/api/admin/users');
     expect(r.status).toBe(200);
     const row = r.body.data.find((x: any) => x.id === u.id);
-    expect(row).toMatchObject({ email: 'withidp@x.com', name: 'Idp', status: 'active', roles: ['super_admin'], lastLoginAt: null });
+    expect(row).toMatchObject({ email: 'withidp@x.com', name: 'Idp', status: 'active', roles: ['super-admin'], lastLoginAt: null });
     expect(row.identities).toEqual([{ id: expect.any(String), provider: 'google', subject: 'sub-1', email: 'withidp@x.com' }]);
     const adminRow = r.body.data.find((x: any) => x.id === adminId);
     expect(adminRow.lastLoginAt).toEqual(expect.any(String));
@@ -186,14 +186,14 @@ describe('user management + password change API', () => {
     expect(await t.db.selectFrom('auth_user_identities').select('id').where('id', '=', ident.id).execute()).toEqual([]);
   });
 
-  it('a session whose user lost super_admin gets 403 forbidden on users routes', async () => {
+  it('a session whose user lost super-admin gets 403 forbidden (Missing permission: settings.users) on users routes', async () => {
     await users.create({ email: 'norole@x.com', name: 'N', password: PW });
     const c = await login('norole@x.com');
     const u = (await users.findByEmail('norole@x.com'))!;
-    await t.db.deleteFrom('auth_user_roles').where('user_id', '=', u.id).execute();
+    await t.db.deleteFrom('auth_user_groups').where('user_id', '=', u.id).execute();
     const r = await api('/api/admin/users', { cookie: c });
     expect(r.status).toBe(403);
-    expect(r.body.error.code).toBe('forbidden');
+    expect(r.body).toEqual({ error: { code: 'forbidden', message: 'Missing permission: settings.users' } });
   });
 
   it('POST /api/auth/password: wrong current -> 401; correct keeps this session and kills the other', async () => {

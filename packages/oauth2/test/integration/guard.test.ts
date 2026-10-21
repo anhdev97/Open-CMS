@@ -5,7 +5,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { OidcClient } from '../../src/bff/oidc-client';
 import { SessionStore } from '../../src/bff/session.store';
 import { OAUTH2_CONFIG } from '../../src/constants';
-import { CurrentUser, RequireRole, type RequestUser } from '../../src/guard/current-user.decorator';
+import { CurrentUser, RequirePermission, RequireRole, type RequestUser } from '../../src/guard/current-user.decorator';
+import { PERMISSIONS } from '../../src/permissions';
 import { adminClientSecret } from '../../src/provider/provider.factory';
 import { sha256 } from '../../src/security/crypto';
 import { UserService } from '../../src/users/user.service';
@@ -32,6 +33,25 @@ class ProbeController {
   @RequireRole('nonexistent')
   @Get('needs-role')
   needsRole(): { ok: true } {
+    return { ok: true };
+  }
+
+  /** Compat shim (removed in Task 14): the legacy key maps to isSuperAdmin. */
+  @RequireRole('super_admin')
+  @Get('needs-super-admin')
+  needsSuperAdmin(): { ok: true } {
+    return { ok: true };
+  }
+
+  @RequirePermission('settings.users')
+  @Get('needs-users')
+  needsUsers(): { ok: true } {
+    return { ok: true };
+  }
+
+  @RequirePermission('content.read', 'content.publish')
+  @Get('needs-read-publish')
+  needsReadPublish(): { ok: true } {
     return { ok: true };
   }
 }
@@ -141,11 +161,19 @@ describe('AuthGuard, me, logout (default TTLs)', () => {
     expect(bogus.status).toBe(401);
   });
 
-  it('after login → me 200 { id, email, name, roles, locale }; @CurrentUser() gets the same user', async () => {
+  it('after login → me 200 { id, email, name, locale, groups, permissions, isSuperAdmin }; @CurrentUser() gets the same user', async () => {
     const { sessionCookie } = await loginAs(t, 'admin@x.com', PW);
     const me = await api('/api/auth/me', { cookie: sessionCookie });
     expect(me.status).toBe(200);
-    expect(me.body).toEqual({ id: adminId, email: 'admin@x.com', name: 'Admin', roles: ['super_admin'], locale: null });
+    expect(me.body).toEqual({
+      id: adminId,
+      email: 'admin@x.com',
+      name: 'Admin',
+      locale: null,
+      groups: [{ key: 'super-admin', name: 'Super Admin' }],
+      permissions: [...PERMISSIONS].sort(),
+      isSuperAdmin: true,
+    });
     const w = await api('/api/test/whoami', { cookie: sessionCookie });
     expect(w.status).toBe(200);
     expect(w.body).toEqual(me.body);
@@ -156,6 +184,38 @@ describe('AuthGuard, me, logout (default TTLs)', () => {
     const r = await api('/api/test/needs-role', { cookie: sessionCookie });
     expect(r.status).toBe(403);
     expect(r.body.error.code).toBe('forbidden');
+  });
+
+  it('@RequirePermission: super admin passes; contenter gets 403 with the missing permission; permissions recomputed per request', async () => {
+    const admin = (await loginAs(t, 'admin@x.com', PW)).sessionCookie;
+    expect((await api('/api/test/needs-users', { cookie: admin })).status).toBe(200);
+    expect((await api('/api/test/needs-super-admin', { cookie: admin })).status).toBe(200);
+
+    const c = await t.app.get(UserService).create({ email: 'contenter@x.com', name: 'C', password: PW });
+    await t.db.deleteFrom('auth_user_groups').where('user_id', '=', c.id).execute();
+    await sql`insert into auth_user_groups (user_id, group_id) select ${c.id}, id from auth_groups where key = 'contenter'`.execute(t.db);
+    const cookie = (await loginAs(t, 'contenter@x.com', PW)).sessionCookie;
+
+    const me = await api('/api/auth/me', { cookie });
+    expect(me.body).toMatchObject({
+      groups: [{ key: 'contenter', name: 'Contenter' }],
+      permissions: ['content.create', 'content.delete', 'content.read', 'content.submit', 'content.update'],
+      isSuperAdmin: false,
+    });
+
+    const r = await api('/api/test/needs-users', { cookie });
+    expect(r.status).toBe(403);
+    expect(r.body).toEqual({ error: { code: 'forbidden', message: 'Missing permission: settings.users' } });
+    const rp = await api('/api/test/needs-read-publish', { cookie });
+    expect(rp.body).toEqual({ error: { code: 'forbidden', message: 'Missing permission: content.publish' } });
+    expect((await api('/api/test/needs-super-admin', { cookie })).status).toBe(403);
+
+    // Adding reviewer takes effect on the next request (B10).
+    await sql`insert into auth_user_groups (user_id, group_id) select ${c.id}, id from auth_groups where key = 'reviewer'`.execute(t.db);
+    expect((await api('/api/test/needs-read-publish', { cookie })).status).toBe(200);
+    const me2 = await api('/api/auth/me', { cookie });
+    expect(me2.body.groups).toEqual([{ key: 'contenter', name: 'Contenter' }, { key: 'reviewer', name: 'Reviewer' }]);
+    expect(me2.body.permissions).toContain('content.publish');
   });
 
   it('POST with a wrong or missing Origin → 403 origin_mismatch; right Origin → 200', async () => {

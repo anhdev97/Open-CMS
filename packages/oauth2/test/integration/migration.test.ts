@@ -6,8 +6,8 @@ import { startTestDb } from '../support/db';
 
 const TABLES = [
   'auth_users',
-  'auth_roles',
-  'auth_user_roles',
+  'auth_groups',
+  'auth_user_groups',
   'auth_user_identities',
   'auth_oauth_clients',
   'auth_oidc_payloads',
@@ -41,9 +41,9 @@ describe('oauth2_0001_init', () => {
     expect(r.rows).toEqual([{ data_type: 'timestamp with time zone', is_nullable: 'YES' }]);
   });
 
-  it('seeds exactly one super_admin role', async () => {
-    const rows = await db.selectFrom('auth_roles').selectAll().execute();
-    expect(rows.map((r) => [r.key, r.name])).toEqual([['super_admin', 'Super Admin']]);
+  it('seeds the super-admin, contenter and reviewer groups (after oauth2_0003_groups)', async () => {
+    const rows = await db.selectFrom('auth_groups').selectAll().orderBy('key').execute();
+    expect(rows.map((r) => [r.key, r.name])).toEqual([['contenter', 'Contenter'], ['reviewer', 'Reviewer'], ['super-admin', 'Super Admin']]);
   });
 
   it('enforces case-insensitive unique email', async () => {
@@ -55,13 +55,13 @@ describe('oauth2_0001_init', () => {
     await expect(db.insertInto('auth_users').values({ email: 'c@x.com', name: 'C', status: 'bogus' }).execute()).rejects.toThrow();
   });
 
-  it('cascades user deletion to roles, identities and sessions', async () => {
+  it('cascades user deletion to groups, identities and sessions', async () => {
     const u = await db.insertInto('auth_users').values({ email: 'd@x.com', name: 'D' }).returning('id').executeTakeFirstOrThrow();
-    const role = await db.selectFrom('auth_roles').select('id').where('key', '=', 'super_admin').executeTakeFirstOrThrow();
-    await db.insertInto('auth_user_roles').values({ user_id: u.id, role_id: role.id }).execute();
+    const group = await db.selectFrom('auth_groups').select('id').where('key', '=', 'super-admin').executeTakeFirstOrThrow();
+    await db.insertInto('auth_user_groups').values({ user_id: u.id, group_id: group.id }).execute();
     await db.insertInto('auth_user_identities').values({ user_id: u.id, provider: 'p', subject: 's' }).execute();
     await db.deleteFrom('auth_users').where('id', '=', u.id).execute();
-    expect(await db.selectFrom('auth_user_roles').selectAll().where('user_id', '=', u.id).execute()).toHaveLength(0);
+    expect(await db.selectFrom('auth_user_groups').selectAll().where('user_id', '=', u.id).execute()).toHaveLength(0);
     expect(await db.selectFrom('auth_user_identities').selectAll().where('user_id', '=', u.id).execute()).toHaveLength(0);
   });
 
@@ -93,8 +93,11 @@ describe('oauth2_0001_init', () => {
   });
 
   it('down drops all 9 tables', async () => {
-    // oauth2 migrations are last in key order: undo 0002 (locale), then 0001
+    // oauth2 migrations are last in key order: undo 0003 (groups), 0002 (locale), then 0001
     const m = coreMigrator(db);
+    const groups = await m.migrateDown();
+    expect(groups.error).toBeUndefined();
+    expect(groups.results?.[0]?.migrationName).toBe('oauth2_0003_groups');
     const first = await m.migrateDown();
     expect(first.error).toBeUndefined();
     expect(first.results?.[0]?.migrationName).toBe('oauth2_0002_user_locale');
