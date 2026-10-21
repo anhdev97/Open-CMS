@@ -15,6 +15,7 @@ export const SYSTEM_TABLES = {
   taxonomies: 'opencms_taxonomies',
   taxonomyTerms: 'opencms_taxonomy_terms',
   entryVersions: 'opencms_entry_versions',
+  workflow: 'opencms_workflow',
 } as const;
 
 export const PG_MAX_IDENTIFIER = 63;

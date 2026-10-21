@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { CurrentUser, RequirePermission, type RequestUser } from '@opencms/oauth2';
 import { EntriesService, type ListParams } from './entries.service';
+import { WorkflowService } from './workflow.service';
 
 /** Accepts both `filter[name]=x` flat keys (Express 5) and nested objects (qs). */
 export function parseListQuery(query: Record<string, unknown>): ListParams {
@@ -67,7 +68,8 @@ export class AdminContentController {
   @Get(':apiId')
   list(@Param('apiId') apiId: string, @Query() query: Record<string, unknown>) {
     const status = query.status === 'published' ? 'published' : 'draft';
-    return this.entries.list(apiId, { ...parseListQuery(query), status });
+    const workflow = query.workflow === undefined ? undefined : String(query.workflow);
+    return this.entries.list(apiId, { ...parseListQuery(query), status, workflow });
   }
 
   @RequirePermission('content.read')
@@ -93,9 +95,10 @@ export class AdminContentController {
     @Param('apiId') apiId: string,
     @Param('documentId', ParseUUIDPipe) documentId: string,
     @Body() body: unknown,
+    @CurrentUser() user: RequestUser,
     @Query('locale') locale?: string,
   ) {
-    return this.entries.update(apiId, documentId, body, locale);
+    return this.entries.update(apiId, documentId, body, locale, user);
   }
 
   @Post(':apiId/:documentId/publish')
@@ -110,6 +113,32 @@ export class AdminContentController {
     return this.entries.unpublish(apiId, documentId, user);
   }
 
+  @RequirePermission('content.submit')
+  @Post(':apiId/:documentId/submit')
+  @HttpCode(200)
+  submit(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string, @CurrentUser() user: RequestUser) {
+    return this.entries.transition(apiId, documentId, 'submit', user);
+  }
+
+  /** The submitter or a user with `content.publish` (checked in WorkflowService). */
+  @Post(':apiId/:documentId/withdraw')
+  @HttpCode(200)
+  withdraw(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string, @CurrentUser() user: RequestUser) {
+    return this.entries.transition(apiId, documentId, 'withdraw', user);
+  }
+
+  @RequirePermission('content.publish')
+  @Post(':apiId/:documentId/reject')
+  @HttpCode(200)
+  reject(
+    @Param('apiId') apiId: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Body() body: { note?: unknown } | undefined,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.entries.transition(apiId, documentId, 'reject', user, body?.note);
+  }
+
   @RequirePermission('content.delete')
   @Delete(':apiId/:documentId')
   remove(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string) {
@@ -120,5 +149,17 @@ export class AdminContentController {
   @Get(':apiId/:documentId/versions')
   versions(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string) {
     return this.entries.versions(apiId, documentId);
+  }
+}
+
+/** Review queue (spec B §5.3). */
+@Controller('api/admin/workflow')
+export class WorkflowController {
+  constructor(@Inject(WorkflowService) private readonly workflow: WorkflowService) {}
+
+  @RequirePermission('content.publish')
+  @Get('pending-count')
+  pendingCount() {
+    return this.workflow.pendingCount();
   }
 }

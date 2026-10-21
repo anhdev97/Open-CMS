@@ -106,6 +106,27 @@ export const coreMigrations: Record<string, Migration> = {
       // Not reversible: the old short codes are not recorded.
     },
   },
+  '0003_workflow': {
+    /** Spec B §5.2: review state per document. No row = clean draft. */
+    async up(db) {
+      await db.schema
+        .createTable(SYSTEM_TABLES.workflow)
+        .addColumn('api_id', 'text', (c) => c.notNull())
+        .addColumn('document_id', 'uuid', (c) => c.notNull())
+        .addColumn('state', 'text', (c) => c.notNull().check(sql`state in ('in_review', 'draft')`))
+        .addColumn('submitted_by', 'uuid')
+        .addColumn('submitted_at', 'timestamptz')
+        .addColumn('reviewed_by', 'uuid')
+        .addColumn('reviewed_at', 'timestamptz')
+        .addColumn('note', 'text')
+        .addPrimaryKeyConstraint('opencms_workflow_pk', ['api_id', 'document_id'])
+        .execute();
+      await db.schema.createIndex('opencms_workflow_state_idx').on(SYSTEM_TABLES.workflow).columns(['state', 'api_id']).execute();
+    },
+    async down(db) {
+      await db.schema.dropTable(SYSTEM_TABLES.workflow).execute();
+    },
+  },
 };
 
 /* ----------------------------- project ---------------------------- */

@@ -127,11 +127,14 @@ describe('permission mapping (spec B §4.2) and the review flag', () => {
     const c = await pub(articleId, 'article', contenter);
     expect(c.status).toBe(403);
     expect(c.body).toEqual(forbidden('content.publish'));
+    // A review type is approved from In review (spec B §5.2), so submit first.
+    expect((await pub(articleId, 'article', contenter, 'submit')).status).toBe(200);
     expect((await pub(articleId, 'article', reviewer)).status).toBe(200);
     const cu = await pub(articleId, 'article', contenter, 'unpublish');
     expect(cu.status).toBe(403);
     expect(cu.body).toEqual(forbidden('content.publish'));
     expect((await pub(articleId, 'article', reviewer, 'unpublish')).status).toBe(200);
+    expect((await pub(articleId, 'article', admin, 'submit')).status).toBe(200);
     expect((await pub(articleId, 'article', admin)).status).toBe(200);
   });
 

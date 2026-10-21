@@ -5,6 +5,7 @@ import { AuthError, type RequestUser } from '@opencms/oauth2';
 import { EntryRepository, type ListQuery, type Status } from './entry.repository';
 import { OPENCMS_DB, OPENCMS_OPTIONS, type HookContext, type ResolvedOpenCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
+import { WorkflowService } from './workflow.service';
 
 type Row = Record<string, unknown>;
 
@@ -16,6 +17,8 @@ export interface ListParams {
   sort?: string;
   limit?: string | number;
   offset?: string | number;
+  /** Admin only: `in_review` lists entries waiting for review (spec B §5.3). */
+  workflow?: string;
 }
 
 @Injectable()
@@ -25,6 +28,7 @@ export class EntriesService {
     @Inject(EntryRepository) private readonly repo: EntryRepository,
     @Inject(OPENCMS_OPTIONS) private readonly options: ResolvedOpenCmsOptions,
     @Inject(OPENCMS_DB) private readonly db: Kysely<any>,
+    @Inject(WorkflowService) private readonly workflow: WorkflowService,
   ) {}
 
   private ctx(apiId: string, locale: string): HookContext {
@@ -69,14 +73,21 @@ export class EntriesService {
       sort = { field, direction: dir };
     }
     const filters = typeof params.filter === 'object' && params.filter ? params.filter : {};
+    const status = params.status ?? 'published';
+    if (params.workflow !== undefined && params.workflow !== 'in_review') throw new BadRequestException('workflow must be in_review');
+    const inReview = params.workflow === 'in_review';
+    // A type without review has nothing in review (rows left from before review was turned off are ignored).
+    if (inReview && (status !== 'draft' || !def.review)) return { data: [], meta: { total: 0, limit, offset } };
     const { items, total } = await this.repo.list(def, {
-      status: params.status ?? 'published',
+      status,
       locales: this.localeChain(params.locale, params.fallback),
       filters,
       sort,
       limit,
       offset,
+      inReview,
     });
+    await this.workflow.attach(def, items);
     return { data: items, meta: { total, limit, offset } };
   }
 
@@ -84,6 +95,7 @@ export class EntriesService {
     const def = this.registry.get(apiId);
     const entry = await this.repo.findOne(def, documentId, status, this.localeChain(locale, fallback));
     if (!entry) throw new NotFoundException(`${apiId} ${documentId} not found`);
+    await this.workflow.attach(def, [entry]);
     return { data: entry };
   }
 
@@ -99,7 +111,8 @@ export class EntriesService {
     return this.get(apiId, documentId, 'draft', loc);
   }
 
-  async update(apiId: string, documentId: string, body: unknown, locale?: string) {
+  /** `user` absent = trusted server-side call: the In review lock (B7) does not apply. */
+  async update(apiId: string, documentId: string, body: unknown, locale?: string, user?: Pick<RequestUser, 'permissions'>) {
     const def = this.registry.get(apiId);
     const loc = this.locale(locale);
     let data = this.validate(def, body, 'draft');
@@ -107,7 +120,7 @@ export class EntriesService {
       const r = await h.beforeUpdate?.(data, { ...this.ctx(apiId, loc), documentId });
       if (r && typeof r === 'object') data = r as Row;
     }
-    await this.repo.update(def, documentId, data, loc);
+    await this.repo.update(def, documentId, data, loc, (trx) => this.workflow.guardUpdate(trx, def, documentId, user));
     return this.get(apiId, documentId, 'draft', loc);
   }
 
@@ -124,11 +137,12 @@ export class EntriesService {
     }
   }
 
-  async publish(apiId: string, documentId: string, user: Pick<RequestUser, 'permissions'>) {
+  async publish(apiId: string, documentId: string, user: Pick<RequestUser, 'id' | 'permissions'>) {
     const def = this.registry.get(apiId);
     this.assertCanPublish(def, user);
     const doc = await this.repo.exportDocument(def, documentId, 'draft');
     if (!doc) throw new NotFoundException(`${apiId} ${documentId} not found`);
+    await this.workflow.precheckPublish(def, documentId);
 
     // Required fields: shared ones once, localizable ones in every translation that exists.
     const locales = Object.keys(doc.translations);
@@ -144,7 +158,7 @@ export class EntriesService {
 
     const ctx = this.ctx(apiId, this.options.config.defaultLocale);
     for (const h of this.registry.hooksFor(apiId)) await h.beforePublish?.(doc, ctx);
-    await this.repo.publish(def, documentId, doc);
+    await this.repo.publish(def, documentId, doc, (trx) => this.workflow.guardPublish(trx, def, documentId, user));
     for (const h of this.registry.hooksFor(apiId)) await h.afterPublish?.(doc, ctx);
     return this.get(apiId, documentId, 'published');
   }
@@ -160,9 +174,16 @@ export class EntriesService {
 
   async remove(apiId: string, documentId: string) {
     const def = this.registry.get(apiId);
-    if (!(await this.repo.delete(def, documentId))) throw new NotFoundException(`${apiId} ${documentId} not found`);
+    if (!(await this.repo.delete(def, documentId, (trx) => this.workflow.guardDelete(trx, def, documentId)))) throw new NotFoundException(`${apiId} ${documentId} not found`);
     for (const h of this.registry.hooksFor(apiId)) await h.afterDelete?.(documentId, this.ctx(apiId, this.options.config.defaultLocale));
     return { ok: true };
+  }
+
+  /** submit / withdraw / reject (spec B §4.2); returns the draft with its new `workflow`. */
+  async transition(apiId: string, documentId: string, action: 'submit' | 'withdraw' | 'reject', user: Pick<RequestUser, 'id' | 'permissions'>, note?: unknown) {
+    const def = this.registry.get(apiId);
+    await this.workflow.transition(def, documentId, action, user, note);
+    return this.get(apiId, documentId, 'draft');
   }
 
   async versions(apiId: string, documentId: string) {

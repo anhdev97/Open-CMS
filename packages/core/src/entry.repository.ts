@@ -20,7 +20,12 @@ export interface ListQuery {
   sort?: { field: string; direction: 'asc' | 'desc' };
   limit: number;
   offset: number;
+  /** Only documents whose workflow row is `in_review` (spec B §5.3). */
+  inReview?: boolean;
 }
+
+/** Runs inside a repository write transaction, before the write (workflow locks and checks). */
+export type InTransaction = (trx: Kysely<any>) => Promise<void>;
 
 const META_SORT: Record<string, string> = { createdAt: 'created_at', updatedAt: 'updated_at', publishedAt: 'published_at' };
 
@@ -119,9 +124,10 @@ export class EntryRepository {
     return documentId;
   }
 
-  async update(def: ContentTypeDefinition, documentId: string, data: Row, locale: string): Promise<void> {
+  async update(def: ContentTypeDefinition, documentId: string, data: Row, locale: string, inTrx?: InTransaction): Promise<void> {
     const { main, l10n, rels } = this.split(def, data);
     await this.db.transaction().execute(async (trx) => {
+      await inTrx?.(trx);
       const id = await this.findRowId(trx, def, documentId, 'draft');
       if (!id) throw new NotFoundException(`${def.apiId} ${documentId} not found`);
       await trx.updateTable(mainTable(def)).set({ ...main, updated_at: sql`now()` }).where('id', '=', id).execute();
@@ -205,6 +211,17 @@ export class EntryRepository {
     const l10n = l10nTable(def);
     const primaryLocale = q.locales[0];
     let query = this.db.selectFrom(`${main} as m`).where('m.status', '=', q.status);
+    if (q.inReview) {
+      query = query.where(({ exists, selectFrom }) =>
+        exists(
+          selectFrom(`${SYSTEM_TABLES.workflow} as w`)
+            .select(sql.lit(1).as('one'))
+            .where('w.api_id', '=', def.apiId)
+            .whereRef('w.document_id', '=', 'm.document_id')
+            .where('w.state', '=', 'in_review'),
+        ),
+      );
+    }
 
     for (const [name, raw] of Object.entries(q.filters)) {
       const field = def.fields.find((f) => f.name === name);
@@ -288,7 +305,7 @@ export class EntryRepository {
    * Copies the draft row (plus translations and relations) into a fresh
    * published row, in one transaction. Storefront reads only published rows.
    */
-  async publish(def: ContentTypeDefinition, documentId: string, snapshot: PublishedDocument): Promise<void> {
+  async publish(def: ContentTypeDefinition, documentId: string, snapshot: PublishedDocument, inTrx?: InTransaction): Promise<void> {
     const main = mainTable(def);
     const l10n = l10nTable(def);
     const mainCols: string[] = [];
@@ -298,6 +315,7 @@ export class EntryRepository {
       if (s.mode === 'columns') (s.location === 'main' ? mainCols : l10nCols).push(...s.columns.map((c) => c.name));
     }
     await this.db.transaction().execute(async (trx) => {
+      await inTrx?.(trx);
       const draftId = await this.findRowId(trx, def, documentId, 'draft');
       if (!draftId) throw new NotFoundException(`${def.apiId} ${documentId} not found`);
       await trx.deleteFrom(main).where('document_id', '=', documentId).where('status', '=', 'published').execute();
@@ -334,9 +352,12 @@ export class EntryRepository {
     return Number(r.numDeletedRows) > 0;
   }
 
-  async delete(def: ContentTypeDefinition, documentId: string): Promise<boolean> {
-    const r = await this.db.deleteFrom(mainTable(def)).where('document_id', '=', documentId).executeTakeFirst();
-    return Number(r.numDeletedRows) > 0;
+  async delete(def: ContentTypeDefinition, documentId: string, inTrx?: InTransaction): Promise<boolean> {
+    return this.db.transaction().execute(async (trx) => {
+      await inTrx?.(trx);
+      const r = await trx.deleteFrom(mainTable(def)).where('document_id', '=', documentId).executeTakeFirst();
+      return Number(r.numDeletedRows) > 0;
+    });
   }
 
   async versions(def: ContentTypeDefinition, documentId: string) {

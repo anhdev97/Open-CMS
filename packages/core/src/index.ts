@@ -10,3 +10,5 @@ export * from './content-groups';
 export * from './system.controller';
 export * from './locales';
 export * from './i18n';
+export * from './workflow';
+export * from './workflow.service';

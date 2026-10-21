@@ -7,7 +7,9 @@ export type AuditType =
   | 'login_succeeded' | 'login_failed' | 'logout' | 'setup_completed' | 'admin_seeded_from_env'
   | 'admin_force_reset' | 'user_created' | 'user_disabled' | 'user_enabled' | 'user_deleted'
   | 'password_reset_by_admin' | 'password_changed' | 'idp_linked' | 'user.locale.update'
-  | 'group.create' | 'group.update' | 'group.delete' | 'user.groups.update' | 'user.identity.unlink';
+  | 'group.create' | 'group.update' | 'group.delete' | 'user.groups.update' | 'user.identity.unlink'
+  // Review workflow events, recorded by @opencms/core (spec B §5).
+  | 'content.submit' | 'content.withdraw' | 'content.reject' | 'content.publish';
 
 export interface AuditEvent {
   type: AuditType;
