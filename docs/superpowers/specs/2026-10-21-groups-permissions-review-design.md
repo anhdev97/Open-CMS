@@ -1,6 +1,6 @@
 # opencms: Nhóm quyền, role và quy trình review — Design Spec (Spec B)
 
-**Ngày:** 2026-10-21 · **Trạng thái:** Draft chờ review
+**Ngày:** 2026-10-21 · **Trạng thái:** Approved
 **Nhánh nền:** `feat/admin-nextjs`, sau Spec A (`2026-10-21-settings-i18n-design.md`: Settings, i18n admin, nhóm content type).
 **Thay đổi so với spec auth (`2026-10-14-auth-oauth2-design.md`):** bỏ mô hình "mọi user đều `super_admin`"; `@RequireRole` → `@RequirePermission`.
 

@@ -1,6 +1,6 @@
 # opencms: Settings, nhóm content type, i18n admin và ngôn ngữ website — Design Spec (Spec A)
 
-**Ngày:** 2026-10-21 · **Trạng thái:** Draft chờ review
+**Ngày:** 2026-10-21 · **Trạng thái:** Approved
 **Nhánh nền:** `feat/admin-nextjs` (admin đã là Next.js App Router chạy trong Nest — spec `2026-10-21-admin-nextjs-design.md`).
 **Liên quan:** Spec B (nhóm quyền + role) viết riêng, làm sau; spec này chừa chỗ cho mục "Nhóm quyền" trong Settings (§3.1).
 
