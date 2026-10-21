@@ -139,12 +139,11 @@ export class UsersController {
 
   @Delete(':id/identities/:identityId')
   @HttpCode(204)
-  async removeIdentity(@Param('id') rawId: string, @Param('identityId') rawIdentityId: string): Promise<void> {
-    const res = await this.db
-      .deleteFrom('auth_user_identities')
-      .where('id', '=', uuid(rawIdentityId))
-      .where('user_id', '=', uuid(rawId))
-      .executeTakeFirst();
-    if (Number(res.numDeletedRows) === 0) throw new AuthError('not_found', 404, 'Identity not found');
+  async removeIdentity(
+    @Param('id') rawId: string,
+    @Param('identityId') rawIdentityId: string,
+    @CurrentUser() actor: RequestUser,
+  ): Promise<void> {
+    await this.users.unlinkIdentity(uuid(rawId), uuid(rawIdentityId), actorOf(actor));
   }
 }

@@ -7,7 +7,7 @@ export type AuditType =
   | 'login_succeeded' | 'login_failed' | 'logout' | 'setup_completed' | 'admin_seeded_from_env'
   | 'admin_force_reset' | 'user_created' | 'user_disabled' | 'user_enabled' | 'user_deleted'
   | 'password_reset_by_admin' | 'password_changed' | 'idp_linked' | 'user.locale.update'
-  | 'group.create' | 'group.update' | 'group.delete' | 'user.groups.update';
+  | 'group.create' | 'group.update' | 'group.delete' | 'user.groups.update' | 'user.identity.unlink';
 
 export interface AuditEvent {
   type: AuditType;

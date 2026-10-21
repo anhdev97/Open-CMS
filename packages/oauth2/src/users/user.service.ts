@@ -311,6 +311,27 @@ export class UserService {
     });
   }
 
+  /**
+   * Unlinks one IdP identity of the user (404 when it belongs to someone else), audited. A non-super-admin may
+   * not unlink a super admin's identity (R7b: an SSO-only super admin would be locked out).
+   */
+  async unlinkIdentity(userId: string, identityId: string, actor: UserActor): Promise<void> {
+    await this.withSetupLock(async (trx) => {
+      assertCanManage(actor, (await this.lockTarget(userId, trx)).some((g) => g.system));
+      const removed = await trx
+        .deleteFrom('auth_user_identities')
+        .where('id', '=', identityId)
+        .where('user_id', '=', userId)
+        .returning(['provider', 'subject'])
+        .executeTakeFirst();
+      if (!removed) throw new AuthError('not_found', 404, 'Identity not found');
+      await this.audit.record(
+        { type: 'user.identity.unlink', userId, actorId: actor.id, meta: { identityId, provider: removed.provider, subject: removed.subject } },
+        trx,
+      );
+    });
+  }
+
   async delete(userId: string, actor: UserActor): Promise<void> {
     if (userId === actor.id) throw new AuthError('forbidden', 403, 'Cannot delete yourself');
     await this.withSetupLock(async (trx) => {

@@ -312,6 +312,22 @@ describe('groups API', () => {
       expect(ok.body.data.name).toBe('Renamed SA');
       expect(await t.app.get(UserService).findByEmail('r7-sa@x.com')).toBeTruthy();
       expect(await login(t, 'r7-sa@x.com')).toBeTruthy(); // password unchanged
+      // Unlinking a super admin's IdP identity (could lock out an SSO-only super admin).
+      const ident = await t.db
+        .insertInto('auth_user_identities')
+        .values({ user_id: target.id, provider: 'google', subject: 'r7-sub', email: null })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const unlink = await api(`/api/admin/users/${target.id}/identities/${ident.id}`, { cookie: ua, method: 'DELETE' });
+      expect(unlink.status).toBe(403);
+      expect(unlink.body.error.code).toBe('forbidden');
+      expect(await t.db.selectFrom('auth_user_identities').select('id').where('id', '=', ident.id).execute()).toHaveLength(1);
+      expect((await api(`/api/admin/users/${target.id}/identities/${ident.id}`, { cookie: admin, method: 'DELETE' })).status).toBe(204);
+      expect(await t.db.selectFrom('auth_user_identities').select('id').where('id', '=', ident.id).execute()).toEqual([]);
+      const audit = (await auditTypes(t, 'user.identity.unlink')).filter((e) => e.user_id === target.id);
+      expect(audit).toHaveLength(1);
+      expect(audit[0].actor_id).toBe(adminId);
+      expect(audit[0].meta).toMatchObject({ identityId: ident.id, provider: 'google' });
       // A super admin may do it.
       expect((await api(`/api/admin/users/${target.id}/password`, { cookie: admin, method: 'POST', body: { password: 'brand new passphrase' } })).status).toBe(204);
     });
