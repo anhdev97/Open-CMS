@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
+    "@opencms/assets": "workspace:*",
     "@opencms/codegen": "workspace:*",
     "@opencms/db": "workspace:*",
     "@opencms/oauth2": "workspace:*",

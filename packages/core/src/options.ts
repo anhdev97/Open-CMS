@@ -1,4 +1,5 @@
 import type { Kysely } from 'kysely';
+import type { AssetsModuleOptions } from '@opencms/assets';
 import type { AuthFileConfig } from '@opencms/oauth2';
 import type { ContentGroupDefinition, ContentTypeDefinition, OpenCmsConfig, ResolvedConfig } from '@opencms/schema';
 import type { LoadNext } from './web';
@@ -71,6 +72,8 @@ export interface OpenCmsModuleOptions {
     /** Undocumented; for tests. */
     loadNext?: LoadNext;
   };
+  /** Asset upload + storage. Omit to keep only register-by-URL (no upload, no static serving). */
+  assets?: AssetsModuleOptions;
   /** Exact origins allowed to read `/api/content/**` cross-origin (GET, HEAD, OPTIONS; no credentials). */
   cors?: { origins: string[] };
   /** Environment for the auth module. Default `process.env`. */

@@ -6,6 +6,7 @@ import { Inject, Logger, Module, RequestMethod, type DynamicModule, type Middlew
 import { HttpAdapterHost } from '@nestjs/core';
 import type { Kysely } from 'kysely';
 import { createDb, migrateUp, pendingMigrations } from '@opencms/db';
+import { AssetsModule } from '@opencms/assets';
 import { OAuth2Module, type CoreReady } from '@opencms/oauth2';
 import { resolveConfig } from '@opencms/schema';
 import { ContentCorsMiddleware } from './http/content-cors.middleware';
@@ -80,6 +81,7 @@ export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShu
           auth: input.auth,
           env: input.env,
         }),
+        AssetsModule.forRoot({ dbToken: OPENCMS_DB, assets: input.assets ?? null }),
       ],
       controllers: [ContentController, AdminContentController, SchemaController, ContentGroupsController, LocalesController, SystemController, WorkflowController],
       providers: [
