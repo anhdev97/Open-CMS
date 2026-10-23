@@ -14,6 +14,8 @@ type Option = { value: string; label: string; asset?: AssetMeta };
 type AssetRow = { id: string; filename: string; mimeType?: string | null; alt?: string | null };
 const assetMissingAlt = (a?: AssetMeta) => !!a && (a.mimeType ?? '').startsWith('image/') && !a.alt?.trim();
 const optionCache = new Map<string, Promise<Option[]>>();
+// Set from `meta.uploadEnabled` of the asset list response; upload route only exists when `assets` is configured.
+let assetsUploadEnabled = false;
 const NONE = '__none__';
 const META_KEYS = ['documentId', 'status', 'locale', 'createdAt', 'updatedAt', 'publishedAt'];
 
@@ -30,7 +32,10 @@ function loadOptions(field: FieldDefinition): Promise<Option[]> {
             }),
           )
         : field.kind === 'asset'
-          ? api<{ data: any[] }>('/api/admin/assets').then((r) => r.data.map((a: AssetRow) => ({ value: a.id, label: a.filename, asset: { mimeType: a.mimeType ?? null, alt: a.alt ?? null } })))
+          ? api<{ data: any[]; meta?: { uploadEnabled?: boolean } }>('/api/admin/assets').then((r) => {
+              assetsUploadEnabled = r.meta?.uploadEnabled === true;
+              return r.data.map((a: AssetRow) => ({ value: a.id, label: a.filename, asset: { mimeType: a.mimeType ?? null, alt: a.alt ?? null } }));
+            })
           : api<{ data: any[] }>(`/api/admin/taxonomies/${field.options.taxonomy}/terms`).then((r) =>
               r.data.map((term) => ({ value: term.id, label: (Object.values(term.name ?? {})[0] as string) ?? term.slug })),
             );
@@ -52,6 +57,7 @@ function AssetTools({
   options,
   onChange,
   onReload,
+  uploadEnabled,
 }: {
   id: string;
   field: FieldDefinition;
@@ -59,6 +65,7 @@ function AssetTools({
   options: Option[];
   onChange: (v: any) => void;
   onReload: () => void;
+  uploadEnabled: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,19 +114,21 @@ function AssetTools({
 
   return (
     <div className="mt-2 space-y-2">
-      <div className="flex items-center gap-2">
-        <Input
-          id={`${id}-upload`}
-          type="file"
-          aria-label={t('field.assetUpload')}
-          disabled={busy}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = '';
-            if (file) void upload(file);
-          }}
-        />
-      </div>
+      {uploadEnabled && (
+        <div className="flex items-center gap-2">
+          <Input
+            id={`${id}-upload`}
+            type="file"
+            aria-label={t('field.assetUpload')}
+            disabled={busy}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (file) void upload(file);
+            }}
+          />
+        </div>
+      )}
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -166,7 +175,7 @@ function RelationInput({ id, field, value, onChange }: { id: string; field: Fiel
 
   const tools =
     field.kind === 'asset' ? (
-      <AssetTools id={id} field={field} value={value} options={options} onChange={onChange} onReload={() => setReloadKey((k) => k + 1)} />
+      <AssetTools id={id} field={field} value={value} options={options} onChange={onChange} onReload={() => setReloadKey((k) => k + 1)} uploadEnabled={assetsUploadEnabled} />
     ) : null;
 
   if (field.options.multiple) {

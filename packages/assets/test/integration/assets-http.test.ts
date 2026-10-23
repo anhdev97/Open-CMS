@@ -52,7 +52,9 @@ describe('AssetsModule HTTP', () => {
     expect((await request(server).get('/uploads/../etc/passwd')).status).toBe(404);
     expect((await request(server).get('/uploads/2000/01/missing.webp')).status).toBe(404);
 
-    expect((await request(server).get('/api/admin/assets')).body.data).toHaveLength(1);
+    const listed = await request(server).get('/api/admin/assets');
+    expect(listed.body.data).toHaveLength(1);
+    expect(listed.body.meta).toEqual({ uploadEnabled: true });
     const patched = await request(server).patch(`/api/admin/assets/${id}`).send({ alt: 'new' });
     expect(patched.body.data.alt).toBe('new');
 
@@ -75,7 +77,9 @@ describe('AssetsModule HTTP', () => {
     expect((await request(server).post('/api/admin/assets/upload').attach('file', await png(), 'a.png')).status).toBe(404);
     const reg = await request(server).post('/api/admin/assets').send({ filename: 'a.png', url: 'https://cdn/a.png' });
     expect(reg.status).toBe(201);
-    expect((await request(server).get('/api/admin/assets')).body.data).toHaveLength(1);
+    const listed = await request(server).get('/api/admin/assets');
+    expect(listed.body.data).toHaveLength(1);
+    expect(listed.body.meta).toEqual({ uploadEnabled: false });
     expect((await request(server).delete(`/api/admin/assets/${reg.body.data.id}`)).status).toBe(200);
   });
 });

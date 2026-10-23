@@ -10,6 +10,7 @@ import {
   BadRequestException,
   Injectable,
   Inject,
+  Optional,
   UploadedFile,
   UseInterceptors,
   type CallHandler,
@@ -37,12 +38,17 @@ export class AssetUploadInterceptor implements NestInterceptor {
 
 @Controller('api/admin')
 export class AssetsController {
-  constructor(@Inject(AssetsService) private readonly assets: AssetsService) {}
+  constructor(
+    @Inject(AssetsService) private readonly assets: AssetsService,
+    @Optional() @Inject(ASSETS_OPTIONS) private readonly assetsOptions: AssetsModuleOptions | null = null,
+  ) {}
 
+  /** `meta.uploadEnabled` is true only when the module was configured with a non-null `assets` option. */
   @RequirePermission('content.read')
   @Get('assets')
-  list(@Query('limit') limit = '50') {
-    return this.assets.list(Number(limit) || 50);
+  async list(@Query('limit') limit = '50') {
+    const res = await this.assets.list(Number(limit) || 50);
+    return { ...res, meta: { uploadEnabled: !!this.assetsOptions } };
   }
 
   /** Registers an asset that already lives at `url` (e.g. a CDN). */

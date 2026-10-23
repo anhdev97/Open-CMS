@@ -60,6 +60,9 @@
   is 4000 everywhere.
 - Host apps must create the Nest app with `{ bodyParser: false }`; `@opencms/core` parses request bodies
   itself (oidc-provider needs the raw `/oauth2` requests).
+- **Asset API responses are camelCase.** `/api/admin/assets` rows now use `mimeType`, `storageKey`, `createdAt`,
+  `variants`, … instead of the raw snake_case columns (`mime_type`, `created_at`); `GET /api/admin/assets` also
+  returns `meta.uploadEnabled` (true when `assets` is configured). Clients reading the old fields must be updated.
 
 ### Added
 
