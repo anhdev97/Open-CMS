@@ -259,6 +259,30 @@ Locale codes are now region codes (`en-US`, not `en`); the core migrates existin
 Roles became permission groups: the auth tables are renamed `auth_groups`/`auth_user_groups`, routes are
 guarded with `@RequirePermission(...)` instead of the role decorator, and creating a user needs `groupIds`.
 
+## Assets
+
+Upload and storage live in `@opencms/assets`. Pass `assets` on `OpenCmsModule.forRoot` to enable multipart
+upload, WebP variants, and (for `local`) static serving under `publicBaseUrl`. Omit `assets` to keep
+register-by-URL only (no upload, no disk writes).
+
+```ts
+// src/app.module.ts
+import path from 'node:path';
+
+const projectRoot = findProjectRoot(__dirname);
+
+OpenCmsModule.forRoot({
+  root: projectRoot,
+  // ...
+  assets: {
+    provider: 'local', // or 's3' | 'gcs' (optional SDK peers)
+    local: { root: path.join(projectRoot, 'uploads'), publicBaseUrl: '/media' },
+  },
+});
+```
+
+See [`examples/phone-store`](examples/phone-store) for a working local setup.
+
 ## Extensions
 
 ```ts
@@ -271,7 +295,7 @@ export default defineHooks('product', {
 
 ## Roadmap
 
-- v0.2: markets/sites/currencies as first-class entities, RBAC scoped by market + locale, webhooks, asset upload with storage adapters (local/S3)
+- v0.2: markets/sites/currencies as first-class entities, RBAC scoped by market + locale, webhooks, ~~asset upload with storage adapters (local/S3/GCS via `@opencms/assets`)~~ (done)
 - v0.3: widget schema + page builder, Next.js preview (draft mode), `@opencms/sdk` + React widget renderer
 - v0.4: plugin API (custom field kinds, storage), scheduled publishing, translation workflow, ~~`opencms init` scaffolder~~ (done)
 

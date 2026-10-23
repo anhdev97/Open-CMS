@@ -1,2 +1,4 @@
 public/phones/*
 !public/phones/.gitkeep
+uploads/*
+!uploads/.gitkeep
