@@ -41,11 +41,30 @@ export class ImageTooLargeError extends Error {
   }
 }
 
+export class InvalidImageError extends Error {
+  readonly code = 'invalid_image';
+  constructor(message = 'invalid_image: image could not be processed', options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'InvalidImageError';
+  }
+}
+
 const SVG_MIME = 'image/svg+xml';
 const WEBP_MIME = 'image/webp';
+const WEBP_MAX_DIMENSION = 16383;
+const SAFE_EXT = /^[a-z0-9]{1,10}$/;
 
-function isTransformable(mimeType: string): boolean {
-  return mimeType.startsWith('image/') && mimeType !== SVG_MIME;
+function normalizeMime(mimeType: string): string {
+  return mimeType.split(';')[0].trim().toLowerCase();
+}
+
+function isTransformable(mime: string): boolean {
+  return mime.startsWith('image/') && mime !== SVG_MIME;
+}
+
+function safeExt(ext: string): string {
+  if (!ext) return '';
+  return SAFE_EXT.test(ext) ? ext : 'bin';
 }
 
 function buildKeyPrefix(now: Date, slug: string, shortId: string): string {
@@ -62,15 +81,18 @@ export async function processUpload(
   const shortId = opts.shortId ?? randomBytes(2).toString('hex');
   const sizes = opts.sizes ?? DEFAULT_IMAGE_SIZES;
 
-  if (!isTransformable(input.mimeType)) {
-    const { slug, ext } = slugifyFilename(input.originalFilename);
+  const mime = normalizeMime(input.mimeType);
+
+  if (!isTransformable(mime)) {
+    const { slug, ext: rawExt } = slugifyFilename(input.originalFilename);
+    const ext = safeExt(rawExt);
     const filename = ext ? `${slug}.${ext}` : slug;
     const key = `${buildKeyPrefix(now, slug, shortId)}${ext ? `.${ext}` : ''}`;
     return {
       filename,
-      mimeType: input.mimeType,
+      mimeType: mime,
       storageKey: key,
-      objects: [{ kind: 'original', key, body: input.buffer, contentType: input.mimeType }],
+      objects: [{ kind: 'original', key, body: input.buffer, contentType: mime }],
     };
   }
 
@@ -78,47 +100,62 @@ export async function processUpload(
   const prefix = buildKeyPrefix(now, slug, shortId);
   const originalKey = `${prefix}.webp`;
 
-  // limitInputPixels guards decode; we also check metadata explicitly for a clear error.
-  const base = () => sharp(input.buffer, { limitInputPixels: false }).rotate();
-  const meta = await sharp(input.buffer, { limitInputPixels: false }).metadata();
-  const srcWidth = meta.width ?? 0;
-  const srcHeight = meta.height ?? 0;
-  if (srcWidth * srcHeight > MAX_IMAGE_PIXELS) {
-    throw new ImageTooLargeError();
-  }
+  let objects: PipelineObject[];
+  try {
+    // limitInputPixels guards decode; we also check metadata explicitly for a clear error.
+    // Note: animated GIFs are flattened to the first frame (animation is not preserved) in v1.
+    const base = () => sharp(input.buffer, { limitInputPixels: false }).rotate();
+    const meta = await sharp(input.buffer, { limitInputPixels: false }).metadata();
+    const srcWidth = meta.width ?? 0;
+    const srcHeight = meta.height ?? 0;
+    if (srcWidth * srcHeight > MAX_IMAGE_PIXELS) {
+      throw new ImageTooLargeError();
+    }
+    if (srcWidth > WEBP_MAX_DIMENSION || srcHeight > WEBP_MAX_DIMENSION) {
+      throw new InvalidImageError(
+        `invalid_image: dimensions exceed WebP maximum of ${WEBP_MAX_DIMENSION}px`,
+      );
+    }
 
-  const original = await base().webp().toBuffer({ resolveWithObject: true });
-  const objects: PipelineObject[] = [
-    {
-      kind: 'original',
-      key: originalKey,
-      body: original.data,
-      contentType: WEBP_MIME,
-      width: original.info.width,
-      height: original.info.height,
-    },
-  ];
+    const original = await base().webp().toBuffer({ resolveWithObject: true });
+    objects = [
+      {
+        kind: 'original',
+        key: originalKey,
+        body: original.data,
+        contentType: WEBP_MIME,
+        width: original.info.width,
+        height: original.info.height,
+      },
+    ];
 
-  const origWidth = original.info.width;
-  const variants: Array<['thumb' | 'medium' | 'large', number]> = [
-    ['thumb', sizes.thumb],
-    ['medium', sizes.medium],
-    ['large', sizes.large],
-  ];
-  for (const [kind, target] of variants) {
-    if (origWidth <= target) continue;
-    const out = await base()
-      .resize({ width: target, withoutEnlargement: true })
-      .webp()
-      .toBuffer({ resolveWithObject: true });
-    objects.push({
-      kind,
-      key: `${prefix}_${kind}.webp`,
-      body: out.data,
-      contentType: WEBP_MIME,
-      width: out.info.width,
-      height: out.info.height,
-    });
+    const origMaxEdge = Math.max(original.info.width, original.info.height);
+    const variants: Array<['thumb' | 'medium' | 'large', number]> = [
+      ['thumb', sizes.thumb],
+      ['medium', sizes.medium],
+      ['large', sizes.large],
+    ];
+    for (const [kind, target] of variants) {
+      if (origMaxEdge <= target) continue;
+      const out = await base()
+        .resize({ width: target, height: target, fit: 'inside', withoutEnlargement: true })
+        .webp()
+        .toBuffer({ resolveWithObject: true });
+      objects.push({
+        kind,
+        key: `${prefix}_${kind}.webp`,
+        body: out.data,
+        contentType: WEBP_MIME,
+        width: out.info.width,
+        height: out.info.height,
+      });
+    }
+  } catch (err) {
+    if (err instanceof ImageTooLargeError || err instanceof InvalidImageError) throw err;
+    throw new InvalidImageError(
+      `invalid_image: ${err instanceof Error ? err.message : 'image could not be processed'}`,
+      { cause: err },
+    );
   }
 
   return {
