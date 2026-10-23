@@ -1,6 +1,8 @@
 export type StorageProviderKind = 'local' | 's3' | 'gcs';
 
 export interface VariantInfo {
+  /** Storage object key (used for deletes). */
+  key: string;
   url: string;
   width?: number;
   height?: number;

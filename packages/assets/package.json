@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@opencms/db": "workspace:*",
+    "@opencms/oauth2": "workspace:*",
     "@opencms/schema": "workspace:*",
     "kysely": "^0.28.0",
     "sharp": "^0.34.0"
@@ -23,6 +24,7 @@
   "peerDependencies": {
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",
     "@aws-sdk/client-s3": "^3.0.0",
