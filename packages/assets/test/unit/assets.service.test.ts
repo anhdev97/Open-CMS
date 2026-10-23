@@ -48,7 +48,7 @@ describe('AssetsService.upload', () => {
     expect(res.data.variants!.original.url).toBe(res.data.url);
     expect(Object.keys(res.data.variants!).sort()).toEqual(['large', 'medium', 'original', 'thumb']);
     for (const v of Object.values(res.data.variants!)) expect(await exists(path.join(root, v.key))).toBe(true);
-    expect(res.data.url).toMatch(/^http:\/\/localhost:3000\/uploads\/\d{4}\/\d{2}\/photo-[0-9a-f]{4}\.webp$/);
+    expect(res.data.url).toMatch(/^http:\/\/localhost:3000\/uploads\/\d{4}\/\d{2}\/photo-[0-9a-f]{8}\.webp$/);
   });
 
   it('missingAlt is false when alt is provided', async () => {

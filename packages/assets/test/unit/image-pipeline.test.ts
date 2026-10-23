@@ -60,7 +60,7 @@ describe('processUpload', () => {
       { buffer: await png(1, 1), originalFilename: 'a.png', mimeType: 'image/png' },
       { now },
     );
-    expect(res.storageKey).toMatch(/^2026\/03\/a-[0-9a-f]{4}\.webp$/);
+    expect(res.storageKey).toMatch(/^2026\/03\/a-[0-9a-f]{8}\.webp$/);
   });
 
   it('passes through PDFs as a single object', async () => {

@@ -78,7 +78,7 @@ export async function processUpload(
   opts: ProcessUploadOptions = {},
 ): Promise<ProcessedUpload> {
   const now = opts.now ?? new Date();
-  const shortId = opts.shortId ?? randomBytes(2).toString('hex');
+  const shortId = opts.shortId ?? randomBytes(4).toString('hex');
   const sizes = opts.sizes ?? DEFAULT_IMAGE_SIZES;
 
   const mime = normalizeMime(input.mimeType);
