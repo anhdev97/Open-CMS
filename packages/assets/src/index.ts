@@ -4,6 +4,8 @@ export { slugifyFilename } from './seo/slug';
 export { missingAlt } from './seo/missing-alt';
 export type { StorageProvider } from './provider/storage-provider';
 export { createLocalServerProvider } from './provider/local.provider';
+export { createS3Provider, type S3ProviderDeps } from './provider/s3.provider';
+export { createGcsProvider, type GcsProviderDeps } from './provider/gcs.provider';
 export { processUpload, ImageTooLargeError, InvalidImageError } from './pipeline/image-pipeline';
 export type {
   VariantKind,

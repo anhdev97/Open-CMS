@@ -10,8 +10,19 @@ describe('createProvider', () => {
   it('throws on incomplete local config', () => {
     expect(() => createProvider({ provider: 'local' })).toThrow(/local/);
   });
-  it('throws for s3/gcs until implemented', () => {
-    expect(() => createProvider({ provider: 's3', s3: { bucket: 'b', region: 'r' } })).toThrow('S3 provider not available yet');
-    expect(() => createProvider({ provider: 'gcs', gcs: { bucket: 'b' } })).toThrow(/GCS provider not available/);
+  it('creates an s3 provider', () => {
+    const p = createProvider({ provider: 's3', s3: { bucket: 'b', region: 'us-east-1' } });
+    expect(p.kind).toBe('s3');
+    expect(p.publicUrl('k.png')).toBe('https://b.s3.us-east-1.amazonaws.com/k.png');
+  });
+  it('creates a gcs provider', () => {
+    const p = createProvider({ provider: 'gcs', gcs: { bucket: 'b' } });
+    expect(p.kind).toBe('gcs');
+    expect(p.publicUrl('k.png')).toBe('https://storage.googleapis.com/b/k.png');
+  });
+  it('throws on incomplete s3/gcs config', () => {
+    expect(() => createProvider({ provider: 's3' })).toThrow(/s3/);
+    expect(() => createProvider({ provider: 's3', s3: { bucket: 'b' } as never })).toThrow(/region/);
+    expect(() => createProvider({ provider: 'gcs' })).toThrow(/gcs/);
   });
 });
