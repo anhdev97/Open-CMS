@@ -8,7 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from './ui/alert-dialog';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
 
 /**
  * Confirmation for destructive actions. Clicking the confirm button runs `onConfirm`, then the dialog

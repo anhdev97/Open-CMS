@@ -1,5 +1,5 @@
 // Thin wrappers over `/api/admin/users*` and `/api/auth/password`. Relative imports only (ruling R4).
-import { t } from '../i18n/en';
+import { t } from '../i18n';
 import { api } from './api';
 import { ApiError } from './api-error';
 
@@ -8,7 +8,8 @@ export interface AdminUser {
   email: string;
   name: string;
   status: 'active' | 'disabled' | string;
-  roles: string[];
+  /** Sorted by key. */
+  groups: Array<{ id: string; key: string; name: string }>;
   lastLoginAt: string | null;
   identities: Array<{ id: string; provider: string; subject: string; email: string | null }>;
 }
@@ -32,8 +33,11 @@ const base = '/api/admin/users';
 
 export const listUsers = () => api<{ data: AdminUser[] }>(base).then((r) => r.data);
 
-export const createUser = (input: { email: string; name: string; password?: string }) =>
+export const createUser = (input: { email: string; name: string; password?: string; groupIds: string[] }) =>
   api<{ data: AdminUser }>(base, { method: 'POST', json: input }).then((r) => r.data);
+
+export const setUserGroups = (id: string, groupIds: string[]) =>
+  api<{ data: AdminUser }>(`${base}/${id}`, { method: 'PATCH', json: { groupIds } }).then((r) => r.data);
 
 export const setUserStatus = (id: string, status: 'active' | 'disabled') =>
   api<{ data: AdminUser }>(`${base}/${id}`, { method: 'PATCH', json: { status } }).then((r) => r.data);
@@ -51,13 +55,13 @@ export const changePassword = (currentPassword: string, newPassword: string) =>
 
 const KNOWN_ERRORS = ['last_super_admin', 'email_taken', 'forbidden', 'not_found', 'weak_password'];
 
-/** The en.ts message for a known user-management error code; any other error keeps its own message. */
+/** The active-locale message for a known user-management error code; any other error keeps its own message. */
 export function userErrorMessage(err: unknown): string {
   if (err instanceof ApiError && KNOWN_ERRORS.includes(err.code)) return t(`users.errors.${err.code}`);
   return err instanceof Error ? err.message : String(err);
 }
 
-/** Same error with a known code's en.ts message; keeps status, issues and retryAfterSec. Other errors pass through. */
+/** Same error with a known code's active-locale message; keeps status, issues and retryAfterSec. Other errors pass through. */
 export function userError(err: unknown): Error {
   if (err instanceof ApiError && KNOWN_ERRORS.includes(err.code)) {
     return new ApiError(err.status, err.code, userErrorMessage(err), err.issues, err.retryAfterSec);

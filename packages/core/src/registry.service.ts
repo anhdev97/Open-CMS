@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { ContentTypeDefinition } from '@opencms/schema';
+import type { ContentGroupDefinition, ContentTypeDefinition } from '@opencms/schema';
 import { buildEntryValidator } from '@opencms/schema';
 import { OPENCMS_OPTIONS, type EntryHooks, type ResolvedOpenCmsOptions } from './options';
 
@@ -7,17 +7,27 @@ import { OPENCMS_OPTIONS, type EntryHooks, type ResolvedOpenCmsOptions } from '.
 @Injectable()
 export class ContentRegistry {
   private byApiId = new Map<string, ContentTypeDefinition>();
+  private contentGroups: ContentGroupDefinition[] = [];
   private validators = new Map<string, ReturnType<typeof buildEntryValidator>>();
   private hooks = new Map<string, EntryHooks[]>();
 
   constructor(@Inject(OPENCMS_OPTIONS) options: ResolvedOpenCmsOptions) {
     this.reload(options.contentTypes);
+    this.reloadGroups(options.contentGroups ?? []);
     for (const h of options.hooks) this.hooks.set(h.apiId, [...(this.hooks.get(h.apiId) ?? []), h.hooks]);
   }
 
   reload(defs: ContentTypeDefinition[]): void {
     this.byApiId = new Map(defs.map((d) => [d.apiId, d]));
     this.validators.clear();
+  }
+
+  reloadGroups(groups: ContentGroupDefinition[]): void {
+    this.contentGroups = [...groups];
+  }
+
+  groups(): ContentGroupDefinition[] {
+    return [...this.contentGroups];
   }
 
   all(): ContentTypeDefinition[] {

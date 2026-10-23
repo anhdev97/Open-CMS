@@ -5,7 +5,8 @@ import { defineContentType, f } from '@opencms/schema';
 export default defineContentType({
   id: 'ct_brand0001',
   apiId: 'brand',
-  displayName: 'Brand',
+  displayName: { 'en-US': 'Brand', 'vi-VN': 'Thương hiệu' },
+  group: 'shop',
   fields: {
     name: f.text({ id: 'fld_brand_name', required: true, indexed: true }),
     slug: f.slug({ id: 'fld_brand_slug', required: true, unique: true, from: 'name' }),

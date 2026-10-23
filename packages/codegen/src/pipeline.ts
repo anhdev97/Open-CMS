@@ -14,7 +14,7 @@ import { assertValidSchema, normalizeDefinition } from '@opencms/schema';
 import { generateCode, staleGeneratedFiles, writeGeneratedFiles } from './codegen';
 import { compileStatement } from './ddl';
 import { diffSchemas, type DiffResult } from './diff';
-import { loadDefinitions, type LoadedDefinition } from './loader';
+import { loadContentGroups, loadDefinitions, type LoadedDefinition } from './loader';
 import { migrationStamp, renderMigrationFile, slugifyMigrationName, suggestMigrationName } from './migration-file';
 import { planMigration, type MigrationPlan } from './plan';
 import { printSchemaFile } from './printer';
@@ -53,7 +53,7 @@ export async function computePlan(
   opts: { definitions?: ContentTypeDefinition[]; now?: Date } = {},
 ): Promise<PlanResult> {
   const definitions = opts.definitions ?? (await loadDefinitions(config)).map((l) => l.def);
-  assertValidSchema(definitions);
+  assertValidSchema(definitions, await loadContentGroups(config));
   const snapshot = readSnapshot(config.migrationsDir);
   const diff = diffSchemas(snapshot.contentTypes, definitions);
   const stamp = nextMigrationStamp(config.migrationsDir, opts.now);
@@ -94,7 +94,7 @@ export async function createMigration(
 
 export async function generate(config: ResolvedConfig): Promise<{ definitions: ContentTypeDefinition[]; changed: string[] }> {
   const definitions = (await loadDefinitions(config)).map((l) => l.def);
-  assertValidSchema(definitions);
+  assertValidSchema(definitions, await loadContentGroups(config));
   return { definitions, changed: writeGeneratedFiles(generateCode(definitions, config.generatedDir)) };
 }
 

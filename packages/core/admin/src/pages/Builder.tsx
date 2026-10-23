@@ -7,12 +7,17 @@ import { PageHeader } from '../components/PageHeader';
 import { Alert, AlertDescription } from '../components/ui/alert';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Switch } from '../components/ui/switch';
 import { Checkbox } from '../components/ui/checkbox';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { ContentGroupsTab } from '../components/ContentGroupsTab';
+import { fromLocalizedText, toLocalizedText, type LocaleInputs } from '../lib/content-groups';
+import { localizedText, SUPPORTED_LOCALES } from '@opencms/schema';
 import { useAdminNavigate, useAdminSearch } from '../lib/nav';
-import { t } from '../i18n/en';
+import { getActiveLocale, t } from '../i18n';
 import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
 import {
@@ -26,6 +31,8 @@ import {
 } from '../lib/types';
 
 const NONE = '__none__';
+const typeName = (ty: { apiId: string; displayName: ContentTypeDefinition['displayName'] }) =>
+  localizedText(ty.displayName, getActiveLocale(), ty.apiId);
 const ALL_KINDS: FieldKind[] = [
   'text', 'longText', 'richText', 'slug', 'email', 'url', 'number', 'boolean',
   'date', 'datetime', 'json', 'money', 'asset', 'reference', 'taxonomy',
@@ -154,7 +161,7 @@ function FieldOptions({ field, types, fields, onChange }: {
             <SelectItem value={NONE}>{t('builder.options.selectType')}</SelectItem>
             {types.map((type) => (
               <SelectItem key={type.id} value={type.apiId}>
-                {type.displayName}
+                {typeName(type)}
               </SelectItem>
             ))}
           </OptionSelect>
@@ -187,9 +194,11 @@ export function Builder() {
   const navigate = useAdminNavigate();
   const params = new URLSearchParams(useAdminSearch());
   const selected = params.get('type');
+  const tab = params.get('tab') === 'groups' ? 'groups' : 'type';
   const [meta, setMeta] = useState<Meta | null>(null);
   const [types, setTypes] = useState<ContentTypeDefinition[]>([]);
   const [draft, setDraft] = useState<ContentTypeDefinition>(emptyType);
+  const [nameInputs, setNameInputs] = useState<LocaleInputs>({ 'en-US': '' });
   const [original, setOriginal] = useState<ContentTypeDefinition | null>(null);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [result, setResult] = useState<ApplyResponse | null>(null);
@@ -217,7 +226,9 @@ export function Builder() {
         if (keepResult) return;
         const existing = all.find((type) => type.apiId === selected) ?? null;
         setOriginal(existing);
-        setDraft(existing ? structuredClone(existing) : emptyType());
+        const next = existing ? structuredClone(existing) : emptyType();
+        setDraft(next);
+        setNameInputs(fromLocalizedText(next.displayName));
         setPlan(null);
         setResult(null);
         setError(null);
@@ -270,7 +281,7 @@ export function Builder() {
       toast.success(t('builder.savedToast'));
       if (selected !== draft.apiId) {
         savedApiId.current = draft.apiId;
-        navigate(`/builder?type=${draft.apiId}`, { replace: true });
+        navigate(`/settings/content-types?type=${draft.apiId}`, { replace: true });
       }
     });
 
@@ -281,10 +292,33 @@ export function Builder() {
       setResult(r);
       window.dispatchEvent(new Event('opencms:schema-changed'));
       toast.success(t('builder.archivedToast'));
-      navigate('/builder', { replace: true });
+      navigate('/settings/content-types', { replace: true });
     });
 
   const editable = meta?.schemaEditable ?? false;
+  const nameValid = (nameInputs['en-US'] ?? '').trim() !== '';
+  const setName = (code: string, value: string) => {
+    const next = { ...nameInputs, [code]: value };
+    setNameInputs(next);
+    setDraft((d) => ({ ...d, displayName: toLocalizedText(next) }));
+    setPlan(null);
+  };
+  const setGroup = (value: string) => {
+    setDraft((d) => {
+      const { group: _drop, ...rest } = d;
+      return value === NONE ? rest : { ...rest, group: value };
+    });
+    setPlan(null);
+  };
+  // Only `true` is persisted; turning it off removes the key.
+  const setReview = (on: boolean) => {
+    setDraft((d) => {
+      const { review: _drop, ...rest } = d;
+      return on ? { ...rest, review: true } : rest;
+    });
+    setPlan(null);
+  };
+  const groups = meta?.groups ?? [];
   const table = `ct_${draft.apiId.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase() || '…'}`;
 
   return (
@@ -293,7 +327,7 @@ export function Builder() {
         title={t('builder.title')}
         description={t('builder.description')}
         actions={
-          <Select value={selected ?? NONE} onValueChange={(v) => navigate(v === NONE ? '/builder' : `/builder?type=${v}`)}>
+          <Select value={selected ?? NONE} onValueChange={(v) => navigate(v === NONE ? '/settings/content-types' : `/settings/content-types?type=${v}`)}>
             <SelectTrigger size="sm" aria-label={t('builder.pickType')}>
               <SelectValue />
             </SelectTrigger>
@@ -301,7 +335,7 @@ export function Builder() {
               <SelectItem value={NONE}>{t('builder.newTypeOption')}</SelectItem>
               {types.map((type) => (
                 <SelectItem key={type.id} value={type.apiId}>
-                  {type.displayName}
+                  {typeName(type)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -315,20 +349,27 @@ export function Builder() {
         </Alert>
       )}
 
-      <div className="grid items-start gap-6 lg:grid-cols-3">
+      <Tabs value={tab} onValueChange={(v) => navigate(`/settings/content-types?${selected ? `type=${selected}&` : ''}${v === 'groups' ? 'tab=groups' : ''}`.replace(/[?&]$/, ''))}>
+        <TabsList>
+          <TabsTrigger value="type">{t('builder.tabType')}</TabsTrigger>
+          <TabsTrigger value="groups">{t('builder.tabGroups')}</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {tab === 'groups' && (
+        <ContentGroupsTab
+          types={types}
+          editable={editable}
+          loaded={meta !== null}
+          onChanged={() => load().catch(setError)}
+        />
+      )}
+
+      <div className={tab === 'groups' ? 'hidden' : 'grid items-start gap-6 lg:grid-cols-3'}>
         <div className="space-y-4 lg:col-span-2">
           <Card>
             <CardContent className="space-y-3">
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="type-display-name">{t('builder.displayName')}</Label>
-                  <Input
-                    id="type-display-name"
-                    value={draft.displayName}
-                    onChange={(e) => setDraft({ ...draft, displayName: e.target.value })}
-                    placeholder={t('builder.displayNamePlaceholder')}
-                  />
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="type-api-id">{t('builder.apiId')}</Label>
                   <Input
@@ -337,6 +378,45 @@ export function Builder() {
                     onChange={(e) => setDraft({ ...draft, apiId: e.target.value })}
                     placeholder={t('builder.apiIdPlaceholder')}
                   />
+                </div>
+                <OptionSelect id="type-group" label={t('builder.group')} value={draft.group ?? NONE} onChange={setGroup}>
+                  <SelectItem value={NONE}>{t('builder.noGroup')}</SelectItem>
+                  {groups.map((g) => (
+                    <SelectItem key={g.key} value={g.key}>
+                      {localizedText(g.title, getActiveLocale(), g.key)}
+                    </SelectItem>
+                  ))}
+                </OptionSelect>
+              </div>
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">{t('builder.displayName')}</legend>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {SUPPORTED_LOCALES.map((l) => (
+                    <div key={l.code} className="space-y-1">
+                      <Label htmlFor={`type-display-name-${l.code}`} className="font-normal text-muted-foreground">
+                        {l.name}
+                        {l.code === 'en-US' && ` · ${t('builder.requiredShort')}`}
+                      </Label>
+                      <Input
+                        id={`type-display-name-${l.code}`}
+                        value={nameInputs[l.code] ?? ''}
+                        aria-required={l.code === 'en-US'}
+                        onChange={(e) => setName(l.code, e.target.value)}
+                        placeholder={l.code === 'en-US' ? t('builder.displayNamePlaceholder') : ''}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </fieldset>
+              <div className="flex items-start gap-3">
+                <Switch id="type-review" checked={!!draft.review} onCheckedChange={setReview} aria-describedby="type-review-hint" />
+                <div className="space-y-0.5">
+                  <Label htmlFor="type-review" className="font-normal">
+                    {t('builder.review')}
+                  </Label>
+                  <p id="type-review-hint" className="text-xs text-muted-foreground">
+                    {t('builder.reviewHint')}
+                  </p>
                 </div>
               </div>
               <p className="font-mono text-xs text-muted-foreground">
@@ -455,7 +535,7 @@ export function Builder() {
             <Button variant="outline" disabled={busy} onClick={preview}>
               {t('builder.preview')}
             </Button>
-            <Button disabled={!editable || busy || !dirty} onClick={save}>
+            <Button disabled={!editable || busy || !dirty || !nameValid} onClick={save}>
               {busy ? t('builder.working') : t('builder.save')}
             </Button>
           </div>
@@ -542,7 +622,7 @@ export function Builder() {
       <ConfirmDialog
         open={confirmArchive}
         onOpenChange={setConfirmArchive}
-        title={t('builder.archiveTitle', { name: original?.displayName ?? '' })}
+        title={t('builder.archiveTitle', { name: original ? typeName(original) : '' })}
         description={t('builder.archiveDescription')}
         confirmLabel={t('builder.archiveConfirm')}
         destructive

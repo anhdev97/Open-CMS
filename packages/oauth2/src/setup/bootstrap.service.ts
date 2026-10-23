@@ -6,6 +6,7 @@ import { OAUTH2_CONFIG } from '../constants';
 import { AuthError } from '../errors';
 import { normalizeEmail } from '../security/email';
 import { PasswordService } from '../security/password';
+import { SUPER_ADMIN_GROUP } from '../permissions';
 import { UserService } from '../users/user.service';
 
 export class BootstrapError extends Error {
@@ -83,7 +84,7 @@ export class BootstrapService {
           .set({ status: 'active', updated_at: new Date() })
           .where('id', '=', user.id)
           .execute();
-        await sql`insert into auth_user_roles (user_id, role_id) select ${user.id}, id from auth_roles where key = 'super_admin' on conflict do nothing`.execute(
+        await sql`insert into auth_user_groups (user_id, group_id) select ${user.id}, id from auth_groups where key = ${SUPER_ADMIN_GROUP} on conflict do nothing`.execute(
           trx,
         );
         await this.users.revokeAll(user.id, undefined, trx);

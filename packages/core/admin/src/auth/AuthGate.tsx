@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { Locale } from '@opencms/schema';
 import { toast } from 'sonner';
 import { AppLayout } from '../components/AppLayout';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
+import { setAdminLocale } from '../i18n/I18nProvider';
 import { api } from '../lib/api';
 import { useAdminNavigate } from '../lib/nav';
 import { ApiError } from '../lib/api-error';
@@ -23,7 +25,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
     let live = true;
     setState({ status: 'loading' });
     api<AuthUser>('/api/auth/me', { redirectOn401: false }).then(
-      (user) => live && setState({ status: 'ready', user }),
+      (user) => {
+        if (!live) return;
+        // Spec A §4.3 step 1: a saved per-user language wins over localStorage and the browser.
+        if (user.locale) void setAdminLocale(user.locale);
+        setState({ status: 'ready', user });
+      },
       (error: unknown) => {
         if (!live) return;
         if (error instanceof ApiError && error.status === 409 && error.code === 'setup_required') {
@@ -49,9 +56,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const setUserLocale = useCallback((locale: Locale | null) => {
+    setState((s) => (s.status === 'ready' ? { status: 'ready', user: { ...s.user, locale } } : s));
+  }, []);
+
   const value = useMemo<AuthContextValue | null>(
-    () => (state.status === 'ready' ? { user: state.user, logout } : null),
-    [state, logout],
+    () => (state.status === 'ready' ? { user: state.user, logout, setUserLocale } : null),
+    [state, logout, setUserLocale],
   );
 
   if (state.status === 'error') {

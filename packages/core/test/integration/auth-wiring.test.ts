@@ -35,7 +35,7 @@ describe('OAuth2Module wired into OpenCmsModule', () => {
     expect((await res.json()).error.code).toBe('unauthenticated');
   });
 
-  it('serves admin APIs to a logged-in super_admin', async () => {
+  it('serves admin APIs to a logged-in Super Admin', async () => {
     const res = await call('/api/admin/content-types', { headers: { cookie } });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ data: [] });

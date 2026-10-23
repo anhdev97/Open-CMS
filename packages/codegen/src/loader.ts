@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createJiti } from 'jiti';
-import type { ContentTypeDefinition, OpenCmsConfig, ResolvedConfig } from '@opencms/schema';
+import type { ContentGroupDefinition, ContentTypeDefinition, OpenCmsConfig, ResolvedConfig } from '@opencms/schema';
 import { CONFIG_FILE_NAMES, normalizeDefinition, resolveConfig } from '@opencms/schema';
 
 function freshJiti(root: string) {
@@ -24,6 +24,25 @@ export async function loadConfig(root: string): Promise<ResolvedConfig> {
   if (!file) throw new Error(`No opencms.config.ts in ${root}`);
   const config = await freshJiti(root).import<OpenCmsConfig>(file, { default: true });
   return resolveConfig(config, root);
+}
+
+export function contentGroupsFile(config: ResolvedConfig): string {
+  return path.join(config.root, 'src', 'content-groups.ts');
+}
+
+export function localesFile(config: ResolvedConfig): string {
+  return path.join(config.root, 'src', 'locales.ts');
+}
+
+/** Loads `src/content-groups.ts`; a missing file means no groups. */
+export async function loadContentGroups(config: ResolvedConfig): Promise<ContentGroupDefinition[]> {
+  const file = contentGroupsFile(config);
+  if (!fs.existsSync(file)) return [];
+  const mod = await freshJiti(config.root).import<ContentGroupDefinition[]>(file, { default: true });
+  if (!Array.isArray(mod)) {
+    throw new Error(`${path.relative(config.root, file)} must \`export default defineContentGroups([...])\``);
+  }
+  return mod;
 }
 
 export interface LoadedDefinition {

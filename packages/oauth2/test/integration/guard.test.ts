@@ -5,12 +5,16 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { OidcClient } from '../../src/bff/oidc-client';
 import { SessionStore } from '../../src/bff/session.store';
 import { OAUTH2_CONFIG } from '../../src/constants';
-import { CurrentUser, RequireRole, type RequestUser } from '../../src/guard/current-user.decorator';
+import { CurrentUser, RequirePermission, type RequestUser } from '../../src/guard/current-user.decorator';
+import { PERMISSIONS } from '../../src/permissions';
 import { adminClientSecret } from '../../src/provider/provider.factory';
 import { sha256 } from '../../src/security/crypto';
 import { UserService } from '../../src/users/user.service';
 import { createTestApp, type TestApp } from '../support/app';
 import { loginAs, restartLogin } from '../support/login';
+
+/** A super-admin actor. */
+const su = (id: string) => ({ id, isSuperAdmin: true, permissions: [...PERMISSIONS] });
 
 const PW = 'correct horse battery';
 const auth = { rateLimit: { loginPerEmail: { limit: 1000 }, loginPerIp: { limit: 1000 } } };
@@ -29,9 +33,31 @@ class ProbeController {
     return { ok: true, id: user.id };
   }
 
-  @RequireRole('nonexistent')
-  @Get('needs-role')
-  needsRole(): { ok: true } {
+  @RequirePermission('settings.users')
+  @Get('needs-users')
+  needsUsers(): { ok: true } {
+    return { ok: true };
+  }
+
+  @RequirePermission('content.read', 'content.publish')
+  @Get('needs-read-publish')
+  needsReadPublish(): { ok: true } {
+    return { ok: true };
+  }
+}
+
+/** Class-level + method-level requirements merge: the method adds to the class (de-duplicated). */
+@RequirePermission('content.read')
+@Controller('api/test-merge')
+class MergedController {
+  @Get('plain')
+  plain(): { ok: true } {
+    return { ok: true };
+  }
+
+  @RequirePermission('content.publish')
+  @Get('publish')
+  publish(): { ok: true } {
     return { ok: true };
   }
 }
@@ -45,7 +71,7 @@ class HostController {
   }
 }
 
-const controllers = [ProbeController, HostController];
+const controllers = [ProbeController, MergedController, HostController];
 
 interface Call {
   status: number;
@@ -141,21 +167,65 @@ describe('AuthGuard, me, logout (default TTLs)', () => {
     expect(bogus.status).toBe(401);
   });
 
-  it('after login → me 200 { id, email, name, roles }; @CurrentUser() gets the same user', async () => {
+  it('after login → me 200 { id, email, name, locale, groups, permissions, isSuperAdmin }; @CurrentUser() gets the same user', async () => {
     const { sessionCookie } = await loginAs(t, 'admin@x.com', PW);
     const me = await api('/api/auth/me', { cookie: sessionCookie });
     expect(me.status).toBe(200);
-    expect(me.body).toEqual({ id: adminId, email: 'admin@x.com', name: 'Admin', roles: ['super_admin'] });
+    expect(me.body).toEqual({
+      id: adminId,
+      email: 'admin@x.com',
+      name: 'Admin',
+      locale: null,
+      groups: [{ key: 'super-admin', name: 'Super Admin' }],
+      permissions: [...PERMISSIONS].sort(),
+      isSuperAdmin: true,
+    });
     const w = await api('/api/test/whoami', { cookie: sessionCookie });
     expect(w.status).toBe(200);
     expect(w.body).toEqual(me.body);
   });
 
-  it('@RequireRole with a missing role → 403 forbidden', async () => {
-    const { sessionCookie } = await loginAs(t, 'admin@x.com', PW);
-    const r = await api('/api/test/needs-role', { cookie: sessionCookie });
+  it('@RequirePermission: super admin passes; contenter gets 403 with the missing permission; permissions recomputed per request', async () => {
+    const admin = (await loginAs(t, 'admin@x.com', PW)).sessionCookie;
+    expect((await api('/api/test/needs-users', { cookie: admin })).status).toBe(200);
+
+    const c = await t.app.get(UserService).create({ email: 'contenter@x.com', name: 'C', password: PW });
+    await t.db.deleteFrom('auth_user_groups').where('user_id', '=', c.id).execute();
+    await sql`insert into auth_user_groups (user_id, group_id) select ${c.id}, id from auth_groups where key = 'contenter'`.execute(t.db);
+    const cookie = (await loginAs(t, 'contenter@x.com', PW)).sessionCookie;
+
+    const me = await api('/api/auth/me', { cookie });
+    expect(me.body).toMatchObject({
+      groups: [{ key: 'contenter', name: 'Contenter' }],
+      permissions: ['content.create', 'content.delete', 'content.read', 'content.submit', 'content.update'],
+      isSuperAdmin: false,
+    });
+
+    const r = await api('/api/test/needs-users', { cookie });
     expect(r.status).toBe(403);
-    expect(r.body.error.code).toBe('forbidden');
+    expect(r.body).toEqual({ error: { code: 'forbidden', message: 'Missing permission: settings.users' } });
+    const rp = await api('/api/test/needs-read-publish', { cookie });
+    expect(rp.body).toEqual({ error: { code: 'forbidden', message: 'Missing permission: content.publish' } });
+    // Class + method decorators merge: the class requirement still applies on a method that adds another.
+    expect((await api('/api/test-merge/plain', { cookie })).status).toBe(200);
+    const mp = await api('/api/test-merge/publish', { cookie });
+    expect(mp.status).toBe(403);
+    expect(mp.body.error.message).toBe('Missing permission: content.publish');
+    // Only content.publish, no content.read: the method's own requirement passes but the class's still blocks.
+    await sql`delete from auth_user_groups where user_id = ${c.id}`.execute(t.db);
+    await sql`insert into auth_groups (key, name, roles) values ('publish-only', 'Publish only', ${['content.publish']})`.execute(t.db);
+    await sql`insert into auth_user_groups (user_id, group_id) select ${c.id}, id from auth_groups where key = 'publish-only'`.execute(t.db);
+    const merged = await api('/api/test-merge/publish', { cookie });
+    expect(merged.body).toEqual({ error: { code: 'forbidden', message: 'Missing permission: content.read' } });
+    await sql`delete from auth_user_groups where user_id = ${c.id}`.execute(t.db);
+    await sql`insert into auth_user_groups (user_id, group_id) select ${c.id}, id from auth_groups where key = 'contenter'`.execute(t.db);
+
+    // Adding reviewer takes effect on the next request (B10).
+    await sql`insert into auth_user_groups (user_id, group_id) select ${c.id}, id from auth_groups where key = 'reviewer'`.execute(t.db);
+    expect((await api('/api/test/needs-read-publish', { cookie })).status).toBe(200);
+    const me2 = await api('/api/auth/me', { cookie });
+    expect(me2.body.groups).toEqual([{ key: 'contenter', name: 'Contenter' }, { key: 'reviewer', name: 'Reviewer' }]);
+    expect(me2.body.permissions).toContain('content.publish');
   });
 
   it('POST with a wrong or missing Origin → 403 origin_mismatch; right Origin → 200', async () => {
@@ -182,11 +252,10 @@ describe('AuthGuard, me, logout (default TTLs)', () => {
     const echo = await api('/Api/test/echo', { method: 'POST', origin: 'http://evil.example' });
     expect(echo.status).toBe(403);
     expect(echo.body.error.code).toBe('origin_mismatch');
-    expect((await api('/aPI/TEST/needs-role')).status).toBe(401);
+    expect((await api('/aPI/TEST/needs-users')).status).toBe(401);
     const { sessionCookie } = await loginAs(t, 'admin@x.com', PW);
-    const role = await api('/API/Test/Needs-Role', { cookie: sessionCookie });
-    expect(role.status).toBe(403);
-    expect(role.body.error.code).toBe('forbidden');
+    const ok = await api('/API/Test/Needs-Users', { cookie: sessionCookie });
+    expect(ok.status).toBe(200);
   });
 
   it('disabling the user via UserService → next request 401 and cookie cleared', async () => {
@@ -194,12 +263,12 @@ describe('AuthGuard, me, logout (default TTLs)', () => {
     const other = await users.create({ email: 'second@x.com', name: 'Second', password: PW });
     const { sessionCookie } = await loginAs(t, 'second@x.com', PW);
     expect((await api('/api/auth/me', { cookie: sessionCookie })).status).toBe(200);
-    await users.setStatus(other.id, 'disabled', adminId);
+    await users.setStatus(other.id, 'disabled', su(adminId));
     const r = await api('/api/test/whoami', { cookie: sessionCookie });
     expect(r.status).toBe(401);
     expect(r.body.error.code).toBe('unauthenticated');
     expect(clearsSession(r)).toBe(true);
-    await users.setStatus(other.id, 'active', adminId);
+    await users.setStatus(other.id, 'active', su(adminId));
   });
 
   it('user disabled behind the store (session row still there) → 401 and the session is destroyed', async () => {

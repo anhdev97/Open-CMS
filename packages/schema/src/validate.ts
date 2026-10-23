@@ -1,4 +1,6 @@
 import { fieldColumns, isMultiRelation, snake } from './physical';
+import { GROUP_KEY_RE, validateLocalizedText } from './groups';
+import type { ContentGroupDefinition } from './groups';
 import type { ContentTypeDefinition, FieldKind } from './types';
 
 export const FIELD_KINDS: FieldKind[] = [
@@ -22,8 +24,9 @@ export class SchemaValidationError extends Error {
 }
 
 /** Returns a list of problems; empty when every definition is valid. */
-export function collectSchemaIssues(defs: ContentTypeDefinition[]): string[] {
+export function collectSchemaIssues(defs: ContentTypeDefinition[], groups?: ContentGroupDefinition[]): string[] {
   const issues: string[] = [];
+  const groupKeys = groups ? new Set(groups.map((g) => g.key)) : undefined;
   const typeIds = new Set<string>();
   const apiIds = new Set(defs.map((d) => d.apiId));
   const seenApiIds = new Set<string>();
@@ -37,6 +40,14 @@ export function collectSchemaIssues(defs: ContentTypeDefinition[]): string[] {
     if (seenApiIds.has(def.apiId)) issues.push(`${where}: duplicate apiId`);
     seenApiIds.add(def.apiId);
     if (!def.displayName) issues.push(`${where}: displayName is required`);
+    else if (typeof def.displayName !== 'string') issues.push(...validateLocalizedText(def.displayName, `${where}: displayName`));
+    if (def.group !== undefined && (typeof def.group !== 'string' || !GROUP_KEY_RE.test(def.group))) {
+      issues.push(`${where}: group must match ${GROUP_KEY_RE}`);
+    } else if (def.group !== undefined && groupKeys && !groupKeys.has(def.group)) {
+      issues.push(`Content type "${def.apiId}" uses unknown group "${def.group}"`);
+    }
+
+    if (def.review !== undefined && typeof def.review !== 'boolean') issues.push(`${where}: review must be a boolean`);
 
     const fieldIds = new Set<string>();
     const fieldNames = new Set<string>();
@@ -102,7 +113,7 @@ export function collectSchemaIssues(defs: ContentTypeDefinition[]): string[] {
   return issues;
 }
 
-export function assertValidSchema(defs: ContentTypeDefinition[]): void {
-  const issues = collectSchemaIssues(defs);
+export function assertValidSchema(defs: ContentTypeDefinition[], groups?: ContentGroupDefinition[]): void {
+  const issues = collectSchemaIssues(defs, groups);
   if (issues.length) throw new SchemaValidationError(issues);
 }

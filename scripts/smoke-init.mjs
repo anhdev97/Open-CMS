@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // Smoke test for `opencms init` (spec §8): scaffold a project linked to this repo, install, migrate,
-// boot it and build it, run it in production and walk the site/admin checks and the setup/login/logout chain over HTTP. Exit code 0 = pass, 1 = fail.
+// add a review-workflow content type (generate + migrate:create), build it, run it in production and walk the site/admin checks,
+// the setup/login/logout chain and the groups + review workflow (Contenter submits, Reviewer rejects then approves) over HTTP.
+// Exit code 0 = pass, 1 = fail.
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -128,12 +130,41 @@ async function main() {
   const port = await freePort();
   run('node', [join(repo, 'packages/cli/bin/opencms.js'), 'init', app, '--link', repo, '--no-install', '--db-url', dbUrl.toString(), '--port', String(port)]);
   ok('opencms init (linked, --no-install)');
+  for (const f of ['src/locales.ts', 'src/content-groups.ts', 'app/(site)/messages.ts']) assert(existsSync(join(app, f)), `init did not write ${f}`);
+  assert(readFileSync(join(app, 'src/locales.ts'), 'utf8').includes("locales: ['en-US']"), 'src/locales.ts is not en-US only');
+  ok('src/locales.ts (en-US), src/content-groups.ts, app/(site)/messages.ts present');
 
   // pnpm: use the repo's pinned version via corepack; plain `pnpm` outside the repo may try another version
   const corepack = spawnSync('corepack', ['--version'], { stdio: 'ignore' });
   if (corepack.status === 0) run('corepack', [`pnpm@${pnpmVersion}`, 'install', '--ignore-workspace'], { cwd: app });
   else run('npm', ['install'], { cwd: app });
   ok('dependencies installed');
+
+  // A content type with the review workflow, written as a user would, then generate + migrate:create (before building).
+  const articleDir = join(app, 'src/content-types/article');
+  mkdirSync(articleDir, { recursive: true });
+  writeFileSync(
+    join(articleDir, 'article.schema.ts'),
+    `import { defineContentType, f } from '@opencms/schema';
+
+export default defineContentType({
+  id: 'ct_smokearticle',
+  apiId: 'article',
+  displayName: 'Article',
+  review: true,
+  fields: {
+    title: f.text({ id: 'fld_art_title', required: true }),
+    body: f.longText({ id: 'fld_art_body' }),
+  },
+});
+`,
+  );
+  const cli = join(app, 'node_modules/opencms-cli/bin/opencms.js');
+  run('node', [cli, 'generate'], { cwd: app });
+  run('node', [cli, 'migrate:create', 'add-article'], { cwd: app });
+  assert(readFileSync(join(app, 'src/generated/registry.ts'), 'utf8').match(/"?review"?: true/), 'generated registry lacks review: true for article');
+  assert(readFileSync(join(app, 'migrations/_snapshot.json'), 'utf8').includes('"article"'), 'migrations/_snapshot.json lacks article');
+  ok('article schema (review: true) -> opencms generate + opencms migrate:create');
 
   // Registry-install approximation: with symlinks preserved, @types/node must come from the project's own devDependencies.
   run('node', [join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.server.json', '--noEmit', '--preserveSymlinks'], { cwd: app });
@@ -147,7 +178,7 @@ async function main() {
   run('node', [join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.server.json'], { cwd: app, env });
   run('node', [join(app, 'node_modules/next/dist/bin/next'), 'build'], { cwd: app, env });
   ok('project build (tsc -p tsconfig.server.json + next build)');
-  run('node', [join(app, 'node_modules/opencms-cli/bin/opencms.js'), 'migrate:up'], { cwd: app, env });
+  run('node', [cli, 'migrate:up'], { cwd: app, env });
   ok('opencms migrate:up');
 
   const publicUrl = `http://localhost:${port}`;
@@ -169,19 +200,48 @@ async function main() {
   }
   ok(`server listening on port ${port}`);
 
-  const jar = new CookieJar();
-  // browser-like: requests go to the public URL (the server derives redirects from the Host header), anything off-origin is a failure
-  const send = (href, init = {}) => {
-    const u = new URL(href, publicUrl);
-    assert(u.origin === new URL(publicUrl).origin, `browser left the app origin: ${u.href}`);
-    return jar.fetch(u.href, init);
-  };
-  const post = (path, body) =>
-    send(path, { method: 'POST', headers: { 'content-type': 'application/json', origin: publicUrl }, body: JSON.stringify(body) });
+  // One browser = one cookie jar. Requests go to the public URL (the server derives redirects from the Host header),
+  // anything off-origin is a failure.
   const redirect = (res, what) => {
     assert(res.status >= 300 && res.status < 400 && res.headers.get('location'), `${what}: expected redirect, got ${res.status}`);
     return new URL(res.headers.get('location'), publicUrl);
   };
+  const browser = () => {
+    const jar = new CookieJar();
+    const send = (href, init = {}) => {
+      const u = new URL(href, publicUrl);
+      assert(u.origin === new URL(publicUrl).origin, `browser left the app origin: ${u.href}`);
+      return jar.fetch(u.href, init);
+    };
+    const json = (method) => (path, body) =>
+      send(path, { method, headers: { 'content-type': 'application/json', origin: publicUrl }, body: JSON.stringify(body ?? {}) });
+    const startLogin = async () => {
+      const toProvider = redirect(await send('/api/auth/login'), '/api/auth/login');
+      assert(toProvider.pathname === '/oauth2/auth', `login went to ${toProvider.href}`);
+      return redirect(await send(toProvider.href), '/oauth2/auth');
+    };
+    /** Full OIDC login chain: /api/auth/login -> provider -> /admin/login?uid -> interaction login -> callback (oc_session). */
+    const login = async (who, password) => {
+      const interaction = await startLogin();
+      const uid = interaction.searchParams.get('uid');
+      assert(interaction.pathname === '/admin/login' && uid, `unexpected interaction redirect ${interaction.href}`);
+      const res = await json('POST')(`/oauth2/interaction/${uid}/login`, { email: who, password });
+      const body = await res.json();
+      assert(res.status === 200 && body.redirectTo, `interaction login (${who}) -> ${res.status} ${JSON.stringify(body)}`);
+      let next = new URL(body.redirectTo, publicUrl);
+      for (let hop = 0; next.pathname !== '/api/auth/callback'; hop++) {
+        assert(hop < 10, 'too many redirects');
+        assert(next.pathname.startsWith('/oauth2/'), `redirected outside the provider: ${next.href}`);
+        next = redirect(await send(next.href), next.pathname);
+      }
+      const callback = await send(next.href);
+      assert(callback.status === 302, `callback (${who}) -> ${callback.status}`);
+      assert(jar.has('oc_session'), `callback did not set oc_session (${who})`);
+    };
+    return { jar, send, post: json('POST'), patch: json('PATCH'), startLogin, login };
+  };
+  const admin = browser();
+  const { send, post, startLogin } = admin;
 
   // 2. website, admin shell (CSP nonce, noindex), static assets, setup_required
   const siteRes = await send('/');
@@ -190,6 +250,9 @@ async function main() {
   assert((siteRes.headers.get('content-type') ?? '').startsWith('text/html'), 'GET / is not text/html');
   assert(siteHtml.includes('data-opencms-site'), 'GET / lacks data-opencms-site');
   assert(!siteRes.headers.has('content-security-policy'), 'GET / must not carry a Content-Security-Policy');
+  const tagline = 'A website and its OpenCMS admin, served by one Next.js app.';
+  assert(readFileSync(join(app, 'app/(site)/messages.ts'), 'utf8').includes(tagline), 'messages.ts lacks the en-US tagline');
+  assert(siteHtml.includes(tagline), 'GET / lacks the en-US string of app/(site)/messages.ts');
 
   const slashRes = await send('/admin/');
   assert(slashRes.status === 308, `GET /admin/ -> ${slashRes.status} (expected 308)`);
@@ -217,7 +280,7 @@ async function main() {
   const me0 = await send('/api/auth/me');
   const me0Body = await me0.json();
   assert(me0.status === 409 && me0Body.error?.code === 'setup_required', `GET /api/auth/me before setup -> ${me0.status} ${JSON.stringify(me0Body)}`);
-  ok('/ site, /admin/ -> 308, /admin nonce+noindex, static immutable; GET /api/auth/me -> 409 setup_required');
+  ok('/ site (en-US messages), /admin/ -> 308, /admin nonce+noindex, static immutable; GET /api/auth/me -> 409 setup_required');
 
   // 3. first super_admin
   const setup = await post('/api/auth/setup', { email, name: 'Smoke Admin', password: pw });
@@ -225,32 +288,98 @@ async function main() {
   ok('POST /api/auth/setup -> 201');
 
   // 4. login chain
-  const startLogin = async () => {
-    const toProvider = redirect(await send('/api/auth/login'), '/api/auth/login');
-    assert(toProvider.pathname === '/oauth2/auth', `login went to ${toProvider.href}`);
-    return redirect(await send(toProvider.href), '/oauth2/auth');
-  };
-  const interaction = await startLogin();
-  const uid = interaction.searchParams.get('uid');
-  assert(interaction.pathname === '/admin/login' && uid, `unexpected interaction redirect ${interaction.href}`);
-  const login = await post(`/oauth2/interaction/${uid}/login`, { email, password: pw });
-  const loginBody = await login.json();
-  assert(login.status === 200 && loginBody.redirectTo, `interaction login -> ${login.status} ${JSON.stringify(loginBody)}`);
-  let next = new URL(loginBody.redirectTo, publicUrl);
-  for (let hop = 0; next.pathname !== '/api/auth/callback'; hop++) {
-    assert(hop < 10, 'too many redirects');
-    assert(next.pathname.startsWith('/oauth2/'), `redirected outside the provider: ${next.href}`);
-    next = redirect(await send(next.href), next.pathname);
-  }
-  const callback = await send(next.href);
-  assert(callback.status === 302, `callback -> ${callback.status}`);
-  assert(jar.has('oc_session'), 'callback did not set oc_session');
+  await admin.login(email, pw);
   const me1 = await send('/api/auth/me');
   const me1Body = await me1.json();
   assert(me1.status === 200, `GET /api/auth/me after login -> ${me1.status} ${JSON.stringify(me1Body)}`);
   ok('login chain complete; GET /api/auth/me -> 200');
 
-  // 5. logout; the next login must ask for the password again
+  const loc = await send('/api/admin/locales');
+  const locBody = await loc.json();
+  assert(loc.status === 200, `GET /api/admin/locales -> ${loc.status} ${JSON.stringify(locBody)}`);
+  assert(JSON.stringify(locBody.locales) === JSON.stringify(['en-US']) && locBody.defaultLocale === 'en-US', `GET /api/admin/locales -> ${JSON.stringify(locBody)}`);
+  assert(locBody.editable === false, `GET /api/admin/locales in production must not be editable: ${JSON.stringify(locBody)}`);
+  ok("GET /api/admin/locales -> locales: ['en-US'], not editable in production");
+
+  // 5. groups + review workflow: the super admin creates a Contenter and a Reviewer from the seed groups
+  const call = async (b, method, path, body) => {
+    const res = method === 'GET' ? await b.send(path) : await b[method.toLowerCase()](path, body);
+    const text = await res.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : undefined;
+    } catch {
+      data = text;
+    }
+    return { status: res.status, body: data, text };
+  };
+  const expect = (r, status, what) => {
+    assert(r.status === status, `${what} -> ${r.status} (expected ${status}) ${r.text}`);
+    return r.body;
+  };
+  const groups = expect(await call(admin, 'GET', '/api/admin/groups'), 200, 'GET /api/admin/groups').data;
+  const groupId = (key) => {
+    const g = groups.find((x) => x.key === key);
+    assert(g, `seed group ${key} missing: ${JSON.stringify(groups.map((x) => x.key))}`);
+    return g.id;
+  };
+  assert(groups.find((g) => g.key === 'super-admin')?.system === true, 'super-admin seed group is not a system group');
+  const people = {
+    contenter: { email: 'contenter@example.com', name: 'Smoke Contenter', group: 'contenter' },
+    reviewer: { email: 'reviewer@example.com', name: 'Smoke Reviewer', group: 'reviewer' },
+  };
+  for (const p of Object.values(people)) {
+    const created = expect(
+      await call(admin, 'POST', '/api/admin/users', { email: p.email, name: p.name, password: pw, groupIds: [groupId(p.group)] }),
+      201,
+      `POST /api/admin/users (${p.group})`,
+    );
+    assert(created.data.groups?.some((g) => g.key === p.group), `created user lacks group ${p.group}: ${JSON.stringify(created.data)}`);
+  }
+  ok('super admin: GET /api/admin/groups (seed groups), POST /api/admin/users Contenter + Reviewer (groupIds)');
+
+  const contenter = browser();
+  await contenter.login(people.contenter.email, pw);
+  const reviewer = browser();
+  await reviewer.login(people.reviewer.email, pw);
+  const meC = expect(await call(contenter, 'GET', '/api/auth/me'), 200, 'GET /api/auth/me (contenter)');
+  assert(JSON.stringify(meC).includes('content.submit') && !JSON.stringify(meC).includes('content.publish'), `contenter permissions: ${JSON.stringify(meC)}`);
+  expect(await call(contenter, 'GET', '/api/admin/groups'), 403, 'GET /api/admin/groups (contenter)');
+  ok('Contenter and Reviewer log in; Contenter has content.submit, not content.publish; groups API -> 403 for Contenter');
+
+  const art = '/api/admin/content/article';
+  const draft = expect(await call(contenter, 'POST', art, { title: 'Hello review', body: 'First draft' }), 201, `POST ${art} (contenter)`).data;
+  const doc = `${art}/${draft.documentId}`;
+  const submitted = expect(await call(contenter, 'POST', `${doc}/submit`), 200, 'submit (contenter)').data;
+  assert(submitted.workflow?.state === 'in_review', `after submit workflow = ${JSON.stringify(submitted.workflow)}`);
+  const direct = await call(contenter, 'POST', `${doc}/publish`);
+  assert(direct.status === 403 && direct.body?.error?.code === 'forbidden', `direct publish (contenter) -> ${direct.status} ${direct.text}`);
+  ok('Contenter creates + submits an article (in_review); direct publish -> 403 forbidden');
+
+  const pending = expect(await call(reviewer, 'GET', '/api/admin/workflow/pending-count'), 200, 'pending-count (reviewer)');
+  assert(pending.count === 1 && pending.byType?.article === 1, `pending-count: ${JSON.stringify(pending)}`);
+  const queue = expect(await call(reviewer, 'GET', `${art}?workflow=in_review`), 200, 'in_review list (reviewer)');
+  assert(queue.data.some((e) => e.documentId === draft.documentId), `in_review list lacks the article: ${JSON.stringify(queue)}`);
+  const note = 'Please add a stronger intro.';
+  const rejected = expect(await call(reviewer, 'POST', `${doc}/reject`, { note }), 200, 'reject (reviewer)').data;
+  assert(rejected.workflow?.state === 'draft', `after reject workflow = ${JSON.stringify(rejected.workflow)}`);
+  const seen = expect(await call(contenter, 'GET', doc), 200, 'GET draft (contenter)').data;
+  assert(seen.workflow?.note === note, `Contenter does not see the reject note: ${JSON.stringify(seen.workflow)}`);
+  ok('Reviewer: pending-count + ?workflow=in_review list the article, reject with a note; Contenter sees the note');
+
+  expect(await call(contenter, 'PATCH', doc, { title: 'Hello review', body: 'Second draft, stronger intro' }), 200, 'PATCH after reject (contenter)');
+  const resubmitted = expect(await call(contenter, 'POST', `${doc}/submit`), 200, 'resubmit (contenter)').data;
+  assert(resubmitted.workflow?.state === 'in_review', `after resubmit workflow = ${JSON.stringify(resubmitted.workflow)}`);
+  const approved = expect(await call(reviewer, 'POST', `${doc}/approve`), 200, 'approve (reviewer)').data;
+  assert(approved.documentId === draft.documentId, `approve returned ${JSON.stringify(approved)}`);
+  const again2 = await call(reviewer, 'POST', `${doc}/approve`);
+  assert(again2.status === 409 && again2.body?.error?.code === 'invalid_transition', `second approve -> ${again2.status} ${again2.text}`);
+  const delivered = expect(await call(browser(), 'GET', '/api/content/article'), 200, 'GET /api/content/article (anonymous)');
+  const pub = delivered.data.find((e) => e.documentId === draft.documentId);
+  assert(pub && pub.body === 'Second draft, stronger intro', `GET /api/content/article lacks the approved article: ${JSON.stringify(delivered)}`);
+  ok('Contenter edits + resubmits; Reviewer approves (/approve, second approve -> 409); GET /api/content/article returns it');
+
+  // 6. logout; the next login must ask for the password again
   const logout = await post('/api/auth/logout', {});
   const logoutBody = await logout.json();
   assert(logout.status === 200 && logoutBody.redirectTo === '/admin/login', `logout -> ${logout.status} ${JSON.stringify(logoutBody)}`);
@@ -272,7 +401,7 @@ try {
   console.error(`[smoke] FAIL at step ${step + 1}: ${err instanceof Error ? err.stack : err}`);
   if (serverLog) console.error(`[smoke] server output:\n${serverLog}`);
 } finally {
-  // 6. stop server, drop DB, remove temp dir
+  // 7. stop server, drop DB, remove temp dir
   try {
     await stopServer();
     log('server stopped');

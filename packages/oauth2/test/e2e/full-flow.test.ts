@@ -33,7 +33,7 @@ describe('e2e: setup → login → me → access expiry → refresh → logout �
     expect(sessionCookie).toBeTruthy();
     const first = await me(sessionCookie);
     expect(first.status).toBe(200);
-    expect(await first.json()).toMatchObject({ email: 'admin@x.com', roles: ['super_admin'] });
+    expect(await first.json()).toMatchObject({ email: 'admin@x.com', groups: [{ key: 'super-admin', name: 'Super Admin' }], isSuperAdmin: true });
 
     await sleep(3000); // access token (2 s) has expired → transparent refresh
     const second = await me(sessionCookie);

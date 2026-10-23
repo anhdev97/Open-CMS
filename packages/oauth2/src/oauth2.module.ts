@@ -6,6 +6,8 @@ import { OidcClient } from './bff/oidc-client';
 import { SessionStore } from './bff/session.store';
 import { loadConfig, type AuthFileConfig, type OAuth2Config } from './config/schema';
 import { ApiExceptionFilter, AuthExceptionFilter } from './errors';
+import { GroupsController, PermissionsController } from './groups/groups.controller';
+import { GroupsService } from './groups/groups.service';
 import { AuthGuard } from './guard/auth.guard';
 import { SessionAuthenticator } from './guard/session-auth.service';
 import { CleanupService } from './maintenance/cleanup.service';
@@ -52,7 +54,10 @@ export class OAuth2Module {
     return {
       module: OAuth2Module,
       global: true,
-      controllers: [SetupController, InteractionController, IdpController, AuthController, UsersController, PasswordController],
+      controllers: [
+        SetupController, InteractionController, IdpController, AuthController, UsersController, PasswordController,
+        GroupsController, PermissionsController,
+      ],
       providers: [
         { provide: OAUTH2_DB, useExisting: opts.dbToken },
         // Throws ConfigError on a missing/short secret or missing public URL → app refuses to start.
@@ -75,6 +80,7 @@ export class OAuth2Module {
         },
         AuditService,
         UserService,
+        GroupsService,
         { provide: GRANT_REVOKER, useExisting: ProviderService },
         SetupState,
         {
@@ -109,6 +115,7 @@ export class OAuth2Module {
         PasswordService,
         AuditService,
         UserService,
+        GroupsService,
         SetupState,
         BootstrapService,
         ProviderService,

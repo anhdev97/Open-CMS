@@ -8,7 +8,10 @@ import type { ContentTypeDefinition } from '@opencms/schema';
 export const brandDefinition: ContentTypeDefinition = {
   "id": "ct_brand0001",
   "apiId": "brand",
-  "displayName": "Brand",
+  "displayName": {
+    "en-US": "Brand",
+    "vi-VN": "Thương hiệu"
+  },
   "fields": [
     {
       "id": "fld_brand_name",
@@ -46,13 +49,17 @@ export const brandDefinition: ContentTypeDefinition = {
         ]
       }
     }
-  ]
+  ],
+  "group": "shop"
 };
 
 export const productDefinition: ContentTypeDefinition = {
   "id": "ct_product01",
   "apiId": "product",
-  "displayName": "Product",
+  "displayName": {
+    "en-US": "Product",
+    "vi-VN": "Sản phẩm"
+  },
   "fields": [
     {
       "id": "fld_prod_name",
@@ -158,7 +165,9 @@ export const productDefinition: ContentTypeDefinition = {
       "unique": false,
       "options": {}
     }
-  ]
+  ],
+  "group": "shop",
+  "review": true
 };
 
 export const contentTypes: ContentTypeDefinition[] = [brandDefinition, productDefinition];

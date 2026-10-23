@@ -8,6 +8,7 @@ import { useAuth } from '../auth/AuthContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorAlert } from '../components/ErrorAlert';
+import { GroupPicker } from '../components/GroupPicker';
 import { PageHeader } from '../components/PageHeader';
 import { StatusBadge } from '../components/StatusBadge';
 import { Badge } from '../components/ui/badge';
@@ -25,13 +26,16 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
+import { useFormat } from '../i18n/hooks';
 import { ApiError } from '../lib/api-error';
+import { groupName } from '../lib/groups';
 import {
   createUser,
   deleteUser,
   listUsers,
   resetUserPassword,
+  setUserGroups,
   setUserStatus,
   unlinkIdentity,
   userActions,
@@ -44,33 +48,41 @@ type Identity = AdminUser['identities'][number];
 
 type Dialogs =
   | { kind: 'create' }
+  | { kind: 'groups'; user: AdminUser }
   | { kind: 'reset' | 'disable' | 'enable' | 'delete'; user: AdminUser }
   | { kind: 'unlink'; user: AdminUser; identity: Identity };
 
-const createSchema = z.object({
-  email: z
-    .string()
-    .trim()
-    .min(1, t('users.create.emailRequired'))
-    .pipe(z.string().email(t('users.create.emailInvalid'))),
-  name: z.string().trim().min(1, t('users.create.nameRequired')),
-  password: z.string(),
-});
-type CreateValues = z.infer<typeof createSchema>;
+const createSchema = () =>
+  z.object({
+    email: z
+      .string()
+      .trim()
+      .min(1, t('users.create.emailRequired'))
+      .pipe(z.string().email(t('users.create.emailInvalid'))),
+    name: z.string().trim().min(1, t('users.create.nameRequired')),
+    password: z.string(),
+  });
+type CreateValues = z.infer<ReturnType<typeof createSchema>>;
 
-const resetSchema = z.object({ password: z.string().min(1, t('users.create.passwordRequired')) });
+const resetSchema = () => z.object({ password: z.string().min(1, t('users.create.passwordRequired')) });
 
 function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [formError, setFormError] = useState<Error | null>(null);
+  const [groupIds, setGroupIds] = useState<string[]>([]);
+  const [groupsError, setGroupsError] = useState(false);
   const form = useForm<CreateValues>({
-    resolver: zodResolver(createSchema),
+    resolver: zodResolver(createSchema()),
     defaultValues: { email: '', name: '', password: '' },
   });
 
   async function onSubmit({ email, name, password }: CreateValues) {
     setFormError(null);
+    if (groupIds.length === 0) {
+      setGroupsError(true);
+      return;
+    }
     try {
-      await createUser({ email, name, ...(password ? { password } : {}) });
+      await createUser({ email, name, groupIds, ...(password ? { password } : {}) });
       toast.success(t('users.create.created'));
       onDone();
       onClose();
@@ -89,7 +101,11 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
           <DialogDescription>{t('users.create.description')}</DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form className="grid gap-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
+          <form
+            className="grid gap-4"
+            onSubmit={form.handleSubmit(onSubmit, () => setGroupsError(groupIds.length === 0))}
+            noValidate
+          >
             <ErrorAlert error={formError} />
             <FormField
               control={form.control}
@@ -131,6 +147,22 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
                 </FormItem>
               )}
             />
+            <div className="grid gap-2">
+              <span className="text-sm font-medium">{t('users.groups')}</span>
+              <GroupPicker
+                idPrefix="create-group"
+                value={groupIds}
+                onChange={(ids) => {
+                  setGroupIds(ids);
+                  setGroupsError(false);
+                }}
+              />
+              {groupsError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {t('users.groupsRequired')}
+                </p>
+              )}
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={onClose}>
                 {t('common.cancel')}
@@ -146,10 +178,71 @@ function CreateUserDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
   );
 }
 
+function EditGroupsDialog({ user, onClose, onDone }: { user: AdminUser; onClose: () => void; onDone: () => void }) {
+  const [formError, setFormError] = useState<Error | null>(null);
+  const [groupIds, setGroupIds] = useState<string[]>(user.groups.map((g) => g.id));
+  const [groupsError, setGroupsError] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (groupIds.length === 0) {
+      setGroupsError(true);
+      return;
+    }
+    setBusy(true);
+    setFormError(null);
+    try {
+      await setUserGroups(user.id, groupIds);
+      toast.success(t('users.editGroups.done'));
+      onDone();
+      onClose();
+    } catch (err) {
+      setFormError(userError(err));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t('users.editGroups.title')}</DialogTitle>
+          <DialogDescription>{t('users.editGroups.description', { email: user.email })}</DialogDescription>
+        </DialogHeader>
+        <form className="grid gap-4" onSubmit={submit} noValidate>
+          <ErrorAlert error={formError} />
+          <GroupPicker
+            idPrefix="edit-group"
+            value={groupIds}
+            onChange={(ids) => {
+              setGroupIds(ids);
+              setGroupsError(false);
+            }}
+          />
+          {groupsError && (
+            <p role="alert" className="text-sm text-destructive">
+              {t('users.groupsRequired')}
+            </p>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" disabled={busy}>
+              {busy ? t('users.editGroups.submitting') : t('users.editGroups.submit')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ResetPasswordDialog({ user, isMe, onClose }: { user: AdminUser; isMe: boolean; onClose: () => void }) {
   const [formError, setFormError] = useState<Error | null>(null);
-  const form = useForm<z.infer<typeof resetSchema>>({
-    resolver: zodResolver(resetSchema),
+  const form = useForm<z.infer<ReturnType<typeof resetSchema>>>({
+    resolver: zodResolver(resetSchema()),
     defaultValues: { password: '' },
   });
 
@@ -208,6 +301,7 @@ function ResetPasswordDialog({ user, isMe, onClose }: { user: AdminUser; isMe: b
 
 export function Users() {
   const { user: me } = useAuth();
+  const { formatDateTime } = useFormat();
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [dialog, setDialog] = useState<Dialogs | null>(null);
@@ -277,6 +371,7 @@ export function Users() {
                 <TableRow>
                   <TableHead>{t('users.name')}</TableHead>
                   <TableHead>{t('users.email')}</TableHead>
+                  <TableHead>{t('users.groups')}</TableHead>
                   <TableHead>{t('users.status')}</TableHead>
                   <TableHead>{t('users.lastLogin')}</TableHead>
                   <TableHead>{t('users.sso')}</TableHead>
@@ -300,10 +395,19 @@ export function Users() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">{u.email}</TableCell>
                       <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {u.groups.map((g) => (
+                            <Badge key={g.id} variant="secondary">
+                              {groupName(g)}
+                            </Badge>
+                          ))}
+                        </div>
+                      </TableCell>
+                      <TableCell>
                         <StatusBadge status={u.status === 'disabled' ? 'disabled' : 'active'} />
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : t('users.never')}
+                        {u.lastLoginAt ? formatDateTime(u.lastLoginAt) : t('users.never')}
                       </TableCell>
                       <TableCell>
                         {u.identities.length === 0 ? (
@@ -335,6 +439,9 @@ export function Users() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => setDialog({ kind: 'groups', user: u })}>
+                              {t('users.editGroups.menu')}
+                            </DropdownMenuItem>
                             <DropdownMenuItem onSelect={() => setDialog({ kind: 'reset', user: u })}>
                               {t('users.reset.menu')}
                             </DropdownMenuItem>
@@ -369,6 +476,7 @@ export function Users() {
       )}
 
       {dialog?.kind === 'create' && <CreateUserDialog onClose={close} onDone={load} />}
+      {dialog?.kind === 'groups' && <EditGroupsDialog user={dialog.user} onClose={close} onDone={load} />}
       {dialog?.kind === 'reset' && <ResetPasswordDialog user={dialog.user} isMe={dialog.user.id === me.id} onClose={close} />}
 
       <ConfirmDialog

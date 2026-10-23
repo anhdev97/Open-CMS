@@ -60,8 +60,8 @@ Commit the generated file unchanged, then show it on the `/_ui` page (`src/pages
 - No arbitrary Tailwind values (`[13px]`) unless a comment next to them says why.
 - Icons come only from `lucide-react`.
 - Every interactive element works with the keyboard and shows a visible focus ring (`focus-visible:`, never plain `focus:`, with `ring-offset-background`).
-- UI text is English and lives only in `src/i18n/en.ts`, read through `t()`.
-- Modules imported by root vitest tests (`lib/api.ts` once the API client is added, `lib/api-error.ts`, `lib/format-issue.ts`, `i18n/en.ts`, ...) use relative imports only; the `@/` alias no longer exists because `tsc` does not rewrite it on emit.
+- UI text is English and lives only in `src/i18n/messages/*` (en-US is the source), read through `t()`.
+- Modules imported by root vitest tests (`lib/api.ts` once the API client is added, `lib/api-error.ts`, `lib/format-issue.ts`, `i18n/messages/en-US.ts`, ...) use relative imports only; the `@/` alias no longer exists because `tsc` does not rewrite it on emit.
 
 ## Dev workflow
 
@@ -70,3 +70,7 @@ Run `pnpm --filter @opencms/core dev:admin` (`tsc -w`, emits to `dist/admin`) ne
 ## Note for plugins
 
 The components are built on Tailwind, so a plugin UI that wants to look the same must also use Tailwind with these same tokens. The components are not exported for plugins yet.
+
+## Translations
+
+The `vi-VN`, `fr-FR` and `id-ID` bundles in `src/i18n/messages/` are machine-made. They need review by native speakers before a public release. `messages.test.ts` guards structure only (same keys, same `{placeholders}`, not copies of English), not wording quality.

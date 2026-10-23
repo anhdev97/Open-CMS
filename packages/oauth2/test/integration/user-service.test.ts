@@ -5,6 +5,10 @@ import { PasswordService } from '../../src/security/password';
 import { UserService } from '../../src/users/user.service';
 import type { AuthTables } from '../../src/db/types';
 import { startTestDb } from '../support/db';
+import { PERMISSIONS } from '../../src/permissions';
+
+/** A super-admin actor. */
+const su = (id: string) => ({ id, isSuperAdmin: true, permissions: [...PERMISSIONS] });
 
 describe('UserService', () => {
   let ctx: Awaited<ReturnType<typeof startTestDb>>;
@@ -23,10 +27,11 @@ describe('UserService', () => {
   });
   afterAll(() => ctx.stop());
 
-  it('normalizes email, assigns super_admin, rejects duplicates', async () => {
+  it('normalizes email, assigns super-admin, rejects duplicates', async () => {
     const u = await users.create({ email: ' A@X.com ', name: 'A', password: 'correct horse battery', actorId: undefined });
     expect(u.email).toBe('a@x.com');
-    expect(u.roles).toEqual(['super_admin']);
+    expect(u.groups).toEqual([{ key: 'super-admin', name: 'Super Admin' }]);
+    expect(u.isSuperAdmin).toBe(true);
     expect(u.status).toBe('active');
     expect(u.passwordHash).toMatch(/^\$argon2id\$/);
     await expect(users.create({ email: 'a@x.com', name: 'B' })).rejects.toMatchObject({ code: 'email_taken', status: 409 });
@@ -63,10 +68,10 @@ describe('UserService', () => {
       try {
         const s = new UserService(lone.db, new PasswordService({ minLength: 12 }), new AuditService(lone.db), revoker);
         const a = await s.create({ email: 'a@x.com', name: 'A' });
-        await expect(s.setStatus(a.id, 'disabled', a.id)).rejects.toMatchObject({ code: 'last_super_admin', status: 409 });
+        await expect(s.setStatus(a.id, 'disabled', su(a.id))).rejects.toMatchObject({ code: 'last_super_admin', status: 409 });
         const b = await s.create({ email: 'b@x.com', name: 'B' });
-        await expect(s.delete(a.id, b.id)).resolves.toBeUndefined();
-        await expect(s.delete(b.id, a.id)).rejects.toMatchObject({ code: 'last_super_admin' });
+        await expect(s.delete(a.id, su(b.id))).resolves.toBeUndefined();
+        await expect(s.delete(b.id, su(a.id))).rejects.toMatchObject({ code: 'last_super_admin' });
       } finally {
         await lone.stop();
       }
@@ -78,7 +83,7 @@ describe('UserService', () => {
         const s = new UserService(c.db, new PasswordService({ minLength: 12 }), new AuditService(c.db), revoker);
         const a = await s.create({ email: 'a@x.com', name: 'A' });
         const b = await s.create({ email: 'b@x.com', name: 'B' });
-        const r = await Promise.allSettled([s.setStatus(a.id, 'disabled', b.id), s.setStatus(b.id, 'disabled', a.id)]);
+        const r = await Promise.allSettled([s.setStatus(a.id, 'disabled', su(b.id)), s.setStatus(b.id, 'disabled', su(a.id))]);
         expect(r.filter((x) => x.status === 'fulfilled')).toHaveLength(1);
         const rej = r.filter((x): x is PromiseRejectedResult => x.status === 'rejected');
         expect(rej).toHaveLength(1);
@@ -94,7 +99,7 @@ describe('UserService', () => {
         const s = new UserService(c.db, new PasswordService({ minLength: 12 }), new AuditService(c.db), revoker);
         const a = await s.create({ email: 'a@x.com', name: 'A' });
         const b = await s.create({ email: 'b@x.com', name: 'B' });
-        const r = await Promise.allSettled([s.delete(a.id, b.id), s.delete(b.id, a.id)]);
+        const r = await Promise.allSettled([s.delete(a.id, su(b.id)), s.delete(b.id, su(a.id))]);
         expect(r.filter((x) => x.status === 'fulfilled')).toHaveLength(1);
         const rej = r.filter((x): x is PromiseRejectedResult => x.status === 'rejected');
         expect(rej).toHaveLength(1);
@@ -111,12 +116,12 @@ describe('UserService', () => {
     const b = await mk();
     revoker.revokeAllGrants.mockClear();
     await db.insertInto('auth_sessions').values({ id_hash: `h-${b.id}`, user_id: b.id, idle_expires_at: new Date(Date.now() + 1e6), absolute_expires_at: new Date(Date.now() + 1e6) }).execute();
-    await users.setStatus(b.id, 'disabled', a.id);
+    await users.setStatus(b.id, 'disabled', su(a.id));
     expect((await users.findById(b.id))!.status).toBe('disabled');
     expect(await db.selectFrom('auth_sessions').selectAll().where('user_id', '=', b.id).execute()).toHaveLength(0);
     expect(revoker.revokeAllGrants).toHaveBeenCalledWith(b.id);
     expect((await events('user_disabled')).some((e) => e.user_id === b.id && e.actor_id === a.id)).toBe(true);
-    await users.setStatus(b.id, 'active', a.id);
+    await users.setStatus(b.id, 'active', su(a.id));
     expect((await users.findById(b.id))!.status).toBe('active');
     expect((await events('user_enabled')).some((e) => e.user_id === b.id)).toBe(true);
   });
@@ -124,9 +129,9 @@ describe('UserService', () => {
   it('delete: self forbidden; audit recorded with actor; user removed', async () => {
     const a = await mk();
     const b = await mk();
-    await expect(users.delete(a.id, a.id)).rejects.toMatchObject({ code: 'forbidden', status: 403 });
+    await expect(users.delete(a.id, su(a.id))).rejects.toMatchObject({ code: 'forbidden', status: 403 });
     revoker.revokeAllGrants.mockClear();
-    await users.delete(b.id, a.id);
+    await users.delete(b.id, su(a.id));
     expect(revoker.revokeAllGrants).toHaveBeenCalledWith(b.id);
     expect(await users.findById(b.id)).toBeUndefined();
     expect((await events('user_deleted')).some((e) => e.user_id === b.id && e.actor_id === a.id)).toBe(true);
@@ -136,8 +141,8 @@ describe('UserService', () => {
     const a = await mk();
     const ghost = '00000000-0000-0000-0000-000000000001';
     await expect(users.setPassword(ghost, 'another long password')).rejects.toMatchObject({ code: 'not_found', status: 404 });
-    await expect(users.setStatus(ghost, 'disabled', a.id)).rejects.toMatchObject({ code: 'not_found', status: 404 });
-    await expect(users.delete(ghost, a.id)).rejects.toMatchObject({ code: 'not_found', status: 404 });
+    await expect(users.setStatus(ghost, 'disabled', su(a.id))).rejects.toMatchObject({ code: 'not_found', status: 404 });
+    await expect(users.delete(ghost, su(a.id))).rejects.toMatchObject({ code: 'not_found', status: 404 });
     expect((await events('user_deleted')).some((e) => e.user_id === ghost)).toBe(false);
     expect((await events('user_disabled')).some((e) => e.user_id === ghost)).toBe(false);
   });

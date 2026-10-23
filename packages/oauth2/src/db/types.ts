@@ -11,19 +11,25 @@ export interface AuthUsersTable {
   password_hash: string | null;
   status: Generated<string>; // 'active' | 'disabled'
   last_login_at: NullableTimestamp;
+  locale: string | null;
   created_at: Timestamp;
   updated_at: Timestamp;
 }
 
-export interface AuthRolesTable {
+export interface AuthGroupsTable {
   id: Generated<string>;
+  /** Slug `^[a-z][a-z0-9-]{0,63}$`; `super-admin` is the built-in system group. */
   key: string;
   name: string;
+  /** Permissions (spec B §3.1), stored sorted; ignored for `system` groups (they have all). */
+  roles: Generated<string[]>;
+  system: Generated<boolean>;
+  updated_at: NullableTimestamp;
 }
 
-export interface AuthUserRolesTable {
+export interface AuthUserGroupsTable {
   user_id: string;
-  role_id: string;
+  group_id: string;
 }
 
 export interface AuthUserIdentitiesTable {
@@ -90,8 +96,8 @@ export interface AuthAuditEventsTable {
 
 export interface AuthTables {
   auth_users: AuthUsersTable;
-  auth_roles: AuthRolesTable;
-  auth_user_roles: AuthUserRolesTable;
+  auth_groups: AuthGroupsTable;
+  auth_user_groups: AuthUserGroupsTable;
   auth_user_identities: AuthUserIdentitiesTable;
   auth_oauth_clients: AuthOauthClientsTable;
   auth_oidc_payloads: AuthOidcPayloadsTable;

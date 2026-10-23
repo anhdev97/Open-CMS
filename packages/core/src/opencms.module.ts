@@ -10,13 +10,17 @@ import { OAuth2Module, type CoreReady } from '@opencms/oauth2';
 import { resolveConfig } from '@opencms/schema';
 import { ContentCorsMiddleware } from './http/content-cors.middleware';
 import { JsonBodyParserMiddleware } from './http/body-parser.middleware';
-import { AdminContentController, ContentController } from './content.controllers';
+import { AdminContentController, ContentController, WorkflowController } from './content.controllers';
 import { EntriesService } from './entries.service';
 import { EntryRepository } from './entry.repository';
+import { LocalesController, LocalesService } from './locales';
+import { ContentGroupsController, ContentGroupsService } from './content-groups';
 import { CORE_READY_CORE, OPENCMS_DB, OPENCMS_OPTIONS, type OpenCmsModuleOptions, type ResolvedOpenCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
 import { SchemaBuilderService, SchemaController } from './schema-builder';
+import { SchemaWriteQueue } from './schema-write-queue';
 import { SystemController } from './system.controller';
+import { WorkflowService } from './workflow.service';
 import { createWebHost, type WebHost } from './web';
 
 /** A `CoreReady` holder (not a promise: Nest would await that at DI time) settled by OpenCmsModule.onModuleInit. */
@@ -77,14 +81,18 @@ export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShu
           env: input.env,
         }),
       ],
-      controllers: [ContentController, AdminContentController, SchemaController, SystemController],
+      controllers: [ContentController, AdminContentController, SchemaController, ContentGroupsController, LocalesController, SystemController, WorkflowController],
       providers: [
         { provide: OPENCMS_OPTIONS, useValue: options },
         { provide: OPENCMS_DB, useFactory: () => createDb(options.config.database.url) },
         ContentRegistry,
         EntryRepository,
         EntriesService,
+        WorkflowService,
+        SchemaWriteQueue,
         SchemaBuilderService,
+        ContentGroupsService,
+        LocalesService,
         { provide: CORE_READY_CORE, useValue: new DeferredCoreReady() },
       ],
       exports: [OPENCMS_DB, CORE_READY_CORE, ContentRegistry, EntriesService],

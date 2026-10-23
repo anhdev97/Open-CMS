@@ -51,6 +51,7 @@ describe('runInit', () => {
       'app/(admin)/admin/[[...slug]]/page.tsx',
       'app/(admin)/layout.tsx',
       'app/(site)/layout.tsx',
+      'app/(site)/messages.ts',
       'app/(site)/page.tsx',
       'app/globals.css',
       '.env',
@@ -65,6 +66,7 @@ describe('runInit', () => {
       'package.json',
       'postcss.config.mjs',
       'src/app.module.ts',
+      'src/content-groups.ts',
       'src/content-types/.gitkeep',
       'src/extensions/index.ts',
       'src/generated/index.ts',
@@ -72,6 +74,7 @@ describe('runInit', () => {
       'src/generated/tables.ts',
       'src/generated/types.ts',
       'src/generated/validators.ts',
+      'src/locales.ts',
       'src/main.ts',
       'src/root.ts',
       'tsconfig.json',
@@ -163,6 +166,45 @@ describe('runInit', () => {
     const cfg = read(dir, 'next.config.ts');
     expect(cfg).not.toContain('turbopack');
     expect(cfg).not.toContain('outputFileTracingRoot');
+  });
+
+  it('scaffolds locales, content groups and the website messages', async () => {
+    const dir = path.join(tmp, 'My Shop');
+    await runInit(dir, base);
+    const locales = read(dir, 'src/locales.ts');
+    expect(locales).toContain("import { defineLocales } from '@opencms/schema';");
+    expect(locales).toContain("defaultLocale: 'en-US'");
+    expect(locales).toContain("locales: ['en-US']");
+    const groups = read(dir, 'src/content-groups.ts');
+    expect(groups).toContain("import { defineContentGroups } from '@opencms/schema';");
+    expect(groups).toMatch(/export default defineContentGroups\(\[\s*\]\);/);
+    const cfg = read(dir, 'opencms.config.ts');
+    expect(cfg).toContain("import locales from './src/locales';");
+    expect(cfg).toContain('...locales');
+    expect(cfg).not.toContain('defaultLocale:');
+    const mod = read(dir, 'src/app.module.ts');
+    expect(mod).toContain("import contentGroups from './content-groups';");
+    expect(mod).toMatch(/\n\s+contentGroups,\n/);
+    // @opencms/core resolves to a Nest-free module under react-server; externalizing it would also
+    // externalize @opencms/core/admin (client components) and break the admin build.
+    const next = read(dir, 'next.config.ts');
+    expect(next).not.toContain('serverExternalPackages');
+    expect(next).toContain('@opencms/core/admin');
+    const messages = read(dir, 'app/(site)/messages.ts');
+    expect(messages).toContain("import { defineMessages } from '@opencms/core';");
+    expect(messages).toContain("'en-US': {");
+    expect(messages).toContain("'vi-VN': {");
+    expect(messages).toContain('A website and its OpenCMS admin, served by one Next.js app.');
+    const page = read(dir, 'app/(site)/page.tsx');
+    expect(page).toContain("import { createTranslator } from '@opencms/core';");
+    expect(page).toContain("import locales from '../../src/locales';");
+    expect(page).toContain("import { messages } from './messages';");
+    expect(page).toContain('createTranslator(messages, locales.defaultLocale)');
+    expect(read(dir, 'app/(site)/layout.tsx')).toContain('lang={locales.defaultLocale}');
+    for (const f of ['src/locales.ts', 'src/content-groups.ts', 'app/(site)/messages.ts', 'app/(site)/page.tsx', 'opencms.config.ts', 'src/app.module.ts']) {
+      const out = ts.transpileModule(read(dir, f), { reportDiagnostics: true, compilerOptions: { jsx: ts.JsxEmit.ReactJSX } });
+      expect(out.diagnostics ?? [], f).toEqual([]);
+    }
   });
 
   it('links internal packages and core-owned dependencies with --link', async () => {

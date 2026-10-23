@@ -3,6 +3,7 @@ import { CircleAlertIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { LanguageMenu } from '../components/LanguageMenu';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
 import { Button } from '../components/ui/button';
@@ -11,7 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
 import { useAdminSearch } from '../lib/nav';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
 import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
 import { errorMessage, loginPageAction, originMismatchMessage } from '../lib/auth-flow';
@@ -22,11 +23,12 @@ interface Interaction {
 }
 type InteractionResponse = Interaction | { redirectTo: string };
 
-const schema = z.object({
-  email: z.string().trim().min(1, t('setup.errors.emailRequired')),
-  password: z.string().min(1, t('login.errors.passwordRequired')),
-});
-type Values = z.infer<typeof schema>;
+const schema = () =>
+  z.object({
+    email: z.string().trim().min(1, t('setup.errors.emailRequired')),
+    password: z.string().min(1, t('login.errors.passwordRequired')),
+  });
+type Values = z.infer<ReturnType<typeof schema>>;
 
 function submitErrorText(e: unknown): string | null {
   if (!(e instanceof ApiError)) return null;
@@ -46,7 +48,7 @@ function LoginForm({ uid, interaction }: { uid: string; interaction: Interaction
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [otherError, setOtherError] = useState<Error | null>(null);
   const form = useForm<Values>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema()),
     defaultValues: { email: interaction.loginHint ?? '', password: '' },
   });
   const base = `/oauth2/interaction/${encodeURIComponent(uid)}`;
@@ -156,7 +158,8 @@ export function Login() {
   if (action.kind === 'restart') return null;
 
   return (
-    <main className="flex min-h-svh items-center justify-center p-4">
+    <main className="relative flex min-h-svh items-center justify-center p-4">
+      <LanguageMenu className="absolute top-4 right-4" />
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="text-xl">{t('login.title')}</CardTitle>

@@ -1,5 +1,5 @@
 import { ApiError } from './api-error';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
 
 const ADMIN_PREFIX = '/admin';
 
@@ -35,7 +35,7 @@ const KNOWN_LOGIN_ERRORS = [
   'account_disabled',
 ] as const;
 
-/** Maps an `?error=` code to its en.ts message; unknown or missing codes get the generic one. */
+/** Maps an `?error=` code to its active-locale message; unknown or missing codes get the generic one. */
 export function errorMessage(code: string | null): string {
   if (code && (KNOWN_LOGIN_ERRORS as readonly string[]).includes(code)) return t(`login.errors.${code}`);
   return t('login.errors.generic');

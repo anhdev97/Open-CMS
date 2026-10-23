@@ -6,7 +6,8 @@ export type AuthErrorCode =
   | 'unauthenticated' | 'setup_required' | 'setup_already_completed' | 'invalid_credentials'
   | 'account_disabled' | 'forbidden' | 'origin_mismatch' | 'validation_failed' | 'weak_password'
   | 'not_found' | 'email_taken' | 'last_super_admin' | 'rate_limited'
-  | 'idp_account_not_found' | 'idp_email_unverified' | 'login_expired' | 'invalid_state';
+  | 'idp_account_not_found' | 'idp_email_unverified' | 'login_expired' | 'invalid_state'
+  | 'system_group' | 'group_key_taken';
 
 export class AuthError extends Error {
   retryAfterSec?: number;
@@ -86,10 +87,11 @@ export class ApiExceptionFilter implements ExceptionFilter {
       if (typeof body !== 'object' || body === null) {
         return sendError(host, status, codeForStatus(status), exception.message);
       }
-      const { issues, message } = body as { issues?: unknown; message?: unknown };
+      const { issues, message, code } = body as { issues?: unknown; message?: unknown; code?: unknown };
+      const errCode = typeof code === 'string' ? code : codeForStatus(status);
       const list = Array.isArray(issues) ? issues : undefined;
-      if (Array.isArray(message)) return sendError(host, status, codeForStatus(status), message.join('; '), list ?? message);
-      return sendError(host, status, codeForStatus(status), exception.message, list);
+      if (Array.isArray(message)) return sendError(host, status, errCode, message.join('; '), list ?? message);
+      return sendError(host, status, errCode, exception.message, list);
     }
     const clientStatus = clientStatusOf(exception);
     if (clientStatus) return sendError(host, clientStatus, codeForStatus(clientStatus), STATUS_CODES[clientStatus] ?? 'Error');

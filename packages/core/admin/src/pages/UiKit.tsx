@@ -45,7 +45,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Textarea } from '../components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
 import { ApiError } from '../lib/api-error';
 import { setTheme } from '../lib/theme';
 
@@ -63,15 +63,16 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 const SIDES = ['top', 'right', 'bottom', 'left'] as const;
 
-const demoSchema = z.object({
-  name: z.string().min(3, t('uiKit.form.nameTooShort')),
-  email: z.string().email(t('uiKit.form.emailInvalid')),
-});
-type DemoValues = z.infer<typeof demoSchema>;
+const demoSchema = () =>
+  z.object({
+    name: z.string().min(3, t('uiKit.form.nameTooShort')),
+    email: z.string().email(t('uiKit.form.emailInvalid')),
+  });
+type DemoValues = z.infer<ReturnType<typeof demoSchema>>;
 
 function FormDemo() {
   const form = useForm<DemoValues>({
-    resolver: zodResolver(demoSchema),
+    resolver: zodResolver(demoSchema()),
     defaultValues: { name: 'ab', email: 'ok@example.com' },
     mode: 'onChange',
   });

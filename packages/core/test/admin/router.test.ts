@@ -16,9 +16,18 @@ describe('matchRoute', () => {
     expect(matchRoute(['content', 'a', 'b']).id).toBe('notFound');
   });
   it('matches the simple guarded pages', () => {
-    for (const id of ['builder', 'users', 'account'] as const) {
-      expect(matchRoute([id])).toEqual({ id, params: {}, guarded: true });
-    }
+    expect(matchRoute(['account'])).toEqual({ id: 'account', params: {}, guarded: true });
+  });
+  it('matches the settings pages', () => {
+    expect(matchRoute(['settings', 'users'])).toEqual({ id: 'settingsUsers', params: {}, guarded: true });
+    expect(matchRoute(['settings', 'content-types'])).toMatchObject({ id: 'settingsContentTypes' });
+    expect(matchRoute(['settings', 'languages'])).toMatchObject({ id: 'settingsLanguages' });
+    expect(matchRoute(['settings']).id).toBe('notFound');
+    expect(matchRoute(['settings', 'nope']).id).toBe('notFound');
+  });
+  it('redirects the old users and builder routes', () => {
+    expect(matchRoute(['users'])).toEqual({ id: 'redirectUsers', params: {}, guarded: true });
+    expect(matchRoute(['builder'])).toEqual({ id: 'redirectBuilder', params: {}, guarded: true });
   });
   it('falls back to guarded notFound', () => {
     expect(matchRoute(['nope'])).toEqual({ id: 'notFound', params: {}, guarded: true });

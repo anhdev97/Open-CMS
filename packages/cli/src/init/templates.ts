@@ -46,11 +46,12 @@ export const tsconfigServerJson = (): string =>
   ) + '\n';
 
 export const configTs = (): string => `import { defineConfig } from '@opencms/schema';
+import locales from './src/locales';
 
 export default defineConfig({
   database: { url: process.env.DATABASE_URL! },
-  defaultLocale: 'en',
-  locales: ['en'],
+  // Website languages live in src/locales.ts (managed from the admin: Settings > Languages).
+  ...locales,
 });
 `;
 
@@ -105,6 +106,7 @@ bootstrap().catch((e: unknown) => {
 export const appModuleTs = (): string => `import { Module } from '@nestjs/common';
 import { OpenCmsModule } from '@opencms/core';
 import config from '../opencms.config';
+import contentGroups from './content-groups';
 import { contentTypes } from './generated';
 import { hooks } from './extensions';
 import { findProjectRoot } from './root';
@@ -117,6 +119,8 @@ const projectRoot = findProjectRoot(__dirname);
       root: projectRoot,
       config,
       contentTypes,
+      // Sidebar groups of the content types (src/content-groups.ts, managed from Settings > Content types).
+      contentGroups,
       hooks,
       // Content Type Builder writes schema files + migrations: dev only.
       schemaEditable: process.env.NODE_ENV !== 'production',
@@ -143,6 +147,7 @@ export const adminPageTsx = (): string => `export { default } from '@opencms/cor
 export const siteLayoutTsx = (name: string): string => `import '../globals.css';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import locales from '../../src/locales';
 
 export const metadata: Metadata = {
   title: '${name}',
@@ -150,24 +155,50 @@ export const metadata: Metadata = {
 
 export default function SiteLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang={locales.defaultLocale}>
       <body className="bg-background text-foreground antialiased">{children}</body>
     </html>
   );
 }
 `;
 
-export const sitePageTsx = (name: string): string => `export default function HomePage() {
+/** Website strings: en-US is required, other locales may be partial (missing keys fall back to en-US). */
+export const siteMessagesTs = (): string => `// Strings of the website. Server components import the helpers from '@opencms/core';
+// client components ('use client') must import them from '@opencms/core/admin' instead.
+import { defineMessages } from '@opencms/core';
+
+export const messages = defineMessages({
+  'en-US': {
+    home: {
+      tagline: 'A website and its OpenCMS admin, served by one Next.js app.',
+      openAdmin: 'Open admin',
+    },
+  },
+  'vi-VN': {
+    home: {
+      tagline: 'Một website và trang quản trị OpenCMS, chạy trong cùng một ứng dụng Next.js.',
+      openAdmin: 'Mở trang quản trị',
+    },
+  },
+});
+`;
+
+export const sitePageTsx = (name: string): string => `import { createTranslator } from '@opencms/core';
+import locales from '../../src/locales';
+import { messages } from './messages';
+
+export default function HomePage() {
+  const t = createTranslator(messages, locales.defaultLocale);
   return (
     <main data-opencms-site="" className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-4 px-6">
       <h1 className="text-3xl font-semibold tracking-tight">${name}</h1>
-      <p className="text-muted-foreground">A website and its OpenCMS admin, served by one Next.js app.</p>
+      <p className="text-muted-foreground">{t('home.tagline')}</p>
       <p>
         <a
           href="/admin"
           className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
-          Open admin
+          {t('home.openAdmin')}
         </a>
       </p>
     </main>
@@ -185,6 +216,8 @@ export function nextConfigTs(link?: { root: string }): string {
   if (!link) {
     return `import type { NextConfig } from 'next';
 
+// Server components may import the i18n helpers from @opencms/core: under the \`react-server\` condition the
+// package resolves to a NestJS-free module. Client components ('use client') import them from @opencms/core/admin.
 const nextConfig: NextConfig = {};
 
 export default nextConfig;
@@ -195,6 +228,8 @@ export default nextConfig;
 
 // @opencms/core is linked from outside this directory (opencms init --link); Turbopack and output tracing
 // only follow files under their root, so both point at the common ancestor of the project and the checkout.
+// Server components may import the i18n helpers from @opencms/core: under the \`react-server\` condition the
+// package resolves to a NestJS-free module. Client components ('use client') import them from @opencms/core/admin.
 const nextConfig: NextConfig = {
   turbopack: { root: ${root} },
   outputFileTracingRoot: ${root},
@@ -288,9 +323,11 @@ An OpenCMS project: a NestJS backend (\`src/\`) and one Next.js app (\`app/\`) t
 
 \`\`\`
 src/                  NestJS: main.ts, app.module.ts, content types, hooks, generated code
+  locales.ts          website languages (managed from Settings > Languages)
+  content-groups.ts   sidebar groups of content types (managed from Settings > Content types)
 app/                  Next.js App Router: one app for the admin and the website
   (admin)/            root layout + page of the admin (re-exported from @opencms/core)
-  (site)/             root layout + home page of the website: yours to change
+  (site)/             root layout, home page and strings (messages.ts) of the website: yours to change
   globals.css         Tailwind v4 + the admin theme
 migrations/           SQL migrations (opencms migrate:create / migrate:up)
 next.config.ts        Next config
@@ -330,6 +367,12 @@ Configuration lives in \`.env\` (see \`.env.example\`). Every \`opencms\` comman
 The website is the \`app/(site)\` route group; edit it like any Next app. To run only the API and no admin or website, set \`web: { enabled: false }\` in \`OpenCmsModule.forRoot({ ... })\` (\`src/app.module.ts\`).
 
 Limitation: Next keeps its cache in \`.next/cache\` on disk, so caching is only correct when a single instance runs.
+
+## Languages
+
+- Website languages are in \`src/locales.ts\` (\`defaultLocale\`, \`locales\`); \`opencms.config.ts\` spreads it. Supported codes: \`en-US\`, \`vi-VN\`, \`fr-FR\`, \`id-ID\`. In dev the admin page Settings > Languages rewrites the file.
+- Website strings are in \`app/(site)/messages.ts\` (\`defineMessages\`: \`en-US\` required, other languages may be partial). Translate with \`createTranslator(messages, locale)\`; format with \`formatDateTime\` / \`formatNumber\`.
+- Server components import these helpers from \`@opencms/core\` (in a server component it resolves to a small module without NestJS). Client components (\`'use client'\`) must import them from \`@opencms/core/admin\`, which also has \`useLocale\`, \`useTranslator\` and \`useFormat\`.
 
 ## Security notes
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { DropdownMenuRadioGroup, DropdownMenuRadioItem } from './ui/dropdown-menu';
 import { getTheme, setTheme, type Theme } from '../lib/theme';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
 
 const THEMES: Theme[] = ['light', 'dark', 'system'];
 

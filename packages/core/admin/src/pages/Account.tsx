@@ -1,3 +1,4 @@
+import { SUPPORTED_LOCALES, isLocale, matchLocale, type Locale } from '@opencms/schema';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -11,10 +12,14 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/form';
 import { Input } from '../components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Label } from '../components/ui/label';
-import { t } from '../i18n/en';
+import { t } from '../i18n';
+import { setAdminLocale } from '../i18n/I18nProvider';
+import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
 import { PASSWORD_MAX, PASSWORD_MIN, validateSetup } from '../lib/auth-flow';
+import { groupName } from '../lib/groups';
 import { getTheme, setTheme, type Theme } from '../lib/theme';
 import { changePassword } from '../lib/users';
 
@@ -147,8 +152,70 @@ function ThemeCard() {
   );
 }
 
+// Radix Select items cannot have an empty value.
+const BROWSER_DEFAULT = 'browser';
+
+function LanguageCard({ initial, onSaved }: { initial: Locale | null; onSaved: (l: Locale | null) => void }) {
+  const [value, setValue] = useState<string>(initial ?? BROWSER_DEFAULT);
+  const [error, setError] = useState<Error | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function onChange(next: string) {
+    const locale: Locale | null = isLocale(next) ? next : null;
+    setError(null);
+    setSaving(true);
+    try {
+      await api('/api/auth/me', { method: 'PATCH', json: { locale } });
+      setValue(next);
+      onSaved(locale);
+      if (locale) {
+        await setAdminLocale(locale);
+      } else {
+        // Browser default: setAdminLocale persists its argument, so drop the stored choice afterwards;
+        // otherwise it would keep winning over the browser on the next visit.
+        await setAdminLocale(matchLocale(navigator.languages ?? [navigator.language]));
+        try {
+          localStorage.removeItem('opencms-locale');
+        } catch {
+          /* storage unavailable */
+        }
+      }
+      toast.success(t('account.languageSaved'));
+    } catch (e) {
+      setError(e instanceof Error ? e : new Error(String(e)));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('account.language')}</CardTitle>
+        <CardDescription>{t('account.languageHint')}</CardDescription>
+      </CardHeader>
+      <CardContent className="grid max-w-md gap-3">
+        <ErrorAlert error={error} />
+        <Select value={value} disabled={saving} onValueChange={(v) => void onChange(v)}>
+          <SelectTrigger aria-label={t('account.language')} className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={BROWSER_DEFAULT}>{t('account.browserDefault')}</SelectItem>
+            {SUPPORTED_LOCALES.map((l) => (
+              <SelectItem key={l.code} value={l.code} lang={l.code}>
+                {l.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function Account() {
-  const { user } = useAuth();
+  const { user, setUserLocale } = useAuth();
   return (
     <div className="space-y-6">
       <PageHeader title={t('account.title')} description={t('account.description')} />
@@ -163,15 +230,18 @@ export function Account() {
             <dd className="sm:col-span-2">{user.name || t('content.noValue')}</dd>
             <dt className="text-muted-foreground">{t('account.email')}</dt>
             <dd className="sm:col-span-2">{user.email}</dd>
-            <dt className="text-muted-foreground">{t('account.roles')}</dt>
+            <dt className="text-muted-foreground">{t('account.groups')}</dt>
             <dd className="flex flex-wrap gap-1 sm:col-span-2">
-              {user.roles.length === 0 ? t('account.noRoles') : user.roles.map((r) => <Badge key={r} variant="secondary">{r}</Badge>)}
+              {user.groups.length === 0
+                ? t('account.noGroups')
+                : user.groups.map((g) => <Badge key={g.key} variant="secondary">{g.name}</Badge>)}
             </dd>
           </dl>
         </CardContent>
       </Card>
 
       <ChangePasswordCard email={user.email} />
+      <LanguageCard initial={user.locale ?? null} onSaved={setUserLocale} />
       <ThemeCard />
     </div>
   );

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { OpenCmsModule } from '@opencms/core';
 import config from '../opencms.config';
+import contentGroups from './content-groups';
 import { contentTypes } from './generated';
 import { hooks } from './extensions';
 import { findProjectRoot } from './root';
@@ -13,6 +14,8 @@ const projectRoot = findProjectRoot(__dirname);
       root: projectRoot,
       config,
       contentTypes,
+      // Sidebar groups of the content types (src/content-groups.ts, managed from Settings > Content types).
+      contentGroups,
       hooks,
       // Content Type Builder writes schema files + migrations: dev only.
       schemaEditable: process.env.NODE_ENV !== 'production',

@@ -19,6 +19,7 @@ describe('user management + password change API', () => {
   let users: UserService;
   let adminId: string;
   let cookie: string;
+  let contenterId: string;
 
   const api = async (
     path: string,
@@ -56,6 +57,7 @@ describe('user management + password change API', () => {
     const admin = await users.create({ email: 'admin@x.com', name: 'Admin', password: PW });
     adminId = admin.id;
     cookie = await login('admin@x.com');
+    contenterId = (await t.db.selectFrom('auth_groups').select('id').where('key', '=', 'contenter').executeTakeFirstOrThrow()).id;
   }, 60_000);
   afterAll(async () => {
     await t.close();
@@ -70,7 +72,7 @@ describe('user management + password change API', () => {
     const r = await api('/api/admin/users');
     expect(r.status).toBe(200);
     const row = r.body.data.find((x: any) => x.id === u.id);
-    expect(row).toMatchObject({ email: 'withidp@x.com', name: 'Idp', status: 'active', roles: ['super_admin'], lastLoginAt: null });
+    expect(row).toMatchObject({ email: 'withidp@x.com', name: 'Idp', status: 'active', groups: [{ id: expect.any(String), key: 'super-admin', name: 'Super Admin' }], lastLoginAt: null });
     expect(row.identities).toEqual([{ id: expect.any(String), provider: 'google', subject: 'sub-1', email: 'withidp@x.com' }]);
     const adminRow = r.body.data.find((x: any) => x.id === adminId);
     expect(adminRow.lastLoginAt).toEqual(expect.any(String));
@@ -79,7 +81,7 @@ describe('user management + password change API', () => {
   });
 
   it('POST without password creates an IdP-only user (null hash); password login is invalid_credentials', async () => {
-    const r = await api('/api/admin/users', { method: 'POST', body: { email: ' IdpOnly@X.com ', name: 'Only' } });
+    const r = await api('/api/admin/users', { method: 'POST', body: { email: ' IdpOnly@X.com ', name: 'Only', groupIds: [contenterId] } });
     expect(r.status).toBe(201);
     expect(r.body.data).toMatchObject({ email: 'idponly@x.com', name: 'Only', status: 'active', identities: [] });
     expect(JSON.stringify(r.body)).not.toMatch(/password/i);
@@ -91,15 +93,15 @@ describe('user management + password change API', () => {
   });
 
   it('POST validation and conflicts', async () => {
-    const dup = await api('/api/admin/users', { method: 'POST', body: { email: 'ADMIN@x.com', name: 'Dup' } });
+    const dup = await api('/api/admin/users', { method: 'POST', body: { email: 'ADMIN@x.com', name: 'Dup', groupIds: [contenterId] } });
     expect(dup.status).toBe(409);
     expect(dup.body.error.code).toBe('email_taken');
-    const bad = await api('/api/admin/users', { method: 'POST', body: { email: 'nope', name: 'x' } });
+    const bad = await api('/api/admin/users', { method: 'POST', body: { email: 'nope', name: 'x', groupIds: [contenterId] } });
     expect(bad.status).toBe(422);
     expect(bad.body.error.code).toBe('validation_failed');
-    const extra = await api('/api/admin/users', { method: 'POST', body: { email: 'e@x.com', name: 'x', roles: ['a'] } });
+    const extra = await api('/api/admin/users', { method: 'POST', body: { email: 'e@x.com', name: 'x', groupIds: [contenterId], roles: ['a'] } });
     expect(extra.status).toBe(422);
-    const weak = await api('/api/admin/users', { method: 'POST', body: { email: 'w@x.com', name: 'x', password: 'short' } });
+    const weak = await api('/api/admin/users', { method: 'POST', body: { email: 'w@x.com', name: 'x', password: 'short', groupIds: [contenterId] } });
     expect(weak.status).toBe(422);
     expect(weak.body.error.code).toBe('weak_password');
   });
@@ -186,14 +188,14 @@ describe('user management + password change API', () => {
     expect(await t.db.selectFrom('auth_user_identities').select('id').where('id', '=', ident.id).execute()).toEqual([]);
   });
 
-  it('a session whose user lost super_admin gets 403 forbidden on users routes', async () => {
+  it('a session whose user lost super-admin gets 403 forbidden (Missing permission: settings.users) on users routes', async () => {
     await users.create({ email: 'norole@x.com', name: 'N', password: PW });
     const c = await login('norole@x.com');
     const u = (await users.findByEmail('norole@x.com'))!;
-    await t.db.deleteFrom('auth_user_roles').where('user_id', '=', u.id).execute();
+    await t.db.deleteFrom('auth_user_groups').where('user_id', '=', u.id).execute();
     const r = await api('/api/admin/users', { cookie: c });
     expect(r.status).toBe(403);
-    expect(r.body.error.code).toBe('forbidden');
+    expect(r.body).toEqual({ error: { code: 'forbidden', message: 'Missing permission: settings.users' } });
   });
 
   it('POST /api/auth/password: wrong current -> 401; correct keeps this session and kills the other', async () => {

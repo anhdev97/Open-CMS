@@ -18,13 +18,14 @@ import {
   Post,
 } from '@nestjs/common';
 import type { Kysely } from 'kysely';
-import { RequireRole } from '@opencms/oauth2';
+import { RequirePermission } from '@opencms/oauth2';
 import { captureProjectFiles, createMigration, DiffError, previewChange, restoreProjectFiles, writeSchemaChange } from '@opencms/codegen';
 import { migrateUp } from '@opencms/db';
 import type { ContentTypeDefinition } from '@opencms/schema';
 import { FIELD_KINDS, SchemaValidationError, newId } from '@opencms/schema';
 import { OPENCMS_DB, OPENCMS_OPTIONS, type ResolvedOpenCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
+import { SchemaWriteQueue } from './schema-write-queue';
 
 function toHttp(e: unknown): never {
   if (e instanceof SchemaValidationError || e instanceof DiffError) {
@@ -35,25 +36,17 @@ function toHttp(e: unknown): never {
 
 @Injectable()
 export class SchemaBuilderService {
-  private queue: Promise<unknown> = Promise.resolve();
-
   constructor(
     @Inject(OPENCMS_OPTIONS) private readonly options: ResolvedOpenCmsOptions,
     @Inject(OPENCMS_DB) private readonly db: Kysely<any>,
     @Inject(ContentRegistry) private readonly registry: ContentRegistry,
+    @Inject(SchemaWriteQueue) private readonly queue: SchemaWriteQueue,
   ) {}
 
-  private assertEditable() {
+  assertEditable() {
     if (!this.options.schemaEditable) {
       throw new ForbiddenException('Schema editing is disabled (production mode). Change schema files in git and deploy migrations.');
     }
-  }
-
-  /** Schema changes are serialized: one migration at a time. */
-  private exclusive<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.queue.then(fn, fn);
-    this.queue = run.catch(() => undefined);
-    return run;
   }
 
   async preview(change: { upsert?: ContentTypeDefinition; removeId?: string }) {
@@ -67,7 +60,7 @@ export class SchemaBuilderService {
 
   apply(change: { upsert?: ContentTypeDefinition; removeId?: string }) {
     this.assertEditable();
-    return this.exclusive(async () => {
+    return this.queue.run(async () => {
       const config = this.options.config;
       const before = captureProjectFiles(config);
       try {
@@ -103,7 +96,6 @@ export class SchemaBuilderService {
   }
 }
 
-@RequireRole('super_admin')
 @Controller('api/admin')
 export class SchemaController {
   constructor(
@@ -112,17 +104,20 @@ export class SchemaController {
     @Inject(OPENCMS_OPTIONS) private readonly options: ResolvedOpenCmsOptions,
   ) {}
 
+  /** Read by every admin page (nav, locales, groups): a session is enough, no permission. */
   @Get('meta')
   meta() {
     return {
       schemaEditable: this.options.schemaEditable,
       defaultLocale: this.options.config.defaultLocale,
       locales: this.options.config.locales,
+      groups: this.registry.groups(),
       fieldKinds: FIELD_KINDS,
       newIds: { contentType: newId('ct'), fields: Array.from({ length: 20 }, () => newId('fld')) },
     };
   }
 
+  /** Definitions drive the entry forms of every role, so reads need a session only; changes need settings.content-types. */
   @Get('content-types')
   list() {
     return { data: this.registry.all() };
@@ -134,12 +129,14 @@ export class SchemaController {
   }
 
   /** Dry run: what migration would this definition produce? */
+  @RequirePermission('settings.content-types')
   @Post('content-types/plan')
   @HttpCode(200)
   plan(@Body() body: { definition?: ContentTypeDefinition; removeId?: string }) {
     return this.builder.preview({ upsert: body.definition, removeId: body.removeId });
   }
 
+  @RequirePermission('settings.content-types')
   @Post('content-types')
   @HttpCode(200)
   save(@Body() body: { definition: ContentTypeDefinition }) {
@@ -147,6 +144,7 @@ export class SchemaController {
     return this.builder.apply({ upsert: body.definition });
   }
 
+  @RequirePermission('settings.content-types')
   @Delete('content-types/:id')
   remove(@Param('id') id: string) {
     return this.builder.apply({ removeId: id });

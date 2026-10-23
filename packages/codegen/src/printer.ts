@@ -3,7 +3,7 @@
  * Used when a content type is created / edited from the admin UI, so the UI
  * and hand-written files share the same source of truth.
  */
-import type { ContentTypeDefinition, FieldDefinition } from '@opencms/schema';
+import type { ContentGroupDefinition, ContentTypeDefinition, FieldDefinition, LocaleSettings } from '@opencms/schema';
 
 const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
@@ -44,7 +44,9 @@ export function printSchemaFile(def: ContentTypeDefinition): string {
     `  id: ${lit(def.id, '')},`,
     `  apiId: ${lit(def.apiId, '')},`,
     `  displayName: ${lit(def.displayName, '')},`,
+    ...(def.group ? [`  group: ${lit(def.group, '')},`] : []),
     ...(def.description ? [`  description: ${lit(def.description, '')},`] : []),
+    ...(def.review ? ['  review: true,'] : []),
     '  fields: {',
     ...def.fields.map(printField),
     '  },',
@@ -52,4 +54,31 @@ export function printSchemaFile(def: ContentTypeDefinition): string {
     '',
   ];
   return lines.join('\n');
+}
+
+export function printContentGroupsFile(groups: ContentGroupDefinition[]): string {
+  return [
+    '// Content groups. Managed by OpenCMS: edit by hand or from the admin',
+    '// Content Type Builder (which rewrites this file).',
+    "import { defineContentGroups } from '@opencms/schema';",
+    '',
+    'export default defineContentGroups([',
+    ...groups.map((g) => `  ${lit({ key: g.key, title: g.title, order: g.order }, '')},`),
+    ']);',
+    '',
+  ].join('\n');
+}
+
+export function printLocalesFile(s: LocaleSettings): string {
+  return [
+    '// Supported locales. Managed by OpenCMS: edit by hand or from the admin',
+    '// Settings > Languages (which rewrites this file).',
+    "import { defineLocales } from '@opencms/schema';",
+    '',
+    'export default defineLocales({',
+    `  defaultLocale: ${lit(s.defaultLocale, '')},`,
+    `  locales: ${lit(s.locales, '')},`,
+    '});',
+    '',
+  ].join('\n');
 }

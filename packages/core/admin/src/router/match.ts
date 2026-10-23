@@ -1,4 +1,4 @@
-export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'content' | 'builder' | 'users' | 'account' | 'notFound';
+export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'content' | 'settingsUsers' | 'settingsGroups' | 'settingsContentTypes' | 'settingsLanguages' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
 
 export interface RouteMatch {
   id: RouteId;
@@ -6,7 +6,14 @@ export interface RouteMatch {
   guarded: boolean;
 }
 
-const SIMPLE: Record<string, RouteId> = { builder: 'builder', users: 'users', account: 'account' };
+const SIMPLE: Record<string, RouteId> = { builder: 'redirectBuilder', users: 'redirectUsers', account: 'account' };
+
+const SETTINGS: Record<string, RouteId> = {
+  users: 'settingsUsers',
+  groups: 'settingsGroups',
+  'content-types': 'settingsContentTypes',
+  languages: 'settingsLanguages',
+};
 
 /** Pure matcher for the `[[...slug]]` catch-all (spec §5.2). `setup`, `login` and `_ui` sit outside AuthGate. */
 export function matchRoute(slug: string[] | undefined, opts: { dev?: boolean } = {}): RouteMatch {
@@ -23,6 +30,10 @@ export function matchRoute(slug: string[] | undefined, opts: { dev?: boolean } =
   }
   if (s.length === 2 && first === 'content' && second) {
     return { id: 'content', params: { apiId: second }, guarded: true };
+  }
+  if (s.length === 2 && first === 'settings') {
+    const id = Object.hasOwn(SETTINGS, second) ? SETTINGS[second] : undefined;
+    if (id) return { id, params: {}, guarded: true };
   }
   return { id: 'notFound', params: {}, guarded: true };
 }

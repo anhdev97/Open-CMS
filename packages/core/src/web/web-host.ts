@@ -89,6 +89,7 @@ export function createWebHost(opts: WebHostOptions): WebHost {
     } else {
       // A client-chosen CSP must never reach Next, which would read a nonce out of it.
       delete req.headers['content-security-policy'];
+      delete req.headers['content-security-policy-report-only'];
     }
     requestHandler(req, res).catch((e: unknown) => {
       logger.error(`Web UI request failed: ${messageOf(e)}`);
