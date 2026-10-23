@@ -58,7 +58,7 @@ export class AssetsController {
     return this.assets.patch(id, body);
   }
 
-  @RequirePermission('content.delete')
+  @RequirePermission('content.update')
   @Delete('assets/:id')
   remove(@Param('id') id: string) {
     return this.assets.delete(id);
