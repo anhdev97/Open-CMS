@@ -366,6 +366,10 @@ export const enUS = {
     currency: 'Currency code',
     currencyPlaceholder: 'USD',
     noOptions: 'No options available',
+    assetMissingAlt: 'This image is missing alt text (helps SEO and accessibility).',
+    assetUpload: 'Upload',
+    assetAltPlaceholder: 'Alt text',
+    assetAltSave: 'Save alt text',
     required: 'required',
   },
   groups: {

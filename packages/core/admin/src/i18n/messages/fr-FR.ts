@@ -368,6 +368,10 @@ const frFR: Messages = {
     currency: 'Code de devise',
     currencyPlaceholder: 'USD',
     noOptions: 'Aucune option disponible',
+    assetMissingAlt: 'Cette image n\'a pas de texte alternatif (utile pour le SEO et l\'accessibilité).',
+    assetUpload: 'Téléverser',
+    assetAltPlaceholder: 'Texte alternatif',
+    assetAltSave: 'Enregistrer l\'alt',
     required: 'obligatoire',
   },
   groups: {

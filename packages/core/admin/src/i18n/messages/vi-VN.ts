@@ -368,6 +368,10 @@ const viVN: Messages = {
     currency: 'Mã tiền tệ',
     currencyPlaceholder: 'USD',
     noOptions: 'Không có lựa chọn',
+    assetMissingAlt: 'Hình ảnh này chưa có văn bản thay thế (alt) — giúp SEO và khả năng truy cập.',
+    assetUpload: 'Tải lên',
+    assetAltPlaceholder: 'Văn bản thay thế (alt)',
+    assetAltSave: 'Lưu alt',
     required: 'bắt buộc',
   },
   groups: {

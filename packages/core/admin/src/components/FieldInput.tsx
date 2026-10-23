@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -8,7 +9,10 @@ import { t } from '../i18n';
 import { api } from '../lib/api';
 import type { FieldDefinition } from '../lib/types';
 
-type Option = { value: string; label: string };
+type AssetMeta = { mimeType: string | null; alt: string | null };
+type Option = { value: string; label: string; asset?: AssetMeta };
+type AssetRow = { id: string; filename: string; mimeType?: string | null; alt?: string | null };
+const assetMissingAlt = (a?: AssetMeta) => !!a && (a.mimeType ?? '').startsWith('image/') && !a.alt?.trim();
 const optionCache = new Map<string, Promise<Option[]>>();
 const NONE = '__none__';
 const META_KEYS = ['documentId', 'status', 'locale', 'createdAt', 'updatedAt', 'publishedAt'];
@@ -26,7 +30,7 @@ function loadOptions(field: FieldDefinition): Promise<Option[]> {
             }),
           )
         : field.kind === 'asset'
-          ? api<{ data: any[] }>('/api/admin/assets').then((r) => r.data.map((a) => ({ value: a.id, label: a.filename })))
+          ? api<{ data: any[] }>('/api/admin/assets').then((r) => r.data.map((a: AssetRow) => ({ value: a.id, label: a.filename, asset: { mimeType: a.mimeType ?? null, alt: a.alt ?? null } })))
           : api<{ data: any[] }>(`/api/admin/taxonomies/${field.options.taxonomy}/terms`).then((r) =>
               r.data.map((term) => ({ value: term.id, label: (Object.values(term.name ?? {})[0] as string) ?? term.slug })),
             );
@@ -41,52 +45,172 @@ function loadOptions(field: FieldDefinition): Promise<Option[]> {
   return optionCache.get(key)!;
 }
 
+function AssetTools({
+  id,
+  field,
+  value,
+  options,
+  onChange,
+  onReload,
+}: {
+  id: string;
+  field: FieldDefinition;
+  value: any;
+  options: Option[];
+  onChange: (v: any) => void;
+  onReload: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Assets uploaded in this session that the API flagged (or not) before the cached list reloads.
+  const [flagged, setFlagged] = useState<Record<string, AssetMeta>>({});
+  const [alts, setAlts] = useState<Record<string, string>>({});
+  const selected: string[] = field.options.multiple ? (value ?? []) : value ? [value] : [];
+  const missing = selected.filter((sid) => assetMissingAlt(flagged[sid] ?? options.find((o) => o.value === sid)?.asset));
+  const labelOf = (sid: string) => options.find((o) => o.value === sid)?.label ?? sid;
+
+  const upload = async (file: File) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      const res = await api<{ data: AssetRow; seo?: { missingAlt?: boolean } }>('/api/admin/assets/upload', { method: 'POST', body });
+      optionCache.delete('assets');
+      setFlagged((f) => ({
+        ...f,
+        [res.data.id]: { mimeType: res.data.mimeType ?? null, alt: res.seo?.missingAlt ? null : (res.data.alt ?? 'ok') },
+      }));
+      onChange(field.options.multiple ? [...selected, res.data.id] : res.data.id);
+      onReload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveAlt = async (sid: string) => {
+    const alt = (alts[sid] ?? '').trim();
+    if (!alt) return;
+    setError(null);
+    try {
+      const res = await api<{ data: AssetRow }>(`/api/admin/assets/${sid}`, { method: 'PATCH', json: { alt } });
+      optionCache.delete('assets');
+      setFlagged((f) => ({ ...f, [sid]: { mimeType: res.data.mimeType ?? null, alt: res.data.alt ?? alt } }));
+      setAlts((a) => ({ ...a, [sid]: '' }));
+      onReload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  return (
+    <div className="mt-2 space-y-2">
+      <div className="flex items-center gap-2">
+        <Input
+          id={`${id}-upload`}
+          type="file"
+          aria-label={t('field.assetUpload')}
+          disabled={busy}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (file) void upload(file);
+          }}
+        />
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      {missing.map((sid) => (
+        <div key={sid} className="space-y-1">
+          <p role="alert" className="text-sm text-muted-foreground">
+            {labelOf(sid)}: {t('field.assetMissingAlt')}
+          </p>
+          <div className="flex gap-2">
+            <Input
+              aria-label={t('field.assetAltPlaceholder')}
+              placeholder={t('field.assetAltPlaceholder')}
+              value={alts[sid] ?? ''}
+              onChange={(e) => setAlts((a) => ({ ...a, [sid]: e.target.value }))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void saveAlt(sid);
+                }
+              }}
+            />
+            <Button type="button" variant="outline" disabled={!(alts[sid] ?? '').trim()} onClick={() => void saveAlt(sid)}>
+              {t('field.assetAltSave')}
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RelationInput({ id, field, value, onChange }: { id: string; field: FieldDefinition; value: any; onChange: (v: any) => void }) {
   const [options, setOptions] = useState<Option[]>([]);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let live = true;
     loadOptions(field).then((o) => live && setOptions(o));
     return () => {
       live = false;
     };
-  }, [field.kind, field.options.target, field.options.taxonomy]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [field.kind, field.options.target, field.options.taxonomy, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const tools =
+    field.kind === 'asset' ? (
+      <AssetTools id={id} field={field} value={value} options={options} onChange={onChange} onReload={() => setReloadKey((k) => k + 1)} />
+    ) : null;
 
   if (field.options.multiple) {
     const selected: string[] = value ?? [];
     const toggle = (v: string, on: boolean) => onChange(on ? [...selected, v] : selected.filter((s) => s !== v));
     return (
-      <div
-        id={id}
-        role="group"
-        aria-labelledby={`${id}-label`}
-        className="max-h-44 space-y-2 overflow-y-auto rounded-md border border-input p-3"
-      >
-        {options.length === 0 && <p className="text-sm text-muted-foreground">{t('field.noOptions')}</p>}
-        {options.map((o) => (
-          <div key={o.value} className="flex items-center gap-2">
-            <Checkbox id={`${id}-${o.value}`} checked={selected.includes(o.value)} onCheckedChange={(c) => toggle(o.value, c === true)} />
-            <Label htmlFor={`${id}-${o.value}`} className="font-normal">
-              {o.label}
-            </Label>
-          </div>
-        ))}
-      </div>
+      <>
+        <div
+          id={id}
+          role="group"
+          aria-labelledby={`${id}-label`}
+          className="max-h-44 space-y-2 overflow-y-auto rounded-md border border-input p-3"
+        >
+          {options.length === 0 && <p className="text-sm text-muted-foreground">{t('field.noOptions')}</p>}
+          {options.map((o) => (
+            <div key={o.value} className="flex items-center gap-2">
+              <Checkbox id={`${id}-${o.value}`} checked={selected.includes(o.value)} onCheckedChange={(c) => toggle(o.value, c === true)} />
+              <Label htmlFor={`${id}-${o.value}`} className="font-normal">
+                {o.label}
+              </Label>
+            </div>
+          ))}
+        </div>
+        {tools}
+      </>
     );
   }
   return (
-    <Select value={value ?? NONE} onValueChange={(v) => onChange(v === NONE ? null : v)}>
-      <SelectTrigger id={id} className="w-full">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={NONE}>{t('content.noValue')}</SelectItem>
-        {options.map((o) => (
-          <SelectItem key={o.value} value={o.value}>
-            {o.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <>
+      <Select value={value ?? NONE} onValueChange={(v) => onChange(v === NONE ? null : v)}>
+        <SelectTrigger id={id} className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NONE}>{t('content.noValue')}</SelectItem>
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {tools}
+    </>
   );
 }
 

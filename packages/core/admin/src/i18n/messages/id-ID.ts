@@ -368,6 +368,10 @@ const idID: Messages = {
     currency: 'Kode mata uang',
     currencyPlaceholder: 'USD',
     noOptions: 'Tidak ada pilihan',
+    assetMissingAlt: 'Gambar ini belum memiliki teks alt (membantu SEO dan aksesibilitas).',
+    assetUpload: 'Unggah',
+    assetAltPlaceholder: 'Teks alt',
+    assetAltSave: 'Simpan alt',
     required: 'wajib',
   },
   groups: {
