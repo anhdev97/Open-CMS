@@ -1,4 +1,4 @@
-export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'content' | 'settingsUsers' | 'settingsGroups' | 'settingsContentTypes' | 'settingsLanguages' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
+export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'assets' | 'content' | 'settingsUsers' | 'settingsGroups' | 'settingsContentTypes' | 'settingsLanguages' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
 
 export interface RouteMatch {
   id: RouteId;
@@ -6,7 +6,7 @@ export interface RouteMatch {
   guarded: boolean;
 }
 
-const SIMPLE: Record<string, RouteId> = { builder: 'redirectBuilder', users: 'redirectUsers', account: 'account' };
+const SIMPLE: Record<string, RouteId> = { builder: 'redirectBuilder', users: 'redirectUsers', account: 'account', assets: 'assets' };
 
 const SETTINGS: Record<string, RouteId> = {
   users: 'settingsUsers',

@@ -70,6 +70,8 @@
   `large` variants; register-by-URL unchanged when `assets` is omitted. Core migration `0004_assets_storage`
   adds `storage_key`, `provider`, and `variants` on `opencms_assets`. Configure via `OpenCmsModule.forRoot({
   assets: { provider: 'local' | 's3' | 'gcs', … } })`.
+- Admin **Assets** page at `/admin/assets` (list, upload when configured, edit alt, delete); sidebar link for
+  users with `content.read`.
 - Permission groups: seed groups Super Admin (`super-admin`, system), Contenter and Reviewer; Settings > Groups
   (`/api/admin/groups`, `/api/admin/permissions`); groups on Settings > Users; sidebar and pages follow the
   user's permissions.

@@ -18,6 +18,7 @@ export const pages: Record<RouteId, ComponentType> = {
   setup: page(() => import('../pages/Setup').then((m) => m.Setup)),
   login: page(() => import('../pages/Login').then((m) => m.Login)),
   home: page(() => import('../pages/Home').then((m) => m.Home)),
+  assets: page(() => import('../pages/Assets').then((m) => m.Assets)),
   content: page(() => import('../pages/Content').then((m) => m.Content)),
   settingsContentTypes: page(() => import('../pages/Builder').then((m) => m.Builder)),
   settingsUsers: page(() => import('../pages/Users').then((m) => m.Users)),
