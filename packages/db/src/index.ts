@@ -127,6 +127,18 @@ export const coreMigrations: Record<string, Migration> = {
       await db.schema.dropTable(SYSTEM_TABLES.workflow).execute();
     },
   },
+  '0004_assets_storage': {
+    async up(db) {
+      await db.schema.alterTable(SYSTEM_TABLES.assets).addColumn('storage_key', 'text').execute();
+      await db.schema.alterTable(SYSTEM_TABLES.assets).addColumn('provider', 'text').execute();
+      await db.schema.alterTable(SYSTEM_TABLES.assets).addColumn('variants', 'jsonb').execute();
+    },
+    async down(db) {
+      await db.schema.alterTable(SYSTEM_TABLES.assets).dropColumn('variants').execute();
+      await db.schema.alterTable(SYSTEM_TABLES.assets).dropColumn('provider').execute();
+      await db.schema.alterTable(SYSTEM_TABLES.assets).dropColumn('storage_key').execute();
+    },
+  },
 };
 
 /* ----------------------------- project ---------------------------- */

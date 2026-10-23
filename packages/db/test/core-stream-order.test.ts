@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Kysely, Migration } from 'kysely';
 import { Pool } from 'pg';
-import { createDb, migrateUp, registerCoreMigrations } from '../src/index';
+import { allCoreMigrations, createDb, migrateUp, registerCoreMigrations } from '../src/index';
 
 const ADMIN_URL = process.env.TEST_DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
 const noop: Migration = { async up() {}, async down() {} };
@@ -29,15 +29,26 @@ describe('core migration stream with contributed sources', () => {
     await admin.end();
   });
 
-  it('applies a later built-in 0004_* after oauth2_0001_init has already run', async () => {
+  it('applies a later built-in 0005_* after oauth2_0001_init has already run', async () => {
     registerCoreMigrations({ oauth2_0001_init: noop });
     const first = await migrateUp(db, NO_PROJECT_MIGRATIONS);
-    expect(first.map((r) => r.name)).toEqual(['0001_system_tables', '0002_region_locales', '0003_workflow', 'oauth2_0001_init']);
+    expect(first.map((r) => r.name)).toEqual([
+      '0001_system_tables',
+      '0002_region_locales',
+      '0003_workflow',
+      '0004_assets_storage',
+      'oauth2_0001_init',
+    ]);
 
     let ran = false;
-    registerCoreMigrations({ '0004_future_core': { async up() { ran = true; }, async down() {} } });
+    registerCoreMigrations({ '0005_future_core': { async up() { ran = true; }, async down() {} } });
     const second = await migrateUp(db, NO_PROJECT_MIGRATIONS);
-    expect(second.map((r) => [r.name, r.status])).toEqual([['0004_future_core', 'Success']]);
+    expect(second.map((r) => [r.name, r.status])).toEqual([['0005_future_core', 'Success']]);
     expect(ran).toBe(true);
+  });
+
+  it('lists 0004_assets_storage after 0003_workflow in allCoreMigrations()', () => {
+    const keys = Object.keys(allCoreMigrations());
+    expect(keys.indexOf('0003_workflow')).toBeLessThan(keys.indexOf('0004_assets_storage'));
   });
 });
