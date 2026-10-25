@@ -1,8 +1,8 @@
 {
-  "name": "opencms-cli-monorepo",
+  "name": "opencloudcms-monorepo",
   "private": true,
   "version": "0.0.0",
-  "description": "opencms-cli — storefront-first headless CMS (NestJS + Next.js) with schema-as-code",
+  "description": "OpenCloudCMS — storefront-first headless CMS (NestJS + Next.js) with schema-as-code",
   "license": "MIT",
   "packageManager": "pnpm@10.28.0",
   "scripts": {
