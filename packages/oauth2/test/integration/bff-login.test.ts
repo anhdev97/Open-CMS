@@ -192,7 +192,7 @@ describe('BFF login and callback', () => {
     }
   });
 
-  it('a session sealed with another OPENCMS_SECRET → 401 (not 500) and the row is deleted', async () => {
+  it('a session sealed with another OPENCLOUDCMS_SECRET → 401 (not 500) and the row is deleted', async () => {
     const r = await loginAs(t, 'admin@x.com', PW);
     const other = deriveKey(Buffer.alloc(32, 7), 'token');
     await t.db
@@ -282,7 +282,7 @@ describe('BFF behind a TLS reverse proxy (Review Focus 5)', () => {
 
   beforeAll(async () => {
     // the internal URL defaults to the app's real address via PORT (R7); publicUrl is unreachable from inside.
-    t = await createTestApp({ OPENCMS_PUBLIC_URL: 'https://cms.test' }, { auth });
+    t = await createTestApp({ OPENCLOUDCMS_PUBLIC_URL: 'https://cms.test' }, { auth });
     await t.app.get(UserService).create({ email: 'admin@x.com', name: 'Admin', password: PW });
   });
   afterAll(async () => {

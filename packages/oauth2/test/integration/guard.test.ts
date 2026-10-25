@@ -396,7 +396,7 @@ describe('AuthGuard refresh (access TTL 2 s)', () => {
   let api: ReturnType<typeof client>;
 
   beforeAll(async () => {
-    t = await createTestApp({ OPENCMS_AUTH_TTL_ACCESS: '2' }, { auth, controllers });
+    t = await createTestApp({ OPENCLOUDCMS_AUTH_TTL_ACCESS: '2' }, { auth, controllers });
     api = client(t);
     await t.app.get(UserService).create({ email: 'admin@x.com', name: 'Admin', password: PW });
   });

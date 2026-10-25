@@ -95,7 +95,7 @@ export async function upsertAdminClient(
   cfg: Pick<OAuth2Config, 'secret' | 'publicUrl'>,
 ): Promise<Record<string, unknown>> {
   const metadata = adminClientMetadata(cfg);
-  // The secret is derived from OPENCMS_SECRET on every boot; never persist it.
+  // The secret is derived from OPENCLOUDCMS_SECRET on every boot; never persist it.
   const { client_secret: _secret, ...stored } = metadata;
   const json = JSON.stringify(stored);
   await db

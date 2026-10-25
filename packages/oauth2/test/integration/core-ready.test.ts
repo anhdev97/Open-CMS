@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestApp } from '../support/app';
 import { startTestDb, type TestDb } from '../support/db';
 
-const env = { OPENCMS_SECRET: 'x'.repeat(64) };
+const env = { OPENCLOUDCMS_SECRET: 'x'.repeat(64) };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe('CORE_READY gate', () => {

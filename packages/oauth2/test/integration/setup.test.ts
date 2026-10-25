@@ -20,7 +20,7 @@ const PW = 'correct horse battery';
 describe('setup wizard API', () => {
   let ctx: Awaited<ReturnType<typeof startTestDb>>;
   let app: INestApplication;
-  const cfg = loadConfig({ OPENCMS_SECRET: Buffer.alloc(32, 7).toString('base64'), OPENCMS_PUBLIC_URL: ORIGIN });
+  const cfg = loadConfig({ OPENCLOUDCMS_SECRET: Buffer.alloc(32, 7).toString('base64'), OPENCLOUDCMS_PUBLIC_URL: ORIGIN });
 
   beforeAll(async () => {
     ctx = await startTestDb();
@@ -83,7 +83,7 @@ describe('setup wizard API', () => {
 describe('setup wizard flow', () => {
   it('GET required true -> POST normalized email 201 -> GET required false', async () => {
     const ctx = await startTestDb();
-    const cfg = loadConfig({ OPENCMS_SECRET: Buffer.alloc(32, 7).toString('base64'), OPENCMS_PUBLIC_URL: ORIGIN });
+    const cfg = loadConfig({ OPENCLOUDCMS_SECRET: Buffer.alloc(32, 7).toString('base64'), OPENCLOUDCMS_PUBLIC_URL: ORIGIN });
     const mod = await Test.createTestingModule({
       controllers: [SetupController],
       providers: [

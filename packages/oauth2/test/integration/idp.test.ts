@@ -27,10 +27,10 @@ describe('external OIDC identity provider (spec §6.4)', () => {
     });
     t = await createTestApp(
       {
-        OPENCMS_IDP_OIDC_ISSUER: idp.issuer.url!,
-        OPENCMS_IDP_OIDC_CLIENT_ID: 'opencms-sso',
-        OPENCMS_IDP_OIDC_CLIENT_SECRET: 'sso-secret',
-        OPENCMS_IDP_OIDC_LABEL: 'Acme SSO',
+        OPENCLOUDCMS_IDP_OIDC_ISSUER: idp.issuer.url!,
+        OPENCLOUDCMS_IDP_OIDC_CLIENT_ID: 'opencms-sso',
+        OPENCLOUDCMS_IDP_OIDC_CLIENT_SECRET: 'sso-secret',
+        OPENCLOUDCMS_IDP_OIDC_LABEL: 'Acme SSO',
       },
       { auth },
     );

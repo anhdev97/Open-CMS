@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sql, type Kysely } from 'kysely';
-import { coreMigrator } from '@opencms/db';
+import { coreMigrator } from '@opencloudcms/db';
 import { startTestDb, type TestDb } from '../support/db';
 
 const tables = async (db: Kysely<any>): Promise<string[]> =>

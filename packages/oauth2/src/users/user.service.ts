@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { isLocale, type Locale } from '@opencms/schema';
+import { isLocale, type Locale } from '@opencloudcms/schema';
 import { sql, type Kysely, type Transaction } from 'kysely';
 import { AuditService } from '../audit/audit.service';
 import { AUTH_SETUP_LOCK, GRANT_REVOKER, OAUTH2_DB } from '../constants';

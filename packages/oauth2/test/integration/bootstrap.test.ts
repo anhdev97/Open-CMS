@@ -18,7 +18,7 @@ describe('BootstrapService', () => {
   const passwords = new PasswordService({ minLength: 12 });
 
   const make = (env: Record<string, string>) => {
-    const cfg = loadConfig({ OPENCMS_SECRET: SECRET, OPENCMS_PUBLIC_URL: 'http://cms.test/', ...env });
+    const cfg = loadConfig({ OPENCLOUDCMS_SECRET: SECRET, OPENCLOUDCMS_PUBLIC_URL: 'http://cms.test/', ...env });
     const audit = new AuditService(db);
     const users = new UserService(db, passwords, audit, revoker);
     return { users, svc: new BootstrapService(cfg, users, passwords, audit, logger) };
@@ -37,7 +37,7 @@ describe('BootstrapService', () => {
   });
 
   it('seeds from env once and is idempotent', async () => {
-    const { users, svc } = make({ OPENCMS_ADMIN_EMAIL: ' Root@X.com ', OPENCMS_ADMIN_PASSWORD: 'correct horse battery' });
+    const { users, svc } = make({ OPENCLOUDCMS_ADMIN_EMAIL: ' Root@X.com ', OPENCLOUDCMS_ADMIN_PASSWORD: 'correct horse battery' });
     await svc.run();
     expect(await users.countUsers()).toBe(1);
     const u = await users.findByEmail('root@x.com');
@@ -52,7 +52,7 @@ describe('BootstrapService', () => {
   });
 
   it('rejects a weak env password', async () => {
-    const { svc } = make({ OPENCMS_ADMIN_EMAIL: 'a@x.com', OPENCMS_ADMIN_PASSWORD: 'short' });
+    const { svc } = make({ OPENCLOUDCMS_ADMIN_EMAIL: 'a@x.com', OPENCLOUDCMS_ADMIN_PASSWORD: 'short' });
     await expect(svc.run()).rejects.toBeInstanceOf(BootstrapError);
   });
 
@@ -71,9 +71,9 @@ describe('BootstrapService', () => {
     await db.updateTable('auth_users').set({ status: 'disabled' }).where('id', '=', u.id).execute();
     await db.deleteFrom('auth_user_groups').where('user_id', '=', u.id).execute();
     const { users: users2, svc } = make({
-      OPENCMS_ADMIN_EMAIL: 'A@x.com',
-      OPENCMS_ADMIN_PASSWORD: 'brand new password',
-      OPENCMS_ADMIN_FORCE_RESET: 'true',
+      OPENCLOUDCMS_ADMIN_EMAIL: 'A@x.com',
+      OPENCLOUDCMS_ADMIN_PASSWORD: 'brand new password',
+      OPENCLOUDCMS_ADMIN_FORCE_RESET: 'true',
     });
     revoker.revokeAllGrants.mockClear();
     await svc.run();
@@ -83,14 +83,14 @@ describe('BootstrapService', () => {
     expect(after!.groups).toEqual([{ key: 'super-admin', name: 'Super Admin' }]);
     expect(revoker.revokeAllGrants).toHaveBeenCalledWith(u.id);
     expect(await events('admin_force_reset')).toHaveLength(1);
-    expect(logger.warn.mock.calls.flat().join(' ')).toContain('OPENCMS_ADMIN_FORCE_RESET');
+    expect(logger.warn.mock.calls.flat().join(' ')).toContain('OPENCLOUDCMS_ADMIN_FORCE_RESET');
   });
 
   it('force reset with unknown email fails', async () => {
     const { svc } = make({
-      OPENCMS_ADMIN_EMAIL: 'nobody@x.com',
-      OPENCMS_ADMIN_PASSWORD: 'brand new password',
-      OPENCMS_ADMIN_FORCE_RESET: 'true',
+      OPENCLOUDCMS_ADMIN_EMAIL: 'nobody@x.com',
+      OPENCLOUDCMS_ADMIN_PASSWORD: 'brand new password',
+      OPENCLOUDCMS_ADMIN_FORCE_RESET: 'true',
     });
     await expect(svc.run()).rejects.toBeInstanceOf(BootstrapError);
   });

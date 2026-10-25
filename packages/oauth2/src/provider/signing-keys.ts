@@ -49,8 +49,8 @@ export async function ensureSigningKey(db: Kysely<AuthTables>, key: Buffer): Pro
     return rows.map((r) => JSON.parse(open(key, r.jwk_private_enc)) as JWK);
   } catch {
     throw new ConfigError(
-      'The signing keys stored in auth_signing_keys were encrypted with a different OPENCMS_SECRET. ' +
-        'Restore the previous OPENCMS_SECRET, or delete the rows in auth_signing_keys and auth_sessions ' +
+      'The signing keys stored in auth_signing_keys were encrypted with a different OPENCLOUDCMS_SECRET. ' +
+        'Restore the previous OPENCLOUDCMS_SECRET, or delete the rows in auth_signing_keys and auth_sessions ' +
         '(a new key is generated at startup; all users are signed out).',
     );
   }

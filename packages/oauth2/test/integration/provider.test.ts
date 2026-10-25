@@ -117,7 +117,7 @@ describe('provider boot', () => {
   it('second boot on the same database does not create another signing key', async () => {
     const ctx = await startTestDb();
     try {
-      const env = { OPENCMS_SECRET: randomBytes(32).toString('hex') };
+      const env = { OPENCLOUDCMS_SECRET: randomBytes(32).toString('hex') };
       const a = await createTestApp(env, { db: ctx });
       const kid1 = (await ctx.db.selectFrom('auth_signing_keys').select('kid').execute()).map((r) => r.kid);
       await a.close();
@@ -130,7 +130,7 @@ describe('provider boot', () => {
       expect(kid2).toEqual(kid1);
       expect(keys.map((k) => k.kid)).toEqual(kid1);
 
-      const key = deriveKey(Buffer.from(env.OPENCMS_SECRET, 'hex'), 'key');
+      const key = deriveKey(Buffer.from(env.OPENCLOUDCMS_SECRET, 'hex'), 'key');
       const jwks = await ensureSigningKey(ctx.db, key);
       expect(jwks.map((j) => j.kid)).toEqual(kid1);
       expect(jwks[0].d).toBeTypeOf('string');
@@ -140,13 +140,13 @@ describe('provider boot', () => {
     }
   });
 
-  it('stored signing keys sealed with another OPENCMS_SECRET → ConfigError naming the secret and the remedy', async () => {
+  it('stored signing keys sealed with another OPENCLOUDCMS_SECRET → ConfigError naming the secret and the remedy', async () => {
     const ctx = await startTestDb();
     try {
       await ensureSigningKey(ctx.db, deriveKey(Buffer.alloc(32, 1), 'key'));
       const err = await ensureSigningKey(ctx.db, deriveKey(Buffer.alloc(32, 2), 'key')).catch((e) => e);
       expect(err).toBeInstanceOf(ConfigError);
-      expect(err.message).toMatch(/OPENCMS_SECRET/);
+      expect(err.message).toMatch(/OPENCLOUDCMS_SECRET/);
       expect(err.message).toMatch(/auth_signing_keys/);
       expect(err.message).toMatch(/auth_sessions/);
     } finally {
@@ -154,12 +154,12 @@ describe('provider boot', () => {
     }
   });
 
-  it('refuses to start without OPENCMS_SECRET', async () => {
-    await expect(createTestApp({ OPENCMS_SECRET: '' })).rejects.toThrow(/OPENCMS_SECRET/);
+  it('refuses to start without OPENCLOUDCMS_SECRET', async () => {
+    await expect(createTestApp({ OPENCLOUDCMS_SECRET: '' })).rejects.toThrow(/OPENCLOUDCMS_SECRET/);
   });
 
-  it('derives a stable admin client secret from OPENCMS_SECRET', () => {
-    const cfg = loadConfig({ OPENCMS_SECRET: Buffer.alloc(32, 1).toString('hex'), OPENCMS_PUBLIC_URL: 'http://x.test' });
+  it('derives a stable admin client secret from OPENCLOUDCMS_SECRET', () => {
+    const cfg = loadConfig({ OPENCLOUDCMS_SECRET: Buffer.alloc(32, 1).toString('hex'), OPENCLOUDCMS_PUBLIC_URL: 'http://x.test' });
     const s = adminClientSecret(cfg);
     expect(s).toBe(deriveKey(cfg.secret, 'client-secret').toString('base64url'));
     expect(s).toMatch(/^[A-Za-z0-9_-]{43}$/);

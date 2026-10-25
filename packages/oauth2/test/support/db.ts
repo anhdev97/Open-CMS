@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
-import { coreMigrator, registerCoreMigrations } from '@opencms/db';
+import { coreMigrator, registerCoreMigrations } from '@opencloudcms/db';
 import { oauth2CoreMigrations } from '../../src/db/migrations';
 import type { AuthTables } from '../../src/db/types';
 
