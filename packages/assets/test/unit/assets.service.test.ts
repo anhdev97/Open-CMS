@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createLocalServerProvider } from '../../src/provider/local.provider';
 import type { StorageProvider } from '../../src/provider/storage-provider';
 import { AssetsService } from '../../src/nest/assets.service';
+import { FoldersService } from '../../src/nest/folders.service';
 import type { AssetsModuleOptions } from '../../src/types';
 import { FakeDb } from '../support/fake-db';
 
@@ -18,7 +19,7 @@ const opts = (): AssetsModuleOptions => ({
 });
 
 const mk = (provider: StorageProvider | null = createLocalServerProvider(opts().local!), o: AssetsModuleOptions | null = opts()) =>
-  new AssetsService(db as any, provider, o);
+  new AssetsService(db as any, new FoldersService(db as any), provider, o);
 
 const png = (w: number, h: number) =>
   sharp({ create: { width: w, height: h, channels: 3, background: { r: 10, g: 20, b: 30 } } }).png().toBuffer();
@@ -52,7 +53,7 @@ describe('AssetsService.upload', () => {
   });
 
   it('missingAlt is false when alt is provided', async () => {
-    const res = await mk().upload(await file(await png(10, 10)), 'A red square');
+    const res = await mk().upload(await file(await png(10, 10)), { alt: 'A red square' });
     expect(res.data.alt).toBe('A red square');
     expect(res.seo.missingAlt).toBe(false);
   });
@@ -149,7 +150,7 @@ describe('AssetsService.delete', () => {
 describe('AssetsService register/list/patch', () => {
   it('registers an external asset (no variants / provider)', async () => {
     const res = await mk(null, null).register({ filename: 'a.png', url: 'https://x/a.png', mimeType: 'image/png', width: 3, height: 4 });
-    expect(res.data).toMatchObject({ filename: 'a.png', url: 'https://x/a.png', mimeType: 'image/png', width: 3, height: 4, variants: null, provider: null, storageKey: null });
+    expect(res.data).toMatchObject({ filename: 'a.png', url: 'https://x/a.png', mimeType: 'image/png', width: 3, height: 4, variants: null, provider: null, storageKey: null, folderId: null });
     expect(res.seo.missingAlt).toBe(true);
   });
 
@@ -174,5 +175,66 @@ describe('AssetsService register/list/patch', () => {
     expect((await svc.patch(data.id, { alt: '  ' })).seo.missingAlt).toBe(true);
     await expect(svc.patch('00000000-0000-4000-8000-000000000000', { alt: 'x' })).rejects.toMatchObject({ status: 404 });
     await expect(svc.patch(data.id, {})).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe('folders + filter + bulk', () => {
+  it('creates nested folders and filters assets by folder / root', async () => {
+    const folders = new FoldersService(db as any);
+    const svc = new AssetsService(db as any, folders, null, null);
+    const root = await folders.create({ name: 'Products' });
+    const child = await folders.create({ name: 'Phones', parentId: root.data.id });
+    expect(child.data.parentId).toBe(root.data.id);
+    expect((await folders.list()).data.map((f) => f.slug).sort()).toEqual(['phones', 'products']);
+
+    await svc.register({ filename: 'unfiled', url: 'u0' });
+    await svc.register({ filename: 'in-root-folder', url: 'u1', folderId: root.data.id });
+    await svc.register({ filename: 'nested', url: 'u2', folderId: child.data.id });
+
+    expect((await svc.list(50)).data).toHaveLength(3);
+    expect((await svc.list(50, null)).data.map((a) => a.filename)).toEqual(['unfiled']);
+    expect((await svc.list(50, root.data.id)).data.map((a) => a.filename)).toEqual(['in-root-folder']);
+    expect((await svc.list(50, child.data.id)).data.map((a) => a.filename)).toEqual(['nested']);
+  });
+
+  it('prefixes storage key with folder path on upload', async () => {
+    const folders = new FoldersService(db as any);
+    const { data: folder } = await folders.create({ name: 'Heroes' });
+    const res = await mk().upload(await file(await png(10, 10)), { folderId: folder.id });
+    expect(res.data.folderId).toBe(folder.id);
+    expect(res.data.storageKey).toMatch(/^heroes\/\d{4}\/\d{2}\//);
+  });
+
+  it('bulk move updates folderId; bulk delete removes rows', async () => {
+    const folders = new FoldersService(db as any);
+    const svc = new AssetsService(db as any, folders, null, null);
+    const { data: folder } = await folders.create({ name: 'Docs' });
+    const a = await svc.register({ filename: 'a', url: 'ua' });
+    const b = await svc.register({ filename: 'b', url: 'ub' });
+    await svc.bulk({ action: 'move', ids: [a.data.id, b.data.id], folderId: folder.id });
+    expect((await svc.list(50, folder.id)).data).toHaveLength(2);
+    await svc.bulk({ action: 'move', ids: [a.data.id], folderId: null });
+    expect((await svc.list(50, null)).data.map((x) => x.filename)).toEqual(['a']);
+    await svc.bulk({ action: 'delete', ids: [a.data.id, b.data.id] });
+    expect((await svc.list(50)).data).toHaveLength(0);
+  });
+
+  it('refuses deleting a non-empty folder', async () => {
+    const folders = new FoldersService(db as any);
+    const svc = new AssetsService(db as any, folders, null, null);
+    const { data: folder } = await folders.create({ name: 'Keep' });
+    await svc.register({ filename: 'x', url: 'ux', folderId: folder.id });
+    await expect(folders.delete(folder.id)).rejects.toMatchObject({ status: 409 });
+    await folders.create({ name: 'Child', parentId: folder.id });
+    // still has child even after moving asset out
+    await svc.bulk({ action: 'move', ids: [(await svc.list(50, folder.id)).data[0].id], folderId: null });
+    await expect(folders.delete(folder.id)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('blocks moving a folder into its descendant', async () => {
+    const folders = new FoldersService(db as any);
+    const a = await folders.create({ name: 'A' });
+    const b = await folders.create({ name: 'B', parentId: a.data.id });
+    await expect(folders.patch(a.data.id, { parentId: b.data.id })).rejects.toMatchObject({ status: 400 });
   });
 });

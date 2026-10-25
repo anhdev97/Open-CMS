@@ -17,6 +17,7 @@ import { ImageTooLargeError, InvalidImageError, processUpload } from '../pipelin
 import type { StorageProvider } from '../provider/storage-provider';
 import { missingAlt } from '../seo/missing-alt';
 import type { AssetVariants, AssetsModuleOptions } from '../types';
+import { FoldersService } from './folders.service';
 
 export interface UploadedFileInput {
   buffer: Buffer;
@@ -32,6 +33,7 @@ export interface RegisterAssetInput {
   alt?: string;
   width?: number;
   height?: number;
+  folderId?: string | null;
 }
 
 export interface AssetApiRow {
@@ -43,6 +45,7 @@ export interface AssetApiRow {
   width: number | null;
   height: number | null;
   alt: string | null;
+  folderId: string | null;
   storageKey: string | null;
   provider: string | null;
   variants: AssetVariants | null;
@@ -52,6 +55,7 @@ export interface AssetApiRow {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_LIST = 200;
+const MAX_BULK = 100;
 
 function parseJson<T>(v: unknown): T | null {
   if (v == null) return null;
@@ -75,6 +79,7 @@ function toApi(row: any): AssetApiRow {
     width: row.width ?? null,
     height: row.height ?? null,
     alt: row.alt ?? null,
+    folderId: row.folder_id ?? null,
     storageKey: row.storage_key ?? null,
     provider: row.provider ?? null,
     variants: parseJson<AssetVariants>(row.variants),
@@ -102,23 +107,34 @@ export class AssetsService {
 
   constructor(
     @Inject(ASSETS_DB) private readonly db: Kysely<any>,
+    @Inject(FoldersService) private readonly folders: FoldersService,
     @Optional() @Inject(STORAGE_PROVIDER) private readonly provider: StorageProvider | null = null,
     @Optional() @Inject(ASSETS_OPTIONS) private readonly options: AssetsModuleOptions | null = null,
   ) {}
 
-  async list(limit: number): Promise<{ data: AssetApiRow[] }> {
+  /**
+   * `folderId` omitted → all assets; `folderId=null` / query `root` → assets in root;
+   * UUID → that folder only (not descendants).
+   */
+  async list(limit: number, folderId?: string | null | undefined): Promise<{ data: AssetApiRow[] }> {
     const n = Math.min(Math.max(Math.trunc(limit) || 50, 1), MAX_LIST);
-    const rows = await this.db.selectFrom(SYSTEM_TABLES.assets).selectAll().orderBy('created_at', 'desc').limit(n).execute();
+    let q = this.db.selectFrom(SYSTEM_TABLES.assets).selectAll().orderBy('created_at', 'desc').limit(n);
+    if (folderId === null) q = q.where('folder_id', 'is', null);
+    else if (typeof folderId === 'string') {
+      if (!UUID_RE.test(folderId)) throw new BadRequestException('Invalid folderId');
+      q = q.where('folder_id', '=', folderId);
+    }
+    const rows = await q.execute();
     return { data: rows.map(toApi) };
   }
 
-  /** Registers an asset that already lives at `url` (no storage provider involved). */
   async register(body: RegisterAssetInput): Promise<{ data: AssetApiRow; seo: { missingAlt: boolean } }> {
     if (!body?.filename || !body.url) throw new BadRequestException('filename and url are required');
     const filename = optString(body.filename, 'filename', 255)!;
     const url = optString(body.url, 'url', 2048)!;
     const mimeType = optString(body.mimeType, 'mimeType', 127);
     const alt = optString(body.alt, 'alt', 512);
+    const folderId = await this.folders.assertExists(body.folderId);
     const row = await this.db
       .insertInto(SYSTEM_TABLES.assets)
       .values({
@@ -130,6 +146,7 @@ export class AssetsService {
         height: optInt(body.height, 'height'),
         variants: null,
         provider: null,
+        folder_id: folderId,
       })
       .returningAll()
       .executeTakeFirstOrThrow();
@@ -137,7 +154,10 @@ export class AssetsService {
     return { data, seo: { missingAlt: missingAlt(data) } };
   }
 
-  async upload(file: UploadedFileInput, alt?: string): Promise<{ data: AssetApiRow; seo: { missingAlt: boolean } }> {
+  async upload(
+    file: UploadedFileInput,
+    opts: { alt?: string; folderId?: string | null } = {},
+  ): Promise<{ data: AssetApiRow; seo: { missingAlt: boolean } }> {
     const provider = this.provider;
     if (!provider || !this.options) throw new Error('Asset uploads are not configured');
     if (!file?.buffer) throw new BadRequestException('file is required');
@@ -152,14 +172,24 @@ export class AssetsService {
     if (accept?.length && !accept.some((a) => acceptMatches(a, mime))) {
       throw new UnsupportedMediaTypeException(`Unsupported file type "${mime}"`);
     }
-    const altText = optString(alt, 'alt', 512);
+    const altText = optString(opts.alt, 'alt', 512);
+    const folderId = await this.folders.assertExists(opts.folderId);
+    const keyPrefix = await this.folders.pathSlugs(folderId);
 
     let processed;
     try {
       const s = this.options.image?.sizes;
       processed = await processUpload(
         { buffer: file.buffer, originalFilename: file.originalname, mimeType: file.mimetype },
-        { sizes: { ...DEFAULT_IMAGE_SIZES, ...(s?.thumb ? { thumb: s.thumb } : {}), ...(s?.medium ? { medium: s.medium } : {}), ...(s?.large ? { large: s.large } : {}) } },
+        {
+          keyPrefix: keyPrefix || undefined,
+          sizes: {
+            ...DEFAULT_IMAGE_SIZES,
+            ...(s?.thumb ? { thumb: s.thumb } : {}),
+            ...(s?.medium ? { medium: s.medium } : {}),
+            ...(s?.large ? { large: s.large } : {}),
+          },
+        },
       );
     } catch (err) {
       if (err instanceof ImageTooLargeError) throw new BadRequestException({ message: err.message, code: err.code });
@@ -207,6 +237,7 @@ export class AssetsService {
           storage_key: processed.storageKey,
           provider: provider.kind,
           variants: JSON.stringify(variants),
+          folder_id: folderId,
         })
         .returningAll()
         .executeTakeFirstOrThrow();
@@ -223,19 +254,41 @@ export class AssetsService {
     return { data, seo: { missingAlt: missingAlt(data) } };
   }
 
-  async patch(id: string, body: { alt?: string | null }): Promise<{ data: AssetApiRow; seo: { missingAlt: boolean } }> {
+  async patch(
+    id: string,
+    body: { alt?: string | null; folderId?: string | null },
+  ): Promise<{ data: AssetApiRow; seo: { missingAlt: boolean } }> {
     if (!UUID_RE.test(id)) throw new NotFoundException('Asset not found');
-    if (!body || !('alt' in body)) throw new BadRequestException('alt is required');
-    const alt = optString(body.alt, 'alt', 512);
-    const row = await this.db
-      .updateTable(SYSTEM_TABLES.assets)
-      .set({ alt: alt === null || alt.trim() === '' ? null : alt })
-      .where('id', '=', id)
-      .returningAll()
-      .executeTakeFirst();
+    if (!body || (!('alt' in body) && !('folderId' in body))) throw new BadRequestException('alt or folderId is required');
+    const patch: Record<string, unknown> = {};
+    if ('alt' in body) {
+      const alt = optString(body.alt, 'alt', 512);
+      patch.alt = alt === null || alt.trim() === '' ? null : alt;
+    }
+    if ('folderId' in body) {
+      patch.folder_id = await this.folders.assertExists(body.folderId);
+    }
+    const row = await this.db.updateTable(SYSTEM_TABLES.assets).set(patch).where('id', '=', id).returningAll().executeTakeFirst();
     if (!row) throw new NotFoundException('Asset not found');
     const data = toApi(row);
     return { data, seo: { missingAlt: missingAlt(data) } };
+  }
+
+  async bulk(body: { action?: string; ids?: string[]; folderId?: string | null }): Promise<{ data: { ids: string[] } }> {
+    const action = body?.action;
+    const ids = Array.isArray(body?.ids) ? body.ids.filter((id) => typeof id === 'string' && UUID_RE.test(id)) : [];
+    if (!ids.length) throw new BadRequestException('ids is required');
+    if (ids.length > MAX_BULK) throw new BadRequestException(`At most ${MAX_BULK} assets per bulk request`);
+    if (action === 'delete') {
+      for (const id of ids) await this.delete(id);
+      return { data: { ids } };
+    }
+    if (action === 'move') {
+      const folderId = await this.folders.assertExists(body.folderId);
+      await this.db.updateTable(SYSTEM_TABLES.assets).set({ folder_id: folderId }).where('id', 'in', ids).execute();
+      return { data: { ids } };
+    }
+    throw new BadRequestException('action must be "move" or "delete"');
   }
 
   /** Deletes storage objects first, then the row. A storage failure keeps the row (502). */
@@ -260,7 +313,6 @@ export class AssetsService {
     return { data: { id } };
   }
 
-  /** Best-effort delete; returns keys that could not be removed. */
   private async cleanup(provider: StorageProvider, keys: string[]): Promise<string[]> {
     const leftover: string[] = [];
     for (const key of keys) {

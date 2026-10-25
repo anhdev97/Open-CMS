@@ -14,6 +14,7 @@ import type { StorageProvider } from '../provider/storage-provider';
 import type { AssetsModuleOptions } from '../types';
 import { AssetsController, AssetsUploadController, AssetUploadInterceptor } from './assets.controller';
 import { AssetsService } from './assets.service';
+import { FoldersService } from './folders.service';
 import { createLocalStaticMiddleware, localStaticPrefix } from './local-static.middleware';
 
 export interface AssetsModuleForRootOptions {
@@ -43,9 +44,10 @@ export class AssetsModule implements NestModule {
         // Throws at module init when the provider is unavailable or its config is incomplete.
         { provide: STORAGE_PROVIDER, useFactory: () => (assets ? createProvider(assets) : null) },
         ...(assets ? [AssetUploadInterceptor] : []),
+        FoldersService,
         AssetsService,
       ],
-      exports: [AssetsService, ASSETS_OPTIONS, STORAGE_PROVIDER],
+      exports: [AssetsService, FoldersService, ASSETS_OPTIONS, STORAGE_PROVIDER],
     };
   }
 

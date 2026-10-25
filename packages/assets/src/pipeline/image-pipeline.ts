@@ -31,6 +31,8 @@ export interface ProcessUploadOptions {
   now?: Date;
   shortId?: string;
   sizes?: { thumb: number; medium: number; large: number };
+  /** Optional storage path prefix (e.g. folder slug path `products/phones`). */
+  keyPrefix?: string;
 }
 
 export class ImageTooLargeError extends Error {
@@ -67,10 +69,12 @@ function safeExt(ext: string): string {
   return SAFE_EXT.test(ext) ? ext : 'bin';
 }
 
-function buildKeyPrefix(now: Date, slug: string, shortId: string): string {
+function buildKeyPrefix(now: Date, slug: string, shortId: string, folderPrefix?: string): string {
   const yyyy = String(now.getUTCFullYear());
   const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
-  return `${yyyy}/${mm}/${slug}-${shortId}`;
+  const base = `${yyyy}/${mm}/${slug}-${shortId}`;
+  const fp = folderPrefix?.replace(/^\/+|\/+$/g, '');
+  return fp ? `${fp}/${base}` : base;
 }
 
 export async function processUpload(
@@ -87,7 +91,7 @@ export async function processUpload(
     const { slug, ext: rawExt } = slugifyFilename(input.originalFilename);
     const ext = safeExt(rawExt);
     const filename = ext ? `${slug}.${ext}` : slug;
-    const key = `${buildKeyPrefix(now, slug, shortId)}${ext ? `.${ext}` : ''}`;
+    const key = `${buildKeyPrefix(now, slug, shortId, opts.keyPrefix)}${ext ? `.${ext}` : ''}`;
     return {
       filename,
       mimeType: mime,
@@ -97,7 +101,7 @@ export async function processUpload(
   }
 
   const { slug } = slugifyFilename(input.originalFilename, 'webp');
-  const prefix = buildKeyPrefix(now, slug, shortId);
+  const prefix = buildKeyPrefix(now, slug, shortId, opts.keyPrefix);
   const originalKey = `${prefix}.webp`;
 
   let objects: PipelineObject[];

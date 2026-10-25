@@ -139,6 +139,32 @@ export const coreMigrations: Record<string, Migration> = {
       await db.schema.alterTable(SYSTEM_TABLES.assets).dropColumn('storage_key').execute();
     },
   },
+  '0005_asset_folders': {
+    async up(db) {
+      await db.schema
+        .createTable(SYSTEM_TABLES.assetFolders)
+        .addColumn('id', 'uuid', (c) => c.primaryKey().defaultTo(sql`gen_random_uuid()`))
+        .addColumn('parent_id', 'uuid', (c) => c.references(`${SYSTEM_TABLES.assetFolders}.id`).onDelete('restrict'))
+        .addColumn('slug', 'varchar(64)', (c) => c.notNull())
+        .addColumn('name', 'varchar(255)', (c) => c.notNull())
+        .addColumn('created_at', 'timestamptz', (c) => c.notNull().defaultTo(sql`now()`))
+        .addUniqueConstraint('opencms_asset_folders_parent_slug_uq', ['parent_id', 'slug'])
+        .execute();
+      // Unique among root folders (parent_id IS NULL): partial unique index.
+      await sql`create unique index opencms_asset_folders_root_slug_uq on ${sql.table(SYSTEM_TABLES.assetFolders)} (slug) where parent_id is null`.execute(db);
+      await db.schema
+        .alterTable(SYSTEM_TABLES.assets)
+        .addColumn('folder_id', 'uuid', (c) => c.references(`${SYSTEM_TABLES.assetFolders}.id`).onDelete('set null'))
+        .execute();
+      await db.schema.createIndex('opencms_assets_folder_idx').on(SYSTEM_TABLES.assets).column('folder_id').execute();
+    },
+    async down(db) {
+      await db.schema.dropIndex('opencms_assets_folder_idx').execute();
+      await db.schema.alterTable(SYSTEM_TABLES.assets).dropColumn('folder_id').execute();
+      await sql`drop index if exists opencms_asset_folders_root_slug_uq`.execute(db);
+      await db.schema.dropTable(SYSTEM_TABLES.assetFolders).execute();
+    },
+  },
 };
 
 /* ----------------------------- project ---------------------------- */

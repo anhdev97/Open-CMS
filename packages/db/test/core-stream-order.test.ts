@@ -37,18 +37,19 @@ describe('core migration stream with contributed sources', () => {
       '0002_region_locales',
       '0003_workflow',
       '0004_assets_storage',
+      '0005_asset_folders',
       'oauth2_0001_init',
     ]);
 
     let ran = false;
-    registerCoreMigrations({ '0005_future_core': { async up() { ran = true; }, async down() {} } });
+    registerCoreMigrations({ '0006_future_core': { async up() { ran = true; }, async down() {} } });
     const second = await migrateUp(db, NO_PROJECT_MIGRATIONS);
-    expect(second.map((r) => [r.name, r.status])).toEqual([['0005_future_core', 'Success']]);
+    expect(second.map((r) => [r.name, r.status])).toEqual([['0006_future_core', 'Success']]);
     expect(ran).toBe(true);
   });
 
-  it('lists 0004_assets_storage after 0003_workflow in allCoreMigrations()', () => {
+  it('lists 0005_asset_folders after 0004_assets_storage in allCoreMigrations()', () => {
     const keys = Object.keys(allCoreMigrations());
-    expect(keys.indexOf('0003_workflow')).toBeLessThan(keys.indexOf('0004_assets_storage'));
+    expect(keys.indexOf('0004_assets_storage')).toBeLessThan(keys.indexOf('0005_asset_folders'));
   });
 });

@@ -15,6 +15,16 @@ export interface EntryMeta {
   publishedAt: string | null;
 }
 
+/** Categories (blogcategories) */
+export interface Blogcategories extends EntryMeta {
+  /** Tên. text, localizable */
+  title: string | null;
+}
+
+export interface BlogcategoriesInput {
+  title?: string | null;
+}
+
 /** Brand (brand) */
 export interface Brand extends EntryMeta {
   /** text, required, indexed */
@@ -67,6 +77,8 @@ export interface Phone extends EntryMeta {
   color: string | null;
   /** text */
   screen: string | null;
+  /** asset */
+  assets: string | null;
 }
 
 export interface PhoneInput {
@@ -82,15 +94,18 @@ export interface PhoneInput {
   ramGb?: number | null;
   color?: string | null;
   screen?: string | null;
+  assets?: string | null;
 }
 
 export interface ContentTypeMap {
+  blogcategories: Blogcategories;
   brand: Brand;
   category: Category;
   phone: Phone;
 }
 
 export interface ContentTypeInputMap {
+  blogcategories: BlogcategoriesInput;
   brand: BrandInput;
   category: CategoryInput;
   phone: PhoneInput;

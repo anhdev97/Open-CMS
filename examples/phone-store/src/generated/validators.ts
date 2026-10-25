@@ -4,8 +4,10 @@
 // ------------------------------------------------------------------
 
 import { buildEntryValidator } from '@opencms/schema';
-import { brandDefinition, categoryDefinition, phoneDefinition } from './registry';
+import { blogcategoriesDefinition, brandDefinition, categoryDefinition, phoneDefinition } from './registry';
 
+export const blogcategoriesDraftSchema = buildEntryValidator(blogcategoriesDefinition, 'draft');
+export const blogcategoriesPublishSchema = buildEntryValidator(blogcategoriesDefinition, 'publish');
 export const brandDraftSchema = buildEntryValidator(brandDefinition, 'draft');
 export const brandPublishSchema = buildEntryValidator(brandDefinition, 'publish');
 export const categoryDraftSchema = buildEntryValidator(categoryDefinition, 'draft');

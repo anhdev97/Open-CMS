@@ -5,6 +5,22 @@
 
 /** Kysely table types for the generated ct_* tables. */
 
+export interface BlogcategoriesTable {
+  id: string;
+  document_id: string;
+  status: string;
+  created_at: Date;
+  updated_at: Date;
+  published_at: Date | null;
+}
+
+export interface BlogcategoriesL10nTable {
+  entry_id: string;
+  locale: string;
+  status: string;
+  title: string | null;
+}
+
 export interface BrandTable {
   id: string;
   document_id: string;
@@ -56,6 +72,7 @@ export interface PhoneTable {
   storage_gb: number | null;
   ram_gb: number | null;
   screen: string | null;
+  assets_id: string | null;
 }
 
 export interface PhoneL10nTable {
@@ -74,4 +91,6 @@ export interface ContentDatabase {
   ct_category_l10n: CategoryL10nTable;
   ct_brand: BrandTable;
   ct_brand_l10n: BrandL10nTable;
+  ct_blogcategories: BlogcategoriesTable;
+  ct_blogcategories_l10n: BlogcategoriesL10nTable;
 }

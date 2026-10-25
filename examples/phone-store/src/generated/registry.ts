@@ -5,6 +5,29 @@
 
 import type { ContentTypeDefinition } from '@opencms/schema';
 
+export const blogcategoriesDefinition: ContentTypeDefinition = {
+  "id": "ct_cyl4n4",
+  "apiId": "blogcategories",
+  "displayName": {
+    "en-US": "Categories",
+    "vi-VN": "Danh mục"
+  },
+  "fields": [
+    {
+      "id": "fld_g8tii7",
+      "name": "title",
+      "kind": "text",
+      "required": false,
+      "localizable": true,
+      "indexed": false,
+      "unique": false,
+      "options": {},
+      "label": "Tên"
+    }
+  ],
+  "group": "blog"
+};
+
 export const brandDefinition: ContentTypeDefinition = {
   "id": "ct_phonebrand",
   "apiId": "brand",
@@ -209,9 +232,20 @@ export const phoneDefinition: ContentTypeDefinition = {
       "indexed": false,
       "unique": false,
       "options": {}
+    },
+    {
+      "id": "fld_ikf7na",
+      "name": "assets",
+      "kind": "asset",
+      "required": false,
+      "localizable": false,
+      "indexed": false,
+      "unique": false,
+      "options": {}
     }
   ],
-  "group": "shop"
+  "group": "shop",
+  "review": true
 };
 
-export const contentTypes: ContentTypeDefinition[] = [brandDefinition, categoryDefinition, phoneDefinition];
+export const contentTypes: ContentTypeDefinition[] = [blogcategoriesDefinition, brandDefinition, categoryDefinition, phoneDefinition];

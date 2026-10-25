@@ -18,4 +18,6 @@ export { createProvider } from './provider/create-provider';
 export { AssetsModule, type AssetsModuleForRootOptions } from './nest/assets.module';
 export { AssetsService } from './nest/assets.service';
 export type { AssetApiRow, RegisterAssetInput, UploadedFileInput } from './nest/assets.service';
+export { FoldersService } from './nest/folders.service';
+export type { FolderApiRow } from './nest/folders.service';
 export { AssetsController, AssetsUploadController } from './nest/assets.controller';
