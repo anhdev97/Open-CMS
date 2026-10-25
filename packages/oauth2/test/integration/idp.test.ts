@@ -27,10 +27,10 @@ describe('external OIDC identity provider (spec §6.4)', () => {
     });
     t = await createTestApp(
       {
-        OPENCMS_IDP_OIDC_ISSUER: idp.issuer.url!,
-        OPENCMS_IDP_OIDC_CLIENT_ID: 'opencms-sso',
-        OPENCMS_IDP_OIDC_CLIENT_SECRET: 'sso-secret',
-        OPENCMS_IDP_OIDC_LABEL: 'Acme SSO',
+        OPENCLOUDCMS_IDP_OIDC_ISSUER: idp.issuer.url!,
+        OPENCLOUDCMS_IDP_OIDC_CLIENT_ID: 'opencloudcms-sso',
+        OPENCLOUDCMS_IDP_OIDC_CLIENT_SECRET: 'sso-secret',
+        OPENCLOUDCMS_IDP_OIDC_LABEL: 'Acme SSO',
       },
       { auth },
     );
@@ -105,7 +105,7 @@ describe('external OIDC identity provider (spec §6.4)', () => {
     const loc = new URL(start.headers.get('location')!);
     expect(loc.origin).toBe(new URL(idp.issuer.url!).origin);
     expect(Object.fromEntries(loc.searchParams)).toMatchObject({
-      client_id: 'opencms-sso',
+      client_id: 'opencloudcms-sso',
       response_type: 'code',
       scope: 'openid email profile',
       redirect_uri: `${t.url}/oauth2/idp/oidc/callback`,

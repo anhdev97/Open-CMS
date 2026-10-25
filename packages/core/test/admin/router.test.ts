@@ -17,6 +17,7 @@ describe('matchRoute', () => {
   });
   it('matches the simple guarded pages', () => {
     expect(matchRoute(['account'])).toEqual({ id: 'account', params: {}, guarded: true });
+    expect(matchRoute(['assets'])).toEqual({ id: 'assets', params: {}, guarded: true });
   });
   it('matches the settings pages', () => {
     expect(matchRoute(['settings', 'users'])).toEqual({ id: 'settingsUsers', params: {}, guarded: true });

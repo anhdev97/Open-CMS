@@ -1,7 +1,7 @@
 import { FolderIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { GROUP_KEY_RE, SUPPORTED_LOCALES, localizedText, type ContentGroupDefinition } from '@opencms/schema';
+import { GROUP_KEY_RE, SUPPORTED_LOCALES, localizedText, type ContentGroupDefinition } from '@opencloudcms/schema';
 import { getActiveLocale, t } from '../i18n';
 import { ApiError } from '../lib/api-error';
 import {
@@ -79,7 +79,7 @@ export function ContentGroupsTab({ types, editable, loaded, onChanged }: Props) 
     try {
       const r = await saveContentGroups(next);
       setGroups(r.groups);
-      window.dispatchEvent(new Event('opencms:schema-changed'));
+      window.dispatchEvent(new Event('opencloudcms:schema-changed'));
       onChanged();
       toast.success(t('groups.savedToast'));
       return true;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PERMISSIONS } from '@opencms/schema';
+import { PERMISSIONS } from '@opencloudcms/schema';
 import { can, landingState, routePermission, visibleSettingsItems } from '../../admin/src/lib/can';
 import { settingsItems } from '../../admin/src/navigation';
 import { matchRoute } from '../../admin/src/router/match';

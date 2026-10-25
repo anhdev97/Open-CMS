@@ -1,6 +1,6 @@
-# OpenCMS admin design system
+# OpenCloudCMS admin design system
 
-The admin is a set of Next App Router modules (`@opencms/core/admin`, `/admin/layout`, `/admin/theme.css`) built from shadcn components (`src/components/ui/`) and a few OpenCMS components (`src/components/`), styled with Tailwind v4 and the tokens in `src/styles/theme.css`. Open `/admin/_ui` (served only when the host runs in dev mode) to see every component and variant in light and dark.
+The admin is a set of Next App Router modules (`@opencloudcms/core/admin`, `/admin/layout`, `/admin/theme.css`) built from shadcn components (`src/components/ui/`) and a few OpenCloudCMS components (`src/components/`), styled with Tailwind v4 and the tokens in `src/styles/theme.css`. Open `/admin/_ui` (served only when the host runs in dev mode) to see every component and variant in light and dark.
 
 ## Tokens
 
@@ -41,7 +41,7 @@ All colours are CSS variables in `src/styles/theme.css`, mapped to Tailwind util
 
 ## Dark mode
 
-The default follows `prefers-color-scheme`. `ThemeToggle` stores the choice in `localStorage['opencms-theme']` (read and written inside try/catch) and sets the `.dark` class on `<html>`. A small inline script in `src/layout.tsx` (nonce taken from the CSP header) sets the class before first paint so the page never flashes. Use `src/lib/theme.ts` (`getTheme`, `setTheme`, `applyTheme`) rather than touching the class directly.
+The default follows `prefers-color-scheme`. `ThemeToggle` stores the choice in `localStorage['opencloudcms-theme']` (read and written inside try/catch) and sets the `.dark` class on `<html>`. A small inline script in `src/layout.tsx` (nonce taken from the CSP header) sets the class before first paint so the page never flashes. Use `src/lib/theme.ts` (`getTheme`, `setTheme`, `applyTheme`) rather than touching the class directly.
 
 ## Adding a component
 
@@ -65,7 +65,7 @@ Commit the generated file unchanged, then show it on the `/_ui` page (`src/pages
 
 ## Dev workflow
 
-Run `pnpm --filter @opencms/core dev:admin` (`tsc -w`, emits to `dist/admin`) next to the example host app (`examples/my-store`), whose Next dev server bundles the admin from `dist/admin`. Edit `src/`, `tsc` re-emits, Next hot-reloads. `pnpm --filter @opencms/core build` produces the full output including `theme.css`; `dev:admin` does not copy `theme.css`, so on a fresh checkout run that build once before `dev:admin`.
+Run `pnpm --filter @opencloudcms/core dev:admin` (`tsc -w`, emits to `dist/admin`) next to the example host app (`examples/my-store`), whose Next dev server bundles the admin from `dist/admin`. Edit `src/`, `tsc` re-emits, Next hot-reloads. `pnpm --filter @opencloudcms/core build` produces the full output including `theme.css`; `dev:admin` does not copy `theme.css`, so on a fresh checkout run that build once before `dev:admin`.
 
 ## Note for plugins
 

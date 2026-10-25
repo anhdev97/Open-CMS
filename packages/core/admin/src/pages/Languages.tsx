@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { SUPPORTED_LOCALES, type Locale } from '@opencms/schema';
+import { SUPPORTED_LOCALES, type Locale } from '@opencloudcms/schema';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { PageHeader } from '../components/PageHeader';
@@ -58,7 +58,7 @@ export function Languages() {
     try {
       const r = await saveLocales({ locales: enabled, defaultLocale: def, ...(confirmDisable?.length ? { confirmDisable } : {}) });
       apply(r);
-      window.dispatchEvent(new Event('opencms:schema-changed'));
+      window.dispatchEvent(new Event('opencloudcms:schema-changed'));
       toast.success(t('languages.savedToast'));
     } catch (e) {
       if (e instanceof ApiError && e.code === 'locale_has_entries') {

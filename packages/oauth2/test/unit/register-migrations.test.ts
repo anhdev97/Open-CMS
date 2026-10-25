@@ -7,7 +7,7 @@ describe('register-migrations', () => {
   it('registers oauth2_0001_init without loading @nestjs/common', async () => {
     const before = Object.keys(createRequire(__filename).cache).filter((k) => k.includes('/@nestjs/'));
     await import('../../src/register-migrations');
-    const { allCoreMigrations } = await import('@opencms/db');
+    const { allCoreMigrations } = await import('@opencloudcms/db');
     expect(Object.keys(allCoreMigrations())).toContain('oauth2_0001_init');
     const req = createRequire(__filename);
     const after = Object.keys(req.cache).filter((k) => k.includes('/@nestjs/'));

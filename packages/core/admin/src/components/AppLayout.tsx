@@ -1,6 +1,7 @@
-import { BoxesIcon, ChevronRightIcon, ChevronsUpDownIcon, HomeIcon, LogOutIcon, PaletteIcon, UserIcon } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
+import { ChevronRightIcon, ChevronsUpDownIcon, HomeIcon, ImageIcon, LogOutIcon, PaletteIcon, UserIcon } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { ContentGroupDefinition, LocalizedText } from '@opencms/schema';
+import type { ContentGroupDefinition, LocalizedText } from '@opencloudcms/schema';
 import { ThemeToggle } from './ThemeToggle';
 import { Button } from './ui/button';
 import {
@@ -41,7 +42,7 @@ import { useAuth } from '../auth/AuthContext';
 import { can, visibleSettingsItems } from '../lib/can';
 import { cn } from '../lib/utils';
 
-const NAV_STORAGE_KEY = 'opencms-nav';
+const NAV_STORAGE_KEY = 'opencloudcms-nav';
 const SETTINGS_KEY = '__settings';
 
 function readOpen(): Record<string, boolean> {
@@ -99,10 +100,10 @@ function useContentTypes(enabled: boolean) {
       );
     };
     void load();
-    window.addEventListener('opencms:schema-changed', load);
+    window.addEventListener('opencloudcms:schema-changed', load);
     return () => {
       live = false;
-      window.removeEventListener('opencms:schema-changed', load);
+      window.removeEventListener('opencloudcms:schema-changed', load);
     };
   }, [enabled]);
   return { types, groups, failed };
@@ -185,16 +186,16 @@ function AppSidebar() {
           onClick={closeOnNavigate}
           className="flex items-center gap-2 rounded-md px-2 py-1.5 text-base font-semibold tracking-tight"
         >
-          <span className="flex size-7 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-            <BoxesIcon className="size-4" aria-hidden="true" />
-          </span>
-          {t('app.name')}
+          <BrandLogo className="w-full max-w-52" />
         </Link>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu>{link('/', t('nav.home'), <HomeIcon aria-hidden="true" />)}</SidebarMenu>
+            <SidebarMenu>
+              {link('/', t('nav.home'), <HomeIcon aria-hidden="true" />)}
+              {canRead && link('/assets', t('nav.assets'), <ImageIcon aria-hidden="true" />)}
+            </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
         {canRead && types === null && !failed && (

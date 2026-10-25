@@ -24,7 +24,7 @@ export class IdpStateMismatch extends Error {
 }
 
 /**
- * Generic OIDC IdP (spec §6.4) configured by `OPENCMS_IDP_OIDC_*`: authorization code + PKCE S256,
+ * Generic OIDC IdP (spec §6.4) configured by `OPENCLOUDCMS_IDP_OIDC_*`: authorization code + PKCE S256,
  * `client_secret_basic`, state and nonce checked by openid-client v6 on the ID token.
  */
 export class OidcIdentityProvider implements IdentityProvider {

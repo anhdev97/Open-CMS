@@ -1,41 +1,13 @@
-/**
- * Minimal system APIs so asset and taxonomy fields are usable in v0.
- * (File upload + storage adapters come with the asset module.)
- */
-import { BadRequestException, Body, Controller, Get, Inject, Param, Post, Query } from '@nestjs/common';
+/** Minimal system APIs so taxonomy fields are usable in v0. Asset routes live in @opencloudcms/assets. */
+import { BadRequestException, Body, Controller, Get, Inject, Param, Post } from '@nestjs/common';
 import type { Kysely } from 'kysely';
-import { RequirePermission } from '@opencms/oauth2';
-import { SYSTEM_TABLES } from '@opencms/schema';
-import { OPENCMS_DB } from './options';
+import { RequirePermission } from '@opencloudcms/oauth2';
+import { SYSTEM_TABLES } from '@opencloudcms/schema';
+import { OPENCLOUDCMS_DB } from './options';
 
 @Controller('api/admin')
 export class SystemController {
-  constructor(@Inject(OPENCMS_DB) private readonly db: Kysely<any>) {}
-
-  @RequirePermission('content.read')
-  @Get('assets')
-  async assets(@Query('limit') limit = '50') {
-    const data = await this.db
-      .selectFrom(SYSTEM_TABLES.assets)
-      .selectAll()
-      .orderBy('created_at', 'desc')
-      .limit(Math.min(Number(limit) || 50, 200))
-      .execute();
-    return { data };
-  }
-
-  /** Registers an asset that already lives at `url` (e.g. uploaded to S3 / a CDN). */
-  @RequirePermission('content.update')
-  @Post('assets')
-  async createAsset(@Body() body: { filename?: string; url?: string; mimeType?: string; alt?: string; width?: number; height?: number }) {
-    if (!body?.filename || !body?.url) throw new BadRequestException('filename and url are required');
-    const row = await this.db
-      .insertInto(SYSTEM_TABLES.assets)
-      .values({ filename: body.filename, url: body.url, mime_type: body.mimeType ?? null, alt: body.alt ?? null, width: body.width ?? null, height: body.height ?? null })
-      .returningAll()
-      .executeTakeFirstOrThrow();
-    return { data: row };
-  }
+  constructor(@Inject(OPENCLOUDCMS_DB) private readonly db: Kysely<any>) {}
 
   @RequirePermission('content.read')
   @Get('taxonomies')

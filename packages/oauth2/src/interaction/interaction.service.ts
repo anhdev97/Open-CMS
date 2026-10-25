@@ -51,7 +51,7 @@ export class InteractionService {
   /**
    * Records a successful login for `uid` and returns the provider's resume URL
    * (`<issuer>/auth/<uid>`). The redirect is NOT written to `res`; the SPA navigates to it. The
-   * opencms-admin grant (4 scopes) is created by `loadExistingGrant` on resume, so no consent
+   * opencloudcms-admin grant (4 scopes) is created by `loadExistingGrant` on resume, so no consent
    * prompt follows.
    */
   async finishLogin(req: unknown, res: unknown, uid: string, userId: string): Promise<{ redirectTo: string }> {

@@ -1,4 +1,4 @@
-import { createTranslator, type Locale } from '@opencms/schema';
+import { createTranslator, type Locale } from '@opencloudcms/schema';
 import { enUS, type Messages } from './messages/en-US';
 
 export { enUS };

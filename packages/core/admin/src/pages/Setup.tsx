@@ -1,3 +1,4 @@
+import { BrandLogo } from '../components/BrandLogo';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -78,6 +79,7 @@ export function Setup() {
       <LanguageMenu className="absolute top-4 right-4" />
       <Card className="w-full max-w-md">
         <CardHeader>
+          <BrandLogo className="mb-4 w-60 max-w-full" />
           <CardTitle className="text-xl">{t('setup.title')}</CardTitle>
           <CardDescription>{t('setup.description')}</CardDescription>
         </CardHeader>

@@ -12,6 +12,7 @@ import type { ContentTypeDefinition, FieldDefinition } from './types';
 
 export const SYSTEM_TABLES = {
   assets: 'opencms_assets',
+  assetFolders: 'opencms_asset_folders',
   taxonomies: 'opencms_taxonomies',
   taxonomyTerms: 'opencms_taxonomy_terms',
   entryVersions: 'opencms_entry_versions',

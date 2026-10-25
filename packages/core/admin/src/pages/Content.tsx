@@ -20,7 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { useAuth } from '../auth/AuthContext';
 import { entryActions, formLocked, type EntryAction, type WorkflowState } from '../lib/entry-actions';
 import { Link, useAdminParams } from '../lib/nav';
-import { localizedText } from '@opencms/schema';
+import { localizedText } from '@opencloudcms/schema';
 import { getActiveLocale, t } from '../i18n';
 import { useFormat } from '../i18n/hooks';
 import { api } from '../lib/api';
@@ -82,11 +82,11 @@ function ContentView({ apiId }: { apiId: string }) {
         })
         .catch(setError);
     loadMeta();
-    window.addEventListener('opencms:schema-changed', loadMeta);
+    window.addEventListener('opencloudcms:schema-changed', loadMeta);
     api<{ data: ContentTypeDefinition }>(`/api/admin/content-types/${apiId}`)
       .then((r) => setDef(r.data))
       .catch(setError);
-    return () => window.removeEventListener('opencms:schema-changed', loadMeta);
+    return () => window.removeEventListener('opencloudcms:schema-changed', loadMeta);
   }, [apiId]);
 
   const reload = useCallback(() => {

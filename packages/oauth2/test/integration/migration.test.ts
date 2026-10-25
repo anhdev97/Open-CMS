@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sql, type Kysely } from 'kysely';
-import { coreMigrator } from '@opencms/db';
+import { coreMigrator } from '@opencloudcms/db';
 import type { AuthTables } from '../../src/db/types';
 import { startTestDb } from '../support/db';
 

@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ContentTypeDefinition } from '@opencms/schema';
+import type { ContentTypeDefinition } from '@opencloudcms/schema';
 
 export const SNAPSHOT_FILE = '_snapshot.json';
 

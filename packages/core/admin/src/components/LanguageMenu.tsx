@@ -1,4 +1,4 @@
-import { SUPPORTED_LOCALES, isLocale } from '@opencms/schema';
+import { SUPPORTED_LOCALES, isLocale } from '@opencloudcms/schema';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { useLocale } from '../i18n/hooks';
 import { setAdminLocale } from '../i18n/I18nProvider';

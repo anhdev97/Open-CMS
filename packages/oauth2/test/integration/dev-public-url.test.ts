@@ -7,14 +7,14 @@ import { loginAs } from '../support/login';
 const PW = 'correct horse battery';
 
 /**
- * Dev default: no OPENCMS_PUBLIC_URL, so the public URL is http://localhost:<port> while the app listens on
+ * Dev default: no OPENCLOUDCMS_PUBLIC_URL, so the public URL is http://localhost:<port> while the app listens on
  * 127.0.0.1 and the BFF reaches its own provider there. Provider URLs must still be on the public origin.
  */
-describe('dev default public URL (http://localhost:<port>, no OPENCMS_PUBLIC_URL)', () => {
+describe('dev default public URL (http://localhost:<port>, no OPENCLOUDCMS_PUBLIC_URL)', () => {
   let t: TestApp;
 
   beforeAll(async () => {
-    t = await createTestApp({ OPENCMS_PUBLIC_URL: '' });
+    t = await createTestApp({ OPENCLOUDCMS_PUBLIC_URL: '' });
     await t.app.get(UserService).create({ email: 'admin@x.com', name: 'Admin', password: PW });
   });
   afterAll(async () => {

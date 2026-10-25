@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { Body, Controller, Get, HttpCode, Inject, Logger, Patch, Post, Req, Res } from '@nestjs/common';
-import { isLocale, type Locale } from '@opencms/schema';
+import { isLocale, type Locale } from '@opencloudcms/schema';
 import { z } from 'zod';
 import type { Request, Response } from 'express';
 import { AuditService } from '../audit/audit.service';

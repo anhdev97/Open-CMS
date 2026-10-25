@@ -1,4 +1,4 @@
-import { SUPPORTED_LOCALES, isLocale, matchLocale, type Locale } from '@opencms/schema';
+import { SUPPORTED_LOCALES, isLocale, matchLocale, type Locale } from '@opencloudcms/schema';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -175,7 +175,7 @@ function LanguageCard({ initial, onSaved }: { initial: Locale | null; onSaved: (
         // otherwise it would keep winning over the browser on the next visit.
         await setAdminLocale(matchLocale(navigator.languages ?? [navigator.language]));
         try {
-          localStorage.removeItem('opencms-locale');
+          localStorage.removeItem('opencloudcms-locale');
         } catch {
           /* storage unavailable */
         }

@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { isLocale, type Locale } from '@opencms/schema';
+import { isLocale, type Locale } from '@opencloudcms/schema';
 import { LocaleContext } from './context';
 import { loadMessages, setActiveMessages } from './index';
 import { initialLocaleState } from './resolve';
 
-const STORAGE_KEY = 'opencms-locale';
+const STORAGE_KEY = 'opencloudcms-locale';
 
 let listener: ((l: Locale) => void) | null = null;
 

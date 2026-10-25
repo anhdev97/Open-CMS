@@ -2,11 +2,11 @@ import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Kysely, Migration } from 'kysely';
 import { Pool } from 'pg';
-import { createDb, migrateUp, registerCoreMigrations } from '../src/index';
+import { allCoreMigrations, createDb, migrateUp, registerCoreMigrations } from '../src/index';
 
 const ADMIN_URL = process.env.TEST_DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
 const noop: Migration = { async up() {}, async down() {} };
-const NO_PROJECT_MIGRATIONS = '/nonexistent-opencms-migrations';
+const NO_PROJECT_MIGRATIONS = '/nonexistent-opencloudcms-migrations';
 
 /**
  * I3: contributed migrations (e.g. `oauth2_0001_init`) sort after every `000N_*` built-in, so the next
@@ -29,15 +29,27 @@ describe('core migration stream with contributed sources', () => {
     await admin.end();
   });
 
-  it('applies a later built-in 0004_* after oauth2_0001_init has already run', async () => {
+  it('applies a later built-in 0005_* after oauth2_0001_init has already run', async () => {
     registerCoreMigrations({ oauth2_0001_init: noop });
     const first = await migrateUp(db, NO_PROJECT_MIGRATIONS);
-    expect(first.map((r) => r.name)).toEqual(['0001_system_tables', '0002_region_locales', '0003_workflow', 'oauth2_0001_init']);
+    expect(first.map((r) => r.name)).toEqual([
+      '0001_system_tables',
+      '0002_region_locales',
+      '0003_workflow',
+      '0004_assets_storage',
+      '0005_asset_folders',
+      'oauth2_0001_init',
+    ]);
 
     let ran = false;
-    registerCoreMigrations({ '0004_future_core': { async up() { ran = true; }, async down() {} } });
+    registerCoreMigrations({ '0006_future_core': { async up() { ran = true; }, async down() {} } });
     const second = await migrateUp(db, NO_PROJECT_MIGRATIONS);
-    expect(second.map((r) => [r.name, r.status])).toEqual([['0004_future_core', 'Success']]);
+    expect(second.map((r) => [r.name, r.status])).toEqual([['0006_future_core', 'Success']]);
     expect(ran).toBe(true);
+  });
+
+  it('lists 0005_asset_folders after 0004_assets_storage in allCoreMigrations()', () => {
+    const keys = Object.keys(allCoreMigrations());
+    expect(keys.indexOf('0004_assets_storage')).toBeLessThan(keys.indexOf('0005_asset_folders'));
   });
 });

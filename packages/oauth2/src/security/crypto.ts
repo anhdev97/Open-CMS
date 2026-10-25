@@ -3,7 +3,7 @@ import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes } f
 export type KeyPurpose = 'token' | 'key' | 'cookie' | 'client-secret';
 
 export function deriveKey(secret: Buffer, purpose: KeyPurpose): Buffer {
-  return Buffer.from(hkdfSync('sha256', secret, Buffer.alloc(0), `opencms/${purpose}`, 32));
+  return Buffer.from(hkdfSync('sha256', secret, Buffer.alloc(0), `opencloudcms/${purpose}`, 32));
 }
 
 /** base64url of iv(12) | tag(16) | ciphertext. */

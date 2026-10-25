@@ -5,7 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { findProjectRoot } from './root';
 
 async function bootstrap() {
-  // Load .env before the app (and opencms.config.ts) is evaluated; variables already set win.
+  // Load .env before the app (and opencloudcms.config.ts) is evaluated; variables already set win.
   const envFile = path.join(findProjectRoot(__dirname), '.env');
   if (fs.existsSync(envFile)) {
     try {
@@ -15,13 +15,14 @@ async function bootstrap() {
     }
   }
   const { AppModule } = await import('./app.module');
-  // bodyParser: false — @opencms/core owns request body parsing.
+  // bodyParser: false — @opencloudcms/core owns request body parsing.
   const app = await NestFactory.create(AppModule, { bodyParser: false });
-  app.enableShutdownHooks();
+  // useProcessExit: after hooks finish, exit even if Next left open handles; SIGINT/SIGTERM only.
+  app.enableShutdownHooks(['SIGINT', 'SIGTERM'], { useProcessExit: true });
   const port = Number(process.env.PORT ?? 4000);
   await app.listen(port);
-  const publicUrl = process.env.OPENCMS_PUBLIC_URL ?? `http://localhost:${port}`;
-  console.log(`OpenCMS ready at ${publicUrl}`);
+  const publicUrl = process.env.OPENCLOUDCMS_PUBLIC_URL ?? `http://localhost:${port}`;
+  console.log(`OpenCloudCMS ready at ${publicUrl}`);
   console.log(`Admin: ${publicUrl}/admin`);
 }
 // Exit on a boot failure: Next installs its own unhandledRejection handler, which would keep the process alive.

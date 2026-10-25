@@ -70,14 +70,14 @@ export class BootstrapService {
       this.wrap(e);
     }
     if (seeded) this.logger.log(`Seeded admin ${email} from environment.`);
-    else this.logger.log('OPENCMS_ADMIN_EMAIL/OPENCMS_ADMIN_PASSWORD ignored: users already exist.');
+    else this.logger.log('OPENCLOUDCMS_ADMIN_EMAIL/OPENCLOUDCMS_ADMIN_PASSWORD ignored: users already exist.');
   }
 
   private async forceReset(email: string, password: string): Promise<void> {
     try {
       await this.users.withSetupLock(async (trx) => {
         const user = await this.users.findByEmail(email, trx);
-        if (!user) throw new BootstrapError(`OPENCMS_ADMIN_FORCE_RESET: user ${email} does not exist`);
+        if (!user) throw new BootstrapError(`OPENCLOUDCMS_ADMIN_FORCE_RESET: user ${email} does not exist`);
         await this.users.setPassword(user.id, password, trx);
         await trx
           .updateTable('auth_users')
@@ -94,7 +94,7 @@ export class BootstrapService {
       this.wrap(e);
     }
     this.logger.warn(
-      `Admin ${email} was force-reset from environment. Remove OPENCMS_ADMIN_FORCE_RESET (and the password variable) now, or it will reset on every boot.`,
+      `Admin ${email} was force-reset from environment. Remove OPENCLOUDCMS_ADMIN_FORCE_RESET (and the password variable) now, or it will reset on every boot.`,
     );
   }
 }

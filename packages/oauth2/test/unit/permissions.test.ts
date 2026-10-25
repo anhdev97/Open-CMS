@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { PERMISSIONS as SCHEMA_PERMISSIONS } from '@opencms/schema';
+import { PERMISSIONS as SCHEMA_PERMISSIONS } from '@opencloudcms/schema';
 import { PERMISSIONS, effectivePermissions } from '../../src/permissions';
 
 const CONTENTER = ['content.read', 'content.create', 'content.update', 'content.delete', 'content.submit'];
 const REVIEWER = ['content.read', 'content.update', 'content.publish'];
 
 describe('PERMISSIONS', () => {
-  it('is the fixed catalog, re-exported from @opencms/schema', () => {
+  it('is the fixed catalog, re-exported from @opencloudcms/schema', () => {
     expect(PERMISSIONS).toEqual([
       'content.read',
       'content.create',

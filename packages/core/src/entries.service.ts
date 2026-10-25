@@ -1,9 +1,9 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { Kysely } from 'kysely';
-import type { ContentTypeDefinition, Locale } from '@opencms/schema';
-import { AuthError, type RequestUser } from '@opencms/oauth2';
+import type { ContentTypeDefinition, Locale } from '@opencloudcms/schema';
+import { AuthError, type RequestUser } from '@opencloudcms/oauth2';
 import { EntryRepository, type ListQuery, type Status } from './entry.repository';
-import { OPENCMS_DB, OPENCMS_OPTIONS, type HookContext, type ResolvedOpenCmsOptions } from './options';
+import { OPENCLOUDCMS_DB, OPENCLOUDCMS_OPTIONS, type HookContext, type ResolvedOpenCloudCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
 import { WorkflowService } from './workflow.service';
 
@@ -26,8 +26,8 @@ export class EntriesService {
   constructor(
     @Inject(ContentRegistry) private readonly registry: ContentRegistry,
     @Inject(EntryRepository) private readonly repo: EntryRepository,
-    @Inject(OPENCMS_OPTIONS) private readonly options: ResolvedOpenCmsOptions,
-    @Inject(OPENCMS_DB) private readonly db: Kysely<any>,
+    @Inject(OPENCLOUDCMS_OPTIONS) private readonly options: ResolvedOpenCloudCmsOptions,
+    @Inject(OPENCLOUDCMS_DB) private readonly db: Kysely<any>,
     @Inject(WorkflowService) private readonly workflow: WorkflowService,
   ) {}
 

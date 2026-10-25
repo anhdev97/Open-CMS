@@ -1,6 +1,6 @@
 /**
  * Database access and the two migration streams:
- *   - core migrations (system tables shipped with @opencms/db), tracked in opencms_core_migrations
+ *   - core migrations (system tables shipped with @opencloudcms/db), tracked in opencms_core_migrations
  *   - project migrations (generated ct_* tables in <project>/migrations), tracked in opencms_migrations
  * Core always runs first. Kysely's migrator takes a lock, so several instances
  * starting at once will not apply the same migration twice.
@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import { createJiti } from 'jiti';
 import { Kysely, Migrator, PostgresDialect, sql, type Migration, type MigrationProvider, type MigrationResultSet } from 'kysely';
 import { Pool, types } from 'pg';
-import { SYSTEM_TABLES } from '@opencms/schema';
+import { SYSTEM_TABLES } from '@opencloudcms/schema';
 
 // Keep `date` columns as 'YYYY-MM-DD' strings instead of timezone-shifted JS Dates.
 types.setTypeParser(1082, (v: string) => v);
@@ -97,10 +97,10 @@ export const coreMigrations: Record<string, Migration> = {
           changed += Number(res.numAffectedRows ?? 0);
           const left = await sql<{ n: string }>`select count(*)::text as n from ${sql.id(table)} where locale = ${from}`.execute(db);
           const n = Number(left.rows[0]?.n ?? 0);
-          if (n > 0) console.warn(`[opencms] 0002_region_locales: ${table}: ${n} "${from}" row(s) kept, "${to}" already exists for the same entry`);
+          if (n > 0) console.warn(`[opencloudcms] 0002_region_locales: ${table}: ${n} "${from}" row(s) kept, "${to}" already exists for the same entry`);
         }
       }
-      console.log(`[opencms] 0002_region_locales: renamed ${changed} locale row(s)`);
+      console.log(`[opencloudcms] 0002_region_locales: renamed ${changed} locale row(s)`);
     },
     async down() {
       // Not reversible: the old short codes are not recorded.
@@ -127,6 +127,44 @@ export const coreMigrations: Record<string, Migration> = {
       await db.schema.dropTable(SYSTEM_TABLES.workflow).execute();
     },
   },
+  '0004_assets_storage': {
+    async up(db) {
+      await db.schema.alterTable(SYSTEM_TABLES.assets).addColumn('storage_key', 'text').execute();
+      await db.schema.alterTable(SYSTEM_TABLES.assets).addColumn('provider', 'text').execute();
+      await db.schema.alterTable(SYSTEM_TABLES.assets).addColumn('variants', 'jsonb').execute();
+    },
+    async down(db) {
+      await db.schema.alterTable(SYSTEM_TABLES.assets).dropColumn('variants').execute();
+      await db.schema.alterTable(SYSTEM_TABLES.assets).dropColumn('provider').execute();
+      await db.schema.alterTable(SYSTEM_TABLES.assets).dropColumn('storage_key').execute();
+    },
+  },
+  '0005_asset_folders': {
+    async up(db) {
+      await db.schema
+        .createTable(SYSTEM_TABLES.assetFolders)
+        .addColumn('id', 'uuid', (c) => c.primaryKey().defaultTo(sql`gen_random_uuid()`))
+        .addColumn('parent_id', 'uuid', (c) => c.references(`${SYSTEM_TABLES.assetFolders}.id`).onDelete('restrict'))
+        .addColumn('slug', 'varchar(64)', (c) => c.notNull())
+        .addColumn('name', 'varchar(255)', (c) => c.notNull())
+        .addColumn('created_at', 'timestamptz', (c) => c.notNull().defaultTo(sql`now()`))
+        .addUniqueConstraint('opencms_asset_folders_parent_slug_uq', ['parent_id', 'slug'])
+        .execute();
+      // Unique among root folders (parent_id IS NULL): partial unique index.
+      await sql`create unique index opencms_asset_folders_root_slug_uq on ${sql.table(SYSTEM_TABLES.assetFolders)} (slug) where parent_id is null`.execute(db);
+      await db.schema
+        .alterTable(SYSTEM_TABLES.assets)
+        .addColumn('folder_id', 'uuid', (c) => c.references(`${SYSTEM_TABLES.assetFolders}.id`).onDelete('set null'))
+        .execute();
+      await db.schema.createIndex('opencms_assets_folder_idx').on(SYSTEM_TABLES.assets).column('folder_id').execute();
+    },
+    async down(db) {
+      await db.schema.dropIndex('opencms_assets_folder_idx').execute();
+      await db.schema.alterTable(SYSTEM_TABLES.assets).dropColumn('folder_id').execute();
+      await sql`drop index if exists opencms_asset_folders_root_slug_uq`.execute(db);
+      await db.schema.dropTable(SYSTEM_TABLES.assetFolders).execute();
+    },
+  },
 };
 
 /* ----------------------------- project ---------------------------- */
@@ -150,7 +188,7 @@ export class FileMigrationProvider implements MigrationProvider {
 const registeredSources: Record<string, Migration>[] = [];
 
 /**
- * Lets other packages (e.g. @opencms/oauth2) contribute migrations to the core stream.
+ * Lets other packages (e.g. @opencloudcms/oauth2) contribute migrations to the core stream.
  * Registering the same object again is a no-op; a key that already exists (built-in or
  * from another source) throws.
  */

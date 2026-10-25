@@ -32,6 +32,6 @@ export {
   createTranslator,
   formatDateTime,
   formatNumber,
-} from '@opencms/schema';
-export type { Locale } from '@opencms/schema';
+} from '@opencloudcms/schema';
+export type { Locale } from '@opencloudcms/schema';
 export { useLocale, useTranslator, useFormat } from './i18n/hooks';

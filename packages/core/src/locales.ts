@@ -6,10 +6,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Body, ConflictException, Controller, ForbiddenException, Get, Inject, Injectable, Put, UnprocessableEntityException } from '@nestjs/common';
 import { sql, type Kysely } from 'kysely';
-import { RequirePermission } from '@opencms/oauth2';
-import { localesFile, printLocalesFile } from '@opencms/codegen';
-import { SUPPORTED_LOCALES, isLocale, l10nTable, validateLocaleSettings, type Locale } from '@opencms/schema';
-import { OPENCMS_DB, OPENCMS_OPTIONS, type ResolvedOpenCmsOptions } from './options';
+import { RequirePermission } from '@opencloudcms/oauth2';
+import { localesFile, printLocalesFile } from '@opencloudcms/codegen';
+import { SUPPORTED_LOCALES, isLocale, l10nTable, validateLocaleSettings, type Locale } from '@opencloudcms/schema';
+import { OPENCLOUDCMS_DB, OPENCLOUDCMS_OPTIONS, type ResolvedOpenCloudCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
 import { SchemaBuilderService } from './schema-builder';
 import { SchemaWriteQueue } from './schema-write-queue';
@@ -17,8 +17,8 @@ import { SchemaWriteQueue } from './schema-write-queue';
 @Injectable()
 export class LocalesService {
   constructor(
-    @Inject(OPENCMS_OPTIONS) private readonly options: ResolvedOpenCmsOptions,
-    @Inject(OPENCMS_DB) private readonly db: Kysely<any>,
+    @Inject(OPENCLOUDCMS_OPTIONS) private readonly options: ResolvedOpenCloudCmsOptions,
+    @Inject(OPENCLOUDCMS_DB) private readonly db: Kysely<any>,
     @Inject(ContentRegistry) private readonly registry: ContentRegistry,
     @Inject(SchemaBuilderService) private readonly builder: SchemaBuilderService,
     @Inject(SchemaWriteQueue) private readonly queue: SchemaWriteQueue,

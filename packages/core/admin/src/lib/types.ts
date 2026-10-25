@@ -1,5 +1,5 @@
 // Shared API shapes of the admin. Relative imports only (tested by the root vitest, see ruling R4).
-import type { ContentGroupDefinition, LocalizedText } from '@opencms/schema';
+import type { ContentGroupDefinition, LocalizedText } from '@opencloudcms/schema';
 
 export type FieldKind =
   | 'text' | 'longText' | 'richText' | 'slug' | 'email' | 'url' | 'number' | 'boolean'

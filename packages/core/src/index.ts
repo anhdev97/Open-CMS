@@ -1,5 +1,5 @@
 export * from './options';
-export * from './opencms.module';
+export * from './opencloudcms.module';
 export * from './registry.service';
 export * from './entry.repository';
 export * from './entries.service';

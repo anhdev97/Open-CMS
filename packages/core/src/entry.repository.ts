@@ -1,14 +1,14 @@
 /**
  * Dynamic repository over the generated ct_* tables. Table and column names
- * come from @opencms/schema's physical mapping, the same code that generated
+ * come from @opencloudcms/schema's physical mapping, the same code that generated
  * the migrations, so runtime and schema can't drift apart.
  */
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { sql, type Kysely } from 'kysely';
-import type { ContentTypeDefinition, FieldDefinition } from '@opencms/schema';
-import { fieldColumns, fieldStorage, isMultiRelation, l10nTable, mainTable, SYSTEM_TABLES } from '@opencms/schema';
-import { OPENCMS_DB, type PublishedDocument } from './options';
+import type { ContentTypeDefinition, FieldDefinition } from '@opencloudcms/schema';
+import { fieldColumns, fieldStorage, isMultiRelation, l10nTable, mainTable, SYSTEM_TABLES } from '@opencloudcms/schema';
+import { OPENCLOUDCMS_DB, type PublishedDocument } from './options';
 
 type Row = Record<string, any>;
 export type Status = 'draft' | 'published';
@@ -69,7 +69,7 @@ const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : (v as string 
 
 @Injectable()
 export class EntryRepository {
-  constructor(@Inject(OPENCMS_DB) private readonly db: Kysely<any>) {}
+  constructor(@Inject(OPENCLOUDCMS_DB) private readonly db: Kysely<any>) {}
 
   /** Splits API input into main-table columns, l10n columns and relation lists. */
   private split(def: ContentTypeDefinition, data: Row) {

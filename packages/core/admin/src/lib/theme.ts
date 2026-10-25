@@ -1,6 +1,6 @@
 export type Theme = 'light' | 'dark' | 'system';
 
-const KEY = 'opencms-theme';
+const KEY = 'opencloudcms-theme';
 
 export function getTheme(): Theme {
   try {

@@ -25,7 +25,7 @@ export type OAuth2Config = {
   admin: { email?: string; password?: string; name?: string; forceReset: boolean };
 };
 
-/** Non-secret part of `auth` in opencms.config.ts. */
+/** Non-secret part of `auth` in opencloudcms.config.ts. */
 export type AuthFileConfig = {
   publicUrl?: string;
   ttl?: Partial<Ttls>;
@@ -67,13 +67,13 @@ const schema = z.object({
 const trimSlash = (s: string) => s.replace(/\/+$/, '');
 
 function decodeSecret(raw: string | undefined): Buffer {
-  if (!raw) throw new ConfigError('OPENCMS_SECRET is required (at least 32 bytes, base64 or hex)');
+  if (!raw) throw new ConfigError('OPENCLOUDCMS_SECRET is required (at least 32 bytes, base64 or hex)');
   const v = raw.trim();
   const buf = /^[0-9a-fA-F]+$/.test(v) && v.length % 2 === 0
     ? Buffer.from(v, 'hex')
     : Buffer.from(v, 'base64');
   if (buf.length < 32) {
-    throw new ConfigError(`OPENCMS_SECRET must decode to at least 32 bytes (got ${buf.length})`);
+    throw new ConfigError(`OPENCLOUDCMS_SECRET must decode to at least 32 bytes (got ${buf.length})`);
   }
   return buf;
 }
@@ -86,32 +86,32 @@ function envInt(env: NodeJS.ProcessEnv, name: string): number | undefined {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv, file: Partial<AuthFileConfig> = {}): OAuth2Config {
-  const secret = decodeSecret(env.OPENCMS_SECRET);
+  const secret = decodeSecret(env.OPENCLOUDCMS_SECRET);
   const port = Number(env.PORT) || 4000;
   const internalUrl = `http://127.0.0.1:${port}`;
-  const publicRaw = env.OPENCMS_PUBLIC_URL || file.publicUrl;
+  const publicRaw = env.OPENCLOUDCMS_PUBLIC_URL || file.publicUrl;
   if (!publicRaw && env.NODE_ENV === 'production') {
-    throw new ConfigError('OPENCMS_PUBLIC_URL is required when NODE_ENV=production');
+    throw new ConfigError('OPENCLOUDCMS_PUBLIC_URL is required when NODE_ENV=production');
   }
   const publicUrl = trimSlash((publicRaw ?? `http://localhost:${port}`).trim());
 
   const ttl = {
     ...file.ttl,
     ...pick({
-      accessToken: envInt(env, 'OPENCMS_AUTH_TTL_ACCESS'),
-      refreshToken: envInt(env, 'OPENCMS_AUTH_TTL_REFRESH'),
-      sessionIdle: envInt(env, 'OPENCMS_AUTH_TTL_SESSION_IDLE'),
-      sessionAbsolute: envInt(env, 'OPENCMS_AUTH_TTL_SESSION_ABSOLUTE'),
+      accessToken: envInt(env, 'OPENCLOUDCMS_AUTH_TTL_ACCESS'),
+      refreshToken: envInt(env, 'OPENCLOUDCMS_AUTH_TTL_REFRESH'),
+      sessionIdle: envInt(env, 'OPENCLOUDCMS_AUTH_TTL_SESSION_IDLE'),
+      sessionAbsolute: envInt(env, 'OPENCLOUDCMS_AUTH_TTL_SESSION_ABSOLUTE'),
     }),
   };
 
-  const issuer = env.OPENCMS_IDP_OIDC_ISSUER;
+  const issuer = env.OPENCLOUDCMS_IDP_OIDC_ISSUER;
   const oidc = issuer
     ? {
         issuer,
-        clientId: env.OPENCMS_IDP_OIDC_CLIENT_ID ?? file.idp?.oidc?.clientId,
-        clientSecret: env.OPENCMS_IDP_OIDC_CLIENT_SECRET ?? file.idp?.oidc?.clientSecret,
-        label: env.OPENCMS_IDP_OIDC_LABEL ?? file.idp?.oidc?.label,
+        clientId: env.OPENCLOUDCMS_IDP_OIDC_CLIENT_ID ?? file.idp?.oidc?.clientId,
+        clientSecret: env.OPENCLOUDCMS_IDP_OIDC_CLIENT_SECRET ?? file.idp?.oidc?.clientSecret,
+        label: env.OPENCLOUDCMS_IDP_OIDC_LABEL ?? file.idp?.oidc?.label,
       }
     : file.idp?.oidc;
 
@@ -123,10 +123,10 @@ export function loadConfig(env: NodeJS.ProcessEnv, file: Partial<AuthFileConfig>
     rateLimit: file.rateLimit,
     idp: { oidc },
     admin: {
-      email: env.OPENCMS_ADMIN_EMAIL || undefined,
-      password: env.OPENCMS_ADMIN_PASSWORD || undefined,
-      name: env.OPENCMS_ADMIN_NAME || undefined,
-      forceReset: env.OPENCMS_ADMIN_FORCE_RESET === 'true',
+      email: env.OPENCLOUDCMS_ADMIN_EMAIL || undefined,
+      password: env.OPENCLOUDCMS_ADMIN_PASSWORD || undefined,
+      name: env.OPENCLOUDCMS_ADMIN_NAME || undefined,
+      forceReset: env.OPENCLOUDCMS_ADMIN_FORCE_RESET === 'true',
     },
   });
   if (!parsed.success) {

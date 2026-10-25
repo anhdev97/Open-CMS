@@ -13,7 +13,7 @@ import { landingState, useCan, visibleSettingsItems } from '../lib/can';
 import { Link } from '../lib/nav';
 import { settingsItems } from '../navigation';
 import { Forbidden } from './Forbidden';
-import { localizedText } from '@opencms/schema';
+import { localizedText } from '@opencloudcms/schema';
 import { getActiveLocale, t } from '../i18n';
 import { api } from '../lib/api';
 import type { ApiError } from '../lib/api-error';
@@ -69,8 +69,8 @@ function HomeContent() {
       .catch(setError);
     const load = () => api<Meta>('/api/admin/meta').then(setMeta).catch(setError);
     load();
-    window.addEventListener('opencms:schema-changed', load);
-    return () => window.removeEventListener('opencms:schema-changed', load);
+    window.addEventListener('opencloudcms:schema-changed', load);
+    return () => window.removeEventListener('opencloudcms:schema-changed', load);
   }, []);
 
   return (

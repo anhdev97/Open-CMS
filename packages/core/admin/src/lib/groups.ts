@@ -1,5 +1,5 @@
 // Thin wrappers over `/api/admin/groups*` and `/api/admin/permissions`. Relative imports only (ruling R4).
-import { PERMISSIONS, type Permission } from '@opencms/schema';
+import { PERMISSIONS, type Permission } from '@opencloudcms/schema';
 import { t } from '../i18n';
 import { api } from './api';
 import { ApiError } from './api-error';

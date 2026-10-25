@@ -1,4 +1,4 @@
-import type { Permission } from '@opencms/schema';
+import type { Permission } from '@opencloudcms/schema';
 import { useAuth } from '../auth/AuthContext';
 import { settingsItems } from '../navigation';
 import type { RouteId } from '../router/match';
@@ -20,6 +20,7 @@ const ROUTE_PERMISSIONS: Partial<Record<RouteId, Permission>> = {
   settingsContentTypes: 'settings.content-types',
   settingsLanguages: 'settings.languages',
   content: 'content.read',
+  assets: 'content.read',
 };
 
 /** The permission a route needs; `undefined` means any signed-in user. */

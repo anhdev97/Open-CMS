@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { defineContentType, f } from '@opencms/schema';
+import { defineContentType, f } from '@opencloudcms/schema';
 import { loginAs } from '../../../oauth2/test/support/login';
 import { createCoreTestApp, type CoreTestApp } from '../support/core-app';
 

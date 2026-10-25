@@ -131,7 +131,7 @@ function Field({ id, label, children }: { id: string; label: string; children: R
   );
 }
 
-/** Dev-only showcase (route `/_ui`): every ui component and variant plus the OpenCMS components. */
+/** Dev-only showcase (route `/_ui`): every ui component and variant plus the OpenCloudCMS components. */
 export function UiKit() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
   const [confirm, setConfirm] = useState<'normal' | 'destructive' | null>(null);

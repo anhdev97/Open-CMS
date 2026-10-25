@@ -2,16 +2,18 @@ import { headers } from 'next/headers';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import Providers from './Providers';
+import { favicon } from './brand';
 
 export const metadata: Metadata = {
-  title: 'OpenCMS Admin',
+  title: 'OpenCloudCMS Admin',
+  icons: { icon: { url: favicon, type: 'image/svg+xml' } },
   robots: { index: false, follow: false },
 };
 
 const THEME_SCRIPT = `
       (function () {
         try {
-          var t = localStorage.getItem('opencms-theme');
+          var t = localStorage.getItem('opencloudcms-theme');
           var dark = t === 'dark' || ((t !== 'light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
           document.documentElement.classList.toggle('dark', dark);
         } catch (e) {}
@@ -26,7 +28,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
       <head>
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
-      <body data-opencms-admin="">
+      <body data-opencloudcms-admin="">
         <Providers>{children}</Providers>
       </body>
     </html>

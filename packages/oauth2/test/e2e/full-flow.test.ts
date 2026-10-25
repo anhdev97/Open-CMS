@@ -9,7 +9,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 describe('e2e: setup → login → me → access expiry → refresh → logout → 401', () => {
   let t: TestApp;
   beforeAll(async () => {
-    t = await createTestApp({ OPENCMS_AUTH_TTL_ACCESS: '2' });
+    t = await createTestApp({ OPENCLOUDCMS_AUTH_TTL_ACCESS: '2' });
   });
   afterAll(async () => {
     await t?.close();

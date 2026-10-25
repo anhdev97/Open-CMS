@@ -1,5 +1,5 @@
 import { LanguagesIcon, ShieldCheckIcon, UsersIcon, WrenchIcon, type LucideIcon } from 'lucide-react';
-import type { Permission } from '@opencms/schema';
+import type { Permission } from '@opencloudcms/schema';
 
 export interface SettingsItem {
   to: string;

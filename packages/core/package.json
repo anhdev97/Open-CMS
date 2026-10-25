@@ -1,7 +1,8 @@
 {
-  "name": "@opencms/core",
+  "name": "@opencloudcms/core",
+  "publishConfig": { "access": "public" },
   "version": "0.1.0",
-  "description": "NestJS modules for opencms: content engine, admin and storefront APIs",
+  "description": "NestJS modules for OpenCloudCMS: content engine, admin and storefront APIs",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,16 +10,17 @@
     "dist"
   ],
   "scripts": {
-    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json && tsc -p admin/tsconfig.json && node -e \"require('fs').cpSync('admin/src/styles/theme.css','dist/admin/styles/theme.css')\"",
+    "build": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.mkdirSync('dist/admin/styles',{recursive:true});fs.copyFileSync('admin/src/styles/theme.css','dist/admin/styles/theme.css')\" && tsc -p tsconfig.json && tsc -p admin/tsconfig.json && node -e \"require('fs').cpSync('admin/src/styles/theme.css','dist/admin/styles/theme.css')\"",
     "dev:admin": "tsc -w -p admin/tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p admin/tsconfig.json --noEmit"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
-    "@opencms/codegen": "workspace:*",
-    "@opencms/db": "workspace:*",
-    "@opencms/oauth2": "workspace:*",
-    "@opencms/schema": "workspace:*",
+    "@opencloudcms/assets": "workspace:*",
+    "@opencloudcms/codegen": "workspace:*",
+    "@opencloudcms/db": "workspace:*",
+    "@opencloudcms/oauth2": "workspace:*",
+    "@opencloudcms/schema": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "express": "^5.2.1",

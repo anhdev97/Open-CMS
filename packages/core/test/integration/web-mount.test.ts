@@ -20,7 +20,7 @@ function fakeNext() {
   return { loadNext, close };
 }
 
-describe('web host mounted in OpenCmsModule', () => {
+describe('web host mounted in OpenCloudCmsModule', () => {
   let t: CoreTestApp | undefined;
   afterEach(async () => {
     await t?.close();

@@ -1,7 +1,7 @@
 /**
  * Content Type Builder API (dev only). The UI sends a definition; this writes
- * the *.schema.ts file and runs the same pipeline as `opencms migrate:create`
- * followed by `opencms migrate:up`. The generated files are what you commit.
+ * the *.schema.ts file and runs the same pipeline as `opencloudcms migrate:create`
+ * followed by `opencloudcms migrate:up`. The generated files are what you commit.
  */
 import * as path from 'node:path';
 import {
@@ -18,12 +18,12 @@ import {
   Post,
 } from '@nestjs/common';
 import type { Kysely } from 'kysely';
-import { RequirePermission } from '@opencms/oauth2';
-import { captureProjectFiles, createMigration, DiffError, previewChange, restoreProjectFiles, writeSchemaChange } from '@opencms/codegen';
-import { migrateUp } from '@opencms/db';
-import type { ContentTypeDefinition } from '@opencms/schema';
-import { FIELD_KINDS, SchemaValidationError, newId } from '@opencms/schema';
-import { OPENCMS_DB, OPENCMS_OPTIONS, type ResolvedOpenCmsOptions } from './options';
+import { RequirePermission } from '@opencloudcms/oauth2';
+import { captureProjectFiles, createMigration, DiffError, previewChange, restoreProjectFiles, writeSchemaChange } from '@opencloudcms/codegen';
+import { migrateUp } from '@opencloudcms/db';
+import type { ContentTypeDefinition } from '@opencloudcms/schema';
+import { FIELD_KINDS, SchemaValidationError, newId } from '@opencloudcms/schema';
+import { OPENCLOUDCMS_DB, OPENCLOUDCMS_OPTIONS, type ResolvedOpenCloudCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
 import { SchemaWriteQueue } from './schema-write-queue';
 
@@ -37,8 +37,8 @@ function toHttp(e: unknown): never {
 @Injectable()
 export class SchemaBuilderService {
   constructor(
-    @Inject(OPENCMS_OPTIONS) private readonly options: ResolvedOpenCmsOptions,
-    @Inject(OPENCMS_DB) private readonly db: Kysely<any>,
+    @Inject(OPENCLOUDCMS_OPTIONS) private readonly options: ResolvedOpenCloudCmsOptions,
+    @Inject(OPENCLOUDCMS_DB) private readonly db: Kysely<any>,
     @Inject(ContentRegistry) private readonly registry: ContentRegistry,
     @Inject(SchemaWriteQueue) private readonly queue: SchemaWriteQueue,
   ) {}
@@ -101,7 +101,7 @@ export class SchemaController {
   constructor(
     @Inject(SchemaBuilderService) private readonly builder: SchemaBuilderService,
     @Inject(ContentRegistry) private readonly registry: ContentRegistry,
-    @Inject(OPENCMS_OPTIONS) private readonly options: ResolvedOpenCmsOptions,
+    @Inject(OPENCLOUDCMS_OPTIONS) private readonly options: ResolvedOpenCloudCmsOptions,
   ) {}
 
   /** Read by every admin page (nav, locales, groups): a session is enough, no permission. */

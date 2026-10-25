@@ -38,7 +38,7 @@ export class PasswordService {
 
   /** Burns comparable time against a cached hash when the account does not exist. */
   async verifyDummy(p: string): Promise<false> {
-    this.dummyHash ??= this.hash('opencms-dummy-password');
+    this.dummyHash ??= this.hash('opencloudcms-dummy-password');
     await this.verify(await this.dummyHash, p);
     return false;
   }

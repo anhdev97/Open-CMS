@@ -7,7 +7,7 @@ const urlencoded = express.urlencoded({ extended: false, limit: '1mb' });
 
 const INTERACTION_PREFIX = '/oauth2/interaction/';
 
-/** oidc-provider's own endpoints. The interaction routes are Nest controllers in @opencms/oauth2 and need the body. */
+/** oidc-provider's own endpoints. The interaction routes are Nest controllers in @opencloudcms/oauth2 and need the body. */
 const isProviderPath = (rawPath: string): boolean => {
   const path = rawPath.toLowerCase(); // Express routing is case-insensitive
   return (path === '/oauth2' || path.startsWith('/oauth2/')) && !path.startsWith(INTERACTION_PREFIX);

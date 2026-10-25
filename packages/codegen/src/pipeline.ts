@@ -9,8 +9,8 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ContentTypeDefinition, ResolvedConfig } from '@opencms/schema';
-import { assertValidSchema, normalizeDefinition } from '@opencms/schema';
+import type { ContentTypeDefinition, ResolvedConfig } from '@opencloudcms/schema';
+import { assertValidSchema, normalizeDefinition } from '@opencloudcms/schema';
 import { generateCode, staleGeneratedFiles, writeGeneratedFiles } from './codegen';
 import { compileStatement } from './ddl';
 import { diffSchemas, type DiffResult } from './diff';
@@ -110,12 +110,12 @@ export async function checkSchema(config: ResolvedConfig): Promise<SchemaCheck> 
   if (result.diff.changed) {
     problems.push(
       result.diff.operations.length
-        ? `Schema changed without a migration (${result.plan.summary.join('; ')}). Run \`opencms migrate:create\`.`
-        : 'Schema metadata changed; run `opencms migrate:create` to update migrations/_snapshot.json.',
+        ? `Schema changed without a migration (${result.plan.summary.join('; ')}). Run \`opencloudcms migrate:create\`.`
+        : 'Schema metadata changed; run `opencloudcms migrate:create` to update migrations/_snapshot.json.',
     );
   }
   for (const f of staleGeneratedFiles(generateCode(result.definitions, config.generatedDir))) {
-    problems.push(`Generated file is stale: ${path.relative(config.root, f)}. Run \`opencms generate\`.`);
+    problems.push(`Generated file is stale: ${path.relative(config.root, f)}. Run \`opencloudcms generate\`.`);
   }
   return { ok: problems.length === 0, problems };
 }

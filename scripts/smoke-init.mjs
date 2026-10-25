@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Smoke test for `opencms init` (spec §8): scaffold a project linked to this repo, install, migrate,
+// Smoke test for `opencloudcms init` (spec §8): scaffold a project linked to this repo, install, migrate,
 // add a review-workflow content type (generate + migrate:create), build it, run it in production and walk the site/admin checks,
 // the setup/login/logout chain and the groups + review workflow (Contenter submits, Reviewer rejects then approves) over HTTP.
 // Exit code 0 = pass, 1 = fail.
@@ -123,13 +123,13 @@ async function main() {
   const email = 'admin@example.com';
 
   // 1. scaffold, DB, install, migrate, boot
-  tmp = mkdtempSync(join(tmpdir(), 'opencms-smoke-'));
+  tmp = mkdtempSync(join(tmpdir(), 'opencloudcms-smoke-'));
   const app = join(tmp, 'app');
   await withAdminDb((c) => c.query(`CREATE DATABASE "${dbName}"`));
   log(`created database ${dbName}`);
   const port = await freePort();
-  run('node', [join(repo, 'packages/cli/bin/opencms.js'), 'init', app, '--link', repo, '--no-install', '--db-url', dbUrl.toString(), '--port', String(port)]);
-  ok('opencms init (linked, --no-install)');
+  run('node', [join(repo, 'packages/cli/bin/opencloudcms.js'), 'init', app, '--link', repo, '--no-install', '--db-url', dbUrl.toString(), '--port', String(port)]);
+  ok('opencloudcms init (linked, --no-install)');
   for (const f of ['src/locales.ts', 'src/content-groups.ts', 'app/(site)/messages.ts']) assert(existsSync(join(app, f)), `init did not write ${f}`);
   assert(readFileSync(join(app, 'src/locales.ts'), 'utf8').includes("locales: ['en-US']"), 'src/locales.ts is not en-US only');
   ok('src/locales.ts (en-US), src/content-groups.ts, app/(site)/messages.ts present');
@@ -145,7 +145,7 @@ async function main() {
   mkdirSync(articleDir, { recursive: true });
   writeFileSync(
     join(articleDir, 'article.schema.ts'),
-    `import { defineContentType, f } from '@opencms/schema';
+    `import { defineContentType, f } from '@opencloudcms/schema';
 
 export default defineContentType({
   id: 'ct_smokearticle',
@@ -159,12 +159,12 @@ export default defineContentType({
 });
 `,
   );
-  const cli = join(app, 'node_modules/opencms-cli/bin/opencms.js');
+  const cli = join(app, 'node_modules/@opencloudcms/cli/bin/opencloudcms.js');
   run('node', [cli, 'generate'], { cwd: app });
   run('node', [cli, 'migrate:create', 'add-article'], { cwd: app });
   assert(readFileSync(join(app, 'src/generated/registry.ts'), 'utf8').match(/"?review"?: true/), 'generated registry lacks review: true for article');
   assert(readFileSync(join(app, 'migrations/_snapshot.json'), 'utf8').includes('"article"'), 'migrations/_snapshot.json lacks article');
-  ok('article schema (review: true) -> opencms generate + opencms migrate:create');
+  ok('article schema (review: true) -> opencloudcms generate + opencloudcms migrate:create');
 
   // Registry-install approximation: with symlinks preserved, @types/node must come from the project's own devDependencies.
   run('node', [join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.server.json', '--noEmit', '--preserveSymlinks'], { cwd: app });
@@ -172,17 +172,17 @@ export default defineContentType({
 
   const env = { ...process.env, PORT: String(port) };
   delete env.NODE_ENV;
-  delete env.OPENCMS_PUBLIC_URL;
+  delete env.OPENCLOUDCMS_PUBLIC_URL;
   delete env.DATABASE_URL;
   // the project's `build` script: Nest (tsc) then Next
   run('node', [join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.server.json'], { cwd: app, env });
   run('node', [join(app, 'node_modules/next/dist/bin/next'), 'build'], { cwd: app, env });
   ok('project build (tsc -p tsconfig.server.json + next build)');
   run('node', [cli, 'migrate:up'], { cwd: app, env });
-  ok('opencms migrate:up');
+  ok('opencloudcms migrate:up');
 
   const publicUrl = `http://localhost:${port}`;
-  const prodEnv = { ...env, NODE_ENV: 'production', OPENCMS_PUBLIC_URL: publicUrl };
+  const prodEnv = { ...env, NODE_ENV: 'production', OPENCLOUDCMS_PUBLIC_URL: publicUrl };
   server = spawn('node', ['dist/src/main.js'], { cwd: app, env: prodEnv, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
   for (const s of [server.stdout, server.stderr]) s.on('data', (d) => (serverLog += d));
   let exitedEarly = false;
@@ -248,9 +248,9 @@ export default defineContentType({
   const siteHtml = await siteRes.text();
   assert(siteRes.status === 200, `GET / -> ${siteRes.status}`);
   assert((siteRes.headers.get('content-type') ?? '').startsWith('text/html'), 'GET / is not text/html');
-  assert(siteHtml.includes('data-opencms-site'), 'GET / lacks data-opencms-site');
+  assert(siteHtml.includes('data-opencloudcms-site'), 'GET / lacks data-opencloudcms-site');
   assert(!siteRes.headers.has('content-security-policy'), 'GET / must not carry a Content-Security-Policy');
-  const tagline = 'A website and its OpenCMS admin, served by one Next.js app.';
+  const tagline = 'A website and its OpenCloudCMS admin, served by one Next.js app.';
   assert(readFileSync(join(app, 'app/(site)/messages.ts'), 'utf8').includes(tagline), 'messages.ts lacks the en-US tagline');
   assert(siteHtml.includes(tagline), 'GET / lacks the en-US string of app/(site)/messages.ts');
 
@@ -269,7 +269,7 @@ export default defineContentType({
   assert(scripts.length > 0, 'GET /admin has no <script>');
   for (const tag of scripts) assert(tag.includes(`nonce="${nonce}"`), `script without the CSP nonce: ${tag}`);
   assert((adminRes.headers.get('x-robots-tag') ?? '').includes('noindex'), 'GET /admin lacks X-Robots-Tag: noindex');
-  assert(html.includes('data-opencms-admin'), 'GET /admin lacks data-opencms-admin');
+  assert(html.includes('data-opencloudcms-admin'), 'GET /admin lacks data-opencloudcms-admin');
 
   const asset = /\/_next\/static\/[^"'\s)\\]+/.exec(html)?.[0];
   assert(asset, 'GET /admin references no /_next/static/ URL');

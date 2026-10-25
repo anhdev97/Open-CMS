@@ -1,13 +1,13 @@
 import { Inject, Injectable, type NestMiddleware } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
-import { OPENCMS_OPTIONS, type ResolvedOpenCmsOptions } from '../options';
+import { OPENCLOUDCMS_OPTIONS, type ResolvedOpenCloudCmsOptions } from '../options';
 
 /** CORS for the public delivery API only: exact origins from `cors.origins`, read-only methods, no credentials. */
 @Injectable()
 export class ContentCorsMiddleware implements NestMiddleware {
   private readonly origins: ReadonlySet<string>;
 
-  constructor(@Inject(OPENCMS_OPTIONS) options: ResolvedOpenCmsOptions) {
+  constructor(@Inject(OPENCLOUDCMS_OPTIONS) options: ResolvedOpenCloudCmsOptions) {
     this.origins = new Set(options.cors?.origins ?? []);
   }
 

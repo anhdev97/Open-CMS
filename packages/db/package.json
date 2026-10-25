@@ -1,7 +1,8 @@
 {
-  "name": "@opencms/db",
+  "name": "@opencloudcms/db",
+  "publishConfig": { "access": "public" },
   "version": "0.1.0",
-  "description": "Database connection, system migrations and migrator for opencms",
+  "description": "Database connection, system migrations and migrator for OpenCloudCMS",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -13,7 +14,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@opencms/schema": "workspace:*",
+    "@opencloudcms/schema": "workspace:*",
     "jiti": "^2.4.0",
     "kysely": "^0.28.0",
     "pg": "^8.13.0"

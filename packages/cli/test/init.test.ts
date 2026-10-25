@@ -8,7 +8,7 @@ import { dbNameFor, packageNameFor } from '../src/init/names';
 
 let tmp: string;
 beforeEach(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'opencms-init-'));
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'opencloudcms-init-'));
 });
 afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
@@ -26,14 +26,14 @@ describe('names', () => {
   it('packageNameFor', () => {
     expect(packageNameFor('/x/My Shop')).toBe('my-shop');
     expect(packageNameFor('/x/shop-2026')).toBe('shop-2026');
-    expect(packageNameFor('/x/@@@')).toBe('opencms-project');
+    expect(packageNameFor('/x/@@@')).toBe('opencloudcms-project');
     expect(packageNameFor('/x/.hidden_app')).toBe('hidden_app');
     expect(packageNameFor('/x/_x')).toBe('x');
   });
   it('dbNameFor', () => {
     expect(dbNameFor('/x/My Shop')).toBe('my_shop');
     expect(dbNameFor('/x/2026shop')).toBe('db_2026shop');
-    expect(dbNameFor('/x/---')).toBe('opencms');
+    expect(dbNameFor('/x/---')).toBe('opencloudcms');
     expect(dbNameFor('/x/' + 'a'.repeat(80))).toHaveLength(63);
   });
 });
@@ -62,7 +62,7 @@ describe('runInit', () => {
       'migrations/_snapshot.json',
       'next-env.d.ts',
       'next.config.ts',
-      'opencms.config.ts',
+      'opencloudcms.config.ts',
       'package.json',
       'postcss.config.mjs',
       'src/app.module.ts',
@@ -110,10 +110,10 @@ describe('runInit', () => {
     const b = path.join(tmp, 'b');
     await runInit(a, base);
     await runInit(b, base);
-    const sa = envOf(a).OPENCMS_SECRET;
+    const sa = envOf(a).OPENCLOUDCMS_SECRET;
     expect(Buffer.from(sa, 'base64url')).toHaveLength(32);
-    expect(sa).not.toBe(envOf(b).OPENCMS_SECRET);
-    expect(envOf(a, '.env.example').OPENCMS_SECRET).toBe('');
+    expect(sa).not.toBe(envOf(b).OPENCLOUDCMS_SECRET);
+    expect(envOf(a, '.env.example').OPENCLOUDCMS_SECRET).toBe('');
     expect(read(a, '.gitignore')).toContain('.env');
   });
 
@@ -121,9 +121,9 @@ describe('runInit', () => {
     const dir = path.join(tmp, 'a');
     await runInit(dir, { ...base, cliVersion: '1.2.3' });
     const pkg = JSON.parse(read(dir, 'package.json'));
-    expect(pkg.dependencies['@opencms/core']).toBe('^1.2.3');
+    expect(pkg.dependencies['@opencloudcms/core']).toBe('^1.2.3');
     expect(pkg.dependencies['@nestjs/core']).toBe('^11.0.0');
-    expect(pkg.devDependencies['opencms-cli']).toBe('^1.2.3');
+    expect(pkg.devDependencies['@opencloudcms/cli']).toBe('^1.2.3');
     expect(pkg.devDependencies['@types/node']).toBe('^22.0.0');
     expect(read(dir, 'README.md')).toContain('Install with dev dependencies');
     expect(pkg.dependencies).toMatchObject({ next: '^16.4.2', react: '^19.3.1', 'react-dom': '^19.3.1', 'cross-env': '^10.1.0' });
@@ -135,10 +135,10 @@ describe('runInit', () => {
       '@types/react-dom': '^19.3.0',
     });
     expect(pkg.scripts).toEqual({
-      dev: 'opencms migrate:up && tsx --tsconfig tsconfig.server.json src/main.ts',
+      dev: 'opencloudcms migrate:up && tsx --tsconfig tsconfig.server.json src/main.ts',
       build: 'tsc -p tsconfig.server.json && next build',
-      start: 'cross-env NODE_ENV=production opencms migrate:up && cross-env NODE_ENV=production node dist/src/main.js',
-      opencms: 'opencms',
+      start: 'cross-env NODE_ENV=production opencloudcms migrate:up && cross-env NODE_ENV=production node dist/src/main.js',
+      opencloudcms: 'opencloudcms',
     });
     const readme = read(dir, 'README.md');
     expect(readme).toContain('web: { enabled: false }');
@@ -150,18 +150,18 @@ describe('runInit', () => {
     await runInit(dir, base);
     const server = JSON.parse(read(dir, 'tsconfig.server.json'));
     expect(server.compilerOptions.experimentalDecorators).toBe(true);
-    expect(server.include).toEqual(['src', 'opencms.config.ts']);
+    expect(server.include).toEqual(['src', 'opencloudcms.config.ts']);
     const next = JSON.parse(read(dir, 'tsconfig.json'));
     expect(next.compilerOptions.jsx).toBe('react-jsx');
     expect(next.compilerOptions.moduleResolution).toBe('bundler');
     expect(next.compilerOptions.plugins).toEqual([{ name: 'next' }]);
     expect(read(dir, '.gitignore')).toContain('.next/');
-    expect(read(dir, 'app/(admin)/layout.tsx')).toContain("from '@opencms/core/admin/layout'");
-    expect(read(dir, 'app/(admin)/admin/[[...slug]]/page.tsx')).toContain("from '@opencms/core/admin'");
+    expect(read(dir, 'app/(admin)/layout.tsx')).toContain("from '@opencloudcms/core/admin/layout'");
+    expect(read(dir, 'app/(admin)/admin/[[...slug]]/page.tsx')).toContain("from '@opencloudcms/core/admin'");
     expect(read(dir, 'app/(site)/layout.tsx')).toContain("title: 'my-shop'");
-    expect(read(dir, 'app/(site)/page.tsx')).toContain('data-opencms-site');
+    expect(read(dir, 'app/(site)/page.tsx')).toContain('data-opencloudcms-site');
     expect(read(dir, 'app/(site)/page.tsx')).toContain('>my-shop</h1>');
-    expect(read(dir, 'app/globals.css')).toContain('@opencms/core/admin/theme.css');
+    expect(read(dir, 'app/globals.css')).toContain('@opencloudcms/core/admin/theme.css');
     expect(read(dir, 'postcss.config.mjs')).toContain('@tailwindcss/postcss');
     const cfg = read(dir, 'next.config.ts');
     expect(cfg).not.toContain('turbopack');
@@ -172,36 +172,39 @@ describe('runInit', () => {
     const dir = path.join(tmp, 'My Shop');
     await runInit(dir, base);
     const locales = read(dir, 'src/locales.ts');
-    expect(locales).toContain("import { defineLocales } from '@opencms/schema';");
+    expect(locales).toContain("import { defineLocales } from '@opencloudcms/schema';");
     expect(locales).toContain("defaultLocale: 'en-US'");
     expect(locales).toContain("locales: ['en-US']");
     const groups = read(dir, 'src/content-groups.ts');
-    expect(groups).toContain("import { defineContentGroups } from '@opencms/schema';");
+    expect(groups).toContain("import { defineContentGroups } from '@opencloudcms/schema';");
     expect(groups).toMatch(/export default defineContentGroups\(\[\s*\]\);/);
-    const cfg = read(dir, 'opencms.config.ts');
+    const cfg = read(dir, 'opencloudcms.config.ts');
+    expect(cfg).toContain("from '@opencloudcms/schema'");
     expect(cfg).toContain("import locales from './src/locales';");
     expect(cfg).toContain('...locales');
     expect(cfg).not.toContain('defaultLocale:');
     const mod = read(dir, 'src/app.module.ts');
+    expect(mod).toContain("import { OpenCloudCmsModule } from '@opencloudcms/core';");
+    expect(mod).toContain('OpenCloudCmsModule.forRoot({');
     expect(mod).toContain("import contentGroups from './content-groups';");
     expect(mod).toMatch(/\n\s+contentGroups,\n/);
-    // @opencms/core resolves to a Nest-free module under react-server; externalizing it would also
-    // externalize @opencms/core/admin (client components) and break the admin build.
+    // @opencloudcms/core resolves to a Nest-free module under react-server; externalizing it would also
+    // externalize @opencloudcms/core/admin (client components) and break the admin build.
     const next = read(dir, 'next.config.ts');
     expect(next).not.toContain('serverExternalPackages');
-    expect(next).toContain('@opencms/core/admin');
+    expect(next).toContain('@opencloudcms/core/admin');
     const messages = read(dir, 'app/(site)/messages.ts');
-    expect(messages).toContain("import { defineMessages } from '@opencms/core';");
+    expect(messages).toContain("import { defineMessages } from '@opencloudcms/core';");
     expect(messages).toContain("'en-US': {");
     expect(messages).toContain("'vi-VN': {");
-    expect(messages).toContain('A website and its OpenCMS admin, served by one Next.js app.');
+    expect(messages).toContain('A website and its OpenCloudCMS admin, served by one Next.js app.');
     const page = read(dir, 'app/(site)/page.tsx');
-    expect(page).toContain("import { createTranslator } from '@opencms/core';");
+    expect(page).toContain("import { createTranslator } from '@opencloudcms/core';");
     expect(page).toContain("import locales from '../../src/locales';");
     expect(page).toContain("import { messages } from './messages';");
     expect(page).toContain('createTranslator(messages, locales.defaultLocale)');
     expect(read(dir, 'app/(site)/layout.tsx')).toContain('lang={locales.defaultLocale}');
-    for (const f of ['src/locales.ts', 'src/content-groups.ts', 'app/(site)/messages.ts', 'app/(site)/page.tsx', 'opencms.config.ts', 'src/app.module.ts']) {
+    for (const f of ['src/locales.ts', 'src/content-groups.ts', 'app/(site)/messages.ts', 'app/(site)/page.tsx', 'opencloudcms.config.ts', 'src/app.module.ts']) {
       const out = ts.transpileModule(read(dir, f), { reportDiagnostics: true, compilerOptions: { jsx: ts.JsxEmit.ReactJSX } });
       expect(out.diagnostics ?? [], f).toEqual([]);
     }
@@ -219,9 +222,9 @@ describe('runInit', () => {
     const dir = path.join(tmp, 'a');
     await runInit(dir, { ...base, link: repo });
     const pkg = JSON.parse(read(dir, 'package.json'));
-    expect(pkg.dependencies['@opencms/core']).toBe(`link:${repo}/packages/core`);
-    expect(pkg.dependencies['@opencms/schema']).toBe(`link:${repo}/packages/schema`);
-    expect(pkg.devDependencies['opencms-cli']).toBe(`link:${repo}/packages/cli`);
+    expect(pkg.dependencies['@opencloudcms/core']).toBe(`link:${repo}/packages/core`);
+    expect(pkg.dependencies['@opencloudcms/schema']).toBe(`link:${repo}/packages/schema`);
+    expect(pkg.devDependencies['@opencloudcms/cli']).toBe(`link:${repo}/packages/cli`);
     expect(pkg.devDependencies['@types/node']).toBe('^22.0.0');
     expect(pkg.dependencies['@nestjs/core']).toBe(`link:${fs.realpathSync(path.join(store, '@nestjs/core'))}`);
     expect(pkg.dependencies.rxjs).toBe(`link:${fs.realpathSync(path.join(store, 'rxjs'))}`);
@@ -237,7 +240,7 @@ describe('runInit', () => {
     const dir = path.join(tmp, 'a');
     await runInit(dir, { ...base, link: '/x' });
     const pkg = JSON.parse(read(dir, 'package.json'));
-    expect(pkg.dependencies['@opencms/core']).toBe('link:/x/packages/core');
+    expect(pkg.dependencies['@opencloudcms/core']).toBe('link:/x/packages/core');
     expect(pkg.dependencies['@nestjs/core']).toBe('^11.0.0');
   });
 
@@ -279,9 +282,9 @@ describe('runInit', () => {
     const main = read(dir, 'src/main.ts');
     expect(main).toContain('bodyParser: false');
     expect(main).toContain('process.loadEnvFile');
-    expect(main).toContain('enableShutdownHooks');
+    expect(main).toContain("enableShutdownHooks(['SIGINT', 'SIGTERM'], { useProcessExit: true })");
     expect(main).toContain('process.env.PORT ?? 4000');
-    expect(main).toContain('OpenCMS ready at');
+    expect(main).toContain('OpenCloudCMS ready at');
     expect(main).toContain('Admin: ');
     expect(main).toContain('process.exit(1)');
     expect(main).not.toContain('enableCors');

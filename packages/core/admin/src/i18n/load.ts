@@ -1,4 +1,4 @@
-import type { Locale } from '@opencms/schema';
+import type { Locale } from '@opencloudcms/schema';
 import { enUS, type Messages } from './messages/en-US';
 
 /** Lazy loaders for non-default bundles (one entry per file in ./messages). */

@@ -1,7 +1,7 @@
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { defineContentType, f } from '@opencms/schema';
-import { UserService } from '@opencms/oauth2';
+import { defineContentType, f } from '@opencloudcms/schema';
+import { UserService } from '@opencloudcms/oauth2';
 import { loginAs } from '../../../oauth2/test/support/login';
 import { createCoreTestApp, type CoreTestApp } from '../support/core-app';
 

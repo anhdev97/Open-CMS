@@ -7,7 +7,7 @@ import * as rsc from '../../src/i18n';
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf8'));
 const I18N = ['SUPPORTED_LOCALES', 'isLocale', 'matchLocale', 'localizedText', 'defineMessages', 'createTranslator', 'formatDateTime', 'formatNumber'];
 
-describe('@opencms/core react-server entry', () => {
+describe('@opencloudcms/core react-server entry', () => {
   it('server components resolve "." to the Nest-free i18n module', () => {
     const dot = pkg.exports['.'];
     expect(Object.keys(dot)).toEqual(['types', 'react-server', 'default']);
@@ -20,9 +20,9 @@ describe('@opencms/core react-server entry', () => {
     for (const k of I18N) expect((rsc as Record<string, unknown>)[k]).toBe((core as Record<string, unknown>)[k]);
   });
 
-  it('imports nothing but @opencms/schema', () => {
+  it('imports nothing but @opencloudcms/schema', () => {
     const src = fs.readFileSync(path.join(__dirname, '../../src/i18n.ts'), 'utf8');
     const specifiers = [...src.matchAll(/from '([^']+)'/g)].map((m) => m[1]);
-    expect(new Set(specifiers)).toEqual(new Set(['@opencms/schema']));
+    expect(new Set(specifiers)).toEqual(new Set(['@opencloudcms/schema']));
   });
 });

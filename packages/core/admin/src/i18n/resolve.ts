@@ -1,4 +1,4 @@
-import { isLocale, matchLocale, type Locale } from '@opencms/schema';
+import { isLocale, matchLocale, type Locale } from '@opencloudcms/schema';
 
 export function resolveAdminLocale({
   userLocale,

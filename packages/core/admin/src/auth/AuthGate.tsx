@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Locale } from '@opencms/schema';
+import type { Locale } from '@opencloudcms/schema';
 import { toast } from 'sonner';
 import { AppLayout } from '../components/AppLayout';
 import { ErrorAlert } from '../components/ErrorAlert';

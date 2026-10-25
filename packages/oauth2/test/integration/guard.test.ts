@@ -112,14 +112,14 @@ const clearsSession = (c: Call) =>
     return parts[0] === 'oc_session=' && parts.includes('path=/') && parts.includes('max-age=0') && parts.includes('httponly');
   });
 
-/** Presents a refresh token straight at the provider's token endpoint as opencms-admin. */
+/** Presents a refresh token straight at the provider's token endpoint as opencloudcms-admin. */
 async function useRefreshToken(t: TestApp, refreshToken: string): Promise<{ status: number; body: any }> {
   const secret = adminClientSecret(t.app.get(OAUTH2_CONFIG));
   const res = await fetch(`${t.url}/oauth2/token`, {
     method: 'POST',
     headers: {
       'content-type': 'application/x-www-form-urlencoded',
-      authorization: `Basic ${Buffer.from(`opencms-admin:${secret}`).toString('base64')}`,
+      authorization: `Basic ${Buffer.from(`opencloudcms-admin:${secret}`).toString('base64')}`,
     },
     body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }).toString(),
   });
@@ -396,7 +396,7 @@ describe('AuthGuard refresh (access TTL 2 s)', () => {
   let api: ReturnType<typeof client>;
 
   beforeAll(async () => {
-    t = await createTestApp({ OPENCMS_AUTH_TTL_ACCESS: '2' }, { auth, controllers });
+    t = await createTestApp({ OPENCLOUDCMS_AUTH_TTL_ACCESS: '2' }, { auth, controllers });
     api = client(t);
     await t.app.get(UserService).create({ email: 'admin@x.com', name: 'Admin', password: PW });
   });

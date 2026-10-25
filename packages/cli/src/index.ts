@@ -1,5 +1,5 @@
 // Registers the oauth2 core migrations so migrate:up/status see them (R8). Nest-free entry.
-import '@opencms/oauth2/migrations';
+import '@opencloudcms/oauth2/migrations';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Command } from 'commander';
@@ -13,12 +13,12 @@ import {
   loadConfig,
   loadDefinitions,
   writeSchemaChange,
-} from '@opencms/codegen';
+} from '@opencloudcms/codegen';
 import { loadProjectEnv } from './env';
 import { nextSteps, runInit } from './init';
-import { createDb, migrateDown, migrateUp, migrationStatus } from '@opencms/db';
-import type { ContentTypeDefinition, FieldDefinition, FieldKind, ResolvedConfig } from '@opencms/schema';
-import { FIELD_KINDS, newId, SchemaValidationError } from '@opencms/schema';
+import { createDb, migrateDown, migrateUp, migrationStatus } from '@opencloudcms/db';
+import type { ContentTypeDefinition, FieldDefinition, FieldKind, ResolvedConfig } from '@opencloudcms/schema';
+import { FIELD_KINDS, newId, SchemaValidationError } from '@opencloudcms/schema';
 
 const c = {
   green: (s: string) => `\x1b[32m${s}\x1b[0m`,
@@ -29,7 +29,7 @@ const c = {
 };
 
 async function project(): Promise<ResolvedConfig> {
-  const root = findProjectRoot(process.env.OPENCMS_ROOT ?? process.cwd());
+  const root = findProjectRoot(process.env.OPENCLOUDCMS_ROOT ?? process.cwd());
   loadProjectEnv(root);
   return loadConfig(root);
 }
@@ -37,7 +37,7 @@ async function project(): Promise<ResolvedConfig> {
 const rel = (config: ResolvedConfig, p: string) => path.relative(config.root, p) || '.';
 
 async function withDb<T>(config: ResolvedConfig, fn: (db: ReturnType<typeof createDb>) => Promise<T>): Promise<T> {
-  if (!config.database?.url) throw new Error('database.url is not set in opencms.config.ts (usually from DATABASE_URL).');
+  if (!config.database?.url) throw new Error('database.url is not set in opencloudcms.config.ts (usually from DATABASE_URL).');
   const db = createDb(config.database.url);
   try {
     return await fn(db);
@@ -56,7 +56,7 @@ function run(fn: (...args: any[]) => Promise<void>) {
         for (const i of e.issues) console.error(`  - ${i}`);
       } else {
         console.error(c.red((e as Error).message ?? String(e)));
-        if (process.env.OPENCMS_DEBUG) console.error(e);
+        if (process.env.OPENCLOUDCMS_DEBUG) console.error(e);
       }
       process.exitCode = 1;
     }
@@ -109,16 +109,16 @@ export function parseFieldSpec(spec: string): FieldDefinition {
 }
 
 const program = new Command();
-program.name('opencms').description('opencms-cli: schema-as-code headless CMS tooling').version('0.1.0');
+program.name('opencloudcms').description('@opencloudcms/cli: schema-as-code headless CMS tooling').version('0.1.0');
 
 program
   .command('init <dir>')
-  .description('Scaffold a new OpenCMS project in <dir>')
+  .description('Scaffold a new OpenCloudCMS project in <dir>')
   .option('--pm <pm>', 'package manager: pnpm | npm | yarn')
   .option('--no-install', 'do not install dependencies')
   .option('--db-url <url>', 'database URL written to .env')
   .option('--port <n>', 'server port', '4000')
-  .option('--link <path>', 'link internal packages from an opencms monorepo checkout')
+  .option('--link <path>', 'link internal packages from an OpenCloudCMS monorepo checkout')
   .action(
     run(async (dir: string, opts: { pm?: string; install: boolean; dbUrl?: string; port: string; link?: string }) => {
       if (opts.pm && !['pnpm', 'npm', 'yarn'].includes(opts.pm)) throw new Error(`Unknown package manager "${opts.pm}". Use pnpm, npm or yarn.`);
@@ -176,7 +176,7 @@ program
       }
       console.log(`${c.green('✓')} Created ${c.bold(rel(config, r.file))}`);
       printPlan(r.plan.plan.summary, r.plan.plan.warnings);
-      console.log(c.dim('\n  Review the file, then run `opencms migrate:up`.'));
+      console.log(c.dim('\n  Review the file, then run `opencloudcms migrate:up`.'));
     }),
   );
 

@@ -1,4 +1,4 @@
-import type { Locale } from '@opencms/schema';
+import type { Locale } from '@opencloudcms/schema';
 import { createParamDecorator, SetMetadata, type ExecutionContext } from '@nestjs/common';
 import type { Permission } from '../permissions';
 

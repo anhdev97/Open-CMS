@@ -9,7 +9,7 @@ import {
   printLocalesFile,
   writeGeneratedFiles,
   writeSnapshot,
-} from '@opencms/codegen';
+} from '@opencloudcms/codegen';
 import { dbNameFor, packageNameFor } from './names';
 import * as t from './templates';
 
@@ -20,7 +20,7 @@ export interface InitOptions {
   install?: boolean;
   dbUrl?: string;
   port?: number;
-  /** Path of an opencms monorepo checkout: internal packages are linked instead of installed. */
+  /** Path of an OpenCloudCMS monorepo checkout: internal packages are linked instead of installed. */
   link?: string;
   cliVersion: string;
   userAgent?: string;
@@ -65,7 +65,7 @@ export function detectPm(userAgent?: string): t.PackageManager | undefined {
   return m ? (m[1] as t.PackageManager) : undefined;
 }
 
-/** Real path of the package root (undefined when `repo` has no packages/core) that `@opencms/core` (at `<repo>/packages/core`) resolves `name` to. */
+/** Real path of the package root (undefined when `repo` has no packages/core) that `@opencloudcms/core` (at `<repo>/packages/core`) resolves `name` to. */
 export function resolveFromCore(repo: string, name: string): string | undefined {
   const coreDir = path.join(repo, 'packages', 'core');
   if (!fs.existsSync(coreDir)) return undefined;
@@ -120,8 +120,8 @@ export async function runInit(dir: string, opts: InitOptions): Promise<InitResul
     const link = (p: string) => `link:${p}`;
     deps = {
       'cross-env': '^10.1.0',
-      '@opencms/core': link(`${repo}/packages/core`),
-      '@opencms/schema': link(`${repo}/packages/schema`),
+      '@opencloudcms/core': link(`${repo}/packages/core`),
+      '@opencloudcms/schema': link(`${repo}/packages/schema`),
       // Share core's own copy of each, otherwise two Nest instances break DI. Not a checkout: plain ranges.
       ...Object.fromEntries(
         SHARED_WITH_CORE.map((n) => {
@@ -130,12 +130,12 @@ export async function runInit(dir: string, opts: InitOptions): Promise<InitResul
         }),
       ),
     };
-    devDeps = { 'opencms-cli': link(`${repo}/packages/cli`), ...DEV_RANGES };
+    devDeps = { '@opencloudcms/cli': link(`${repo}/packages/cli`), ...DEV_RANGES };
     linkRoot = commonAncestor(target, repo);
   } else {
     const v = `^${opts.cliVersion}`;
-    deps = { '@opencms/core': v, '@opencms/schema': v, ...RANGES, 'cross-env': '^10.1.0' };
-    devDeps = { 'opencms-cli': v, ...DEV_RANGES };
+    deps = { '@opencloudcms/core': v, '@opencloudcms/schema': v, ...RANGES, 'cross-env': '^10.1.0' };
+    devDeps = { '@opencloudcms/cli': v, ...DEV_RANGES };
   }
 
   const files = new Map<string, string>([
@@ -152,7 +152,7 @@ export async function runInit(dir: string, opts: InitOptions): Promise<InitResul
     ['app/(site)/messages.ts', t.siteMessagesTs()],
     ['app/(site)/page.tsx', t.sitePageTsx(name)],
     ['src/root.ts', t.rootTs()],
-    ['opencms.config.ts', t.configTs()],
+    ['opencloudcms.config.ts', t.configTs()],
     ['src/main.ts', t.mainTs()],
     ['src/app.module.ts', t.appModuleTs()],
     ['src/locales.ts', printLocalesFile({ defaultLocale: 'en-US', locales: ['en-US'] })],

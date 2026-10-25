@@ -1,7 +1,7 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { ContentGroupDefinition, ContentTypeDefinition } from '@opencms/schema';
-import { buildEntryValidator } from '@opencms/schema';
-import { OPENCMS_OPTIONS, type EntryHooks, type ResolvedOpenCmsOptions } from './options';
+import type { ContentGroupDefinition, ContentTypeDefinition } from '@opencloudcms/schema';
+import { buildEntryValidator } from '@opencloudcms/schema';
+import { OPENCLOUDCMS_OPTIONS, type EntryHooks, type ResolvedOpenCloudCmsOptions } from './options';
 
 /** In-memory registry of content types. Reloaded after the builder applies a migration. */
 @Injectable()
@@ -11,7 +11,7 @@ export class ContentRegistry {
   private validators = new Map<string, ReturnType<typeof buildEntryValidator>>();
   private hooks = new Map<string, EntryHooks[]>();
 
-  constructor(@Inject(OPENCMS_OPTIONS) options: ResolvedOpenCmsOptions) {
+  constructor(@Inject(OPENCLOUDCMS_OPTIONS) options: ResolvedOpenCloudCmsOptions) {
     this.reload(options.contentTypes);
     this.reloadGroups(options.contentGroups ?? []);
     for (const h of options.hooks) this.hooks.set(h.apiId, [...(this.hooks.get(h.apiId) ?? []), h.hooks]);

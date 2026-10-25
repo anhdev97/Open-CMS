@@ -1,1 +1,1 @@
-export { default } from '@opencms/core/admin';
+export { default } from '@opencloudcms/core/admin';

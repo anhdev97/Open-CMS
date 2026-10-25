@@ -241,4 +241,22 @@ describe('createWebHost', () => {
     await s.host.prepare();
     await expect(s.host.close()).resolves.toBeUndefined();
   });
+
+  it('close resolves when app.close hangs past closeTimeoutMs', async () => {
+    const h = harness({
+      close: vi.fn(() => new Promise(() => {})),
+    });
+    const host = createWebHost({
+      dir: tmpDir(),
+      dev: true,
+      logger: h.logger,
+      loadNext: h.loadNext as unknown as LoadNext,
+      closeTimeoutMs: 40,
+    });
+    await host.prepare();
+    const started = Date.now();
+    await expect(host.close()).resolves.toBeUndefined();
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(h.logger.error).toHaveBeenCalled();
+  });
 });

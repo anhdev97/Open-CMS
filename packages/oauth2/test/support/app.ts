@@ -16,7 +16,7 @@ export const TEST_CORE_READY = Symbol('TEST_CORE_READY');
 export interface TestApp {
   app: INestApplication;
   db: Kysely<AuthTables>;
-  /** OPENCMS_PUBLIC_URL (no trailing slash): the origin the browser sees. When the env sets it to '' this is the dev default, http://localhost:<port>. */
+  /** OPENCLOUDCMS_PUBLIC_URL (no trailing slash): the origin the browser sees. When the env sets it to '' this is the dev default, http://localhost:<port>. */
   url: string;
   /** The address the app actually listens on (http://127.0.0.1:<port>). */
   baseUrl: string;
@@ -43,7 +43,7 @@ async function freePort(): Promise<number> {
  * `opts.listenPort` is the port the app listens on (default: a free port, also used as PORT); pass `env.PORT`
  * separately to point the BFF's internal URL elsewhere.
  * `opts.coreReady` is the promise behind a `CoreReady` holder the module's `coreReady` token resolves to (what
- * @opencms/core provides in production); `opts.configureApp` runs on the Nest app before it listens (e.g. `app.useGlobalFilters(...)`).
+ * @opencloudcms/core provides in production); `opts.configureApp` runs on the Nest app before it listens (e.g. `app.useGlobalFilters(...)`).
  * `opts.controllers` mounts extra (test-only) controllers next to the module.
  * Error JSON comes from the module's own APP_FILTER (Task 11), so no global filter is added here.
  */
@@ -67,8 +67,8 @@ export async function createTestApp(
     const listenPort = opts.listenPort ?? (await freePort());
     const base = `http://127.0.0.1:${listenPort}`;
     const fullEnv: Record<string, string> = {
-      OPENCMS_SECRET: randomBytes(32).toString('hex'),
-      OPENCMS_PUBLIC_URL: base,
+      OPENCLOUDCMS_SECRET: randomBytes(32).toString('hex'),
+      OPENCLOUDCMS_PUBLIC_URL: base,
       PORT: String(listenPort),
       ...env,
     };
@@ -103,7 +103,7 @@ export async function createTestApp(
     return {
       app: started,
       db: testDb.db,
-      url: (fullEnv.OPENCMS_PUBLIC_URL || `http://localhost:${listenPort}`).replace(/\/+$/, ''),
+      url: (fullEnv.OPENCLOUDCMS_PUBLIC_URL || `http://localhost:${listenPort}`).replace(/\/+$/, ''),
       baseUrl: base,
       async close() {
         await started.close();

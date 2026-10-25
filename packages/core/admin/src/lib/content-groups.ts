@@ -1,4 +1,4 @@
-import type { ContentGroupDefinition, Locale, LocalizedText } from '@opencms/schema';
+import type { ContentGroupDefinition, Locale, LocalizedText } from '@opencloudcms/schema';
 import { api } from './api';
 
 export type LocaleInputs = Partial<Record<Locale, string>>;

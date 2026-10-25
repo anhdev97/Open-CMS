@@ -1,7 +1,7 @@
 /**
  * A tiny DDL model. The diff engine produces statements; three consumers use them:
  *   - printStatement()  -> Kysely code written into migration files
- *   - compileStatement() -> SQL shown in the admin UI / `opencms plan`
+ *   - compileStatement() -> SQL shown in the admin UI / `opencloudcms plan`
  *   - executeStatement() -> run directly (tests, tooling)
  */
 import {
@@ -12,7 +12,7 @@ import {
   PostgresQueryCompiler,
   sql,
 } from 'kysely';
-import type { IndexSpec, PhysicalColumn } from '@opencms/schema';
+import type { IndexSpec, PhysicalColumn } from '@opencloudcms/schema';
 
 export type Statement =
   | { type: 'createTable'; table: string; columns: PhysicalColumn[]; primaryKey: { name: string; columns: string[] } }

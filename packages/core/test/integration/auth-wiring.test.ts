@@ -5,7 +5,7 @@ import { createCoreTestApp, type CoreTestApp } from '../support/core-app';
 const PW = 'correct horse battery';
 const EMAIL = 'admin@example.com';
 
-describe('OAuth2Module wired into OpenCmsModule', () => {
+describe('OAuth2Module wired into OpenCloudCmsModule', () => {
   let t: CoreTestApp;
   let cookie: string;
 
@@ -68,7 +68,7 @@ describe('OAuth2Module wired into OpenCmsModule', () => {
       (e: Error) => e,
     );
     expect(err).toBeDefined();
-    expect(err!.message).toContain('opencms migrate:up');
+    expect(err!.message).toContain('opencloudcms migrate:up');
     expect(err!.message).not.toContain('relation');
   }, 60_000);
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defineContentType, f } from '@opencms/schema';
+import { defineContentType, f } from '@opencloudcms/schema';
 import { compileStatement, DiffError, diffSchemas, planMigration } from '../src';
 
 const product = (fields: Parameters<typeof defineContentType>[0]['fields'], apiId = 'product') =>

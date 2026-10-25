@@ -1,4 +1,4 @@
-import { PERMISSIONS, isPermission, type Permission } from '@opencms/schema';
+import { PERMISSIONS, isPermission, type Permission } from '@opencloudcms/schema';
 
 export { PERMISSIONS, isPermission, type Permission };
 

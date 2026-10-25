@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { coreMigrations } from '@opencms/db';
+import { coreMigrations } from '@opencloudcms/db';
 import { startTestDb } from '../../../oauth2/test/support/db';
 
 describe('core migration 0002_region_locales', () => {

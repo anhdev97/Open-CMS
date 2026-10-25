@@ -3,7 +3,7 @@ import { loadConfig } from '../../src/config/schema';
 import { ConfigAuthSettingsProvider } from '../../src/settings/settings.provider';
 import { AuthError, AuthExceptionFilter } from '../../src/errors';
 
-const env = { OPENCMS_SECRET: Buffer.alloc(32, 7).toString('base64'), OPENCMS_PUBLIC_URL: 'https://cms.x.com' };
+const env = { OPENCLOUDCMS_SECRET: Buffer.alloc(32, 7).toString('base64'), OPENCLOUDCMS_PUBLIC_URL: 'https://cms.x.com' };
 
 describe('ConfigAuthSettingsProvider', () => {
   it('returns default ttls', async () => {
@@ -18,7 +18,7 @@ describe('ConfigAuthSettingsProvider', () => {
   it('clamps refresh to session absolute and warns once', async () => {
     const warns: string[] = [];
     const cfg = loadConfig({
-      ...env, OPENCMS_AUTH_TTL_REFRESH: String(40 * 86400), OPENCMS_AUTH_TTL_SESSION_ABSOLUTE: String(30 * 86400),
+      ...env, OPENCLOUDCMS_AUTH_TTL_REFRESH: String(40 * 86400), OPENCLOUDCMS_AUTH_TTL_SESSION_ABSOLUTE: String(30 * 86400),
     });
     const p = new ConfigAuthSettingsProvider(cfg, { warn: (m) => warns.push(m) });
     expect((await p.getTtls()).refreshToken).toBe(30 * 86400);

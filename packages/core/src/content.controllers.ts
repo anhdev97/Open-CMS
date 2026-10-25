@@ -11,7 +11,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { CurrentUser, RequirePermission, type RequestUser } from '@opencms/oauth2';
+import { CurrentUser, RequirePermission, type RequestUser } from '@opencloudcms/oauth2';
 import { EntriesService, type ListParams } from './entries.service';
 import { WorkflowService } from './workflow.service';
 
