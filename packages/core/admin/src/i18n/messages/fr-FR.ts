@@ -10,7 +10,7 @@ const frFR: Messages = {
     failedTitle: "Impossible de charger l'administration",
     retry: 'Réessayer',
     originMismatch:
-      "Le serveur a rejeté cette adresse. Ouvrez l'administration à son URL publique configurée, ou définissez OPENCMS_PUBLIC_URL sur l'adresse que vous utilisez, puis redémarrez.",
+      "Le serveur a rejeté cette adresse. Ouvrez l'administration à son URL publique configurée, ou définissez OPENCLOUDCMS_PUBLIC_URL sur l'adresse que vous utilisez, puis redémarrez.",
   },
   setup: {
     title: 'Créer le premier administrateur',
@@ -84,7 +84,7 @@ const frFR: Messages = {
     description: 'Téléversez et gérez les images et fichiers utilisés dans le contenu.',
     upload: 'Téléverser',
     uploading: 'Téléversement…',
-    uploadDisabled: 'Le téléversement n’est pas configuré. Définissez l’option assets sur OpenCmsModule (par ex. un dossier local) pour l’activer.',
+    uploadDisabled: 'Le téléversement n’est pas configuré. Définissez l’option assets sur OpenCloudCmsModule (par ex. un dossier local) pour l’activer.',
     listLabel: 'Médias',
     emptyTitle: 'Aucun média pour le moment',
     emptyDescription: 'Téléversez une image ou un fichier pour l’utiliser dans votre contenu.',

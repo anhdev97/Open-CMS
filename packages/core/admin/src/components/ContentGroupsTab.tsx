@@ -1,7 +1,7 @@
 import { FolderIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { GROUP_KEY_RE, SUPPORTED_LOCALES, localizedText, type ContentGroupDefinition } from '@opencms/schema';
+import { GROUP_KEY_RE, SUPPORTED_LOCALES, localizedText, type ContentGroupDefinition } from '@opencloudcms/schema';
 import { getActiveLocale, t } from '../i18n';
 import { ApiError } from '../lib/api-error';
 import {

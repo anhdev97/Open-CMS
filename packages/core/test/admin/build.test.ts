@@ -13,7 +13,7 @@ function walk(dir: string): string[] {
   });
 }
 
-describe.skipIf(!built)('admin module output (run `pnpm --filter @opencms/core build` first)', () => {
+describe.skipIf(!built)('admin module output (run `pnpm --filter @opencloudcms/core build` first)', () => {
   it('emits index.js, layout.js and declarations', () => {
     expect(fs.existsSync(path.join(adminDist, 'index.js'))).toBe(true);
     expect(fs.existsSync(path.join(adminDist, 'layout.js'))).toBe(true);
@@ -49,6 +49,6 @@ describe.skipIf(!built)('admin module output (run `pnpm --filter @opencms/core b
   });
 });
 
-it.skipIf(built)('build output is missing: run `pnpm --filter @opencms/core build`', () => {
+it.skipIf(built)('build output is missing: run `pnpm --filter @opencloudcms/core build`', () => {
   expect(built).toBe(false);
 });

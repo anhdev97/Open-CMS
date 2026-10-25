@@ -1,6 +1,6 @@
 import { BoxesIcon, ChevronRightIcon, ChevronsUpDownIcon, HomeIcon, ImageIcon, LogOutIcon, PaletteIcon, UserIcon } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { ContentGroupDefinition, LocalizedText } from '@opencms/schema';
+import type { ContentGroupDefinition, LocalizedText } from '@opencloudcms/schema';
 import { ThemeToggle } from './ThemeToggle';
 import { Button } from './ui/button';
 import {

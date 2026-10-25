@@ -1,12 +1,12 @@
 import type { Kysely } from 'kysely';
-import type { AssetsModuleOptions } from '@opencms/assets';
-import type { AuthFileConfig } from '@opencms/oauth2';
-import type { ContentGroupDefinition, ContentTypeDefinition, OpenCmsConfig, ResolvedConfig } from '@opencms/schema';
+import type { AssetsModuleOptions } from '@opencloudcms/assets';
+import type { AuthFileConfig } from '@opencloudcms/oauth2';
+import type { ContentGroupDefinition, ContentTypeDefinition, OpenCloudCmsConfig, ResolvedConfig } from '@opencloudcms/schema';
 import type { LoadNext } from './web';
 
-export const OPENCMS_OPTIONS = Symbol('OPENCMS_OPTIONS');
-export const OPENCMS_DB = Symbol('OPENCMS_DB');
-/** Provides a `CoreReady` holder that OpenCmsModule settles once the database is known to be migrated. */
+export const OPENCLOUDCMS_OPTIONS = Symbol('OPENCLOUDCMS_OPTIONS');
+export const OPENCLOUDCMS_DB = Symbol('OPENCLOUDCMS_DB');
+/** Provides a `CoreReady` holder that OpenCloudCmsModule settles once the database is known to be migrated. */
 export const CORE_READY_CORE = Symbol('CORE_READY_CORE');
 
 export interface HookContext {
@@ -44,10 +44,10 @@ export function defineHooks(apiId: string, hooks: EntryHooks): HookRegistration 
   return { apiId, hooks };
 }
 
-export interface OpenCmsModuleOptions {
-  /** Project root (where opencms.config.ts lives). */
+export interface OpenCloudCmsModuleOptions {
+  /** Project root (where opencloudcms.config.ts lives). */
   root: string;
-  config: OpenCmsConfig;
+  config: OpenCloudCmsConfig;
   /** The generated registry: `import { contentTypes } from './generated'`. */
   contentTypes: ContentTypeDefinition[];
   /** `import contentGroups from './content-groups'`. Default: none. */
@@ -60,7 +60,7 @@ export interface OpenCmsModuleOptions {
   schemaEditable?: boolean;
   /** Apply pending migrations on startup instead of refusing to start. Default false. */
   autoMigrate?: boolean;
-  /** Non-secret `auth` section (see @opencms/oauth2). Secrets come from the environment. */
+  /** Non-secret `auth` section (see @opencloudcms/oauth2). Secrets come from the environment. */
   auth?: Partial<AuthFileConfig>;
   web?: {
     /** Serve the project's Next app (the admin UI under /admin, the site elsewhere). Default true. */
@@ -80,7 +80,7 @@ export interface OpenCmsModuleOptions {
   env?: NodeJS.ProcessEnv;
 }
 
-export interface ResolvedOpenCmsOptions extends Omit<OpenCmsModuleOptions, 'config'> {
+export interface ResolvedOpenCloudCmsOptions extends Omit<OpenCloudCmsModuleOptions, 'config'> {
   config: ResolvedConfig;
   schemaEditable: boolean;
   autoMigrate: boolean;

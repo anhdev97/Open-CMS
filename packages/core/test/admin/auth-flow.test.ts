@@ -86,7 +86,7 @@ describe('originMismatchMessage', () => {
   it('explains a 403 origin_mismatch with the remedy', () => {
     const msg = originMismatchMessage(new ApiError(403, 'origin_mismatch', 'Origin not allowed'));
     expect(msg).toBe(en.auth.originMismatch);
-    expect(msg).toContain('OPENCMS_PUBLIC_URL');
+    expect(msg).toContain('OPENCLOUDCMS_PUBLIC_URL');
   });
   it('ignores every other error', () => {
     expect(originMismatchMessage(new ApiError(403, 'account_disabled', 'x'))).toBeNull();

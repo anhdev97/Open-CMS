@@ -1,14 +1,14 @@
 // Side-effect, Nest-free: registers oauth2_0001_init with the core migration stream. The `opencms` CLI
 // registers it too, so every process that migrates (autoMigrate, the Content Type Builder) must know it,
 // or Kysely reports a missing migration.
-import '@opencms/oauth2/migrations';
+import '@opencloudcms/oauth2/migrations';
 import { Inject, Logger, Module, RequestMethod, type DynamicModule, type MiddlewareConsumer, type NestModule, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import type { Kysely } from 'kysely';
-import { createDb, migrateUp, pendingMigrations } from '@opencms/db';
-import { AssetsModule } from '@opencms/assets';
-import { OAuth2Module, type CoreReady } from '@opencms/oauth2';
-import { resolveConfig } from '@opencms/schema';
+import { createDb, migrateUp, pendingMigrations } from '@opencloudcms/db';
+import { AssetsModule } from '@opencloudcms/assets';
+import { OAuth2Module, type CoreReady } from '@opencloudcms/oauth2';
+import { resolveConfig } from '@opencloudcms/schema';
 import { ContentCorsMiddleware } from './http/content-cors.middleware';
 import { JsonBodyParserMiddleware } from './http/body-parser.middleware';
 import { AdminContentController, ContentController, WorkflowController } from './content.controllers';
@@ -16,7 +16,7 @@ import { EntriesService } from './entries.service';
 import { EntryRepository } from './entry.repository';
 import { LocalesController, LocalesService } from './locales';
 import { ContentGroupsController, ContentGroupsService } from './content-groups';
-import { CORE_READY_CORE, OPENCMS_DB, OPENCMS_OPTIONS, type OpenCmsModuleOptions, type ResolvedOpenCmsOptions } from './options';
+import { CORE_READY_CORE, OPENCLOUDCMS_DB, OPENCLOUDCMS_OPTIONS, type OpenCloudCmsModuleOptions, type ResolvedOpenCloudCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
 import { SchemaBuilderService, SchemaController } from './schema-builder';
 import { SchemaWriteQueue } from './schema-write-queue';
@@ -24,7 +24,7 @@ import { SystemController } from './system.controller';
 import { WorkflowService } from './workflow.service';
 import { createWebHost, type WebHost } from './web';
 
-/** A `CoreReady` holder (not a promise: Nest would await that at DI time) settled by OpenCmsModule.onModuleInit. */
+/** A `CoreReady` holder (not a promise: Nest would await that at DI time) settled by OpenCloudCmsModule.onModuleInit. */
 class DeferredCoreReady implements CoreReady {
   private readonly promise: Promise<void>;
   private resolveFn!: () => void;
@@ -51,19 +51,19 @@ class DeferredCoreReady implements CoreReady {
 }
 
 @Module({})
-export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShutdown {
-  private readonly logger = new Logger('OpenCms');
+export class OpenCloudCmsModule implements NestModule, OnModuleInit, OnApplicationShutdown {
+  private readonly logger = new Logger('OpenCloudCms');
   private webHost?: WebHost;
 
   constructor(
-    @Inject(OPENCMS_OPTIONS) private readonly options: ResolvedOpenCmsOptions,
-    @Inject(OPENCMS_DB) private readonly db: Kysely<any>,
+    @Inject(OPENCLOUDCMS_OPTIONS) private readonly options: ResolvedOpenCloudCmsOptions,
+    @Inject(OPENCLOUDCMS_DB) private readonly db: Kysely<any>,
     @Inject(CORE_READY_CORE) private readonly ready: DeferredCoreReady,
     @Inject(HttpAdapterHost) private readonly httpHost: HttpAdapterHost,
   ) {}
 
-  static forRoot(input: OpenCmsModuleOptions): DynamicModule {
-    const options: ResolvedOpenCmsOptions = {
+  static forRoot(input: OpenCloudCmsModuleOptions): DynamicModule {
+    const options: ResolvedOpenCloudCmsOptions = {
       ...input,
       config: resolveConfig(input.config, input.root),
       hooks: input.hooks ?? [],
@@ -71,22 +71,22 @@ export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShu
       autoMigrate: input.autoMigrate ?? false,
     };
     return {
-      module: OpenCmsModule,
+      module: OpenCloudCmsModule,
       global: true,
       imports: [
         OAuth2Module.forRoot({
-          dbToken: OPENCMS_DB,
+          dbToken: OPENCLOUDCMS_DB,
           coreReady: CORE_READY_CORE,
           publicPathPrefixes: ['/api/content/'],
           auth: input.auth,
           env: input.env,
         }),
-        AssetsModule.forRoot({ dbToken: OPENCMS_DB, assets: input.assets ?? null }),
+        AssetsModule.forRoot({ dbToken: OPENCLOUDCMS_DB, assets: input.assets ?? null }),
       ],
       controllers: [ContentController, AdminContentController, SchemaController, ContentGroupsController, LocalesController, SystemController, WorkflowController],
       providers: [
-        { provide: OPENCMS_OPTIONS, useValue: options },
-        { provide: OPENCMS_DB, useFactory: () => createDb(options.config.database.url) },
+        { provide: OPENCLOUDCMS_OPTIONS, useValue: options },
+        { provide: OPENCLOUDCMS_DB, useFactory: () => createDb(options.config.database.url) },
         ContentRegistry,
         EntryRepository,
         EntriesService,
@@ -97,7 +97,7 @@ export class OpenCmsModule implements NestModule, OnModuleInit, OnApplicationShu
         LocalesService,
         { provide: CORE_READY_CORE, useValue: new DeferredCoreReady() },
       ],
-      exports: [OPENCMS_DB, CORE_READY_CORE, ContentRegistry, EntriesService],
+      exports: [OPENCLOUDCMS_DB, CORE_READY_CORE, ContentRegistry, EntriesService],
     };
   }
 

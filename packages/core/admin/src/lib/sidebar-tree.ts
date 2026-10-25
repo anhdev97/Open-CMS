@@ -1,4 +1,4 @@
-import { localizedText, type ContentGroupDefinition, type Locale, type LocalizedText } from '@opencms/schema';
+import { localizedText, type ContentGroupDefinition, type Locale, type LocalizedText } from '@opencloudcms/schema';
 
 export const UNGROUPED_KEY = '__ungrouped';
 

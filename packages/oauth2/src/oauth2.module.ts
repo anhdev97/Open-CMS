@@ -32,7 +32,7 @@ import { UserService } from './users/user.service';
 import { UsersController } from './users/users.controller';
 
 export interface OAuth2ModuleOptions {
-  /** DI token under which the app provides its Kysely instance (e.g. OPENCMS_DB). */
+  /** DI token under which the app provides its Kysely instance (e.g. OPENCLOUDCMS_DB). */
   dbToken: InjectionToken;
   /** Non-secret `auth` section of opencms.config.ts. */
   auth?: Partial<AuthFileConfig>;

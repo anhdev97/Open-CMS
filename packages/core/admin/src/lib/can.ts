@@ -1,4 +1,4 @@
-import type { Permission } from '@opencms/schema';
+import type { Permission } from '@opencloudcms/schema';
 import { useAuth } from '../auth/AuthContext';
 import { settingsItems } from '../navigation';
 import type { RouteId } from '../router/match';

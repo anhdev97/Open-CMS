@@ -1,4 +1,4 @@
-import { SUPPORTED_LOCALES, isLocale, matchLocale, type Locale } from '@opencms/schema';
+import { SUPPORTED_LOCALES, isLocale, matchLocale, type Locale } from '@opencloudcms/schema';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';

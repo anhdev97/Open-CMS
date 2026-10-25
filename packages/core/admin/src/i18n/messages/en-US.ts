@@ -8,7 +8,7 @@ export const enUS = {
     failedTitle: 'Could not load the admin',
     retry: 'Try again',
     originMismatch:
-      'The server rejected this address. Open the admin at its configured public URL, or set OPENCMS_PUBLIC_URL to the address you are using and restart.',
+      'The server rejected this address. Open the admin at its configured public URL, or set OPENCLOUDCMS_PUBLIC_URL to the address you are using and restart.',
   },
   setup: {
     title: 'Create the first admin',
@@ -82,7 +82,7 @@ export const enUS = {
     description: 'Upload and manage images and files used in content.',
     upload: 'Upload',
     uploading: 'Uploading…',
-    uploadDisabled: 'File upload is not configured. Set the assets option on OpenCmsModule (for example a local folder) to enable uploads.',
+    uploadDisabled: 'File upload is not configured. Set the assets option on OpenCloudCmsModule (for example a local folder) to enable uploads.',
     listLabel: 'Assets',
     emptyTitle: 'No assets yet',
     emptyDescription: 'Upload an image or file to use it in your content.',

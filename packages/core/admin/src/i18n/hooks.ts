@@ -7,7 +7,7 @@ import {
   formatNumber as fmtNumber,
   type Locale,
   type MessageTree,
-} from '@opencms/schema';
+} from '@opencloudcms/schema';
 import { LocaleContext } from './context';
 
 export function useLocale(): Locale {

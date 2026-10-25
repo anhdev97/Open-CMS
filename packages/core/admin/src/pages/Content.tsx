@@ -20,7 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { useAuth } from '../auth/AuthContext';
 import { entryActions, formLocked, type EntryAction, type WorkflowState } from '../lib/entry-actions';
 import { Link, useAdminParams } from '../lib/nav';
-import { localizedText } from '@opencms/schema';
+import { localizedText } from '@opencloudcms/schema';
 import { getActiveLocale, t } from '../i18n';
 import { useFormat } from '../i18n/hooks';
 import { api } from '../lib/api';

@@ -10,7 +10,7 @@ const viVN: Messages = {
     failedTitle: 'Không thể tải trang quản trị',
     retry: 'Thử lại',
     originMismatch:
-      'Máy chủ đã từ chối địa chỉ này. Hãy mở trang quản trị bằng URL công khai đã cấu hình, hoặc đặt OPENCMS_PUBLIC_URL thành địa chỉ bạn đang dùng rồi khởi động lại.',
+      'Máy chủ đã từ chối địa chỉ này. Hãy mở trang quản trị bằng URL công khai đã cấu hình, hoặc đặt OPENCLOUDCMS_PUBLIC_URL thành địa chỉ bạn đang dùng rồi khởi động lại.',
   },
   setup: {
     title: 'Tạo quản trị viên đầu tiên',
@@ -84,7 +84,7 @@ const viVN: Messages = {
     description: 'Tải lên và quản lý ảnh, tệp dùng trong nội dung.',
     upload: 'Tải lên',
     uploading: 'Đang tải lên…',
-    uploadDisabled: 'Chưa cấu hình upload. Thêm tùy chọn assets trên OpenCmsModule (ví dụ thư mục local) để bật tải lên.',
+    uploadDisabled: 'Chưa cấu hình upload. Thêm tùy chọn assets trên OpenCloudCmsModule (ví dụ thư mục local) để bật tải lên.',
     listLabel: 'Tài nguyên',
     emptyTitle: 'Chưa có tài nguyên',
     emptyDescription: 'Tải lên ảnh hoặc tệp để dùng trong nội dung.',

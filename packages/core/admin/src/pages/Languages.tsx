@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { SUPPORTED_LOCALES, type Locale } from '@opencms/schema';
+import { SUPPORTED_LOCALES, type Locale } from '@opencloudcms/schema';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { PageHeader } from '../components/PageHeader';

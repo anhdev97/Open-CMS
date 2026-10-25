@@ -1,13 +1,13 @@
-/** Minimal system APIs so taxonomy fields are usable in v0. Asset routes live in @opencms/assets. */
+/** Minimal system APIs so taxonomy fields are usable in v0. Asset routes live in @opencloudcms/assets. */
 import { BadRequestException, Body, Controller, Get, Inject, Param, Post } from '@nestjs/common';
 import type { Kysely } from 'kysely';
-import { RequirePermission } from '@opencms/oauth2';
-import { SYSTEM_TABLES } from '@opencms/schema';
-import { OPENCMS_DB } from './options';
+import { RequirePermission } from '@opencloudcms/oauth2';
+import { SYSTEM_TABLES } from '@opencloudcms/schema';
+import { OPENCLOUDCMS_DB } from './options';
 
 @Controller('api/admin')
 export class SystemController {
-  constructor(@Inject(OPENCMS_DB) private readonly db: Kysely<any>) {}
+  constructor(@Inject(OPENCLOUDCMS_DB) private readonly db: Kysely<any>) {}
 
   @RequirePermission('content.read')
   @Get('taxonomies')

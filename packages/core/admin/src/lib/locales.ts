@@ -1,4 +1,4 @@
-import type { Locale } from '@opencms/schema';
+import type { Locale } from '@opencloudcms/schema';
 import { api } from './api';
 
 export interface LocalesResponse {

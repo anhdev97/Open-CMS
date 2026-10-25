@@ -5,10 +5,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Body, ConflictException, Controller, Get, Inject, Injectable, Put, UnprocessableEntityException } from '@nestjs/common';
-import { RequirePermission } from '@opencms/oauth2';
-import { contentGroupsFile, printContentGroupsFile } from '@opencms/codegen';
-import { validateContentGroups, type ContentGroupDefinition } from '@opencms/schema';
-import { OPENCMS_OPTIONS, type ResolvedOpenCmsOptions } from './options';
+import { RequirePermission } from '@opencloudcms/oauth2';
+import { contentGroupsFile, printContentGroupsFile } from '@opencloudcms/codegen';
+import { validateContentGroups, type ContentGroupDefinition } from '@opencloudcms/schema';
+import { OPENCLOUDCMS_OPTIONS, type ResolvedOpenCloudCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
 import { SchemaBuilderService } from './schema-builder';
 import { SchemaWriteQueue } from './schema-write-queue';
@@ -16,7 +16,7 @@ import { SchemaWriteQueue } from './schema-write-queue';
 @Injectable()
 export class ContentGroupsService {
   constructor(
-    @Inject(OPENCMS_OPTIONS) private readonly options: ResolvedOpenCmsOptions,
+    @Inject(OPENCLOUDCMS_OPTIONS) private readonly options: ResolvedOpenCloudCmsOptions,
     @Inject(ContentRegistry) private readonly registry: ContentRegistry,
     @Inject(SchemaBuilderService) private readonly builder: SchemaBuilderService,
     @Inject(SchemaWriteQueue) private readonly queue: SchemaWriteQueue,

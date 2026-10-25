@@ -6,9 +6,9 @@
  */
 import { ConflictException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { sql, type Kysely } from 'kysely';
-import { mainTable, SYSTEM_TABLES, type ContentTypeDefinition } from '@opencms/schema';
-import { AuditService, AuthError, type AuditType, type RequestUser } from '@opencms/oauth2';
-import { OPENCMS_DB } from './options';
+import { mainTable, SYSTEM_TABLES, type ContentTypeDefinition } from '@opencloudcms/schema';
+import { AuditService, AuthError, type AuditType, type RequestUser } from '@opencloudcms/oauth2';
+import { OPENCLOUDCMS_DB } from './options';
 import { ContentRegistry } from './registry.service';
 import { nextState, type WorkflowAction, type WorkflowInfo, type WorkflowState } from './workflow';
 
@@ -38,7 +38,7 @@ const AUDIT: Record<WorkflowAction, AuditType> = {
 @Injectable()
 export class WorkflowService {
   constructor(
-    @Inject(OPENCMS_DB) private readonly db: Kysely<any>,
+    @Inject(OPENCLOUDCMS_DB) private readonly db: Kysely<any>,
     @Inject(ContentRegistry) private readonly registry: ContentRegistry,
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}

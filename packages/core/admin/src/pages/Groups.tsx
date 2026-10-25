@@ -1,4 +1,4 @@
-import { PERMISSIONS, type Permission } from '@opencms/schema';
+import { PERMISSIONS, type Permission } from '@opencloudcms/schema';
 import { PencilIcon, PlusIcon, ShieldCheckIcon, Trash2Icon } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';

@@ -1,4 +1,4 @@
-import type { Locale, Permission } from '@opencms/schema';
+import type { Locale, Permission } from '@opencloudcms/schema';
 import { createContext, useContext } from 'react';
 
 export interface AuthUser {

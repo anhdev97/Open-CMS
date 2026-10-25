@@ -7,13 +7,13 @@ import * as path from 'node:path';
 import { Module, type INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { sql, type Kysely } from 'kysely';
-import type { ContentGroupDefinition, ContentTypeDefinition } from '@opencms/schema';
+import type { ContentGroupDefinition, ContentTypeDefinition } from '@opencloudcms/schema';
 import { startTestDb } from '../../../oauth2/test/support/db';
-import { OpenCmsModule, type OpenCmsModuleOptions } from '../../src';
+import { OpenCloudCmsModule, type OpenCloudCmsModuleOptions } from '../../src';
 
 export interface CoreTestApp {
   app: INestApplication;
-  /** OPENCMS_PUBLIC_URL, which is also the address the app listens on. */
+  /** OPENCLOUDCMS_PUBLIC_URL, which is also the address the app listens on. */
   url: string;
   baseUrl: string;
   db: Kysely<any>;
@@ -28,8 +28,8 @@ export interface CoreTestAppOptions {
   /** Default true. */
   schemaEditable?: boolean;
   /** Default `{ enabled: false }`: most tests have no Next app. */
-  web?: OpenCmsModuleOptions['web'];
-  cors?: OpenCmsModuleOptions['cors'];
+  web?: OpenCloudCmsModuleOptions['web'];
+  cors?: OpenCloudCmsModuleOptions['cors'];
   /** false: leave the database empty and without autoMigrate, so startup must refuse. Default true. */
   migrate?: boolean;
   env?: Record<string, string>;
@@ -51,8 +51,8 @@ async function freePort(): Promise<number> {
 }
 
 /**
- * Boots OpenCmsModule on a real HTTP port against a throwaway database. The database is migrated by core
- * itself (autoMigrate), never through a separately imported @opencms/db: vitest can load a second copy of it
+ * Boots OpenCloudCmsModule on a real HTTP port against a throwaway database. The database is migrated by core
+ * itself (autoMigrate), never through a separately imported @opencloudcms/db: vitest can load a second copy of it
  * with its own migration registry.
  */
 export async function createCoreTestApp(opts: CoreTestAppOptions = {}): Promise<CoreTestApp> {
@@ -72,14 +72,14 @@ export async function createCoreTestApp(opts: CoreTestAppOptions = {}): Promise<
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
     const env: NodeJS.ProcessEnv = {
-      OPENCMS_SECRET: randomBytes(32).toString('hex'),
-      OPENCMS_PUBLIC_URL: base,
+      OPENCLOUDCMS_SECRET: randomBytes(32).toString('hex'),
+      OPENCLOUDCMS_PUBLIC_URL: base,
       PORT: String(port),
       ...opts.env,
     };
     @Module({
       imports: [
-        OpenCmsModule.forRoot({
+        OpenCloudCmsModule.forRoot({
           root,
           config: { database: { url: testDb.url }, ...(opts.locales ? { locales: opts.locales as any } : {}), ...(opts.defaultLocale ? { defaultLocale: opts.defaultLocale as any } : {}) },
           contentTypes: opts.contentTypes ?? [],
@@ -97,7 +97,7 @@ export async function createCoreTestApp(opts: CoreTestAppOptions = {}): Promise<
     await app.init();
     await app.listen(port, '127.0.0.1');
     const started = app;
-    return { app: started, url: env.OPENCMS_PUBLIC_URL!.replace(/\/+$/, ''), baseUrl: base, db: testDb.db, root, close: cleanup };
+    return { app: started, url: env.OPENCLOUDCMS_PUBLIC_URL!.replace(/\/+$/, ''), baseUrl: base, db: testDb.db, root, close: cleanup };
   } catch (e) {
     await cleanup();
     throw e;

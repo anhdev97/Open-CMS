@@ -10,7 +10,7 @@ const idID: Messages = {
     failedTitle: 'Tidak dapat memuat admin',
     retry: 'Coba lagi',
     originMismatch:
-      'Server menolak alamat ini. Buka admin pada URL publik yang dikonfigurasi, atau setel OPENCMS_PUBLIC_URL ke alamat yang Anda gunakan lalu mulai ulang.',
+      'Server menolak alamat ini. Buka admin pada URL publik yang dikonfigurasi, atau setel OPENCLOUDCMS_PUBLIC_URL ke alamat yang Anda gunakan lalu mulai ulang.',
   },
   setup: {
     title: 'Buat admin pertama',
@@ -84,7 +84,7 @@ const idID: Messages = {
     description: 'Unggah dan kelola gambar serta file yang dipakai di konten.',
     upload: 'Unggah',
     uploading: 'Mengunggah…',
-    uploadDisabled: 'Unggahan belum dikonfigurasi. Atur opsi assets di OpenCmsModule (misalnya folder lokal) untuk mengaktifkannya.',
+    uploadDisabled: 'Unggahan belum dikonfigurasi. Atur opsi assets di OpenCloudCmsModule (misalnya folder lokal) untuk mengaktifkannya.',
     listLabel: 'Aset',
     emptyTitle: 'Belum ada aset',
     emptyDescription: 'Unggah gambar atau file untuk dipakai di konten.',
