@@ -1,5 +1,6 @@
 {
-  "name": "@opencms/schema",
+  "name": "@opencloudcms/schema",
+  "publishConfig": { "access": "public" },
   "version": "0.1.0",
   "description": "Content type definition DSL, field registry and physical storage mapping for opencms",
   "license": "MIT",

@@ -1,5 +1,5 @@
 {
-  "name": "opencms-cli",
+  "name": "@opencloudcms/cli",
   "version": "0.1.0",
   "description": "opencms command line: generate code, create and run migrations, scaffold content types",
   "license": "MIT",
@@ -10,6 +10,14 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "dependencies": { "@opencms/schema": "workspace:*", "@opencms/codegen": "workspace:*", "@opencms/db": "workspace:*", "@opencms/oauth2": "workspace:*", "commander": "^12.1.0", "jiti": "^2.4.0" },
-  "bin": { "opencms": "bin/opencms.js" }
+  "dependencies": {
+    "@opencloudcms/schema": "workspace:*",
+    "@opencloudcms/codegen": "workspace:*",
+    "@opencloudcms/db": "workspace:*",
+    "@opencloudcms/oauth2": "workspace:*",
+    "commander": "^12.1.0",
+    "jiti": "^2.4.0"
+  },
+  "bin": { "opencloudcms": "bin/opencloudcms.js" },
+  "publishConfig": { "access": "public" }
 }

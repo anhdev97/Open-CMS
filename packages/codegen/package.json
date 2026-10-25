@@ -1,5 +1,5 @@
 {
-  "name": "@opencms/codegen",
+  "name": "@opencloudcms/codegen",
   "version": "0.1.0",
   "description": "Diff engine, migration generator and code generator for opencms",
   "license": "MIT",
@@ -10,5 +10,6 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "dependencies": { "@opencms/schema": "workspace:*", "kysely": "^0.28.0", "jiti": "^2.4.0", "zod": "^3.25.0" }
+  "dependencies": { "@opencloudcms/schema": "workspace:*", "kysely": "^0.28.0", "jiti": "^2.4.0", "zod": "^3.25.0" },
+  "publishConfig": { "access": "public" }
 }

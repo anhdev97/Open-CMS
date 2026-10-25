@@ -1,5 +1,6 @@
 {
-  "name": "@opencms/assets",
+  "name": "@opencloudcms/assets",
+  "publishConfig": { "access": "public" },
   "version": "0.1.0",
   "description": "Asset upload and storage providers for opencms",
   "license": "MIT",
@@ -15,9 +16,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@opencms/db": "workspace:*",
-    "@opencms/oauth2": "workspace:*",
-    "@opencms/schema": "workspace:*",
+    "@opencloudcms/db": "workspace:*",
+    "@opencloudcms/oauth2": "workspace:*",
+    "@opencloudcms/schema": "workspace:*",
     "kysely": "^0.28.0",
     "sharp": "^0.34.0"
   },

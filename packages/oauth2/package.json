@@ -1,5 +1,6 @@
 {
-  "name": "@opencms/oauth2",
+  "name": "@opencloudcms/oauth2",
+  "publishConfig": { "access": "public" },
   "version": "0.1.0",
   "description": "OAuth2/OIDC authentication for opencms admin",
   "license": "MIT",
@@ -21,8 +22,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@opencms/db": "workspace:*",
-    "@opencms/schema": "workspace:*",
+    "@opencloudcms/db": "workspace:*",
+    "@opencloudcms/schema": "workspace:*",
     "argon2": "^0.45.1",
     "kysely": "^0.28.0",
     "oidc-provider": "^9.12.2",
