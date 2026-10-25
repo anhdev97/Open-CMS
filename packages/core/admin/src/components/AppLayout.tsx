@@ -1,4 +1,5 @@
-import { BoxesIcon, ChevronRightIcon, ChevronsUpDownIcon, HomeIcon, ImageIcon, LogOutIcon, PaletteIcon, UserIcon } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
+import { ChevronRightIcon, ChevronsUpDownIcon, HomeIcon, ImageIcon, LogOutIcon, PaletteIcon, UserIcon } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ContentGroupDefinition, LocalizedText } from '@opencloudcms/schema';
 import { ThemeToggle } from './ThemeToggle';
@@ -185,10 +186,7 @@ function AppSidebar() {
           onClick={closeOnNavigate}
           className="flex items-center gap-2 rounded-md px-2 py-1.5 text-base font-semibold tracking-tight"
         >
-          <span className="flex size-7 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-            <BoxesIcon className="size-4" aria-hidden="true" />
-          </span>
-          {t('app.name')}
+          <BrandLogo className="w-full max-w-52" />
         </Link>
       </SidebarHeader>
       <SidebarContent>

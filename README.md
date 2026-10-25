@@ -1,5 +1,10 @@
 # OpenCloudCMS
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="brand/svg/logo-horizontal-dark.svg">
+  <img src="brand/svg/logo-horizontal-color.svg" alt="OpenCloudCMS" width="360">
+</picture>
+
 A storefront-first headless CMS on **NestJS + Next.js + PostgreSQL**, built around **schema-as-code**:
 every content type is a TypeScript file in your repo, and each one gets **its own Postgres tables**.
 Whether you add a content type from the CLI or from the admin UI, the same pipeline runs and writes three things:

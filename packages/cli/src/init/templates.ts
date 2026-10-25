@@ -89,7 +89,8 @@ async function bootstrap() {
   const { AppModule } = await import('./app.module');
   // bodyParser: false — @opencloudcms/core owns request body parsing.
   const app = await NestFactory.create(AppModule, { bodyParser: false });
-  app.enableShutdownHooks();
+  // useProcessExit: after hooks finish, exit even if Next left open handles; SIGINT/SIGTERM only.
+  app.enableShutdownHooks(['SIGINT', 'SIGTERM'], { useProcessExit: true });
   const port = Number(process.env.PORT ?? 4000);
   await app.listen(port);
   const publicUrl = process.env.OPENCLOUDCMS_PUBLIC_URL ?? \`http://localhost:\${port}\`;

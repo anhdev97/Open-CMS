@@ -2,7 +2,7 @@
 // registers it too, so every process that migrates (autoMigrate, the Content Type Builder) must know it,
 // or Kysely reports a missing migration.
 import '@opencloudcms/oauth2/migrations';
-import { Inject, Logger, Module, RequestMethod, type DynamicModule, type MiddlewareConsumer, type NestModule, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
+import { Inject, Logger, Module, RequestMethod, type BeforeApplicationShutdown, type DynamicModule, type MiddlewareConsumer, type NestModule, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import type { Kysely } from 'kysely';
 import { createDb, migrateUp, pendingMigrations } from '@opencloudcms/db';
@@ -20,9 +20,13 @@ import { CORE_READY_CORE, OPENCLOUDCMS_DB, OPENCLOUDCMS_OPTIONS, type OpenCloudC
 import { ContentRegistry } from './registry.service';
 import { SchemaBuilderService, SchemaController } from './schema-builder';
 import { SchemaWriteQueue } from './schema-write-queue';
+import { forceCloseHttpConnections, installHardShutdownDeadline, withTimeout } from './shutdown-guard';
 import { SystemController } from './system.controller';
 import { WorkflowService } from './workflow.service';
 import { createWebHost, type WebHost } from './web';
+
+/** Max wait for the Postgres pool to drain on shutdown (Next close has its own timeout). */
+const DB_DESTROY_TIMEOUT_MS = 2_000;
 
 /** A `CoreReady` holder (not a promise: Nest would await that at DI time) settled by OpenCloudCmsModule.onModuleInit. */
 class DeferredCoreReady implements CoreReady {
@@ -51,7 +55,7 @@ class DeferredCoreReady implements CoreReady {
 }
 
 @Module({})
-export class OpenCloudCmsModule implements NestModule, OnModuleInit, OnApplicationShutdown {
+export class OpenCloudCmsModule implements NestModule, OnModuleInit, BeforeApplicationShutdown, OnApplicationShutdown {
   private readonly logger = new Logger('OpenCloudCms');
   private webHost?: WebHost;
 
@@ -112,10 +116,17 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, OnApplicati
       await this.ensureMigrated();
       this.ready.resolve();
       await this.mountWeb();
+      // After Next is up: if graceful Nest/Next shutdown stalls, still exit on Ctrl+C.
+      installHardShutdownDeadline();
     } catch (e) {
       this.ready.reject(e);
       throw e;
     }
+  }
+
+  /** Runs before Nest closes the HTTP server — drop HMR/keep-alive so `server.close()` does not hang. */
+  beforeApplicationShutdown(): void {
+    forceCloseHttpConnections(this.httpHost.httpAdapter?.getHttpServer?.());
   }
 
   /** Mounted from onModuleInit: Nest has already registered its routes, only its 404/exception handlers come after, which is why backend paths fall through to Nest. */
@@ -151,7 +162,12 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, OnApplicati
   }
 
   async onApplicationShutdown(): Promise<void> {
+    // webHost.close already times out and SIGKILLs Next child workers that hang after Ctrl+C.
     await this.webHost?.close();
-    await this.db.destroy();
+    try {
+      await withTimeout(this.db.destroy(), DB_DESTROY_TIMEOUT_MS, 'Database destroy');
+    } catch (e) {
+      this.logger.error(`Database destroy failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 }

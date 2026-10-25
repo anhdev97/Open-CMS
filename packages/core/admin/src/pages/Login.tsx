@@ -1,3 +1,4 @@
+import { BrandLogo } from '../components/BrandLogo';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { CircleAlertIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -162,6 +163,7 @@ export function Login() {
       <LanguageMenu className="absolute top-4 right-4" />
       <Card className="w-full max-w-md">
         <CardHeader>
+          <BrandLogo className="mb-4 w-60 max-w-full" />
           <CardTitle className="text-xl">{t('login.title')}</CardTitle>
           <CardDescription>{t('login.description')}</CardDescription>
         </CardHeader>

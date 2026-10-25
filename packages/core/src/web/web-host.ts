@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Duplex } from 'node:stream';
 import * as path from 'node:path';
 import type { NextFunction, Request, Response } from 'express';
+import { killDirectChildProcesses, withTimeout } from '../shutdown-guard';
 import { ADMIN_SECURITY_HEADERS, adminCsp, createNonce } from './csp';
 import { isAdminPath, isBackendPath } from './paths';
 
@@ -21,7 +22,16 @@ export interface WebHostOptions {
   dev: boolean;
   logger: { log(m: string): void; warn(m: string): void; error(m: string): void };
   loadNext?: LoadNext;
+  /**
+   * Max time to wait for `next.close()` before giving up and SIGKILL-ing direct child
+   * processes (Turbopack/PostCSS workers). Ctrl+C hits the whole process group and can
+   * leave those workers dead while `close()` hangs forever.
+   */
+  closeTimeoutMs?: number;
 }
+
+/** Default wait for Next's graceful close before force-killing orphaned workers. */
+export const WEB_HOST_CLOSE_TIMEOUT_MS = 2_000;
 
 export interface WebHost {
   /** Never rejects; on failure the host answers 503. */
@@ -42,9 +52,12 @@ export const defaultLoadNext: LoadNext = ({ dev, dir }) => {
 
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
+export { killDirectChildProcesses, withTimeout } from '../shutdown-guard';
+
 export function createWebHost(opts: WebHostOptions): WebHost {
   const { dir, dev, logger } = opts;
   const loadNext = opts.loadNext ?? defaultLoadNext;
+  const closeTimeoutMs = opts.closeTimeoutMs ?? WEB_HOST_CLOSE_TIMEOUT_MS;
   let app: NextAppLike | undefined;
   let requestHandler: ((req: IncomingMessage, res: ServerResponse) => Promise<void>) | undefined;
   let upgradeHandler: ((req: IncomingMessage, socket: Duplex, head: Buffer) => unknown) | undefined;
@@ -112,11 +125,19 @@ export function createWebHost(opts: WebHostOptions): WebHost {
   }
 
   async function close(): Promise<void> {
-    if (!app?.close) return;
     try {
-      await app.close();
+      if (app?.close) {
+        await withTimeout(app.close(), closeTimeoutMs, 'Web UI close');
+      }
     } catch (e) {
       logger.error(`Web UI failed to close: ${messageOf(e)}`);
+    } finally {
+      // Process-group SIGINT often kills Turbopack workers before Next's cleanup finishes;
+      // force-kill any remaining direct children so Nest can exit.
+      killDirectChildProcesses();
+      app = undefined;
+      requestHandler = undefined;
+      upgradeHandler = undefined;
     }
   }
 

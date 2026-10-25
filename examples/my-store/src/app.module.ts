@@ -1,10 +1,11 @@
-import { Module } from '@nestjs/common';
-import { OpenCloudCmsModule } from '@opencloudcms/core';
-import config from '../opencloudcms.config';
-import contentGroups from './content-groups';
-import { contentTypes } from './generated';
-import { hooks } from './extensions';
-import { findProjectRoot } from './root';
+import { Module } from "@nestjs/common";
+import { OpenCloudCmsModule } from "@opencloudcms/core";
+import config from "../opencloudcms.config";
+import contentGroups from "./content-groups";
+import { contentTypes } from "./generated";
+import { hooks } from "./extensions";
+import { findProjectRoot } from "./root";
+import path from "path";
 
 const projectRoot = findProjectRoot(__dirname);
 
@@ -18,9 +19,16 @@ const projectRoot = findProjectRoot(__dirname);
       contentGroups,
       hooks,
       // Content Type Builder writes schema files + migrations: dev only.
-      schemaEditable: process.env.NODE_ENV !== 'production',
+      schemaEditable: process.env.NODE_ENV !== "production",
       // One Next app (app/) serves the admin at /admin and the website everywhere else.
       web: { dir: projectRoot },
+      assets: {
+        provider: "local",
+        local: {
+          root: path.join(projectRoot, "assets"),
+          publicBaseUrl: "/media",
+        },
+      },
     }),
   ],
 })

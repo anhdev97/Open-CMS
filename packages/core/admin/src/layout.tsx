@@ -2,9 +2,11 @@ import { headers } from 'next/headers';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import Providers from './Providers';
+import { favicon } from './brand';
 
 export const metadata: Metadata = {
   title: 'OpenCloudCMS Admin',
+  icons: { icon: { url: favicon, type: 'image/svg+xml' } },
   robots: { index: false, follow: false },
 };
 

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Dev server shutdown on Ctrl+C.** Nest could hang on HTTP `server.close()` (HMR keep-alive) or
+  `next.close()` when Turbopack/PostCSS workers died from the process-group SIGINT. `@opencloudcms/core`
+  now drops open connections before dispose, times out Web UI close + `db.destroy()`, SIGKILLs remaining
+  child processes, installs a hard exit deadline (~4s) on SIGINT/SIGTERM, and scaffold/`main.ts` use
+  `enableShutdownHooks(['SIGINT', 'SIGTERM'], { useProcessExit: true })`.
+
 ### Breaking changes
 
 - **The project and npm packages are renamed to OpenCloudCMS and `@opencloudcms/*`.** Install

@@ -282,7 +282,7 @@ describe('runInit', () => {
     const main = read(dir, 'src/main.ts');
     expect(main).toContain('bodyParser: false');
     expect(main).toContain('process.loadEnvFile');
-    expect(main).toContain('enableShutdownHooks');
+    expect(main).toContain("enableShutdownHooks(['SIGINT', 'SIGTERM'], { useProcessExit: true })");
     expect(main).toContain('process.env.PORT ?? 4000');
     expect(main).toContain('OpenCloudCMS ready at');
     expect(main).toContain('Admin: ');
