@@ -9,7 +9,7 @@ export function packageNameFor(dir: string): string {
     .replace(/-+/g, '-')
     .replace(/^[-._]+|-+$/g, '')
     .slice(0, 214);
-  return name || 'opencms-project';
+  return name || 'opencloudcms-project';
 }
 
 export function dbNameFor(dir: string): string {
@@ -17,7 +17,7 @@ export function dbNameFor(dir: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
-  if (!name) return 'opencms';
+  if (!name) return 'opencloudcms';
   if (/^[0-9]/.test(name)) name = `db_${name}`;
   // Postgres identifiers are limited to 63 bytes.
   return name.slice(0, 63).replace(/_+$/, '');

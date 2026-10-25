@@ -1,4 +1,4 @@
-// Side-effect, Nest-free: registers oauth2_0001_init with the core migration stream. The `opencms` CLI
+// Side-effect, Nest-free: registers oauth2_0001_init with the core migration stream. The `opencloudcms` CLI
 // registers it too, so every process that migrates (autoMigrate, the Content Type Builder) must know it,
 // or Kysely reports a missing migration.
 import '@opencloudcms/oauth2/migrations';
@@ -146,7 +146,7 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, OnApplicati
     }
     throw new Error(
       `Database has ${pending.length} pending migration(s): ${pending.map((p) => `${p.stream}/${p.name}`).join(', ')}.\n` +
-        'Run `opencms migrate:up` before starting the server (or set autoMigrate: true in development).',
+        'Run `opencloudcms migrate:up` before starting the server (or set autoMigrate: true in development).',
     );
   }
 

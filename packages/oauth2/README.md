@@ -1,10 +1,10 @@
 # @opencloudcms/oauth2
 
-Authentication for the opencms admin: an embedded OAuth2/OIDC authorization server (`oidc-provider`) plus a
+Authentication for the OpenCloudCMS admin: an embedded OAuth2/OIDC authorization server (`oidc-provider`) plus a
 backend-for-frontend (BFF) that keeps all tokens on the server. The browser only ever holds an opaque,
 httpOnly `oc_session` cookie.
 
-- Authorization code + PKCE (S256 only), `refresh_token` grant, single client `opencms-admin`.
+- Authorization code + PKCE (S256 only), `refresh_token` grant, single client `opencloudcms-admin`.
 - Local email/password (argon2id) and an optional generic OIDC identity provider.
 - Permission groups (`super-admin` system group, `contenter`, `reviewer`), `@RequirePermission(...)`, user management API, first-run setup, audit events.
 - Global `AuthGuard` on every `/api/**` route (opt out per handler with `@Public()`).
@@ -18,10 +18,10 @@ import { OAuth2Module } from '@opencloudcms/oauth2';
 
 @Module({
   imports: [
-    OpenCmsModule.forRoot({ /* ... */ }),
+    OpenCloudCmsModule.forRoot({ /* ... */ }),
     OAuth2Module.forRoot({
       dbToken: OPENCLOUDCMS_DB,     // DI token of the app's Kysely instance
-      auth: { /* non-secret `auth` section of opencms.config.ts */ },
+      auth: { /* non-secret `auth` section of opencloudcms.config.ts */ },
       publicPathPrefixes: ['/api/content/'], // default, see below
     }),
   ],
@@ -44,8 +44,8 @@ Importing `@opencloudcms/oauth2` registers its core migrations (`oauth2_0001_ini
 `oauth2_0003_groups`) with `@opencloudcms/db`'s
 `coreMigrator()`. Any process that runs migrations must therefore load the package first:
 
-- The `opencms` CLI and `@opencloudcms/core` do this themselves (`import '@opencloudcms/oauth2/migrations'`, a
-  Nest-free side-effect entry), so `opencms migrate:up` / `migrate:status`, `autoMigrate` and the Content
+- The `opencloudcms` CLI and `@opencloudcms/core` do this themselves (`import '@opencloudcms/oauth2/migrations'`, a
+  Nest-free side-effect entry), so `opencloudcms migrate:up` / `migrate:status`, `autoMigrate` and the Content
   Type Builder all see `core/oauth2_0001_init`.
 - In your own scripts that use `@opencloudcms/db` without `@opencloudcms/core`, import `@opencloudcms/oauth2` (or
   `@opencloudcms/oauth2/migrations`) **before** calling `coreMigrator(...)`, otherwise Kysely reports a missing
@@ -55,7 +55,7 @@ Importing `@opencloudcms/oauth2` registers its core migrations (`oauth2_0001_ini
 
 `OPENCLOUDCMS_SECRET` is mandatory. `OPENCLOUDCMS_PUBLIC_URL` is optional outside production (default
 `http://localhost:${PORT ?? 4000}`) and mandatory when `NODE_ENV=production`; the app refuses to start without them.
-Env values override the `auth` section of `opencms.config.ts`.
+Env values override the `auth` section of `opencloudcms.config.ts`.
 
 | Key | Default | Env |
 |---|---|---|

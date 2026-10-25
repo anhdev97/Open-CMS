@@ -277,7 +277,7 @@ export function Builder() {
       setPlan(null);
       await load();
       setOriginal(structuredClone(draft));
-      window.dispatchEvent(new Event('opencms:schema-changed'));
+      window.dispatchEvent(new Event('opencloudcms:schema-changed'));
       toast.success(t('builder.savedToast'));
       if (selected !== draft.apiId) {
         savedApiId.current = draft.apiId;
@@ -290,7 +290,7 @@ export function Builder() {
       if (!original) return;
       const r = await api<ApplyResponse>(`/api/admin/content-types/${original.id}`, { method: 'DELETE' });
       setResult(r);
-      window.dispatchEvent(new Event('opencms:schema-changed'));
+      window.dispatchEvent(new Event('opencloudcms:schema-changed'));
       toast.success(t('builder.archivedToast'));
       navigate('/settings/content-types', { replace: true });
     });

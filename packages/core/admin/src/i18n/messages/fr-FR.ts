@@ -2,7 +2,7 @@ import type { Messages } from './en-US';
 
 const frFR: Messages = {
   app: {
-    name: 'OpenCMS',
+    name: 'OpenCloudCMS',
     loading: "Chargement de l'administration…",
   },
   auth: {
@@ -34,7 +34,7 @@ const frFR: Messages = {
   },
   login: {
     title: 'Connexion',
-    description: "Connectez-vous à l'administration OpenCMS.",
+    description: "Connectez-vous à l'administration OpenCloudCMS.",
     loading: 'Chargement du formulaire de connexion…',
     email: 'E-mail',
     password: 'Mot de passe',

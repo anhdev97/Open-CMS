@@ -2,10 +2,10 @@ import 'reflect-metadata';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { NestFactory } from '@nestjs/core';
-import { EntriesService } from '@opencms/core';
+import { EntriesService } from '@opencloudcms/core';
 import { findProjectRoot } from './root';
 
-const UA = 'OpenCMS-phone-store-example/0.1 (local demo; temporary catalog images)';
+const UA = 'OpenCloudCMS-phone-store-example/0.1 (local demo; temporary catalog images)';
 const publisher = {
   id: '00000000-0000-4000-8000-0000000000a1',
   permissions: ['content.publish'],
@@ -193,7 +193,7 @@ async function main() {
   const root = findProjectRoot(__dirname);
   const envFile = path.join(root, '.env');
   if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
-  process.env.OPENCMS_WEB = '0';
+  process.env.OPENCLOUDCMS_WEB = '0';
 
   const { AppModule } = await import('./app.module');
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn', 'log'] });

@@ -3,8 +3,8 @@
  * (matching content types and fields by their stable `id`) and produces a
  * list of schema operations.
  */
-import type { ContentTypeDefinition, FieldDefinition } from '@opencms/schema';
-import { fieldColumns, isMultiRelation } from '@opencms/schema';
+import type { ContentTypeDefinition, FieldDefinition } from '@opencloudcms/schema';
+import { fieldColumns, isMultiRelation } from '@opencloudcms/schema';
 
 export type Operation =
   | { op: 'createType'; def: ContentTypeDefinition }

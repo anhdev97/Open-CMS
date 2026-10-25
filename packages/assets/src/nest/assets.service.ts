@@ -11,7 +11,7 @@ import {
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import type { Kysely } from 'kysely';
-import { SYSTEM_TABLES } from '@opencms/schema';
+import { SYSTEM_TABLES } from '@opencloudcms/schema';
 import { ASSETS_DB, ASSETS_OPTIONS, DEFAULT_IMAGE_SIZES, DEFAULT_MAX_BYTES, STORAGE_PROVIDER } from '../constants';
 import { ImageTooLargeError, InvalidImageError, processUpload } from '../pipeline/image-pipeline';
 import type { StorageProvider } from '../provider/storage-provider';

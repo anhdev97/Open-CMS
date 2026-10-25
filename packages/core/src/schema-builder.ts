@@ -1,7 +1,7 @@
 /**
  * Content Type Builder API (dev only). The UI sends a definition; this writes
- * the *.schema.ts file and runs the same pipeline as `opencms migrate:create`
- * followed by `opencms migrate:up`. The generated files are what you commit.
+ * the *.schema.ts file and runs the same pipeline as `opencloudcms migrate:create`
+ * followed by `opencloudcms migrate:up`. The generated files are what you commit.
  */
 import * as path from 'node:path';
 import {

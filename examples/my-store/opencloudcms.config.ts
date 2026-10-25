@@ -1,4 +1,4 @@
-import { defineConfig } from '@opencms/schema';
+import { defineConfig } from '@opencloudcms/schema';
 import locales from './src/locales';
 
 export default defineConfig({

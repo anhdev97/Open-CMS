@@ -1,6 +1,6 @@
 /**
  * Database access and the two migration streams:
- *   - core migrations (system tables shipped with @opencms/db), tracked in opencms_core_migrations
+ *   - core migrations (system tables shipped with @opencloudcms/db), tracked in opencms_core_migrations
  *   - project migrations (generated ct_* tables in <project>/migrations), tracked in opencms_migrations
  * Core always runs first. Kysely's migrator takes a lock, so several instances
  * starting at once will not apply the same migration twice.
@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import { createJiti } from 'jiti';
 import { Kysely, Migrator, PostgresDialect, sql, type Migration, type MigrationProvider, type MigrationResultSet } from 'kysely';
 import { Pool, types } from 'pg';
-import { SYSTEM_TABLES } from '@opencms/schema';
+import { SYSTEM_TABLES } from '@opencloudcms/schema';
 
 // Keep `date` columns as 'YYYY-MM-DD' strings instead of timezone-shifted JS Dates.
 types.setTypeParser(1082, (v: string) => v);
@@ -97,10 +97,10 @@ export const coreMigrations: Record<string, Migration> = {
           changed += Number(res.numAffectedRows ?? 0);
           const left = await sql<{ n: string }>`select count(*)::text as n from ${sql.id(table)} where locale = ${from}`.execute(db);
           const n = Number(left.rows[0]?.n ?? 0);
-          if (n > 0) console.warn(`[opencms] 0002_region_locales: ${table}: ${n} "${from}" row(s) kept, "${to}" already exists for the same entry`);
+          if (n > 0) console.warn(`[opencloudcms] 0002_region_locales: ${table}: ${n} "${from}" row(s) kept, "${to}" already exists for the same entry`);
         }
       }
-      console.log(`[opencms] 0002_region_locales: renamed ${changed} locale row(s)`);
+      console.log(`[opencloudcms] 0002_region_locales: renamed ${changed} locale row(s)`);
     },
     async down() {
       // Not reversible: the old short codes are not recorded.
@@ -188,7 +188,7 @@ export class FileMigrationProvider implements MigrationProvider {
 const registeredSources: Record<string, Migration>[] = [];
 
 /**
- * Lets other packages (e.g. @opencms/oauth2) contribute migrations to the core stream.
+ * Lets other packages (e.g. @opencloudcms/oauth2) contribute migrations to the core stream.
  * Registering the same object again is a no-op; a key that already exists (built-in or
  * from another source) throws.
  */

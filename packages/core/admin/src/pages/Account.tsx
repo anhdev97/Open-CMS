@@ -175,7 +175,7 @@ function LanguageCard({ initial, onSaved }: { initial: Locale | null; onSaved: (
         // otherwise it would keep winning over the browser on the next visit.
         await setAdminLocale(matchLocale(navigator.languages ?? [navigator.language]));
         try {
-          localStorage.removeItem('opencms-locale');
+          localStorage.removeItem('opencloudcms-locale');
         } catch {
           /* storage unavailable */
         }

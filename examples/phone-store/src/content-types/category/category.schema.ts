@@ -1,4 +1,4 @@
-import { defineContentType, f } from '@opencms/schema';
+import { defineContentType, f } from '@opencloudcms/schema';
 
 export default defineContentType({
   id: 'ct_phonecat',

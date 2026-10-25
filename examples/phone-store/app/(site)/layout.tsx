@@ -1,7 +1,7 @@
 import '../globals.css';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { createTranslator } from '@opencms/core';
+import { createTranslator } from '@opencloudcms/core';
 import { SiteHeader } from './components/site-header';
 import { getSiteLocale } from './locale';
 import { messages } from './messages';

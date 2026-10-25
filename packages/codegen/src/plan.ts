@@ -5,7 +5,7 @@
  * the column / tables to `_del<stamp>_<name>` instead of dropping them, so
  * `migrate:down` restores data and nothing is lost by accident.
  */
-import type { ContentTypeDefinition, FieldDefinition } from '@opencms/schema';
+import type { ContentTypeDefinition, FieldDefinition } from '@opencloudcms/schema';
 import {
   documentStatusIndexName,
   fieldIndex,
@@ -24,7 +24,7 @@ import {
   relTargetIndexName,
   typeIndexNames,
   typeTableNames,
-} from '@opencms/schema';
+} from '@opencloudcms/schema';
 import type { Operation } from './diff';
 import type { Statement } from './ddl';
 

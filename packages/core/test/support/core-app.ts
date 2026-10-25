@@ -57,7 +57,7 @@ async function freePort(): Promise<number> {
  */
 export async function createCoreTestApp(opts: CoreTestAppOptions = {}): Promise<CoreTestApp> {
   const testDb = await startTestDb();
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opencms-core-'));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opencloudcms-core-'));
   let app: INestApplication | undefined;
   const cleanup = async () => {
     await app?.close().catch(() => {});

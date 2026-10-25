@@ -1,6 +1,6 @@
 export const enUS = {
   app: {
-    name: 'OpenCMS',
+    name: 'OpenCloudCMS',
     loading: 'Loading the admin…',
   },
   auth: {
@@ -32,7 +32,7 @@ export const enUS = {
   },
   login: {
     title: 'Sign in',
-    description: 'Sign in to the OpenCMS admin.',
+    description: 'Sign in to the OpenCloudCMS admin.',
     loading: 'Loading the sign-in form…',
     email: 'Email',
     password: 'Password',

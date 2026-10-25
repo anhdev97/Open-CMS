@@ -79,7 +79,7 @@ export function ContentGroupsTab({ types, editable, loaded, onChanged }: Props) 
     try {
       const r = await saveContentGroups(next);
       setGroups(r.groups);
-      window.dispatchEvent(new Event('opencms:schema-changed'));
+      window.dispatchEvent(new Event('opencloudcms:schema-changed'));
       onChanged();
       toast.success(t('groups.savedToast'));
       return true;

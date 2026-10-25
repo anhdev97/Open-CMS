@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Kysely } from 'kysely';
-import { SYSTEM_TABLES } from '@opencms/schema';
+import { SYSTEM_TABLES } from '@opencloudcms/schema';
 import { ASSETS_DB } from '../constants';
 import { slugifyFilename } from '../seo/slug';
 

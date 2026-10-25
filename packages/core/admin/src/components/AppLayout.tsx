@@ -41,7 +41,7 @@ import { useAuth } from '../auth/AuthContext';
 import { can, visibleSettingsItems } from '../lib/can';
 import { cn } from '../lib/utils';
 
-const NAV_STORAGE_KEY = 'opencms-nav';
+const NAV_STORAGE_KEY = 'opencloudcms-nav';
 const SETTINGS_KEY = '__settings';
 
 function readOpen(): Record<string, boolean> {
@@ -99,10 +99,10 @@ function useContentTypes(enabled: boolean) {
       );
     };
     void load();
-    window.addEventListener('opencms:schema-changed', load);
+    window.addEventListener('opencloudcms:schema-changed', load);
     return () => {
       live = false;
-      window.removeEventListener('opencms:schema-changed', load);
+      window.removeEventListener('opencloudcms:schema-changed', load);
     };
   }, [enabled]);
   return { types, groups, failed };

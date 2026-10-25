@@ -2,7 +2,7 @@ import type { Messages } from './en-US';
 
 const viVN: Messages = {
   app: {
-    name: 'OpenCMS',
+    name: 'OpenCloudCMS',
     loading: 'Đang tải trang quản trị…',
   },
   auth: {
@@ -34,7 +34,7 @@ const viVN: Messages = {
   },
   login: {
     title: 'Đăng nhập',
-    description: 'Đăng nhập vào trang quản trị OpenCMS.',
+    description: 'Đăng nhập vào trang quản trị OpenCloudCMS.',
     loading: 'Đang tải biểu mẫu đăng nhập…',
     email: 'Email',
     password: 'Mật khẩu',

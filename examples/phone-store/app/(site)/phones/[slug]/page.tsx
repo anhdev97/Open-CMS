@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createTranslator } from "@opencms/core";
+import { createTranslator } from "@opencloudcms/core";
 import {
   formatPrice,
   listBrands,

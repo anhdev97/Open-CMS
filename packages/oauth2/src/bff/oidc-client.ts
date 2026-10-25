@@ -61,7 +61,7 @@ export function internalFetch(
   };
 }
 
-/** The BFF as a confidential OIDC client (`opencms-admin`) of its own provider (spec D2, §6.3). */
+/** The BFF as a confidential OIDC client (`opencloudcms-admin`) of its own provider (spec D2, §6.3). */
 @Injectable()
 export class OidcClient {
   private config?: Promise<openid.Configuration>;

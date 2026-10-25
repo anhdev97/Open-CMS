@@ -34,7 +34,7 @@ import { UsersController } from './users/users.controller';
 export interface OAuth2ModuleOptions {
   /** DI token under which the app provides its Kysely instance (e.g. OPENCLOUDCMS_DB). */
   dbToken: InjectionToken;
-  /** Non-secret `auth` section of opencms.config.ts. */
+  /** Non-secret `auth` section of opencloudcms.config.ts. */
   auth?: Partial<AuthFileConfig>;
   /** Defaults to process.env. */
   env?: NodeJS.ProcessEnv;

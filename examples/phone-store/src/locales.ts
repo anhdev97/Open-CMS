@@ -1,4 +1,4 @@
-import { defineLocales } from '@opencms/schema';
+import { defineLocales } from '@opencloudcms/schema';
 
 export default defineLocales({
   defaultLocale: 'vi-VN',

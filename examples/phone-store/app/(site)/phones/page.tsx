@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { createTranslator } from '@opencms/core';
+import { createTranslator } from '@opencloudcms/core';
 import { PhoneCard } from '../components/phone-card';
 import { formatPrice, idForSlug, listBrands, listCategories, listPhones, type NamedEntry } from '../content';
 import { getSiteLocale } from '../locale';

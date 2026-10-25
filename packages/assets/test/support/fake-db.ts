@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { SYSTEM_TABLES } from '@opencms/schema';
+import { SYSTEM_TABLES } from '@opencloudcms/schema';
 
 type Row = Record<string, any>;
 type Pred = (row: Row) => boolean;

@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 
 /**
- * I2: the `opencms` CLI registers oauth2_0001_init, so every process that runs the core stream (the app's
+ * I2: the `opencloudcms` CLI registers oauth2_0001_init, so every process that runs the core stream (the app's
  * autoMigrate, the Content Type Builder's apply) must know it too, or Kysely reports a missing migration.
  * Loading @opencloudcms/core alone has to be enough.
  *

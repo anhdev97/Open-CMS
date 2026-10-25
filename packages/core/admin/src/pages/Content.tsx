@@ -82,11 +82,11 @@ function ContentView({ apiId }: { apiId: string }) {
         })
         .catch(setError);
     loadMeta();
-    window.addEventListener('opencms:schema-changed', loadMeta);
+    window.addEventListener('opencloudcms:schema-changed', loadMeta);
     api<{ data: ContentTypeDefinition }>(`/api/admin/content-types/${apiId}`)
       .then((r) => setDef(r.data))
       .catch(setError);
-    return () => window.removeEventListener('opencms:schema-changed', loadMeta);
+    return () => window.removeEventListener('opencloudcms:schema-changed', loadMeta);
   }, [apiId]);
 
   const reload = useCallback(() => {

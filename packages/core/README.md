@@ -1,8 +1,8 @@
 # @opencloudcms/core
 
-NestJS module of opencms: the content engine, the delivery and admin APIs, the Content Type Builder, login
+NestJS module of OpenCloudCMS: the content engine, the delivery and admin APIs, the Content Type Builder, login
 (via `@opencloudcms/oauth2`) and the embedded admin UI at `/admin`. Most projects get a working setup from
-`npx opencms-cli init my-cms`; this page describes what that setup does.
+`npx @opencloudcms/cli init my-cms`; this page describes what that setup does.
 
 ## Usage
 
@@ -58,7 +58,7 @@ The browser must reach the admin at the public URL (`OPENCLOUDCMS_PUBLIC_URL`, d
 |---|---|
 | `DATABASE_URL` | Postgres connection (read by `opencloudcms.config.ts`) |
 | `PORT` | default `4000` |
-| `OPENCLOUDCMS_SECRET` | required, at least 32 bytes (`opencms init` generates one) |
+| `OPENCLOUDCMS_SECRET` | required, at least 32 bytes (`opencloudcms init` generates one) |
 | `OPENCLOUDCMS_PUBLIC_URL` | optional in dev (default `http://localhost:${PORT ?? 4000}`), required when `NODE_ENV=production` |
 | `OPENCLOUDCMS_ADMIN_EMAIL`, `OPENCLOUDCMS_ADMIN_PASSWORD` | seed the first Super Admin without the setup page |
 
@@ -173,7 +173,7 @@ same hooks as `publish`.
 - `OPENCLOUDCMS_INTERNAL_URL` is removed (the BFF calls `http://127.0.0.1:${PORT ?? 4000}`).
 - The Nest app must be created with `bodyParser: false`.
 - The admin is now Next modules and the old admin options and dev variable are replaced by `web` (migration steps in the changelog).
-- Locale codes are `en-US`, `vi-VN`, `fr-FR`, `id-ID`; short codes (`en`) fail config validation. Content rows are migrated by the core migration `0002_region_locales`, applied by `opencms migrate:up` (run by `start`) or `autoMigrate`.
+- Locale codes are `en-US`, `vi-VN`, `fr-FR`, `id-ID`; short codes (`en`) fail config validation. Content rows are migrated by the core migration `0002_region_locales`, applied by `opencloudcms migrate:up` (run by `start`) or `autoMigrate`.
 - Roles became permission groups (tables renamed to `auth_groups`, `auth_user_groups`); routes are guarded with `@RequirePermission` (the role decorator is removed); creating a user needs `groupIds`. Details in the root `CHANGELOG.md`.
 
 See the root `CHANGELOG.md`.

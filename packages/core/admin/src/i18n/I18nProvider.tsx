@@ -6,7 +6,7 @@ import { LocaleContext } from './context';
 import { loadMessages, setActiveMessages } from './index';
 import { initialLocaleState } from './resolve';
 
-const STORAGE_KEY = 'opencms-locale';
+const STORAGE_KEY = 'opencloudcms-locale';
 
 let listener: ((l: Locale) => void) | null = null;
 

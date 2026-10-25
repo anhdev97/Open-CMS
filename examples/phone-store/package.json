@@ -2,11 +2,11 @@
   "name": "phone-store",
   "private": true,
   "version": "0.1.0",
-  "description": "Temporary example: a phone catalog storefront on OpenCMS",
+  "description": "Temporary example: a phone catalog storefront on OpenCloudCMS",
   "scripts": {
     "opencloudcms": "opencloudcms",
     "dev": "opencloudcms migrate:up && tsx --tsconfig tsconfig.server.json src/main.ts",
-    "seed": "cross-env OPENCMS_WEB=0 tsx --tsconfig tsconfig.server.json src/seed.ts",
+    "seed": "cross-env OPENCLOUDCMS_WEB=0 tsx --tsconfig tsconfig.server.json src/seed.ts",
     "build": "tsc -p tsconfig.server.json && next build",
     "start": "cross-env NODE_ENV=production node dist/src/main.js",
     "typecheck": "tsc -p tsconfig.server.json --noEmit"

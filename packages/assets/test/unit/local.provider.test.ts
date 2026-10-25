@@ -6,7 +6,7 @@ import { createLocalServerProvider } from '../../src/provider/local.provider';
 
 describe('createLocalServerProvider', () => {
   it('put writes file under root with nested key dirs', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opencms-assets-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opencloudcms-assets-'));
     const provider = createLocalServerProvider({
       root,
       publicBaseUrl: 'http://localhost:3000/assets',
@@ -18,7 +18,7 @@ describe('createLocalServerProvider', () => {
   });
 
   it('publicUrl strips trailing slash from publicBaseUrl', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opencms-assets-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opencloudcms-assets-'));
     const provider = createLocalServerProvider({
       root,
       publicBaseUrl: 'http://localhost:3000/assets/',
@@ -28,7 +28,7 @@ describe('createLocalServerProvider', () => {
   });
 
   it('delete removes file and ignores missing key', async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opencms-assets-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opencloudcms-assets-'));
     const provider = createLocalServerProvider({
       root,
       publicBaseUrl: 'http://localhost:3000/assets',
@@ -43,7 +43,7 @@ describe('createLocalServerProvider', () => {
   });
 
   it('exposes kind local', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opencms-assets-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opencloudcms-assets-'));
     const provider = createLocalServerProvider({ root, publicBaseUrl: 'http://x/' });
     expect(provider.kind).toBe('local');
   });

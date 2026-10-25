@@ -2,7 +2,7 @@
   "name": "@opencloudcms/core",
   "publishConfig": { "access": "public" },
   "version": "0.1.0",
-  "description": "NestJS modules for opencms: content engine, admin and storefront APIs",
+  "description": "NestJS modules for OpenCloudCMS: content engine, admin and storefront APIs",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -1,4 +1,4 @@
 @import "tailwindcss";
-@import "@opencms/core/admin/theme.css";
+@import "@opencloudcms/core/admin/theme.css";
 @source ".";
-@source "../node_modules/@opencms/core/dist/admin";
+@source "../node_modules/@opencloudcms/core/dist/admin";

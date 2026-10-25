@@ -6,7 +6,7 @@ import { allCoreMigrations, createDb, migrateUp, registerCoreMigrations } from '
 
 const ADMIN_URL = process.env.TEST_DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/postgres';
 const noop: Migration = { async up() {}, async down() {} };
-const NO_PROJECT_MIGRATIONS = '/nonexistent-opencms-migrations';
+const NO_PROJECT_MIGRATIONS = '/nonexistent-opencloudcms-migrations';
 
 /**
  * I3: contributed migrations (e.g. `oauth2_0001_init`) sort after every `000N_*` built-in, so the next

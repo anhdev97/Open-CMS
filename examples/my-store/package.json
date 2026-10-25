@@ -2,7 +2,7 @@
   "name": "my-store",
   "private": true,
   "version": "0.1.0",
-  "description": "Example opencms project: content types, generated code, migrations and one Next app (admin + website)",
+  "description": "Example OpenCloudCMS project: content types, generated code, migrations and one Next app (admin + website)",
   "scripts": {
     "opencloudcms": "opencloudcms",
     "dev": "opencloudcms migrate:up && tsx --tsconfig tsconfig.server.json src/main.ts",

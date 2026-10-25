@@ -25,7 +25,7 @@ export type OAuth2Config = {
   admin: { email?: string; password?: string; name?: string; forceReset: boolean };
 };
 
-/** Non-secret part of `auth` in opencms.config.ts. */
+/** Non-secret part of `auth` in opencloudcms.config.ts. */
 export type AuthFileConfig = {
   publicUrl?: string;
   ttl?: Partial<Ttls>;

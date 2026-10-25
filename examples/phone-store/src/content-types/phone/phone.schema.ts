@@ -1,6 +1,6 @@
 // Source of truth for this content type. Edit by hand or from the admin
-// Content Type Builder (which rewrites this file), then run `opencms migrate:create`.
-import { defineContentType, f } from '@opencms/schema';
+// Content Type Builder (which rewrites this file), then run `opencloudcms migrate:create`.
+import { defineContentType, f } from '@opencloudcms/schema';
 
 export default defineContentType({
   id: 'ct_phone',

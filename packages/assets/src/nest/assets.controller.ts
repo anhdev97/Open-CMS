@@ -18,7 +18,7 @@ import {
   type NestInterceptor,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { RequirePermission } from '@opencms/oauth2';
+import { RequirePermission } from '@opencloudcms/oauth2';
 import { ASSETS_OPTIONS, DEFAULT_MAX_BYTES } from '../constants';
 import type { AssetsModuleOptions } from '../types';
 import { AssetsService, type RegisterAssetInput, type UploadedFileInput } from './assets.service';

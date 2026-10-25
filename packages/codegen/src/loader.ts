@@ -1,8 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createJiti } from 'jiti';
-import type { ContentGroupDefinition, ContentTypeDefinition, OpenCmsConfig, ResolvedConfig } from '@opencms/schema';
-import { CONFIG_FILE_NAMES, normalizeDefinition, resolveConfig } from '@opencms/schema';
+import type { ContentGroupDefinition, ContentTypeDefinition, OpenCloudCmsConfig, ResolvedConfig } from '@opencloudcms/schema';
+import { CONFIG_FILE_NAMES, normalizeDefinition, resolveConfig } from '@opencloudcms/schema';
 
 function freshJiti(root: string) {
   // No caches: the admin UI rewrites schema files while the process is running.
@@ -14,15 +14,15 @@ export function findProjectRoot(start = process.cwd()): string {
   for (;;) {
     if (CONFIG_FILE_NAMES.some((n) => fs.existsSync(path.join(dir, n)))) return dir;
     const parent = path.dirname(dir);
-    if (parent === dir) throw new Error(`No opencms.config.ts found in ${start} or any parent directory.`);
+    if (parent === dir) throw new Error(`No opencloudcms.config.ts found in ${start} or any parent directory.`);
     dir = parent;
   }
 }
 
 export async function loadConfig(root: string): Promise<ResolvedConfig> {
   const file = CONFIG_FILE_NAMES.map((n) => path.join(root, n)).find((p) => fs.existsSync(p));
-  if (!file) throw new Error(`No opencms.config.ts in ${root}`);
-  const config = await freshJiti(root).import<OpenCmsConfig>(file, { default: true });
+  if (!file) throw new Error(`No opencloudcms.config.ts in ${root}`);
+  const config = await freshJiti(root).import<OpenCloudCmsConfig>(file, { default: true });
   return resolveConfig(config, root);
 }
 

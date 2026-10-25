@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { OpenCmsModule } from '@opencms/core';
-import config from '../opencms.config';
+import { OpenCloudCmsModule } from '@opencloudcms/core';
+import config from '../opencloudcms.config';
 import contentGroups from './content-groups';
 import { contentTypes } from './generated';
 import { hooks } from './extensions';
@@ -10,7 +10,7 @@ const projectRoot = findProjectRoot(__dirname);
 
 @Module({
   imports: [
-    OpenCmsModule.forRoot({
+    OpenCloudCmsModule.forRoot({
       root: projectRoot,
       config,
       contentTypes,

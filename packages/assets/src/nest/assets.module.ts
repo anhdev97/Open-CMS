@@ -18,7 +18,7 @@ import { FoldersService } from './folders.service';
 import { createLocalStaticMiddleware, localStaticPrefix } from './local-static.middleware';
 
 export interface AssetsModuleForRootOptions {
-  /** DI token under which the app provides its Kysely instance (e.g. OPENCMS_DB). */
+  /** DI token under which the app provides its Kysely instance (e.g. OPENCLOUDCMS_DB). */
   dbToken: InjectionToken;
   /** Storage/upload configuration. Omit or pass null to disable upload + local static serving. */
   assets?: AssetsModuleOptions | null;

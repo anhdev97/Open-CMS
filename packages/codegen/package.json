@@ -1,7 +1,7 @@
 {
   "name": "@opencloudcms/codegen",
   "version": "0.1.0",
-  "description": "Diff engine, migration generator and code generator for opencms",
+  "description": "Diff engine, migration generator and code generator for OpenCloudCMS",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

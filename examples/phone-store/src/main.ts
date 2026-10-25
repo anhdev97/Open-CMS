@@ -18,8 +18,8 @@ async function bootstrap() {
   app.enableShutdownHooks();
   const port = Number(process.env.PORT ?? 4001);
   await app.listen(port);
-  const publicUrl = process.env.OPENCMS_PUBLIC_URL ?? `http://localhost:${port}`;
-  console.log(`OpenCMS ready at ${publicUrl}`);
+  const publicUrl = process.env.OPENCLOUDCMS_PUBLIC_URL ?? `http://localhost:${port}`;
+  console.log(`OpenCloudCMS ready at ${publicUrl}`);
   console.log(`Admin: ${publicUrl}/admin`);
   console.log(`Store: ${publicUrl}/`);
 }

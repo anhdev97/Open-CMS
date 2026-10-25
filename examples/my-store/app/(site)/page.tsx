@@ -1,11 +1,11 @@
-import { createTranslator } from '@opencms/core';
+import { createTranslator } from '@opencloudcms/core';
 import locales from '../../src/locales';
 import { messages } from './messages';
 
 export default function HomePage() {
   const t = createTranslator(messages, locales.defaultLocale);
   return (
-    <main data-opencms-site="" className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-4 px-6">
+    <main data-opencloudcms-site="" className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-4 px-6">
       <h1 className="text-3xl font-semibold tracking-tight">my-store</h1>
       <p className="text-muted-foreground">{t('home.tagline')}</p>
       <p>

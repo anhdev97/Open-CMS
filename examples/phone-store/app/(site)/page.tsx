@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createTranslator } from "@opencms/core";
+import { createTranslator } from "@opencloudcms/core";
 import { PhoneCard } from "./components/phone-card";
 import { formatPrice, listBrands, listPhones } from "./content";
 import { getSiteLocale } from "./locale";

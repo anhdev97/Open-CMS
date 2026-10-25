@@ -69,8 +69,8 @@ function HomeContent() {
       .catch(setError);
     const load = () => api<Meta>('/api/admin/meta').then(setMeta).catch(setError);
     load();
-    window.addEventListener('opencms:schema-changed', load);
-    return () => window.removeEventListener('opencms:schema-changed', load);
+    window.addEventListener('opencloudcms:schema-changed', load);
+    return () => window.removeEventListener('opencloudcms:schema-changed', load);
   }, []);
 
   return (

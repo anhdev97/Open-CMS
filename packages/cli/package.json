@@ -1,7 +1,7 @@
 {
   "name": "@opencloudcms/cli",
   "version": "0.1.0",
-  "description": "opencms command line: generate code, create and run migrations, scaffold content types",
+  "description": "OpenCloudCMS command line: generate code, create and run migrations, scaffold content types",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

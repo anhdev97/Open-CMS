@@ -47,7 +47,7 @@ describe('oidc provider mounted at /oauth2', () => {
     expect(keys[0].d).toBeUndefined();
   });
 
-  it('upserts the opencms-admin client and authenticates it with client_secret_basic', async () => {
+  it('upserts the opencloudcms-admin client and authenticates it with client_secret_basic', async () => {
     const row = await t.db.selectFrom('auth_oauth_clients').selectAll().where('client_id', '=', ADMIN_CLIENT_ID).executeTakeFirstOrThrow();
     const meta = row.metadata as Record<string, unknown>;
     expect(meta.redirect_uris).toEqual([`${t.url}/api/auth/callback`]);

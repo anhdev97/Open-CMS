@@ -3,7 +3,7 @@
  * Used when a content type is created / edited from the admin UI, so the UI
  * and hand-written files share the same source of truth.
  */
-import type { ContentGroupDefinition, ContentTypeDefinition, FieldDefinition, LocaleSettings } from '@opencms/schema';
+import type { ContentGroupDefinition, ContentTypeDefinition, FieldDefinition, LocaleSettings } from '@opencloudcms/schema';
 
 const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
@@ -37,8 +37,8 @@ function printField(field: FieldDefinition): string {
 export function printSchemaFile(def: ContentTypeDefinition): string {
   const lines = [
     '// Source of truth for this content type. Edit by hand or from the admin',
-    '// Content Type Builder (which rewrites this file), then run `opencms migrate:create`.',
-    "import { defineContentType, f } from '@opencms/schema';",
+    '// Content Type Builder (which rewrites this file), then run `opencloudcms migrate:create`.',
+    "import { defineContentType, f } from '@opencloudcms/schema';",
     '',
     'export default defineContentType({',
     `  id: ${lit(def.id, '')},`,
@@ -58,9 +58,9 @@ export function printSchemaFile(def: ContentTypeDefinition): string {
 
 export function printContentGroupsFile(groups: ContentGroupDefinition[]): string {
   return [
-    '// Content groups. Managed by OpenCMS: edit by hand or from the admin',
+    '// Content groups. Managed by OpenCloudCMS: edit by hand or from the admin',
     '// Content Type Builder (which rewrites this file).',
-    "import { defineContentGroups } from '@opencms/schema';",
+    "import { defineContentGroups } from '@opencloudcms/schema';",
     '',
     'export default defineContentGroups([',
     ...groups.map((g) => `  ${lit({ key: g.key, title: g.title, order: g.order }, '')},`),
@@ -71,9 +71,9 @@ export function printContentGroupsFile(groups: ContentGroupDefinition[]): string
 
 export function printLocalesFile(s: LocaleSettings): string {
   return [
-    '// Supported locales. Managed by OpenCMS: edit by hand or from the admin',
+    '// Supported locales. Managed by OpenCloudCMS: edit by hand or from the admin',
     '// Settings > Languages (which rewrites this file).',
-    "import { defineLocales } from '@opencms/schema';",
+    "import { defineLocales } from '@opencloudcms/schema';",
     '',
     'export default defineLocales({',
     `  defaultLocale: ${lit(s.defaultLocale, '')},`,

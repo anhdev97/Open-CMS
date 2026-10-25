@@ -2,7 +2,7 @@
   "name": "@opencloudcms/oauth2",
   "publishConfig": { "access": "public" },
   "version": "0.1.0",
-  "description": "OAuth2/OIDC authentication for opencms admin",
+  "description": "OAuth2/OIDC authentication for OpenCloudCMS admin",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

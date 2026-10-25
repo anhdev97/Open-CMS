@@ -61,14 +61,14 @@ export interface StartedInteraction {
 
 const b64url = (b: Buffer) => b.toString('base64url');
 
-/** Starts an authorization request for opencms-admin (PKCE S256) and returns the interaction uid. */
+/** Starts an authorization request for opencloudcms-admin (PKCE S256) and returns the interaction uid. */
 export async function startInteraction(url: string, opts: { loginHint?: string } = {}): Promise<StartedInteraction> {
   const verifier = b64url(randomBytes(32));
   const challenge = b64url(createHash('sha256').update(verifier).digest());
   const state = b64url(randomBytes(16));
   const nonce = b64url(randomBytes(16));
   const q = new URLSearchParams({
-    client_id: 'opencms-admin',
+    client_id: 'opencloudcms-admin',
     response_type: 'code',
     scope: 'openid profile email offline_access',
     redirect_uri: `${url}/api/auth/callback`,

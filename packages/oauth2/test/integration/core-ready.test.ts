@@ -21,8 +21,8 @@ describe('CORE_READY gate', () => {
   });
 
   it('a rejected coreReady aborts startup before the provider touches the database', async () => {
-    await expect(createTestApp(env, { db: testDb, coreReady: Promise.reject(new Error('run opencms migrate:up')) })).rejects.toThrow(
-      'run opencms migrate:up',
+    await expect(createTestApp(env, { db: testDb, coreReady: Promise.reject(new Error('run opencloudcms migrate:up')) })).rejects.toThrow(
+      'run opencloudcms migrate:up',
     );
     expect(await keyCount()).toBe(0);
   });
@@ -44,7 +44,7 @@ describe('CORE_READY gate', () => {
   });
 
   /**
-   * Stand-in for OpenCmsModule: settles the gate from its own onModuleInit, which only runs once every
+   * Stand-in for OpenCloudCmsModule: settles the gate from its own onModuleInit, which only runs once every
    * provider is instantiated. If CORE_READY were a promise Nest awaits during DI, startup would deadlock.
    */
   it('a coreReady settled from a sibling onModuleInit does not deadlock startup', async () => {

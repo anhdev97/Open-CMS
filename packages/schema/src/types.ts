@@ -1,5 +1,5 @@
 /**
- * Core type model for opencms content types.
+ * Core type model for OpenCloudCMS content types.
  *
  * A ContentTypeDefinition is the single source of truth. Physical tables,
  * migrations, validators and TypeScript types are all derived from it.

@@ -68,7 +68,7 @@ describe('OAuth2Module wired into OpenCloudCmsModule', () => {
       (e: Error) => e,
     );
     expect(err).toBeDefined();
-    expect(err!.message).toContain('opencms migrate:up');
+    expect(err!.message).toContain('opencloudcms migrate:up');
     expect(err!.message).not.toContain('relation');
   }, 60_000);
 });

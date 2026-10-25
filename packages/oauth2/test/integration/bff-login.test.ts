@@ -52,7 +52,7 @@ describe('BFF login and callback', () => {
     const loc = new URL(res.headers.get('location')!);
     expect(`${loc.origin}${loc.pathname}`).toBe(`${t.url}/oauth2/auth`);
     const p = loc.searchParams;
-    expect(p.get('client_id')).toBe('opencms-admin');
+    expect(p.get('client_id')).toBe('opencloudcms-admin');
     expect(p.get('response_type')).toBe('code');
     expect(p.get('redirect_uri')).toBe(`${t.url}/api/auth/callback`);
     expect(p.get('scope')).toBe('openid profile email offline_access');

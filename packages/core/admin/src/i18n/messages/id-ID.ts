@@ -2,7 +2,7 @@ import type { Messages } from './en-US';
 
 const idID: Messages = {
   app: {
-    name: 'OpenCMS',
+    name: 'OpenCloudCMS',
     loading: 'Memuat admin…',
   },
   auth: {
@@ -34,7 +34,7 @@ const idID: Messages = {
   },
   login: {
     title: 'Masuk',
-    description: 'Masuk ke admin OpenCMS.',
+    description: 'Masuk ke admin OpenCloudCMS.',
     loading: 'Memuat formulir masuk…',
     email: 'Email',
     password: 'Kata sandi',

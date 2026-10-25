@@ -1,5 +1,5 @@
 // Custom logic for the product type. Never overwritten by the generator.
-import { defineHooks } from '@opencms/core';
+import { defineHooks } from '@opencloudcms/core';
 
 export default defineHooks('product', {
   beforePublish: async (doc) => {

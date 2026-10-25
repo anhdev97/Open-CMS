@@ -306,12 +306,12 @@ export function Assets() {
 
   const onDragStartAssets = (e: DragEvent, id: string) => {
     const ids = selected.has(id) && selected.size > 0 ? [...selected] : [id];
-    e.dataTransfer.setData('application/x-opencms-assets', JSON.stringify(ids));
+    e.dataTransfer.setData('application/x-opencloudcms-assets', JSON.stringify(ids));
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const onDragStartFolder = (e: DragEvent, id: string) => {
-    e.dataTransfer.setData('application/x-opencms-folder', id);
+    e.dataTransfer.setData('application/x-opencloudcms-folder', id);
     e.dataTransfer.effectAllowed = 'move';
   };
 
@@ -323,8 +323,8 @@ export function Assets() {
 
   const onDropNav = (e: DragEvent, target: FolderSel) => {
     e.preventDefault();
-    const folderId = e.dataTransfer.getData('application/x-opencms-folder');
-    const raw = e.dataTransfer.getData('application/x-opencms-assets');
+    const folderId = e.dataTransfer.getData('application/x-opencloudcms-folder');
+    const raw = e.dataTransfer.getData('application/x-opencloudcms-assets');
     let assetIds: string[] = [];
     try {
       assetIds = raw ? (JSON.parse(raw) as string[]) : [];

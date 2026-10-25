@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import path from 'node:path';
-import { OpenCmsModule } from '@opencms/core';
-import config from '../opencms.config';
+import { OpenCloudCmsModule } from '@opencloudcms/core';
+import config from '../opencloudcms.config';
 import contentGroups from './content-groups';
 import { contentTypes } from './generated';
 import { hooks } from './extensions';
@@ -11,7 +11,7 @@ const projectRoot = findProjectRoot(__dirname);
 
 @Module({
   imports: [
-    OpenCmsModule.forRoot({
+    OpenCloudCmsModule.forRoot({
       root: projectRoot,
       config,
       contentTypes,
@@ -25,8 +25,8 @@ const projectRoot = findProjectRoot(__dirname);
           publicBaseUrl: '/media',
         },
       },
-      // Seed boots this module without Next (`OPENCMS_WEB=0`).
-      web: process.env.OPENCMS_WEB === '0' ? { enabled: false } : { dir: projectRoot },
+      // Seed boots this module without Next (`OPENCLOUDCMS_WEB=0`).
+      web: process.env.OPENCLOUDCMS_WEB === '0' ? { enabled: false } : { dir: projectRoot },
     }),
   ],
 })

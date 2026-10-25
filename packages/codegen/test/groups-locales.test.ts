@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { assertValidSchema, defineContentType, f, resolveConfig, type ContentGroupDefinition } from '@opencms/schema';
+import { assertValidSchema, defineContentType, f, resolveConfig, type ContentGroupDefinition } from '@opencloudcms/schema';
 import {
   contentGroupsFile,
   loadContentGroups,
@@ -13,7 +13,7 @@ import {
   printSchemaFile,
 } from '../src';
 
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'opencms-gl-'));
+const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'opencloudcms-gl-'));
 const cfg = (root: string) => resolveConfig({ database: { url: 'x' } } as any, root);
 const def = (extra: object = {}) =>
   defineContentType({ id: 'ct_product', apiId: 'product', displayName: 'Product', fields: { name: f.text({ id: 'fld_name' }) }, ...extra } as any);
@@ -36,7 +36,7 @@ describe('content groups and locales files', () => {
       { key: 'blog', title: { 'en-US': 'Blog' } },
     ];
     const text = printContentGroupsFile(groups);
-    expect(text).toMatch(/^\/\/ .*[Mm]anaged by OpenCMS/);
+    expect(text).toMatch(/^\/\/ .*[Mm]anaged by OpenCloudCMS/);
     fs.mkdirSync(path.join(root, 'src'));
     fs.writeFileSync(path.join(root, 'src', 'content-groups.ts'), text);
     expect(await loadContentGroups(cfg(root))).toEqual(groups);
@@ -47,7 +47,7 @@ describe('content groups and locales files', () => {
     const root = tmp();
     const s = { defaultLocale: 'en-US', locales: ['en-US', 'vi-VN'] } as const;
     const text = printLocalesFile({ defaultLocale: s.defaultLocale, locales: [...s.locales] });
-    expect(text).toMatch(/^\/\/ .*[Mm]anaged by OpenCMS/);
+    expect(text).toMatch(/^\/\/ .*[Mm]anaged by OpenCloudCMS/);
     fs.mkdirSync(path.join(root, 'src'));
     fs.writeFileSync(path.join(root, 'src', 'locales.ts'), text);
     const jiti = createJiti(path.join(root, 'noop.js'), { moduleCache: false, fsCache: false, interopDefault: true });

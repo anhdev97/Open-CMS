@@ -2,7 +2,7 @@
   "name": "@opencloudcms/assets",
   "publishConfig": { "access": "public" },
   "version": "0.1.0",
-  "description": "Asset upload and storage providers for opencms",
+  "description": "Asset upload and storage providers for OpenCloudCMS",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

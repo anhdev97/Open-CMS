@@ -26,14 +26,14 @@ describe('names', () => {
   it('packageNameFor', () => {
     expect(packageNameFor('/x/My Shop')).toBe('my-shop');
     expect(packageNameFor('/x/shop-2026')).toBe('shop-2026');
-    expect(packageNameFor('/x/@@@')).toBe('opencms-project');
+    expect(packageNameFor('/x/@@@')).toBe('opencloudcms-project');
     expect(packageNameFor('/x/.hidden_app')).toBe('hidden_app');
     expect(packageNameFor('/x/_x')).toBe('x');
   });
   it('dbNameFor', () => {
     expect(dbNameFor('/x/My Shop')).toBe('my_shop');
     expect(dbNameFor('/x/2026shop')).toBe('db_2026shop');
-    expect(dbNameFor('/x/---')).toBe('opencms');
+    expect(dbNameFor('/x/---')).toBe('opencloudcms');
     expect(dbNameFor('/x/' + 'a'.repeat(80))).toHaveLength(63);
   });
 });
@@ -172,11 +172,11 @@ describe('runInit', () => {
     const dir = path.join(tmp, 'My Shop');
     await runInit(dir, base);
     const locales = read(dir, 'src/locales.ts');
-    expect(locales).toContain("import { defineLocales } from '@opencms/schema';");
+    expect(locales).toContain("import { defineLocales } from '@opencloudcms/schema';");
     expect(locales).toContain("defaultLocale: 'en-US'");
     expect(locales).toContain("locales: ['en-US']");
     const groups = read(dir, 'src/content-groups.ts');
-    expect(groups).toContain("import { defineContentGroups } from '@opencms/schema';");
+    expect(groups).toContain("import { defineContentGroups } from '@opencloudcms/schema';");
     expect(groups).toMatch(/export default defineContentGroups\(\[\s*\]\);/);
     const cfg = read(dir, 'opencloudcms.config.ts');
     expect(cfg).toContain("from '@opencloudcms/schema'");
