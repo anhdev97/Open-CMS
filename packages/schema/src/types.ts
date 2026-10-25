@@ -102,7 +102,7 @@ export interface ContentTypeInput {
   fields: Record<string, FieldSpec>;
 }
 
-export interface OpenCmsConfig {
+export interface OpenCloudCmsConfig {
   database: { url: string };
   /** Directory scanned for `*.schema.ts` files. Default `src/content-types`. */
   contentTypesDir?: string;
@@ -115,7 +115,7 @@ export interface OpenCmsConfig {
   locales?: Locale[];
 }
 
-export interface ResolvedConfig extends Required<Omit<OpenCmsConfig, 'locales'>> {
+export interface ResolvedConfig extends Required<Omit<OpenCloudCmsConfig, 'locales'>> {
   locales: Locale[];
   root: string;
 }

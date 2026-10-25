@@ -6,7 +6,7 @@ import type {
   FieldKind,
   FieldOptionsMap,
   FieldSpec,
-  OpenCmsConfig,
+  OpenCloudCmsConfig,
 } from './types';
 
 type BuilderArg<K extends FieldKind> = FieldFlags & { id: string } & FieldOptionsMap[K];
@@ -91,7 +91,7 @@ export function normalizeDefinition(raw: ContentTypeDefinition): ContentTypeDefi
   return def;
 }
 
-export function defineConfig(config: OpenCmsConfig): OpenCmsConfig {
+export function defineConfig(config: OpenCloudCmsConfig): OpenCloudCmsConfig {
   return config;
 }
 

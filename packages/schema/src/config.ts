@@ -1,10 +1,10 @@
 import * as path from 'node:path';
 import { validateLocaleSettings } from './locales';
-import type { OpenCmsConfig, ResolvedConfig } from './types';
+import type { OpenCloudCmsConfig, ResolvedConfig } from './types';
 
-export const CONFIG_FILE_NAMES = ['opencms.config.ts', 'opencms.config.js'];
+export const CONFIG_FILE_NAMES = ['opencloudcms.config.ts', 'opencloudcms.config.js'];
 
-export function resolveConfig(config: OpenCmsConfig, root: string): ResolvedConfig {
+export function resolveConfig(config: OpenCloudCmsConfig, root: string): ResolvedConfig {
   const defaultLocale = config.defaultLocale ?? 'en-US';
   const locales = config.locales ?? [defaultLocale];
   const issues = validateLocaleSettings({ defaultLocale, locales });
