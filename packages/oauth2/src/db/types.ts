@@ -94,7 +94,98 @@ export interface AuthAuditEventsTable {
   meta: ColumnType<Record<string, unknown>, string | Record<string, unknown> | undefined, string | Record<string, unknown>>;
 }
 
+
+export type IdentityProviderLifecycle = 'DRAFT' | 'ACTIVE' | 'DISABLED' | 'ARCHIVED';
+export type IdentityProviderVersionState = 'DRAFT' | 'TESTED' | 'PUBLISHED' | 'SUPERSEDED';
+export type IdentityProviderHealthStatus = 'UNKNOWN' | 'HEALTHY' | 'DEGRADED' | 'UNAVAILABLE';
+
+export interface AuthIdentityProvidersTable {
+  id: Generated<string>;
+  code: string;
+  display_name: string;
+  description: string | null;
+  lifecycle_status: Generated<IdentityProviderLifecycle>;
+  active_version_id: string | null;
+  draft_version_id: string | null;
+  display_order: Generated<number>;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+  archived_at: NullableTimestamp;
+}
+
+export interface AuthIdentityProviderVersionsTable {
+  id: Generated<string>;
+  provider_id: string;
+  version_no: number;
+  state: Generated<IdentityProviderVersionState>;
+  config_public: Json<Record<string, unknown>>;
+  client_secret_enc: string | null;
+  config_fingerprint: string;
+  tested_fingerprint: string | null;
+  tested_at: NullableTimestamp;
+  published_at: NullableTimestamp;
+  source_version_id: string | null;
+  created_by: string | null;
+  published_by: string | null;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+export interface AuthLoginPolicyTable {
+  id: number;
+  sso_login_enabled: Generated<boolean>;
+  revision: Generated<string>;
+  updated_by: string | null;
+  updated_at: Timestamp;
+}
+
+export interface AuthIdentityBlocksTable {
+  id: Generated<string>;
+  provider_code: string;
+  subject_hash: string;
+  reason: string;
+  blocked_by: string | null;
+  blocked_at: Timestamp;
+  unblocked_by: string | null;
+  unblocked_at: NullableTimestamp;
+}
+
+export interface AuthIdentityProviderHealthTable {
+  provider_id: string;
+  health_status: Generated<IdentityProviderHealthStatus>;
+  active_version_id: string | null;
+  checked_at: NullableTimestamp;
+  last_success_at: NullableTimestamp;
+  last_failure_at: NullableTimestamp;
+  consecutive_failures: Generated<number>;
+  failure_code: string | null;
+}
+
+export interface AuthIdentityProviderHealthEventsTable {
+  id: Generated<string>;
+  provider_id: string;
+  version_id: string | null;
+  category: string;
+  failure_code: string | null;
+  at: Timestamp;
+}
+
+export interface AuthSsoMigrationMarkersTable {
+  key: string;
+  fingerprint: string | null;
+  created_at: Timestamp;
+}
+
 export interface AuthTables {
+  auth_identity_providers: AuthIdentityProvidersTable;
+  auth_identity_provider_versions: AuthIdentityProviderVersionsTable;
+  auth_login_policy: AuthLoginPolicyTable;
+  auth_identity_blocks: AuthIdentityBlocksTable;
+  auth_identity_provider_health: AuthIdentityProviderHealthTable;
+  auth_identity_provider_health_events: AuthIdentityProviderHealthEventsTable;
+  auth_sso_migration_markers: AuthSsoMigrationMarkersTable;
   auth_users: AuthUsersTable;
   auth_groups: AuthGroupsTable;
   auth_user_groups: AuthUserGroupsTable;
