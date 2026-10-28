@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import type { Kysely } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { OAUTH2_CONFIG, OAUTH2_DB } from '../constants';
 import type { OAuth2Config } from '../config/schema';
 import type { AuthTables } from '../db/types';
@@ -26,10 +26,7 @@ export class LegacyOidcImportService {
 
     return this.db.transaction().execute(async (trx) => {
       // Serialize across all application instances even before the marker exists.
-      await trx.executeQuery(
-        // PostgreSQL transaction-scoped lock; key is stable and unrelated to user data.
-        { sql: 'select pg_advisory_xact_lock(1480676197, 1869181033)', parameters: [] },
-      );
+      await sql`select pg_advisory_xact_lock(1480676197, 1869181033)`.execute(trx);
       const marker = await trx.selectFrom('auth_sso_migration_markers')
         .select('key').where('key', '=', 'legacy_oidc_v1').executeTakeFirst();
       if (marker) return 'already_imported';
