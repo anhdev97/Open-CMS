@@ -7,6 +7,7 @@ import type { AuthTables } from '../db/types';
 import { deriveKey } from '../security/crypto';
 import type { AuthSettingsProvider } from '../settings/settings.provider';
 import { BootstrapService } from '../setup/bootstrap.service';
+import { LegacyOidcImportService } from '../sso-management/legacy-oidc-import.service';
 import { UserService, type GrantRevoker } from '../users/user.service';
 import { createKyselyAdapter, type AdapterConstructor } from './kysely.adapter';
 import { createProvider, providerMountHandlers, TtlSnapshot, upsertAdminClient, type OidcProvider } from './provider.factory';
@@ -48,6 +49,9 @@ export class ProviderService implements OnModuleInit, GrantRevoker {
       findUser: (id) => users.findById(id),
     });
     await this.moduleRef.get(BootstrapService, { strict: false }).run();
+    // Import legacy settings once after core migrations; imported providers remain DRAFT.
+    // Do not change the existing login path until the dynamic registry cutover is verified.
+    await this.moduleRef.get(LegacyOidcImportService, { strict: false }).importOnce();
 
     const http = this.adapterHost?.httpAdapter;
     if (!http) {
