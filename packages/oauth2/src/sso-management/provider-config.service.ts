@@ -132,6 +132,48 @@ export class ProviderConfigService {
     });
   }
 
+
+  /**
+   * Publish is deliberately gated by a verified TESTED state.
+   * No API can set TESTED until the network-safe discovery tester is implemented.
+   */
+  async publish(providerId: string, expectedFingerprint: string, actorId: string): Promise<string> {
+    return this.db.transaction().execute(async (trx) => {
+      const provider = await trx.selectFrom('auth_identity_providers')
+        .select(['id', 'draft_version_id', 'active_version_id', 'lifecycle_status'])
+        .where('id', '=', providerId).forUpdate().executeTakeFirst();
+      if (!provider) throw new NotFoundException('SSO provider not found');
+      if (provider.lifecycle_status === 'ARCHIVED' || !provider.draft_version_id) {
+        throw new ConflictException('Provider has no publishable draft');
+      }
+      const draft = await trx.selectFrom('auth_identity_provider_versions')
+        .select(['id', 'state', 'config_fingerprint', 'tested_fingerprint', 'client_secret_enc'])
+        .where('id', '=', provider.draft_version_id)
+        .where('provider_id', '=', providerId).executeTakeFirstOrThrow();
+      if (draft.state !== 'TESTED' || !draft.tested_fingerprint ||
+        draft.tested_fingerprint !== draft.config_fingerprint ||
+        draft.config_fingerprint !== expectedFingerprint || !draft.client_secret_enc) {
+        throw new ConflictException('Draft must be successfully tested and unchanged before publishing');
+      }
+      if (provider.active_version_id) {
+        await trx.updateTable('auth_identity_provider_versions')
+          .set({ state: 'SUPERSEDED', updated_at: new Date() })
+          .where('id', '=', provider.active_version_id).where('provider_id', '=', providerId)
+          .where('state', '=', 'PUBLISHED').execute();
+      }
+      const updated = await trx.updateTable('auth_identity_provider_versions')
+        .set({ state: 'PUBLISHED', published_at: new Date(), published_by: actorId, updated_at: new Date() })
+        .where('id', '=', draft.id).where('state', '=', 'TESTED').returning('id').executeTakeFirst();
+      if (!updated) throw new ConflictException('Draft was concurrently modified');
+      await trx.updateTable('auth_identity_providers')
+        .set({
+          lifecycle_status: 'ACTIVE', active_version_id: draft.id, draft_version_id: null,
+          updated_by: actorId, updated_at: new Date(),
+        }).where('id', '=', providerId).execute();
+      return draft.id;
+    });
+  }
+
   async disable(providerId: string, actorId: string): Promise<void> {
     const row = await this.db.updateTable('auth_identity_providers')
       .set({ lifecycle_status: 'DISABLED', updated_by: actorId, updated_at: new Date() })
