@@ -1,4 +1,5 @@
 import { isIP } from 'node:net';
+import { lookup } from 'node:dns/promises';
 
 /**
  * Reject obvious SSRF destinations before any discovery call.
@@ -59,4 +60,36 @@ export function validateOidcDiscovery(
     throw new Error('OIDC PKCE S256 is required');
   }
   return m as unknown as OidcDiscoveryDocument;
+}
+
+/**
+ * DNS preflight only. Callers MUST pin validated IPs to the actual TLS socket
+ * (or use an outbound proxy enforcing public IP ranges) to prevent DNS rebinding.
+ * Never use this helper alone to authorize a fetch.
+ */
+export async function resolvePublicAddresses(url: URL): Promise<string[]> {
+  assertPublicHttpsUrl(url.toString());
+  const records = await lookup(url.hostname, { all: true, verbatim: true });
+  if (records.length === 0) throw new Error('OIDC host did not resolve');
+  for (const record of records) {
+    const ip = record.address.toLowerCase();
+    if (record.family === 4) {
+      const octets = ip.split('.').map(Number);
+      const [a, b, d] = octets;
+      if (a === 0 || a === 10 || a === 127 || a >= 224 || a === 169 && b === 254
+        || a === 172 && b >= 16 && b <= 31 || a === 192 && b === 168
+        || a === 100 && b >= 64 && b <= 127 || a === 192 && b === 0
+        || a === 198 && (b === 18 || b === 19)
+        || a === 192 && b === 0 && d === 0) {
+        throw new Error('OIDC hostname resolved to a non-public address');
+      }
+    } else if (record.family === 6) {
+      if (ip === '::1' || ip === '::' || ip.startsWith('fc') || ip.startsWith('fd')
+        || /^fe[89ab]/.test(ip) || ip.startsWith('ff')
+        || ip.startsWith('2001:db8:') || ip.startsWith('::ffff:')) {
+        throw new Error('OIDC hostname resolved to a non-public address');
+      }
+    } else throw new Error('Unsupported DNS address family');
+  }
+  return records.map((record) => record.address);
 }
