@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { Kysely } from 'kysely';
+import { sql, type Kysely } from 'kysely';
 import { OAUTH2_CONFIG, OAUTH2_DB } from '../constants';
 import type { OAuth2Config } from '../config/schema';
 import type { AuthTables } from '../db/types';
@@ -121,7 +121,8 @@ export class ProviderConfigService {
         .set({
           config_public: config, client_secret_enc: encrypted,
           config_fingerprint: this.fingerprint(config, encrypted),
-          state: 'DRAFT', tested_fingerprint: null, tested_at: null, updated_at: new Date(),
+          state: 'DRAFT', tested_fingerprint: null, tested_at: null,
+          updated_at: sql`greatest(now(), updated_at + interval '1 millisecond')`,
         }).where('id', '=', draft.id).execute();
       await trx.updateTable('auth_identity_providers')
         .set({
