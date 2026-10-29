@@ -56,8 +56,9 @@ export class ProviderRegistryService {
     if (!(await this.policy.isSsoEnabled())) return undefined;
     const row = await this.db.selectFrom('auth_identity_providers as p')
       .innerJoin('auth_identity_provider_versions as v', (join) =>
-        join.onRef('v.provider_id', '=', 'p.id')
-          .on('v.id', '=', pinnedVersionId ?? this.db.dynamic.ref('p.active_version_id')))
+        pinnedVersionId
+          ? join.onRef('v.provider_id', '=', 'p.id').on('v.id', '=', pinnedVersionId)
+          : join.onRef('v.provider_id', '=', 'p.id').onRef('v.id', '=', 'p.active_version_id'))
       .select([
         'p.id', 'p.code', 'p.display_name', 'v.id as version_id',
         'v.state', 'v.config_public', 'v.client_secret_enc',
