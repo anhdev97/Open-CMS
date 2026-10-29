@@ -54,7 +54,7 @@ export class ProviderRecoveryService {
           config_public: source.config_public,
           client_secret_enc: source.client_secret_enc,
           config_fingerprint: createHmac('sha256', deriveKey(this.cfg.secret, 'client-secret'))
-            .update(JSON.stringify(source.config_public)).update('\\0')
+            .update(JSON.stringify(source.config_public)).update('\0')
             .update(source.client_secret_enc ?? '').digest('hex'),
           tested_fingerprint: null,
           tested_at: null,
