@@ -19,6 +19,7 @@ import { LegacyOidcImportService } from './sso-management/legacy-oidc-import.ser
 import { LoginPolicyService } from './sso-management/login-policy.service';
 import { ProviderRegistryService } from './sso-management/provider-registry.service';
 import { ProviderRecoveryService } from './sso-management/provider-recovery.service';
+import { ProviderConfigService } from './sso-management/provider-config.service';
 import { IDENTITY_PROVIDERS } from './idp/identity-provider';
 import { IdpController } from './idp/idp.controller';
 import { OidcIdentityProvider } from './idp/oidc.identity-provider';
@@ -109,6 +110,7 @@ export class OAuth2Module {
         LoginPolicyService,
         ProviderRegistryService,
         ProviderRecoveryService,
+        ProviderConfigService,
         // Spec §6.5: every /api/** route is protected unless @Public(); §8 error JSON everywhere.
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: ApiExceptionFilter },
