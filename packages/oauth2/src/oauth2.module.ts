@@ -15,6 +15,7 @@ import {
   AUTH_SETTINGS, CORE_READY, PUBLIC_PATH_PREFIXES, GRANT_REVOKER, OAUTH2_CONFIG, OAUTH2_DB, RATE_LIMITER, type CoreReady,
 } from './constants';
 import { IdentityLinker } from './idp/identity-linker';
+import { LegacyOidcImportService } from './sso-management/legacy-oidc-import.service';
 import { IDENTITY_PROVIDERS } from './idp/identity-provider';
 import { IdpController } from './idp/idp.controller';
 import { OidcIdentityProvider } from './idp/oidc.identity-provider';
@@ -101,6 +102,7 @@ export class OAuth2Module {
           inject: [OAUTH2_CONFIG],
         },
         IdentityLinker,
+        LegacyOidcImportService,
         // Spec §6.5: every /api/** route is protected unless @Public(); §8 error JSON everywhere.
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: ApiExceptionFilter },
@@ -125,6 +127,7 @@ export class OAuth2Module {
         SessionAuthenticator,
         IDENTITY_PROVIDERS,
         IdentityLinker,
+        LegacyOidcImportService,
       ],
     };
   }
