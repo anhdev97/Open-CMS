@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { sql, type Kysely } from 'kysely';
+import type { Kysely } from 'kysely';
 import { OAUTH2_CONFIG, OAUTH2_DB } from '../constants';
 import type { OAuth2Config } from '../config/schema';
 import type { AuthTables } from '../db/types';
