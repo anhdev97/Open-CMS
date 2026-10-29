@@ -1,5 +1,9 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { createHmac } from 'node:crypto';
 import { sql, type Kysely } from 'kysely';
+import { OAUTH2_CONFIG } from '../constants';
+import type { OAuth2Config } from '../config/schema';
+import { deriveKey } from '../security/crypto';
 import { OAUTH2_DB } from '../constants';
 import type { AuthTables } from '../db/types';
 
@@ -9,7 +13,10 @@ import type { AuthTables } from '../db/types';
  */
 @Injectable()
 export class ProviderRecoveryService {
-  constructor(@Inject(OAUTH2_DB) private readonly db: Kysely<AuthTables>) {}
+  constructor(
+    @Inject(OAUTH2_DB) private readonly db: Kysely<AuthTables>,
+    @Inject(OAUTH2_CONFIG) private readonly cfg: OAuth2Config,
+  ) {}
 
   async createFromVersion(
     providerId: string,
@@ -46,7 +53,9 @@ export class ProviderRecoveryService {
           state: 'DRAFT',
           config_public: source.config_public,
           client_secret_enc: source.client_secret_enc,
-          config_fingerprint: '',
+          config_fingerprint: createHmac('sha256', deriveKey(this.cfg.secret, 'client-secret'))
+            .update(JSON.stringify(source.config_public)).update('\\0')
+            .update(source.client_secret_enc ?? '').digest('hex'),
           tested_fingerprint: null,
           tested_at: null,
           published_at: null,
