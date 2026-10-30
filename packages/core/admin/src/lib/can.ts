@@ -19,6 +19,7 @@ const ROUTE_PERMISSIONS: Partial<Record<RouteId, Permission>> = {
   settingsGroups: 'settings.groups',
   settingsContentTypes: 'settings.content-types',
   settingsLanguages: 'settings.languages',
+  settingsSso: 'settings.sso.read',
   content: 'content.read',
   assets: 'content.read',
 };
