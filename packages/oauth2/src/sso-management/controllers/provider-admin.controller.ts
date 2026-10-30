@@ -6,6 +6,7 @@ import type { AuthenticatedRequest } from '../../guard/session-auth.service';
 import { parseBody } from '../../security/validate';
 import { ProviderConfigService } from '../provider-config.service';
 import { ProviderRecoveryService } from '../provider-recovery.service';
+import { ProviderHealthService } from '../provider-health.service';
 import { StepUpService } from '../step-up.service';
 
 const id = z.string().uuid();
@@ -34,6 +35,7 @@ export class ProviderAdminController {
     @Inject(ProviderConfigService) private readonly providers: ProviderConfigService,
     @Inject(ProviderRecoveryService) private readonly recovery: ProviderRecoveryService,
     @Inject(StepUpService) private readonly stepUp: StepUpService,
+    @Inject(ProviderHealthService) private readonly health: ProviderHealthService,
   ) {}
 
   private async recent(req: AuthenticatedRequest): Promise<void> {
@@ -57,6 +59,17 @@ export class ProviderAdminController {
   @Get(':id/versions')
   async versions(@Param('id') providerId: string) {
     return { data: await this.providers.listVersions(parseBody(id, providerId)) };
+  }
+
+  @Get(':id/health')
+  async healthHistory(@Param('id') providerId: string) {
+    return { data: await this.health.getHistory(parseBody(id, providerId)) };
+  }
+
+  @Post(':id/probe')
+  @RequirePermission('settings.sso.manage')
+  async probe(@Param('id') providerId: string) {
+    return { data: { status: await this.health.probe(parseBody(id, providerId)) } };
   }
 
   @Post()
