@@ -6,6 +6,7 @@ import type { OAuth2Config } from '../config/schema';
 import type { AuthTables } from '../db/types';
 import { deriveKey, seal } from '../security/crypto';
 import { assertPublicHttpsUrl } from './provider-validation.service';
+import { checkOidcDiscovery } from './oidc-discovery-client';
 
 export interface ProviderDraftInput {
   code: string;
@@ -172,6 +173,56 @@ export class ProviderConfigService {
    * Publish is deliberately gated by a verified TESTED state.
    * No API can set TESTED until the network-safe discovery tester is implemented.
    */
+
+  /**
+   * Test the immutable snapshot of a draft with a DNS-pinned HTTPS fetch.
+   * "TESTED" means that discovery/JWKS and mandatory PKCE metadata passed;
+   * it does NOT prove that the IdP accepts the client secret.
+   *
+   * Network calls intentionally run outside a database transaction.
+   * A concurrent edit changes the fingerprint and invalidates the result.
+   */
+  async testDraft(providerId: string, _actorId: string): Promise<{ testedFingerprint: string; warning: string }> {
+    const provider = await this.db.selectFrom('auth_identity_providers')
+      .select(['draft_version_id', 'lifecycle_status']).where('id', '=', providerId).executeTakeFirst();
+    if (!provider || !provider.draft_version_id || provider.lifecycle_status === 'ARCHIVED') {
+      throw new NotFoundException('Editable provider draft not found');
+    }
+    const draft = await this.db.selectFrom('auth_identity_provider_versions')
+      .select(['id', 'state', 'config_public', 'client_secret_enc', 'config_fingerprint'])
+      .where('id', '=', provider.draft_version_id).where('provider_id', '=', providerId)
+      .executeTakeFirst();
+    if (!draft || !['DRAFT', 'TESTED'].includes(draft.state)) {
+      throw new ConflictException('No testable draft');
+    }
+    if (typeof draft.config_public.issuer !== 'string' ||
+      typeof draft.config_public.clientId !== 'string' || !draft.client_secret_enc) {
+      throw new ConflictException('Draft is missing required OIDC configuration');
+    }
+    await checkOidcDiscovery(draft.config_public.issuer);
+    const result = await this.db.updateTable('auth_identity_provider_versions')
+      .set({
+        state: 'TESTED',
+        tested_fingerprint: draft.config_fingerprint,
+        tested_at: new Date(),
+        updated_at: sql`greatest(now(), updated_at + interval '1 millisecond')`,
+      })
+      .where('id', '=', draft.id).where('provider_id', '=', providerId)
+      .where('config_fingerprint', '=', draft.config_fingerprint)
+      .where('state', 'in', ['DRAFT', 'TESTED'])
+      .where(({ exists, selectFrom }) => exists(
+        selectFrom('auth_identity_providers').select('id')
+          .where('id', '=', providerId).where('draft_version_id', '=', draft.id)
+          .where('lifecycle_status', '<>', 'ARCHIVED'),
+      ))
+      .returning('id').executeTakeFirst();
+    if (!result) throw new ConflictException('Draft changed while discovery was being tested');
+    return {
+      testedFingerprint: draft.config_fingerprint,
+      warning: 'OIDC discovery and JWKS validated. Client credentials were not tested end-to-end.',
+    };
+  }
+
   async publish(providerId: string, expectedFingerprint: string, actorId: string): Promise<string> {
     return this.db.transaction().execute(async (trx) => {
       const provider = await trx.selectFrom('auth_identity_providers')
