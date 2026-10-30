@@ -26,6 +26,8 @@ export interface IdpStartState {
   state: string;
   nonce: string;
   verifier: string;
+  versionId?: string;
+  startedAt?: number;
 }
 
 /**
@@ -38,6 +40,9 @@ export interface IdpLinkedState {
   uid: string;
   provider: string;
   userId: string;
+  subject?: string;
+  versionId?: string;
+  startedAt?: number;
 }
 
 export type IdpState = IdpStartState | IdpLinkedState;
@@ -61,10 +66,15 @@ export function openIdpState(key: Buffer, sealed: string | undefined): IdpState 
   }
   if (!v || !str(v.uid) || !str(v.provider)) return undefined;
   if (v.phase === 'start' && str(v.state) && str(v.nonce) && str(v.verifier)) {
-    return { phase: 'start', uid: v.uid, provider: v.provider, state: v.state, nonce: v.nonce, verifier: v.verifier };
+    return { phase: 'start', uid: v.uid, provider: v.provider, state: v.state, nonce: v.nonce, verifier: v.verifier,
+      versionId: str(v.versionId) ? v.versionId : undefined,
+      startedAt: typeof v.startedAt === 'number' ? v.startedAt : undefined };
   }
   if (v.phase === 'linked' && str(v.userId)) {
-    return { phase: 'linked', uid: v.uid, provider: v.provider, userId: v.userId };
+    return { phase: 'linked', uid: v.uid, provider: v.provider, userId: v.userId,
+      subject: str(v.subject) ? v.subject : undefined,
+      versionId: str(v.versionId) ? v.versionId : undefined,
+      startedAt: typeof v.startedAt === 'number' ? v.startedAt : undefined };
   }
   return undefined;
 }
