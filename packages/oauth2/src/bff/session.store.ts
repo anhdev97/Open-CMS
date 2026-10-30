@@ -27,6 +27,7 @@ export interface SessionRow {
   originProviderCode?: string;
   originSubjectHash?: string;
   originProviderVersionId?: string;
+  originGrantId?: string;
   stepUpVerifiedAt?: Date;
 }
 
@@ -81,6 +82,16 @@ export class SessionStore {
       const user = await trx.selectFrom('auth_users').select('status')
         .where('id', '=', userId).forShare().executeTakeFirst();
       if (!user || user.status !== 'active') throw new Error('User is disabled');
+      const grant = tokens.refreshToken || tokens.accessToken
+        ? await trx.selectFrom('auth_oidc_payloads').select('grant_id')
+          .where((eb) => eb.or([
+            ...(tokens.refreshToken
+              ? [eb.and([eb('kind', '=', 'RefreshToken'), eb('id', '=', tokens.refreshToken)])]
+              : []),
+            eb.and([eb('kind', '=', 'AccessToken'), eb('id', '=', tokens.accessToken)]),
+          ]))
+          .executeTakeFirst()
+        : undefined;
       await trx.insertInto('auth_sessions').values({
         id_hash: idHash, user_id: userId,
         access_token_enc: seal(this.key, tokens.accessToken),
@@ -94,6 +105,7 @@ export class SessionStore {
         origin_provider_code: origin?.method === 'oidc' ? origin.providerCode : null,
         origin_subject_hash: origin?.method === 'oidc' ? origin.subjectHash : null,
         origin_provider_version_id: origin?.method === 'oidc' ? origin.providerVersionId : null,
+        origin_grant_id: grant?.grant_id ?? null,
         step_up_verified_at: null,
       }).execute();
     });
@@ -227,6 +239,7 @@ export class SessionStore {
       originProviderCode: r.origin_provider_code ?? undefined,
       originSubjectHash: r.origin_subject_hash ?? undefined,
       originProviderVersionId: r.origin_provider_version_id ?? undefined,
+      originGrantId: r.origin_grant_id ?? undefined,
       stepUpVerifiedAt: r.step_up_verified_at ? new Date(r.step_up_verified_at) : undefined,
     };
   }
