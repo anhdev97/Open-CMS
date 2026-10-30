@@ -6,6 +6,7 @@ import type { AuthTables } from '../db/types';
 import { AuthError } from '../errors';
 import { normalizeEmail } from '../security/email';
 import { UserService, type AuthUser } from '../users/user.service';
+import { IdentityBlockService } from '../sso-management/identity-block.service';
 import type { ExternalIdentity } from './identity-provider';
 
 /**
@@ -18,10 +19,12 @@ export class IdentityLinker {
     @Inject(OAUTH2_DB) private readonly db: Kysely<AuthTables>,
     @Inject(UserService) private readonly users: UserService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(IdentityBlockService) private readonly blocks: IdentityBlockService,
   ) {}
 
   /** userId, or AuthError `idp_email_unverified` | `idp_account_not_found` | `account_disabled`. */
   async resolve(identity: ExternalIdentity): Promise<string> {
+    await this.blocks.assertAllowed(identity.provider, identity.subject);
     const linked = await this.linkedUser(identity);
     if (linked) return this.active(linked);
 
