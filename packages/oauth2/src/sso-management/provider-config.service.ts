@@ -44,6 +44,41 @@ export class ProviderConfigService {
     }
   }
 
+
+  /**
+   * Admin read model: never return encrypted secrets or raw fingerprints.
+   * The caller must still enforce CMS RBAC before exposing this data.
+   */
+  async listProviders(): Promise<Array<{
+    id: string;
+    code: string;
+    displayName: string;
+    lifecycle: string;
+    activeVersionId: string | null;
+    draftVersionId: string | null;
+    hasDraftSecret: boolean;
+    draftState: string | null;
+  }>> {
+    const rows = await this.db.selectFrom('auth_identity_providers as p')
+      .leftJoin('auth_identity_provider_versions as v', 'v.id', 'p.draft_version_id')
+      .select([
+        'p.id', 'p.code', 'p.display_name', 'p.lifecycle_status',
+        'p.active_version_id', 'p.draft_version_id',
+        'v.client_secret_enc', 'v.state as draft_state',
+      ])
+      .orderBy('p.display_order').orderBy('p.code').execute();
+    return rows.map((row) => ({
+      id: row.id,
+      code: row.code,
+      displayName: row.display_name,
+      lifecycle: row.lifecycle_status,
+      activeVersionId: row.active_version_id,
+      draftVersionId: row.draft_version_id,
+      hasDraftSecret: Boolean(row.client_secret_enc),
+      draftState: row.draft_state ?? null,
+    }));
+  }
+
   async createDraft(input: ProviderDraftInput, actorId: string): Promise<{ providerId: string; draftId: string }> {
     this.validate(input);
     const config = {
