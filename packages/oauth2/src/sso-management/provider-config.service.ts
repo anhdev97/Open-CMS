@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { sql, type Kysely } from 'kysely';
 import { OAUTH2_CONFIG, OAUTH2_DB } from '../constants';
+import { AuditService } from '../audit/audit.service';
 import type { OAuth2Config } from '../config/schema';
 import type { AuthTables } from '../db/types';
 import { deriveKey, seal } from '../security/crypto';
@@ -23,6 +24,7 @@ export class ProviderConfigService {
   constructor(
     @Inject(OAUTH2_DB) private readonly db: Kysely<AuthTables>,
     @Inject(OAUTH2_CONFIG) private readonly cfg: OAuth2Config,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   private key(): Buffer { return deriveKey(this.cfg.secret, 'client-secret'); }
@@ -106,6 +108,8 @@ export class ProviderConfigService {
       }).returning('id').executeTakeFirstOrThrow();
       await trx.updateTable('auth_identity_providers')
         .set({ draft_version_id: version.id }).where('id', '=', provider.id).execute();
+      await this.audit.record({ type: 'sso.provider.create', actorId,
+        meta: { providerId: provider.id, providerCode: input.code } }, trx);
       return { providerId: provider.id, draftId: version.id };
     });
   }
@@ -167,6 +171,8 @@ export class ProviderConfigService {
           ...(patch.displayName === undefined ? {} : { display_name: patch.displayName.trim() }),
           updated_by: actorId, updated_at: new Date(),
         }).where('id', '=', providerId).execute();
+      await this.audit.record({ type: 'sso.provider.edit', actorId,
+        meta: { providerId, changedFields: Object.keys(patch).filter((v) => v !== 'clientSecret') } }, trx);
     });
   }
 
@@ -184,7 +190,7 @@ export class ProviderConfigService {
    * Network calls intentionally run outside a database transaction.
    * A concurrent edit changes the fingerprint and invalidates the result.
    */
-  async testDraft(providerId: string, _actorId: string): Promise<{ testedFingerprint: string; warning: string }> {
+  async testDraft(providerId: string, actorId: string): Promise<{ testedFingerprint: string; warning: string }> {
     const provider = await this.db.selectFrom('auth_identity_providers')
       .select(['draft_version_id', 'lifecycle_status']).where('id', '=', providerId).executeTakeFirst();
     if (!provider || !provider.draft_version_id || provider.lifecycle_status === 'ARCHIVED') {
@@ -201,8 +207,15 @@ export class ProviderConfigService {
       typeof draft.config_public.clientId !== 'string' || !draft.client_secret_enc) {
       throw new ConflictException('Draft is missing required OIDC configuration');
     }
-    await checkOidcDiscovery(draft.config_public.issuer);
-    const result = await this.db.updateTable('auth_identity_provider_versions')
+    try {
+      await checkOidcDiscovery(draft.config_public.issuer);
+    } catch (error) {
+      await this.audit.record({ type: 'sso.provider.test', actorId,
+        meta: { providerId, outcome: 'failed' } });
+      throw error;
+    }
+    const result = await this.db.transaction().execute(async (trx) => {
+      const updated = await trx.updateTable('auth_identity_provider_versions')
       .set({
         state: 'TESTED',
         tested_fingerprint: draft.config_fingerprint,
@@ -218,6 +231,11 @@ export class ProviderConfigService {
           .where('lifecycle_status', '<>', 'ARCHIVED'),
       ))
       .returning('id').executeTakeFirst();
+      if (!updated) throw new ConflictException('Draft changed during test');
+      await this.audit.record({ type: 'sso.provider.test', actorId,
+        meta: { providerId, versionId: draft.id, outcome: 'passed' } }, trx);
+      return updated;
+    });
     if (!result) throw new ConflictException('Draft changed while discovery was being tested');
     return {
       testedFingerprint: draft.config_fingerprint,
@@ -258,6 +276,8 @@ export class ProviderConfigService {
           lifecycle_status: 'ACTIVE', active_version_id: draft.id, draft_version_id: null,
           updated_by: actorId, updated_at: new Date(),
         }).where('id', '=', providerId).execute();
+      await this.audit.record({ type: 'sso.provider.publish', actorId,
+        meta: { providerId, versionId: draft.id } }, trx);
       return draft.id;
     });
   }
@@ -280,27 +300,35 @@ export class ProviderConfigService {
   }
 
   async restore(providerId: string, actorId: string): Promise<void> {
-    const restored = await this.db.updateTable('auth_identity_providers')
-      .set({ lifecycle_status: 'ACTIVE', updated_by: actorId, updated_at: new Date() })
-      .where('id', '=', providerId).where('lifecycle_status', '=', 'DISABLED')
-      .where('active_version_id', 'is not', null)
-      .returning('id').executeTakeFirst();
-    if (!restored) throw new ConflictException('Only a disabled provider with an active version can be restored');
+    await this.db.transaction().execute(async (trx) => {
+      const row = await trx.updateTable('auth_identity_providers')
+        .set({ lifecycle_status: 'ACTIVE', updated_by: actorId, updated_at: new Date() })
+        .where('id', '=', providerId).where('lifecycle_status', '=', 'DISABLED')
+        .where('active_version_id', 'is not', null).returning('id').executeTakeFirst();
+      if (!row) throw new ConflictException('Only a disabled provider with an active version can be restored');
+      await this.audit.record({ type: 'sso.provider.restore', actorId, meta: { providerId } }, trx);
+    });
   }
 
   async disable(providerId: string, actorId: string): Promise<void> {
-    const row = await this.db.updateTable('auth_identity_providers')
-      .set({ lifecycle_status: 'DISABLED', updated_by: actorId, updated_at: new Date() })
-      .where('id', '=', providerId).where('lifecycle_status', '=', 'ACTIVE')
-      .returning('id').executeTakeFirst();
-    if (!row) throw new ConflictException('Only active providers can be disabled');
+    await this.db.transaction().execute(async (trx) => {
+      const row = await trx.updateTable('auth_identity_providers')
+        .set({ lifecycle_status: 'DISABLED', updated_by: actorId, updated_at: new Date() })
+        .where('id', '=', providerId).where('lifecycle_status', '=', 'ACTIVE')
+        .returning('id').executeTakeFirst();
+      if (!row) throw new ConflictException('Only active providers can be disabled');
+      await this.audit.record({ type: 'sso.provider.disable', actorId, meta: { providerId } }, trx);
+    });
   }
 
   async archive(providerId: string, actorId: string): Promise<void> {
-    const row = await this.db.updateTable('auth_identity_providers')
-      .set({ lifecycle_status: 'ARCHIVED', archived_at: new Date(), updated_by: actorId, updated_at: new Date() })
-      .where('id', '=', providerId).where('lifecycle_status', 'in', ['DRAFT', 'DISABLED'])
-      .returning('id').executeTakeFirst();
-    if (!row) throw new ConflictException('Disable an active provider before archiving');
+    await this.db.transaction().execute(async (trx) => {
+      const row = await trx.updateTable('auth_identity_providers')
+        .set({ lifecycle_status: 'ARCHIVED', archived_at: new Date(), updated_by: actorId, updated_at: new Date() })
+        .where('id', '=', providerId).where('lifecycle_status', 'in', ['DRAFT', 'DISABLED'])
+        .returning('id').executeTakeFirst();
+      if (!row) throw new ConflictException('Disable an active provider before archiving');
+      await this.audit.record({ type: 'sso.provider.archive', actorId, meta: { providerId } }, trx);
+    });
   }
 }
