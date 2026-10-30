@@ -66,6 +66,7 @@ const frFR: Messages = {
     groups: 'Groupes',
     contentTypesSettings: 'Types de contenu',
     languages: 'Langues',
+    sso: "Connexion SSO",
     settings: 'Paramètres',
     home: 'Accueil',
     assets: 'Médias',
@@ -310,6 +311,11 @@ const frFR: Messages = {
       groups: { label: 'Gérer les groupes', description: 'Créer des groupes et choisir leurs autorisations.' },
       'content-types': { label: 'Gérer les types de contenu', description: 'Modifier les types de contenu, les champs et les groupes de contenu.' },
       languages: { label: 'Gérer les langues', description: 'Choisir les langues disponibles pour le contenu.' },
+      sso: {
+        read: { label: "Voir les fournisseurs SSO", description: "Afficher les fournisseurs OIDC et leur état." },
+        manage: { label: "Gérer le SSO", description: "Modifier et publier les fournisseurs SSO." },
+        identities: { label: "Gérer les identités SSO", description: "Bloquer et délier les identités externes." },
+      },
     },
   },
   permGroups: {
