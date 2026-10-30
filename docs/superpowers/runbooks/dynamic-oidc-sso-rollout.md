@@ -23,6 +23,7 @@ Status: **implementation in progress; do not deploy or merge until CI and securi
 - oauth2_0004_dynamic_sso adds providers, immutable versions, default-off policy, blocks, health and import markers.
 - oauth2_0005_sso_provenance adds PKCE-bound one-time provenance and BFF session origins.
 - oauth2_0006_sso_health_counters adds separate probe success streak.
+- oauth2_0007_sso_session_grant stores internal AS Grant provenance for targeted Block revocation.
 - Apply migrations using the normal application migrator, and verify global SSO login remains OFF.
 
 ## Import, Test, Publish and enable
