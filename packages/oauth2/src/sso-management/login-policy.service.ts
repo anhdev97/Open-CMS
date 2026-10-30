@@ -1,6 +1,7 @@
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { sql, type Kysely } from 'kysely';
 import { OAUTH2_DB } from '../constants';
+import { AuditService } from '../audit/audit.service';
 import type { AuthTables } from '../db/types';
 
 /**
@@ -9,7 +10,10 @@ import type { AuthTables } from '../db/types';
  */
 @Injectable()
 export class LoginPolicyService {
-  constructor(@Inject(OAUTH2_DB) private readonly db: Kysely<AuthTables>) {}
+  constructor(
+    @Inject(OAUTH2_DB) private readonly db: Kysely<AuthTables>,
+    @Inject(AuditService) private readonly audit: AuditService,
+  ) {}
 
   async isSsoEnabled(): Promise<boolean> {
     const policy = await this.db.selectFrom('auth_login_policy')
@@ -27,7 +31,8 @@ export class LoginPolicyService {
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
       throw new ConflictException('Invalid SSO policy revision');
     }
-    const updated = await this.db.updateTable('auth_login_policy')
+    await this.db.transaction().execute(async (trx) => {
+    const updated = await trx.updateTable('auth_login_policy')
       .set({
         sso_login_enabled: enabled,
         revision: sql`revision + 1`,
@@ -38,5 +43,8 @@ export class LoginPolicyService {
       .where('revision', '=', String(expectedRevision))
       .returning('id').executeTakeFirst();
     if (!updated) throw new ConflictException('SSO policy was modified concurrently');
+    await this.audit.record({ type: 'sso.policy.update', actorId,
+      meta: { enabled, revision: expectedRevision + 1 } }, trx);
+    });
   }
 }
