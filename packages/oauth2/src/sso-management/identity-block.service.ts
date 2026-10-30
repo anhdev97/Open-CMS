@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { sql, type Kysely } from 'kysely';
 import { AuditService } from '../audit/audit.service';
 import { OAUTH2_DB } from '../constants';
@@ -93,13 +93,23 @@ export class IdentityBlockService {
   }
 
   /** Unlink never removes block tombstones and does not revoke existing BFF sessions. */
-  async unlink(identityId: string, actorId: string): Promise<void> {
+  async unlink(identityId: string, actorId: string, actorIsSuperAdmin: boolean): Promise<void> {
     await this.db.transaction().execute(async (trx) => {
-      const row = await trx.deleteFrom('auth_user_identities')
-        .where('id', '=', identityId).returning(['user_id', 'provider']).executeTakeFirst();
-      if (!row) throw new NotFoundException('Identity link not found');
-      await this.audit.record({ type: 'user.identity.unlink', actorId, userId: row.user_id,
-        meta: { provider: row.provider } }, trx);
+      const identity = await trx.selectFrom('auth_user_identities')
+        .select(['id', 'user_id', 'provider'])
+        .where('id', '=', identityId).forUpdate().executeTakeFirst();
+      if (!identity) throw new NotFoundException('Identity link not found');
+      const targetIsSuperAdmin = await trx.selectFrom('auth_user_groups as ug')
+        .innerJoin('auth_groups as g', 'g.id', 'ug.group_id')
+        .select('g.id')
+        .where('ug.user_id', '=', identity.user_id).where('g.system', '=', true)
+        .executeTakeFirst();
+      if (targetIsSuperAdmin && !actorIsSuperAdmin) {
+        throw new ForbiddenException('Only a super admin may unlink a super-admin identity');
+      }
+      await trx.deleteFrom('auth_user_identities').where('id', '=', identityId).execute();
+      await this.audit.record({ type: 'user.identity.unlink', actorId, userId: identity.user_id,
+        meta: { provider: identity.provider, identityId } }, trx);
     });
   }
 }
