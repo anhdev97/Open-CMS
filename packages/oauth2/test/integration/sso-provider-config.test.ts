@@ -38,6 +38,18 @@ describe('SSO provider draft management', () => {
     expect(draft.tested_fingerprint).toBeNull();
   });
 
+  it('never exposes encrypted secrets or fingerprints in the admin read model', async () => {
+    const providers = await service.listProviders();
+    const provider = providers.find((p) => p.id === providerId);
+    expect(provider).toMatchObject({
+      code: 'entra', lifecycle: 'DRAFT', hasDraftSecret: true, draftState: 'DRAFT',
+    });
+    const serialized = JSON.stringify(providers);
+    expect(serialized).not.toContain('client_secret_enc');
+    expect(serialized).not.toContain('config_fingerprint');
+    expect(serialized).not.toContain('private-value');
+  });
+
   it('invalidates a test result after editing and rejects stale edits', async () => {
     const before = await t.db.selectFrom('auth_identity_provider_versions')
       .selectAll().where('id', '=', draftId).executeTakeFirstOrThrow();
