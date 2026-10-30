@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { RATE_LIMITER } from '../../src/constants';
+import { ProviderRegistryService } from '../../src/sso-management/provider-registry.service';
 import type { RateLimiter } from '../../src/security/rate-limiter';
 import { UserService } from '../../src/users/user.service';
 import { createTestApp, type TestApp } from '../support/app';
@@ -34,6 +35,7 @@ describe('password login interaction', () => {
     t.db.selectFrom('auth_audit_events').selectAll().where('type', '=', type).orderBy('at').execute();
 
   it('GET returns loginHint and idps with Cache-Control: no-store', async () => {
+    expect(await t.app.get(ProviderRegistryService).listLoginOptions()).toEqual([]);
     const i = await startInteraction(t.url, { loginHint: 'admin@x.com' });
     const res = await i.cookies.fetch(`${t.url}/oauth2/interaction/${i.uid}`);
     expect(res.status).toBe(200);
