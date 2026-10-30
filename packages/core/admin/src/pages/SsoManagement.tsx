@@ -118,8 +118,15 @@ export function SsoManagement() {
     setDraft({ ...emptyDraft, clientSecret: '' });
   }
 
-  function openEdit(provider: SsoProvider) {
-    const v = versions.find((x) => x.id === provider.draftVersionId);
+  async function openEdit(provider: SsoProvider) {
+    let providerVersions: SsoVersion[];
+    try {
+      providerVersions = await listSsoVersions(provider.id);
+    } catch (error) {
+      setError(error instanceof Error ? error : new Error(String(error)));
+      return;
+    }
+    const v = providerVersions.find((x) => x.id === provider.draftVersionId);
     setDraft({
       code: provider.code,
       displayName: provider.displayName,
@@ -171,7 +178,7 @@ export function SsoManagement() {
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={() => setSelected(provider.id)}>Details</Button>
                 {canManage && provider.draftVersionId && (
-                  <Button variant="outline" size="sm" onClick={() => openEdit(provider)}>Edit draft</Button>
+                  <Button variant="outline" size="sm" onClick={() => void openEdit(provider)}>Edit draft</Button>
                 )}
                 {canManage && provider.draftVersionId && (
                   <Button variant="outline" size="sm" disabled={busy} onClick={() => void run(async () => {
