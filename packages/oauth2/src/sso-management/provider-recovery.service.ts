@@ -5,6 +5,7 @@ import { OAUTH2_CONFIG } from '../constants';
 import type { OAuth2Config } from '../config/schema';
 import { deriveKey } from '../security/crypto';
 import { OAUTH2_DB } from '../constants';
+import { AuditService } from '../audit/audit.service';
 import type { AuthTables } from '../db/types';
 
 /**
@@ -16,6 +17,7 @@ export class ProviderRecoveryService {
   constructor(
     @Inject(OAUTH2_DB) private readonly db: Kysely<AuthTables>,
     @Inject(OAUTH2_CONFIG) private readonly cfg: OAuth2Config,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   async createFromVersion(
@@ -67,6 +69,8 @@ export class ProviderRecoveryService {
       await trx.updateTable('auth_identity_providers')
         .set({ draft_version_id: draft.id, updated_by: actorId, updated_at: new Date() })
         .where('id', '=', providerId).execute();
+      await this.audit.record({ type: 'sso.provider.recovery', actorId,
+        meta: { providerId, sourceVersionId, draftId: draft.id } }, trx);
       return { draftId: draft.id, versionNo };
     });
   }
