@@ -18,7 +18,7 @@ describe('oauth2_0003_groups', () => {
     const u = await db.insertInto('auth_users').values({ email: 'old@x.com', name: 'Old' }).returning('id').executeTakeFirstOrThrow();
     userId = u.id;
     await sql`insert into auth_user_roles (user_id, role_id) select ${userId}, id from auth_roles where key = 'super_admin'`.execute(db);
-    const { error } = await coreMigrator(db).migrateToLatest();
+    const { error } = await coreMigrator(db).migrateTo('oauth2_0003_groups');
     if (error) throw error;
   }, 60_000);
   afterAll(async () => {
