@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { OAuth2Config } from '../../src/config/schema';
 import { ConflictException } from '@nestjs/common';
+import { AuditService } from '../../src/audit/audit.service';
 import { ProviderRecoveryService } from '../../src/sso-management/provider-recovery.service';
 import { startTestDb, type TestDb } from '../support/db';
 
@@ -14,7 +15,7 @@ describe('SSO provider recovery', () => {
 
   beforeAll(async () => {
     t = await startTestDb();
-    service = new ProviderRecoveryService(t.db, { secret: randomBytes(32) } as OAuth2Config);
+    service = new ProviderRecoveryService(t.db, { secret: randomBytes(32) } as OAuth2Config, new AuditService(t.db));
     const p = await t.db.insertInto('auth_identity_providers').values({
       code: 'keycloak', display_name: 'Keycloak', description: null,
       active_version_id: null, draft_version_id: null,
