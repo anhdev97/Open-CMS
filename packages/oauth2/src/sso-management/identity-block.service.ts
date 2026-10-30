@@ -48,12 +48,30 @@ export class IdentityBlockService {
         subject_hash: subjectHash, reason: input.reason.trim(),
         blocked_by: input.actorId, unblocked_by: null, unblocked_at: null,
       }).execute();
+      const matched = await trx.selectFrom('auth_sessions')
+        .select(['id_hash', 'origin_grant_id'])
+        .where('origin_provider_code', '=', input.providerCode)
+        .where('origin_subject_hash', '=', subjectHash).execute();
       const deleted = await trx.deleteFrom('auth_sessions')
         .where('origin_provider_code', '=', input.providerCode)
         .where('origin_subject_hash', '=', subjectHash).executeTakeFirst();
+
+      // Revoke only the AS grants that no other BFF sessions still reference.
+      // This avoids collateral revocation of another provider/subject or local session.
+      let revokedGrants = 0;
+      const grants = [...new Set(matched.map((row) => row.origin_grant_id).filter((v): v is string => !!v))];
+      for (const grantId of grants) {
+        const inUse = await trx.selectFrom('auth_sessions').select('id_hash')
+          .where('origin_grant_id', '=', grantId).executeTakeFirst();
+        if (inUse) continue;
+        await trx.deleteFrom('auth_oidc_payloads').where('grant_id', '=', grantId).execute();
+        await trx.deleteFrom('auth_oidc_payloads')
+          .where('kind', '=', 'Grant').where('id', '=', grantId).execute();
+        revokedGrants++;
+      }
       await this.audit.record({
         type: 'sso.identity.block', actorId: input.actorId,
-        meta: { providerCode: input.providerCode, revokedSessions: Number(deleted.numDeletedRows) },
+        meta: { providerCode: input.providerCode, revokedSessions: Number(deleted.numDeletedRows), revokedGrants },
       }, trx);
       return Number(deleted.numDeletedRows);
     });
