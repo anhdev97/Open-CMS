@@ -30,6 +30,7 @@ import { t } from '../i18n';
 import { useFormat } from '../i18n/hooks';
 import { ApiError } from '../lib/api-error';
 import { groupName } from '../lib/groups';
+import { verifySsoStepUp } from '../lib/sso-api';
 import {
   createUser,
   deleteUser,
@@ -299,6 +300,61 @@ function ResetPasswordDialog({ user, isMe, onClose }: { user: AdminUser; isMe: b
   );
 }
 
+function UnlinkIdentityDialog({
+  user, identity, onClose, onDone,
+}: { user: AdminUser; identity: Identity; onClose: () => void; onDone: () => void }) {
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await verifySsoStepUp(password);
+      await unlinkIdentity(user.id, identity.id);
+      setPassword('');
+      toast.success(t('users.unlink.done'));
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(userError(err));
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t('users.unlink.title', { provider: identity.provider })}</DialogTitle>
+          <DialogDescription>{t('users.unlink.description', {
+            provider: identity.provider, email: user.email,
+          })}</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={(e) => void submit(e)} className="grid gap-4">
+          <ErrorAlert error={error} />
+          <label htmlFor="unlink-cms-password" className="text-sm font-medium">
+            CMS password confirmation
+          </label>
+          <Input
+            id="unlink-cms-password" type="password" autoComplete="current-password"
+            value={password} onChange={(e) => setPassword(e.target.value)} required
+          />
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" disabled={busy || !password} variant="destructive">
+              {t('users.unlink.confirm')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function Users() {
   const { user: me } = useAuth();
   const { formatDateTime } = useFormat();
@@ -505,21 +561,14 @@ export function Users() {
         destructive
         onConfirm={() => target && void run(() => deleteUser(target.id), t('users.remove.done'))}
       />
-      <ConfirmDialog
-        open={dialog?.kind === 'unlink'}
-        onOpenChange={(open) => !open && close()}
-        title={t('users.unlink.title', { provider: shown?.kind === 'unlink' ? shown.identity.provider : '' })}
-        description={t('users.unlink.description', {
-          provider: shown?.kind === 'unlink' ? shown.identity.provider : '',
-          email: target?.email ?? '',
-        })}
-        confirmLabel={t('users.unlink.confirm')}
-        destructive
-        onConfirm={() =>
-          dialog?.kind === 'unlink' &&
-          void run(() => unlinkIdentity(dialog.user.id, dialog.identity.id), t('users.unlink.done'))
-        }
-      />
+      {dialog?.kind === 'unlink' && (
+        <UnlinkIdentityDialog
+          user={dialog.user}
+          identity={dialog.identity}
+          onClose={close}
+          onDone={load}
+        />
+      )}
     </div>
   );
 }
