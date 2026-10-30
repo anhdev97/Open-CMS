@@ -66,6 +66,7 @@ const idID: Messages = {
     groups: 'Grup',
     contentTypesSettings: 'Tipe konten',
     languages: 'Bahasa',
+    sso: "Masuk SSO",
     settings: 'Pengaturan',
     home: 'Beranda',
     assets: 'Aset',
@@ -310,6 +311,11 @@ const idID: Messages = {
       groups: { label: 'Mengelola grup', description: 'Membuat grup dan memilih izinnya.' },
       'content-types': { label: 'Mengelola tipe konten', description: 'Mengedit tipe konten, bidang, dan grup konten.' },
       languages: { label: 'Mengelola bahasa', description: 'Memilih bahasa yang tersedia untuk konten.' },
+      sso: {
+        read: { label: "Lihat penyedia SSO", description: "Lihat penyedia OIDC dan statusnya." },
+        manage: { label: "Kelola SSO", description: "Ubah dan terbitkan konfigurasi SSO." },
+        identities: { label: "Kelola identitas SSO", description: "Blokir dan putuskan tautan identitas eksternal." },
+      },
     },
   },
   permGroups: {
