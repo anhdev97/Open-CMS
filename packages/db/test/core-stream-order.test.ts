@@ -25,6 +25,16 @@ describe('core migration stream with contributed sources', () => {
   });
   afterAll(async () => {
     await db?.destroy();
+    // A pg Pool may resolve destroy() before Postgres backends have exited.
+    // FORCE immediately afterwards can produce an unhandled FATAL 57P01 in CI.
+    const deadline = Date.now() + 5_000;
+    for (;;) {
+      const { rows } = await admin.query(
+        'select count(*)::int as n from pg_stat_activity where datname = $1', [name],
+      );
+      if (rows[0].n === 0 || Date.now() > deadline) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
     await admin.query(`drop database if exists ${name} with (force)`);
     await admin.end();
   });
