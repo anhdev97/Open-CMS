@@ -7,6 +7,7 @@ import type { AuthSessionsTable, AuthTables } from '../db/types';
 import { deriveKey, open, seal, sha256 } from '../security/crypto';
 import type { AuthSettingsProvider } from '../settings/settings.provider';
 import type { TokenSet } from './oidc-client';
+import type { StoredAuthOrigin } from '../sso-management/auth-provenance.service';
 
 /** A BFF session with its tokens opened. Expiry is NOT checked here (the guard does that). */
 export interface SessionRow {
@@ -22,6 +23,11 @@ export interface SessionRow {
   lastSeenAt: Date;
   ip?: string;
   userAgent?: string;
+  authMethod: 'unknown' | 'local' | 'oidc';
+  originProviderCode?: string;
+  originSubjectHash?: string;
+  originProviderVersionId?: string;
+  stepUpVerifiedAt?: Date;
 }
 
 /** touch() writes at most once per this many ms. */
@@ -46,6 +52,7 @@ export class SessionStore {
     userId: string,
     tokens: TokenSet,
     meta: { ip?: string; userAgent?: string },
+    origin?: StoredAuthOrigin,
   ): Promise<{ cookieValue: string; idHash: string }> {
     const ttl = await this.settings.getTtls();
     const cookieValue = randomBytes(32).toString('base64url');
@@ -66,6 +73,11 @@ export class SessionStore {
         last_seen_at: now,
         ip: meta.ip ?? null,
         user_agent: meta.userAgent ?? null,
+        auth_method: origin?.method ?? 'unknown',
+        origin_provider_code: origin?.method === 'oidc' ? origin.providerCode : null,
+        origin_subject_hash: origin?.method === 'oidc' ? origin.subjectHash : null,
+        origin_provider_version_id: origin?.method === 'oidc' ? origin.providerVersionId : null,
+        step_up_verified_at: null,
       })
       .execute();
     return { cookieValue, idHash };
@@ -172,6 +184,11 @@ export class SessionStore {
       lastSeenAt: new Date(r.last_seen_at as Date),
       ip: r.ip ?? undefined,
       userAgent: r.user_agent ?? undefined,
+      authMethod: r.auth_method,
+      originProviderCode: r.origin_provider_code ?? undefined,
+      originSubjectHash: r.origin_subject_hash ?? undefined,
+      originProviderVersionId: r.origin_provider_version_id ?? undefined,
+      stepUpVerifiedAt: r.step_up_verified_at ? new Date(r.step_up_verified_at) : undefined,
     };
   }
 }
