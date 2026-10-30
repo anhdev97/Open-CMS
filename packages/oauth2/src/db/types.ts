@@ -165,6 +165,7 @@ export interface AuthIdentityProviderHealthTable {
   last_success_at: NullableTimestamp;
   last_failure_at: NullableTimestamp;
   consecutive_failures: Generated<number>;
+  consecutive_successes: Generated<number>;
   failure_code: string | null;
 }
 
