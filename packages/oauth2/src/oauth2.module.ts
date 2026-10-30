@@ -24,7 +24,6 @@ import { AuthProvenanceService } from './sso-management/auth-provenance.service'
 import { IdentityBlockService } from './sso-management/identity-block.service';
 import { IDENTITY_PROVIDERS } from './idp/identity-provider';
 import { IdpController } from './idp/idp.controller';
-import { OidcIdentityProvider } from './idp/oidc.identity-provider';
 import { InteractionController } from './interaction/interaction.controller';
 import { InteractionService } from './interaction/interaction.service';
 import { ProviderService } from './provider/provider.service';
@@ -101,12 +100,8 @@ export class OAuth2Module {
         OidcClient,
         SessionStore,
         SessionAuthenticator,
-        // Spec §6.4: only IdPs that are configured; today the single generic OIDC one.
-        {
-          provide: IDENTITY_PROVIDERS,
-          useFactory: (cfg: OAuth2Config) => (cfg.idp.oidc ? [new OidcIdentityProvider(cfg.idp.oidc, cfg)] : []),
-          inject: [OAUTH2_CONFIG],
-        },
+        // Legacy environment OIDC is import-only; live choices are always read from PostgreSQL.
+        { provide: IDENTITY_PROVIDERS, useValue: [] },
         IdentityLinker,
         LegacyOidcImportService,
         LoginPolicyService,
