@@ -73,6 +73,11 @@ export interface AuthSessionsTable {
   ip: string | null;
   user_agent: string | null;
   refresh_lease_until: NullableTimestamp;
+  auth_method: Generated<'unknown' | 'local' | 'oidc'>;
+  origin_provider_code: string | null;
+  origin_subject_hash: string | null;
+  origin_provider_version_id: string | null;
+  step_up_verified_at: NullableTimestamp;
 }
 
 export interface AuthSigningKeysTable {
@@ -178,7 +183,19 @@ export interface AuthSsoMigrationMarkersTable {
   created_at: Timestamp;
 }
 
+export interface AuthSsoAuthContextsTable {
+  challenge_hash: string;
+  user_id: string;
+  auth_method: 'local' | 'oidc';
+  provider_code: string | null;
+  subject_hash: string | null;
+  provider_version_id: string | null;
+  bound_at: Timestamp;
+  expires_at: Date | string;
+}
+
 export interface AuthTables {
+  auth_sso_auth_contexts: AuthSsoAuthContextsTable;
   auth_identity_providers: AuthIdentityProvidersTable;
   auth_identity_provider_versions: AuthIdentityProviderVersionsTable;
   auth_login_policy: AuthLoginPolicyTable;
