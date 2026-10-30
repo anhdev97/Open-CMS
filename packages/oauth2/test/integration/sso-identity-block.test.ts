@@ -48,6 +48,22 @@ describe('targeted SSO identity block and tombstone', () => {
     await session('blocked-session', 'oidc', 'sub-block');
     await session('other-identity', 'oidc', 'sub-other');
     await session('local-session', 'local');
+    for (const grantId of ['target-grant', 'other-grant']) {
+      await t.db.insertInto('auth_oidc_payloads').values([
+        {
+          kind: 'Grant', id: grantId, payload: { accountId: userId },
+          grant_id: null, uid: null, user_code: null, expires_at: null, consumed_at: null,
+        },
+        {
+          kind: 'RefreshToken', id: `refresh-${grantId}`, payload: { accountId: userId, grantId },
+          grant_id: grantId, uid: null, user_code: null, expires_at: null, consumed_at: null,
+        },
+      ]).execute();
+    }
+    await t.db.updateTable('auth_sessions').set({ origin_grant_id: 'target-grant' })
+      .where('id_hash', '=', 'blocked-session').execute();
+    await t.db.updateTable('auth_sessions').set({ origin_grant_id: 'other-grant' })
+      .where('id_hash', '=', 'other-identity').execute();
   });
   afterAll(async () => { await t?.stop(); });
 
@@ -59,6 +75,8 @@ describe('targeted SSO identity block and tombstone', () => {
     const remaining = await t.db.selectFrom('auth_sessions').select('id_hash')
       .orderBy('id_hash').execute();
     expect(remaining.map((s) => s.id_hash)).toEqual(['local-session', 'other-identity']);
+    const grantRows = await t.db.selectFrom('auth_oidc_payloads').select(['kind', 'id']).orderBy('id').execute();
+    expect(grantRows.map((r) => r.id).sort()).toEqual(['other-grant', 'refresh-other-grant']);
     await expect(service.assertAllowed('entra', 'sub-block')).rejects.toThrow();
     await expect(service.assertAllowed('entra', 'sub-other')).resolves.toBeUndefined();
   });
