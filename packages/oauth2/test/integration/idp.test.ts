@@ -1,9 +1,17 @@
 import 'reflect-metadata';
 import { OAuth2Server } from 'oauth2-mock-server';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UserService } from '../../src/users/user.service';
 import { createTestApp, type TestApp } from '../support/app';
 import { CookieJar } from '../support/interaction';
+
+// Network isolation in tests: the fake IdP binds loopback, which production SSO transport rejects.
+ // Keep this bypass limited to the mock-server test; production always pins public DNS addresses.
+vi.mock('../../src/sso-management/oidc-discovery-client', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../src/sso-management/oidc-discovery-client')>();
+  return { ...original, secureOidcFetch: (input: RequestInfo | URL, init?: RequestInit) =>
+    fetch(input, { ...init, redirect: 'manual' }) };
+});
 
 const auth = { rateLimit: { loginPerEmail: { limit: 1000 }, loginPerIp: { limit: 1000 } } };
 const cookieLine = (lines: string[], name: string) => lines.find((l) => l.startsWith(`${name}=`));
@@ -35,6 +43,22 @@ describe('external OIDC identity provider (spec §6.4)', () => {
       { auth },
     );
     userId = (await t.app.get(UserService).create({ email: 'user@x.com', name: 'User' })).id;
+    // Legacy env values are import-only: explicit operator approval is required for activation.
+    // Simulate the approved cutover here, without bypassing the production runtime lifecycle.
+    const provider = await t.db.selectFrom('auth_identity_providers')
+      .select(['id', 'draft_version_id']).where('code', '=', 'oidc').executeTakeFirstOrThrow();
+    const draft = await t.db.selectFrom('auth_identity_provider_versions')
+      .select('config_fingerprint').where('id', '=', provider.draft_version_id!).executeTakeFirstOrThrow();
+    await t.db.updateTable('auth_identity_provider_versions')
+      .set({ state: 'PUBLISHED', tested_fingerprint: draft.config_fingerprint,
+        tested_at: new Date(), published_at: new Date() })
+      .where('id', '=', provider.draft_version_id!).execute();
+    await t.db.updateTable('auth_identity_providers')
+      .set({ lifecycle_status: 'ACTIVE', active_version_id: provider.draft_version_id,
+        draft_version_id: null })
+      .where('id', '=', provider.id).execute();
+    await t.db.updateTable('auth_login_policy')
+      .set({ sso_login_enabled: true }).where('id', '=', 1).execute();
   });
   afterAll(async () => {
     await t?.close();
