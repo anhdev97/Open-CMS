@@ -59,13 +59,14 @@ export class ProviderConfigService {
     draftVersionId: string | null;
     hasDraftSecret: boolean;
     draftState: string | null;
+    draftUpdatedAt: string | null;
   }>> {
     const rows = await this.db.selectFrom('auth_identity_providers as p')
       .leftJoin('auth_identity_provider_versions as v', 'v.id', 'p.draft_version_id')
       .select([
         'p.id', 'p.code', 'p.display_name', 'p.lifecycle_status',
         'p.active_version_id', 'p.draft_version_id',
-        'v.client_secret_enc', 'v.state as draft_state',
+        'v.client_secret_enc', 'v.state as draft_state', 'v.updated_at as draft_updated_at',
       ])
       .orderBy('p.display_order').orderBy('p.code').execute();
     return rows.map((row) => ({
@@ -77,6 +78,7 @@ export class ProviderConfigService {
       draftVersionId: row.draft_version_id,
       hasDraftSecret: Boolean(row.client_secret_enc),
       draftState: row.draft_state ?? null,
+      draftUpdatedAt: row.draft_updated_at ? new Date(row.draft_updated_at).toISOString() : null,
     }));
   }
 
@@ -258,6 +260,32 @@ export class ProviderConfigService {
         }).where('id', '=', providerId).execute();
       return draft.id;
     });
+  }
+
+
+  /** Exposes public configuration and history; secrets and fingerprint stay server-only. */
+  async listVersions(providerId: string): Promise<Array<{
+    id: string; versionNo: number; state: string;
+    configPublic: Record<string, unknown>; testedAt: string | null; publishedAt: string | null;
+  }>> {
+    const versions = await this.db.selectFrom('auth_identity_provider_versions')
+      .select(['id', 'version_no', 'state', 'config_public', 'tested_at', 'published_at'])
+      .where('provider_id', '=', providerId).orderBy('version_no', 'desc').execute();
+    return versions.map((row) => ({
+      id: row.id, versionNo: row.version_no, state: row.state,
+      configPublic: row.config_public,
+      testedAt: row.tested_at ? new Date(row.tested_at).toISOString() : null,
+      publishedAt: row.published_at ? new Date(row.published_at).toISOString() : null,
+    }));
+  }
+
+  async restore(providerId: string, actorId: string): Promise<void> {
+    const restored = await this.db.updateTable('auth_identity_providers')
+      .set({ lifecycle_status: 'ACTIVE', updated_by: actorId, updated_at: new Date() })
+      .where('id', '=', providerId).where('lifecycle_status', '=', 'DISABLED')
+      .where('active_version_id', 'is not', null)
+      .returning('id').executeTakeFirst();
+    if (!restored) throw new ConflictException('Only a disabled provider with an active version can be restored');
   }
 
   async disable(providerId: string, actorId: string): Promise<void> {
