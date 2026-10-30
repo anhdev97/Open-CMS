@@ -22,6 +22,11 @@ import { ProviderRecoveryService } from './sso-management/provider-recovery.serv
 import { ProviderConfigService } from './sso-management/provider-config.service';
 import { AuthProvenanceService } from './sso-management/auth-provenance.service';
 import { IdentityBlockService } from './sso-management/identity-block.service';
+import { StepUpService } from './sso-management/step-up.service';
+import { ProviderAdminController } from './sso-management/controllers/provider-admin.controller';
+import { PolicyAdminController } from './sso-management/controllers/policy-admin.controller';
+import { IdentityAdminController } from './sso-management/controllers/identity-admin.controller';
+import { StepUpController } from './sso-management/controllers/step-up.controller';
 import { IDENTITY_PROVIDERS } from './idp/identity-provider';
 import { IdpController } from './idp/idp.controller';
 import { InteractionController } from './interaction/interaction.controller';
@@ -63,6 +68,7 @@ export class OAuth2Module {
       controllers: [
         SetupController, InteractionController, IdpController, AuthController, UsersController, PasswordController,
         GroupsController, PermissionsController,
+        ProviderAdminController, PolicyAdminController, IdentityAdminController, StepUpController,
       ],
       providers: [
         { provide: OAUTH2_DB, useExisting: opts.dbToken },
@@ -110,6 +116,7 @@ export class OAuth2Module {
         ProviderConfigService,
         AuthProvenanceService,
         IdentityBlockService,
+        StepUpService,
         // Spec §6.5: every /api/** route is protected unless @Public(); §8 error JSON everywhere.
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: ApiExceptionFilter },
