@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { OAuth2Config } from '../../src/config/schema';
 import { deriveKey, seal } from '../../src/security/crypto';
 import { LoginPolicyService } from '../../src/sso-management/login-policy.service';
+import { AuditService } from '../../src/audit/audit.service';
 import { ProviderRegistryService } from '../../src/sso-management/provider-registry.service';
 import { startTestDb, type TestDb } from '../support/db';
 
@@ -17,7 +18,7 @@ describe('dynamic SSO registry', () => {
 
   beforeAll(async () => {
     t = await startTestDb();
-    policy = new LoginPolicyService(t.db);
+    policy = new LoginPolicyService(t.db, new AuditService(t.db));
     registry = new ProviderRegistryService(t.db, { secret } as OAuth2Config, policy);
     const p = await t.db.insertInto('auth_identity_providers').values({
       code: 'entra', display_name: 'Microsoft Entra', description: null,
