@@ -88,3 +88,62 @@ export async function checkOidcDiscovery(issuer: string): Promise<OidcDiscoveryD
   }
   return metadata;
 }
+
+/**
+ * Transport for openid-client/OAuth token calls, with the same DNS-pinning
+ * guarantee as discovery. Redirects are returned as-is (never followed here).
+ * On all future IdP interactions use this transport, not the global fetch.
+ */
+export async function secureOidcFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+  const outbound = new Request(input, { ...init, redirect: 'manual' });
+  const url = assertPublicHttpsUrl(outbound.url);
+  const records = await lookup(url.hostname, { all: true });
+  if (!records.length || records.some((record) => !publicIp(record.address))) {
+    throw new Error('OIDC DNS resolved to non-public address');
+  }
+  const pinned = records[0];
+  const data = outbound.body ? Buffer.from(await outbound.arrayBuffer()) : undefined;
+  if (data && data.byteLength > 128 * 1024) throw new Error('OIDC request body exceeds size limit');
+  return new Promise<Response>((resolve, reject) => {
+    const headers: Record<string, string> = {};
+    outbound.headers.forEach((value, key) => { headers[key] = value; });
+    const req = request(url, {
+      method: outbound.method,
+      headers,
+      timeout: 8000,
+      maxHeaderSize: 8192,
+      lookup: (_host, _opts, callback) => callback(null, pinned.address, pinned.family),
+    }, (res) => {
+      let length = 0;
+      const chunks: Buffer[] = [];
+      res.on('data', (part: Buffer) => {
+        length += part.length;
+        if (length > 1024 * 1024) {
+          req.destroy(new Error('OIDC response exceeds size limit'));
+          return;
+        }
+        chunks.push(part);
+      });
+      res.on('end', () => {
+        const h = new Headers();
+        for (const [key, value] of Object.entries(res.headers)) {
+          if (Array.isArray(value)) value.forEach((entry) => h.append(key, entry));
+          else if (value !== undefined) h.set(key, String(value));
+        }
+        resolve(new Response(Buffer.concat(chunks), {
+          status: res.statusCode ?? 502,
+          statusText: res.statusMessage,
+          headers: h,
+        }));
+      });
+      res.on('error', reject);
+    });
+    req.on('timeout', () => req.destroy(new Error('OIDC request timed out')));
+    req.on('error', reject);
+    if (outbound.signal.aborted) { req.destroy(new Error('OIDC request aborted')); return; }
+    const abort = () => req.destroy(new Error('OIDC request aborted'));
+    outbound.signal.addEventListener('abort', abort, { once: true });
+    req.once('close', () => outbound.signal.removeEventListener('abort', abort));
+    req.end(data);
+  });
+}
