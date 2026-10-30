@@ -24,7 +24,7 @@ export class ProviderRegistryService {
   constructor(
     @Inject(OAUTH2_DB) private readonly db: Kysely<AuthTables>,
     @Inject(OAUTH2_CONFIG) private readonly config: OAuth2Config,
-    private readonly policy: LoginPolicyService,
+    @Inject(LoginPolicyService) private readonly policy: LoginPolicyService,
   ) {}
 
   async listLoginOptions(): Promise<Array<{ code: string; label: string }>> {
