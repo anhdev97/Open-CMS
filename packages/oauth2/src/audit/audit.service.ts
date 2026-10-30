@@ -9,7 +9,7 @@ export type AuditType =
   | 'password_reset_by_admin' | 'password_changed' | 'idp_linked' | 'user.locale.update'
   | 'group.create' | 'group.update' | 'group.delete' | 'user.groups.update' | 'user.identity.unlink'
   | 'sso.provider.create' | 'sso.provider.edit' | 'sso.provider.test' | 'sso.provider.publish'
-  | 'sso.provider.disable' | 'sso.provider.archive' | 'sso.provider.recovery'
+  | 'sso.provider.disable' | 'sso.provider.archive' | 'sso.provider.restore' | 'sso.provider.recovery'
   | 'sso.policy.update' | 'sso.identity.block' | 'sso.identity.unblock'
   | 'sso.step_up.success' | 'sso.step_up.failed'
   // Review workflow events, recorded by @opencloudcms/core (spec B §5).
