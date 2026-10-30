@@ -23,6 +23,7 @@ import { ProviderConfigService } from './sso-management/provider-config.service'
 import { AuthProvenanceService } from './sso-management/auth-provenance.service';
 import { IdentityBlockService } from './sso-management/identity-block.service';
 import { StepUpService } from './sso-management/step-up.service';
+import { ProviderHealthService } from './sso-management/provider-health.service';
 import { ProviderAdminController } from './sso-management/controllers/provider-admin.controller';
 import { PolicyAdminController } from './sso-management/controllers/policy-admin.controller';
 import { IdentityAdminController } from './sso-management/controllers/identity-admin.controller';
@@ -117,6 +118,7 @@ export class OAuth2Module {
         AuthProvenanceService,
         IdentityBlockService,
         StepUpService,
+        ProviderHealthService,
         // Spec §6.5: every /api/** route is protected unless @Public(); §8 error JSON everywhere.
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: ApiExceptionFilter },
