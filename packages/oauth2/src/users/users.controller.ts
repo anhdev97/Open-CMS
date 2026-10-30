@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post, Req } from '@nestjs/common';
 import type { Kysely } from 'kysely';
 import { z } from 'zod';
 import { OAUTH2_DB } from '../constants';
@@ -8,6 +8,8 @@ import { CurrentUser, RequirePermission, type RequestUser } from '../guard/curre
 import { normalizeEmail } from '../security/email';
 import { parseBody } from '../security/validate';
 import { UserService } from './user.service';
+import { StepUpService } from '../sso-management/step-up.service';
+import type { AuthenticatedRequest } from '../guard/session-auth.service';
 
 export interface UserView {
   id: string;
@@ -58,6 +60,7 @@ export class UsersController {
   constructor(
     @Inject(OAUTH2_DB) private readonly db: Kysely<AuthTables>,
     @Inject(UserService) private readonly users: UserService,
+    @Inject(StepUpService) private readonly stepUp: StepUpService,
   ) {}
 
   /** Users + groups + identities in three queries total (no per-user lookups). */
@@ -143,7 +146,10 @@ export class UsersController {
     @Param('id') rawId: string,
     @Param('identityId') rawIdentityId: string,
     @CurrentUser() actor: RequestUser,
+    @Req() req: AuthenticatedRequest,
   ): Promise<void> {
+    if (!req.authSession) throw new AuthError('unauthenticated', 401);
+    await this.stepUp.assertRecent(req.authSession.idHash);
     await this.users.unlinkIdentity(uuid(rawId), uuid(rawIdentityId), actorOf(actor));
   }
 }
