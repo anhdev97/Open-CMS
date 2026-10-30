@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ConflictException } from '@nestjs/common';
+import { AuditService } from '../../src/audit/audit.service';
 import type { OAuth2Config } from '../../src/config/schema';
 import { ProviderConfigService } from '../../src/sso-management/provider-config.service';
 import { startTestDb, type TestDb } from '../support/db';
@@ -15,7 +16,7 @@ describe('SSO publish security gate', () => {
 
   beforeAll(async () => {
     t = await startTestDb();
-    service = new ProviderConfigService(t.db, { secret: randomBytes(32) } as OAuth2Config);
+    service = new ProviderConfigService(t.db, { secret: randomBytes(32) } as OAuth2Config, new AuditService(t.db));
     const created = await service.createDraft({
       code: 'keycloak', displayName: 'Keycloak',
       issuer: 'https://login.microsoftonline.com/common/v2.0',
