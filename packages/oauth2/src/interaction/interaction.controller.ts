@@ -6,7 +6,7 @@ import type { OAuth2Config } from '../config/schema';
 import { OAUTH2_CONFIG, RATE_LIMITER } from '../constants';
 import { AuthError } from '../errors';
 import { Public } from '../guard/public.decorator';
-import { IDENTITY_PROVIDERS, type IdentityProvider } from '../idp/identity-provider';
+import { ProviderRegistryService } from '../sso-management/provider-registry.service';
 import { parseBody } from '../security/validate';
 import { normalizeEmail } from '../security/email';
 import { assertSameOrigin } from '../security/origin';
@@ -39,7 +39,7 @@ export class InteractionController {
     @Inject(PasswordService) private readonly passwords: PasswordService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(RATE_LIMITER) private readonly limiter: RateLimiter,
-    @Inject(IDENTITY_PROVIDERS) private readonly idps: IdentityProvider[],
+    @Inject(ProviderRegistryService) private readonly registry: ProviderRegistryService,
   ) {}
 
   @Get(':uid')
@@ -54,7 +54,7 @@ export class InteractionController {
       const hint = interaction.params?.login_hint;
       return {
         loginHint: typeof hint === 'string' ? hint : undefined,
-        idps: this.idps.map(({ id, label }) => ({ id, label })),
+        idps: (await this.registry.listLoginOptions()).map(({ code, label }) => ({ id: code, label })),
       };
     } catch (e) {
       if (e instanceof InteractionExpired) return expired();
