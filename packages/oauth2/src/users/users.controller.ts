@@ -148,8 +148,14 @@ export class UsersController {
     @CurrentUser() actor: RequestUser,
     @Req() req: AuthenticatedRequest,
   ): Promise<void> {
+    const targetId = uuid(rawId);
+    const identityId = uuid(rawIdentityId);
+    const target = await this.users.findById(targetId);
+    if (target?.isSuperAdmin && !actor.isSuperAdmin) {
+      throw new AuthError('forbidden', 403, 'Only a super admin can manage a super admin');
+    }
     if (!req.authSession) throw new AuthError('unauthenticated', 401);
     await this.stepUp.assertRecent(req.authSession.idHash);
-    await this.users.unlinkIdentity(uuid(rawId), uuid(rawIdentityId), actorOf(actor));
+    await this.users.unlinkIdentity(targetId, identityId, actorOf(actor));
   }
 }
