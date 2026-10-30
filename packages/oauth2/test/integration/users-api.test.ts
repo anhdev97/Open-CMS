@@ -179,6 +179,11 @@ describe('user management + password change API', () => {
       .values({ user_id: a.id, provider: 'google', subject: 'sub-a', email: null })
       .returning('id')
       .executeTakeFirstOrThrow();
+    const unverified = await api(`/api/admin/users/${a.id}/identities/${ident.id}`, { method: 'DELETE' });
+    expect(unverified.status).toBe(403);
+    expect(unverified.body.error.code).toBe('step_up_required');
+    const stepUp = await api('/api/admin/sso/step-up', { method: 'POST', body: { password: PW } });
+    expect(stepUp.status).toBe(201);
     const wrong = await api(`/api/admin/users/${b.id}/identities/${ident.id}`, { method: 'DELETE' });
     expect(wrong.status).toBe(404);
     expect(wrong.body.error.code).toBe('not_found');
