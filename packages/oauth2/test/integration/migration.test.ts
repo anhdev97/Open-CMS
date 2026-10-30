@@ -25,7 +25,7 @@ describe('oauth2_0001_init', () => {
   let ctx: Awaited<ReturnType<typeof startTestDb>>;
   let db: Kysely<AuthTables>;
   beforeAll(async () => {
-    ctx = await startTestDb();
+    ctx = await startTestDb({ upTo: 'oauth2_0003_groups' });
     db = ctx.db;
   });
   afterAll(async () => {
