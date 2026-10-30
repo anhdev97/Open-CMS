@@ -21,6 +21,7 @@ import { ProviderRegistryService } from './sso-management/provider-registry.serv
 import { ProviderRecoveryService } from './sso-management/provider-recovery.service';
 import { ProviderConfigService } from './sso-management/provider-config.service';
 import { AuthProvenanceService } from './sso-management/auth-provenance.service';
+import { IdentityBlockService } from './sso-management/identity-block.service';
 import { IDENTITY_PROVIDERS } from './idp/identity-provider';
 import { IdpController } from './idp/idp.controller';
 import { OidcIdentityProvider } from './idp/oidc.identity-provider';
@@ -113,6 +114,7 @@ export class OAuth2Module {
         ProviderRecoveryService,
         ProviderConfigService,
         AuthProvenanceService,
+        IdentityBlockService,
         // Spec §6.5: every /api/** route is protected unless @Public(); §8 error JSON everywhere.
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: ApiExceptionFilter },
