@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { sql, type Kysely, type Selectable } from 'kysely';
 import type { OAuth2Config } from '../config/schema';
@@ -39,6 +39,7 @@ export const REFRESH_LEASE_SEC = 10;
 @Injectable()
 export class SessionStore {
   private readonly key: Buffer;
+  private readonly hmacKey: Buffer;
 
   constructor(
     @Inject(OAUTH2_DB) private readonly db: Kysely<AuthTables>,
@@ -46,6 +47,7 @@ export class SessionStore {
     @Inject(AUTH_SETTINGS) private readonly settings: AuthSettingsProvider,
   ) {
     this.key = deriveKey(cfg.secret, 'token');
+    this.hmacKey = cfg.secret;
   }
 
   async create(
@@ -58,28 +60,43 @@ export class SessionStore {
     const cookieValue = randomBytes(32).toString('base64url');
     const idHash = sha256(cookieValue);
     const now = new Date();
-    await this.db
-      .insertInto('auth_sessions')
-      .values({
-        id_hash: idHash,
-        user_id: userId,
+    await this.db.transaction().execute(async (trx) => {
+      if (origin?.method === 'oidc') {
+        // Consistent lock order with IdentityBlockService.block() closes the Block vs callback race.
+        await sql`select pg_advisory_xact_lock(hashtext(${origin.providerCode}), hashtext(${origin.subjectHash}))`.execute(trx);
+        const blocked = await trx.selectFrom('auth_identity_blocks').select('id')
+          .where('provider_code', '=', origin.providerCode)
+          .where('subject_hash', '=', origin.subjectHash)
+          .where('unblocked_at', 'is', null).executeTakeFirst();
+        if (blocked) throw new Error('External identity is blocked');
+        const policy = await trx.selectFrom('auth_login_policy').select('sso_login_enabled')
+          .where('id', '=', 1).forShare().executeTakeFirstOrThrow();
+        if (!policy.sso_login_enabled) throw new Error('SSO login disabled');
+        const provider = await trx.selectFrom('auth_identity_providers').select('id')
+          .where('code', '=', origin.providerCode)
+          .where('lifecycle_status', '=', 'ACTIVE').forShare().executeTakeFirst();
+        if (!provider) throw new Error('SSO provider is inactive');
+      }
+      // Serialize new sessions against a concurrent user disable operation.
+      const user = await trx.selectFrom('auth_users').select('status')
+        .where('id', '=', userId).forShare().executeTakeFirst();
+      if (!user || user.status !== 'active') throw new Error('User is disabled');
+      await trx.insertInto('auth_sessions').values({
+        id_hash: idHash, user_id: userId,
         access_token_enc: seal(this.key, tokens.accessToken),
         refresh_token_enc: tokens.refreshToken ? seal(this.key, tokens.refreshToken) : null,
         id_token_enc: tokens.idToken ? seal(this.key, tokens.idToken) : null,
         access_expires_at: accessExpiry(now, tokens),
         idle_expires_at: new Date(now.getTime() + Math.min(ttl.sessionIdle, ttl.sessionAbsolute) * 1000),
         absolute_expires_at: new Date(now.getTime() + ttl.sessionAbsolute * 1000),
-        created_at: now,
-        last_seen_at: now,
-        ip: meta.ip ?? null,
-        user_agent: meta.userAgent ?? null,
+        created_at: now, last_seen_at: now, ip: meta.ip ?? null, user_agent: meta.userAgent ?? null,
         auth_method: origin?.method ?? 'unknown',
         origin_provider_code: origin?.method === 'oidc' ? origin.providerCode : null,
         origin_subject_hash: origin?.method === 'oidc' ? origin.subjectHash : null,
         origin_provider_version_id: origin?.method === 'oidc' ? origin.providerVersionId : null,
         step_up_verified_at: null,
-      })
-      .execute();
+      }).execute();
+    });
     return { cookieValue, idHash };
   }
 
@@ -163,6 +180,28 @@ export class SessionStore {
       .where('id', '=', refreshToken)
       .executeTakeFirst();
     return row?.grant_id ?? undefined;
+  }
+
+
+  async revokeByExternalIdentity(providerCode: string, subject: string): Promise<number> {
+    const subjectHash = createHmac('sha256', this.hmacKey)
+      .update('opencloudcms/sso-subject/v1\0').update(providerCode).update('\0').update(subject)
+      .digest('hex');
+    const deleted = await this.db.deleteFrom('auth_sessions')
+      .where('origin_provider_code', '=', providerCode).where('origin_subject_hash', '=', subjectHash)
+      .executeTakeFirst();
+    return Number(deleted.numDeletedRows);
+  }
+
+  async revokeAllForUser(userId: string): Promise<number> {
+    const deleted = await this.db.deleteFrom('auth_sessions')
+      .where('user_id', '=', userId).executeTakeFirst();
+    return Number(deleted.numDeletedRows);
+  }
+
+  async setStepUpVerifiedAt(idHash: string, verifiedAt: Date): Promise<void> {
+    await this.db.updateTable('auth_sessions')
+      .set({ step_up_verified_at: verifiedAt }).where('id_hash', '=', idHash).execute();
   }
 
   async delete(idHash: string): Promise<void> {
