@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ConflictException } from '@nestjs/common';
 import { LoginPolicyService } from '../../src/sso-management/login-policy.service';
+import { AuditService } from '../../src/audit/audit.service';
 import { startTestDb, type TestDb } from '../support/db';
 
 describe('SSO login policy', () => {
@@ -8,7 +9,7 @@ describe('SSO login policy', () => {
   let service: LoginPolicyService;
   beforeAll(async () => {
     t = await startTestDb();
-    service = new LoginPolicyService(t.db);
+    service = new LoginPolicyService(t.db, new AuditService(t.db));
   });
   afterAll(async () => { await t?.stop(); });
 
