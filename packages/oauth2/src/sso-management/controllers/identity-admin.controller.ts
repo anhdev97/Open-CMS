@@ -49,7 +49,7 @@ export class IdentityAdminController {
   @Post(':id/unlink')
   async unlink(@Param('id') identityId: string, @CurrentUser() user: RequestUser, @Req() req: AuthenticatedRequest) {
     await this.recent(req);
-    await this.identities.unlink(parseBody(z.string().uuid(), identityId), user.id);
+    await this.identities.unlink(parseBody(z.string().uuid(), identityId), user.id, user.isSuperAdmin);
     return { ok: true };
   }
 }
