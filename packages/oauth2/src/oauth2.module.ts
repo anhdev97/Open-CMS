@@ -15,9 +15,21 @@ import {
   AUTH_SETTINGS, CORE_READY, PUBLIC_PATH_PREFIXES, GRANT_REVOKER, OAUTH2_CONFIG, OAUTH2_DB, RATE_LIMITER, type CoreReady,
 } from './constants';
 import { IdentityLinker } from './idp/identity-linker';
+import { LegacyOidcImportService } from './sso-management/legacy-oidc-import.service';
+import { LoginPolicyService } from './sso-management/login-policy.service';
+import { ProviderRegistryService } from './sso-management/provider-registry.service';
+import { ProviderRecoveryService } from './sso-management/provider-recovery.service';
+import { ProviderConfigService } from './sso-management/provider-config.service';
+import { AuthProvenanceService } from './sso-management/auth-provenance.service';
+import { IdentityBlockService } from './sso-management/identity-block.service';
+import { StepUpService } from './sso-management/step-up.service';
+import { ProviderHealthService } from './sso-management/provider-health.service';
+import { ProviderAdminController } from './sso-management/controllers/provider-admin.controller';
+import { PolicyAdminController } from './sso-management/controllers/policy-admin.controller';
+import { IdentityAdminController } from './sso-management/controllers/identity-admin.controller';
+import { StepUpController } from './sso-management/controllers/step-up.controller';
 import { IDENTITY_PROVIDERS } from './idp/identity-provider';
 import { IdpController } from './idp/idp.controller';
-import { OidcIdentityProvider } from './idp/oidc.identity-provider';
 import { InteractionController } from './interaction/interaction.controller';
 import { InteractionService } from './interaction/interaction.service';
 import { ProviderService } from './provider/provider.service';
@@ -57,6 +69,7 @@ export class OAuth2Module {
       controllers: [
         SetupController, InteractionController, IdpController, AuthController, UsersController, PasswordController,
         GroupsController, PermissionsController,
+        ProviderAdminController, PolicyAdminController, IdentityAdminController, StepUpController,
       ],
       providers: [
         { provide: OAUTH2_DB, useExisting: opts.dbToken },
@@ -94,13 +107,18 @@ export class OAuth2Module {
         OidcClient,
         SessionStore,
         SessionAuthenticator,
-        // Spec §6.4: only IdPs that are configured; today the single generic OIDC one.
-        {
-          provide: IDENTITY_PROVIDERS,
-          useFactory: (cfg: OAuth2Config) => (cfg.idp.oidc ? [new OidcIdentityProvider(cfg.idp.oidc, cfg)] : []),
-          inject: [OAUTH2_CONFIG],
-        },
+        // Legacy environment OIDC is import-only; live choices are always read from PostgreSQL.
+        { provide: IDENTITY_PROVIDERS, useValue: [] },
         IdentityLinker,
+        LegacyOidcImportService,
+        LoginPolicyService,
+        ProviderRegistryService,
+        ProviderRecoveryService,
+        ProviderConfigService,
+        AuthProvenanceService,
+        IdentityBlockService,
+        StepUpService,
+        ProviderHealthService,
         // Spec §6.5: every /api/** route is protected unless @Public(); §8 error JSON everywhere.
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: ApiExceptionFilter },
@@ -125,6 +143,7 @@ export class OAuth2Module {
         SessionAuthenticator,
         IDENTITY_PROVIDERS,
         IdentityLinker,
+        LegacyOidcImportService,
       ],
     };
   }

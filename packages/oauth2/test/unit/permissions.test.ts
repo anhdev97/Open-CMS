@@ -18,6 +18,9 @@ describe('PERMISSIONS', () => {
       'settings.groups',
       'settings.content-types',
       'settings.languages',
+      'settings.sso.read',
+      'settings.sso.manage',
+      'settings.sso.identities',
     ]);
     expect(PERMISSIONS).toBe(SCHEMA_PERMISSIONS);
   });

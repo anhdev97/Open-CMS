@@ -18,6 +18,7 @@ describe('routePermission', () => {
     expect(routePermission('settingsGroups')).toBe('settings.groups');
     expect(routePermission('settingsContentTypes')).toBe('settings.content-types');
     expect(routePermission('settingsLanguages')).toBe('settings.languages');
+    expect(routePermission('settingsSso')).toBe('settings.sso.read');
     expect(routePermission('content')).toBe('content.read');
   });
   it('leaves other routes open', () => {
@@ -37,10 +38,11 @@ describe('visibleSettingsItems', () => {
       '/settings/groups',
       '/settings/content-types',
       '/settings/languages',
+      '/settings/sso',
     ]);
   });
   it('shows all items for all permissions', () => {
-    expect(visibleSettingsItems(settingsItems, PERMISSIONS)).toHaveLength(4);
+    expect(visibleSettingsItems(settingsItems, PERMISSIONS)).toHaveLength(5);
   });
   it('hides items without the permission', () => {
     const items = visibleSettingsItems(settingsItems, ['settings.groups', 'content.read']);

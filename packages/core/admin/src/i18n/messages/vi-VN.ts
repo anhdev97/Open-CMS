@@ -66,6 +66,7 @@ const viVN: Messages = {
     groups: 'Nhóm quyền',
     contentTypesSettings: 'Loại nội dung',
     languages: 'Ngôn ngữ',
+    sso: "Đăng nhập SSO",
     settings: 'Cài đặt',
     home: 'Trang chủ',
     assets: 'Tài nguyên',
@@ -310,6 +311,11 @@ const viVN: Messages = {
       groups: { label: 'Quản lý nhóm quyền', description: 'Tạo nhóm quyền và chọn quyền cho nhóm.' },
       'content-types': { label: 'Quản lý loại nội dung', description: 'Sửa loại nội dung, trường và nhóm nội dung.' },
       languages: { label: 'Quản lý ngôn ngữ', description: 'Chọn các ngôn ngữ dùng cho nội dung.' },
+      sso: {
+        read: { label: "Xem nhà cung cấp SSO", description: "Xem cấu hình OIDC, phiên bản và tình trạng." },
+        manage: { label: "Quản lý nhà cung cấp SSO", description: "Chỉnh sửa, kiểm thử, phát hành và bật/tắt đăng nhập SSO." },
+        identities: { label: "Quản lý danh tính SSO", description: "Chặn, bỏ chặn và hủy liên kết danh tính ngoài." },
+      },
     },
   },
   permGroups: {

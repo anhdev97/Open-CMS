@@ -63,6 +63,8 @@ export class SessionAuthenticator {
       throw unauthenticated();
     }
     if (!session) throw unauthenticated();
+    // Migration cutover: unknown origin sessions must reauthenticate; never assume local login.
+    if (session.authMethod === 'unknown') throw await this.expireUnknownSession(session.idHash, unauthenticated);
     const now = Date.now();
     // C1: a BFF session that ends here also ends the user's provider session, so the next
     // /api/auth/login cannot be silently re-authenticated by it.
@@ -104,6 +106,11 @@ export class SessionAuthenticator {
     req.user = result;
     req.authSession = { idHash };
     return result;
+  }
+
+  private async expireUnknownSession(idHash: string, unauthenticated: () => AuthError): Promise<AuthError> {
+    await this.sessions.delete(idHash);
+    return unauthenticated();
   }
 
   /**

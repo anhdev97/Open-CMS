@@ -326,7 +326,7 @@ export class UserService {
         .executeTakeFirst();
       if (!removed) throw new AuthError('not_found', 404, 'Identity not found');
       await this.audit.record(
-        { type: 'user.identity.unlink', userId, actorId: actor.id, meta: { identityId, provider: removed.provider, subject: removed.subject } },
+        { type: 'user.identity.unlink', userId, actorId: actor.id, meta: { identityId, provider: removed.provider } },
         trx,
       );
     });

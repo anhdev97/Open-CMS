@@ -19,6 +19,7 @@ import { UserService, type GrantRevoker } from '../users/user.service';
 import { isSecureUrl, parseCookies, serializeCookie } from './cookies';
 import { OidcClient } from './oidc-client';
 import { SessionStore } from './session.store';
+import { AuthProvenanceService } from '../sso-management/auth-provenance.service';
 
 const LOGIN_COOKIE_PATH = '/api/auth';
 const LOGIN_COOKIE_MAX_AGE = 600;
@@ -60,6 +61,7 @@ export class AuthController {
     @Inject(SessionAuthenticator) private readonly auth: SessionAuthenticator,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(GRANT_REVOKER) private readonly revoker: GrantRevoker,
+    @Inject(AuthProvenanceService) private readonly provenance: AuthProvenanceService,
   ) {
     this.cookieKey = deriveKey(cfg.secret, 'cookie');
     this.secure = isSecureUrl(cfg.publicUrl);
@@ -132,7 +134,9 @@ export class AuthController {
     let sessionCookie: string;
     try {
       const userAgent = first(req.headers['user-agent']);
-      const { cookieValue } = await this.sessions.create(tokens.sub!, tokens, { ip: req.ip, userAgent });
+      if (!tokens.sub) throw new Error('Internal ID token missing subject');
+      const origin = await this.provenance.consumeForBff(st.verifier, tokens.sub);
+      const { cookieValue } = await this.sessions.create(tokens.sub, tokens, { ip: req.ip, userAgent }, origin);
       const ttl = await this.settings.getTtls();
       await this.users.touchLogin(tokens.sub!);
       sessionCookie = serializeCookie(SESSION_COOKIE, cookieValue, {

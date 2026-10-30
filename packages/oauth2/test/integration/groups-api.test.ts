@@ -322,6 +322,11 @@ describe('groups API', () => {
       expect(unlink.status).toBe(403);
       expect(unlink.body.error.code).toBe('forbidden');
       expect(await t.db.selectFrom('auth_user_identities').select('id').where('id', '=', ident.id).execute()).toHaveLength(1);
+      const priorToStepUp = await api(`/api/admin/users/${target.id}/identities/${ident.id}`, { cookie: admin, method: 'DELETE' });
+      expect(priorToStepUp.status).toBe(403);
+      expect(priorToStepUp.body.error.code).toBe('step_up_required');
+      const stepUp = await api('/api/admin/sso/step-up', { cookie: admin, method: 'POST', body: { password: PW } });
+      expect(stepUp.status).toBe(201);
       expect((await api(`/api/admin/users/${target.id}/identities/${ident.id}`, { cookie: admin, method: 'DELETE' })).status).toBe(204);
       expect(await t.db.selectFrom('auth_user_identities').select('id').where('id', '=', ident.id).execute()).toEqual([]);
       const audit = (await auditTypes(t, 'user.identity.unlink')).filter((e) => e.user_id === target.id);

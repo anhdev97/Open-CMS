@@ -1,4 +1,8 @@
+import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { AuthProvenanceService } from '../../src/sso-management/auth-provenance.service';
+import { IdentityBlockService } from '../../src/sso-management/identity-block.service';
+import type { OAuth2Config } from '../../src/config/schema';
 import type { Kysely } from 'kysely';
 import { AuditService } from '../../src/audit/audit.service';
 import type { AuthTables } from '../../src/db/types';
@@ -22,7 +26,8 @@ describe('IdentityLinker (spec §6.4 step 3)', () => {
     db = ctx.db;
     const audit = new AuditService(db);
     users = new UserService(db, new PasswordService({ minLength: 12 }), audit, revoker);
-    linker = new IdentityLinker(db, users, audit);
+    const provenance = new AuthProvenanceService(db, { secret: randomBytes(32) } as OAuth2Config);
+    linker = new IdentityLinker(db, users, audit, new IdentityBlockService(db, provenance, audit));
   });
   afterAll(() => ctx.stop());
 

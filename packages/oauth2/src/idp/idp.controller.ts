@@ -9,13 +9,14 @@ import { Public } from '../guard/public.decorator';
 import { InteractionExpired, InteractionMismatch, InteractionService } from '../interaction/interaction.service';
 import { IdentityLinker } from './identity-linker';
 import {
-  IDENTITY_PROVIDERS,
   idpCookieKey,
   openIdpState,
   sealIdpState,
   type IdentityProvider,
 } from './identity-provider';
-import { IdpStateMismatch } from './oidc.identity-provider';
+import { IdpStateMismatch, OidcIdentityProvider } from './oidc.identity-provider';
+import { ProviderRegistryService } from '../sso-management/provider-registry.service';
+import { IdentityBlockService } from '../sso-management/identity-block.service';
 
 const IDP_COOKIE_PATH = '/oauth2';
 const IDP_COOKIE_MAX_AGE = 600;
@@ -46,7 +47,8 @@ export class IdpController {
 
   constructor(
     @Inject(OAUTH2_CONFIG) private readonly cfg: OAuth2Config,
-    @Inject(IDENTITY_PROVIDERS) private readonly providers: IdentityProvider[],
+    @Inject(ProviderRegistryService) private readonly registry: ProviderRegistryService,
+    @Inject(IdentityBlockService) private readonly blocks: IdentityBlockService,
     @Inject(InteractionService) private readonly interactions: InteractionService,
     @Inject(IdentityLinker) private readonly linker: IdentityLinker,
     @Inject(AuditService) private readonly audit: AuditService,
@@ -69,7 +71,7 @@ export class IdpController {
       if (e instanceof InteractionExpired) return res.redirect(302, loginError('login_expired'));
       throw e;
     }
-    const idp = this.find(providerId);
+    const idp = await this.find(providerId);
     if (!idp) return res.redirect(302, loginError('login_failed'));
 
     let out: { redirectUrl: string; cookie: string };
@@ -95,7 +97,9 @@ export class IdpController {
     };
 
     const st = openIdpState(this.key, sealed);
-    const idp = this.find(providerId);
+    const idp = st?.phase === 'start' && st.versionId && st.startedAt &&
+      Date.now() >= st.startedAt && Date.now() - st.startedAt <= 600_000
+      ? await this.find(providerId, st.versionId) : undefined;
     const query = new URLSearchParams(new URL(req.originalUrl ?? req.url, 'http://internal').search);
     if (!st || st.phase !== 'start' || !idp || st.provider !== idp.id || query.get('state') !== st.state) {
       return deny('invalid_state');
@@ -114,6 +118,7 @@ export class IdpController {
     let userId: string;
     try {
       userId = await this.linker.resolve(identity);
+      await this.blocks.assertAllowed(identity.provider, identity.subject);
     } catch (e) {
       if (e instanceof AuthError && LINKER_CODES.has(e.code)) {
         await this.audit.record({
@@ -128,7 +133,8 @@ export class IdpController {
       return deny('login_failed');
     }
 
-    this.setCookie(res, sealIdpState(this.key, { phase: 'linked', uid: st.uid, provider: idp.id, userId }), LINKED_COOKIE_MAX_AGE);
+    this.setCookie(res, sealIdpState(this.key, { phase: 'linked', uid: st.uid, provider: idp.id,
+      userId, subject: identity.subject, versionId: st.versionId, startedAt: st.startedAt }), LINKED_COOKIE_MAX_AGE);
     res.redirect(302, `/oauth2/interaction/${encodeURIComponent(st.uid)}/idp/${encodeURIComponent(idp.id)}/complete`);
   }
 
@@ -142,13 +148,20 @@ export class IdpController {
     res.setHeader('Cache-Control', 'no-store');
     const st = openIdpState(this.key, parseCookies(req.headers.cookie)[IDP_COOKIE]);
     this.clearCookie(res);
-    if (!st || st.phase !== 'linked' || st.uid !== uid || st.provider !== providerId) {
+    if (!st || st.phase !== 'linked' || st.uid !== uid || st.provider !== providerId ||
+      !st.subject || !st.versionId || !st.startedAt ||
+      Date.now() < st.startedAt || Date.now() - st.startedAt > 600_000 ||
+      !(await this.registry.getForCallback(providerId, st.versionId))) {
       return res.redirect(302, loginError('invalid_state'));
     }
 
     let redirectTo: string;
     try {
-      ({ redirectTo } = await this.interactions.finishLogin(req, res, uid, st.userId));
+      await this.blocks.assertAllowed(providerId, st.subject);
+      ({ redirectTo } = await this.interactions.finishLogin(req, res, uid, st.userId, {
+        method: 'oidc', providerCode: providerId, externalSubject: st.subject,
+        providerVersionId: st.versionId,
+      }));
     } catch (e) {
       // oc_idp was issued for another interaction than the one this browser holds.
       if (e instanceof InteractionMismatch) return res.redirect(302, loginError('invalid_state'));
@@ -166,8 +179,11 @@ export class IdpController {
     res.redirect(302, redirectTo);
   }
 
-  private find(id: string): IdentityProvider | undefined {
-    return this.providers.find((p) => p.id === id);
+  private async find(id: string, versionId?: string): Promise<IdentityProvider | undefined> {
+    const runtime = versionId
+      ? await this.registry.getForCallback(id, versionId)
+      : await this.registry.getForStart(id);
+    return runtime ? OidcIdentityProvider.fromVersion(runtime, this.cfg) : undefined;
   }
 
   private callbackUrl(idp: IdentityProvider): string {

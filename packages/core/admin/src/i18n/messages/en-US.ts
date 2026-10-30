@@ -67,6 +67,7 @@ export const enUS = {
     groups: "Groups",
     contentTypesSettings: "Content types",
     languages: "Languages",
+    sso: "SSO",
     settings: "Settings",
     home: "Home",
     assets: "Assets",
@@ -354,6 +355,11 @@ export const enUS = {
       languages: {
         label: "Manage languages",
         description: "Choose the languages available for content.",
+      },
+      sso: {
+        read: { label: "View SSO providers", description: "See OIDC providers, versions and health." },
+        manage: { label: "Manage SSO providers", description: "Edit, test, publish and change SSO login policy." },
+        identities: { label: "Manage SSO identities", description: "Block, unblock and unlink external identities." },
       },
     },
   },
