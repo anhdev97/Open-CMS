@@ -13,6 +13,9 @@ export const PERMISSIONS = [
   'settings.groups',
   'settings.content-types',
   'settings.languages',
+  'settings.sso.read',
+  'settings.sso.manage',
+  'settings.sso.identities',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
