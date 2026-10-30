@@ -77,6 +77,7 @@ export interface AuthSessionsTable {
   origin_provider_code: string | null;
   origin_subject_hash: string | null;
   origin_provider_version_id: string | null;
+  origin_grant_id: Generated<string | null>;
   step_up_verified_at: NullableTimestamp;
 }
 
