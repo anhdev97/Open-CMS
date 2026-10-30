@@ -7,7 +7,7 @@ export type AuthErrorCode =
   | 'account_disabled' | 'forbidden' | 'origin_mismatch' | 'validation_failed' | 'weak_password'
   | 'not_found' | 'email_taken' | 'last_super_admin' | 'rate_limited'
   | 'idp_account_not_found' | 'idp_email_unverified' | 'login_expired' | 'invalid_state'
-  | 'system_group' | 'group_key_taken';
+  | 'system_group' | 'group_key_taken' | 'step_up_invalid' | 'step_up_required' | 'validation_error';
 
 export class AuthError extends Error {
   retryAfterSec?: number;
