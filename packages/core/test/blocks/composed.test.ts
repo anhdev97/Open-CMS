@@ -419,6 +419,25 @@ describe('resolvePage with composed blocks', () => {
     expect((stored.data.content[0] as { props: Record<string, unknown> }).props).not.toHaveProperty('_locale');
   });
 
+  it('a stored _editor never reaches the website: resolvePage stamps _editor: false on composed/usesLocale items', async () => {
+    const reg = defineBlocks([...coreBlocks, defineComposedBlock(productGrid())]);
+    const { f } = fake();
+    const out = await resolvePage(
+      page([item('ProductList', { entries: { mode: 'query' }, _editor: true }), item('Heading', { text: 'Hi', _editor: true })]),
+      reg,
+      f,
+      O,
+    );
+    const [c, h] = out.content as { props: Record<string, unknown> }[];
+    expect(c.props._editor).toBe(false);
+    expect(h.props._editor).not.toBe(false);
+    // The website render does not see the editor flag (no editor placeholders).
+    const cfg = toPuckConfig(reg, { locale: 'vi-VN', customFields: {} as CustomFieldRenderers });
+    const site = cfg.components.ProductList.render as unknown as (p: unknown) => unknown;
+    expect(html(site(c.props))).toBe(html(site({ ...c.props, _editor: false })));
+    expect(writePageContent(out, reg).data.content[0]).not.toHaveProperty('props._editor');
+  });
+
   it('usesLocale (hand-written, e.g. ejected) blocks get _locale too; defineBlocks validates the flag', async () => {
     const own = defineBlock({ name: 'OwnBlock', label: 'Own', category: 'x', usesLocale: true, fields: { t: b.text() }, render: () => null });
     const plain = defineBlock({ name: 'PlainBlock', label: 'Plain', category: 'x', fields: { t: b.text() }, render: () => null });

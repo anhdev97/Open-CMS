@@ -100,7 +100,7 @@ function mapFieldValues(
  * Missing entries become `null` / are dropped; a failing `query` yields `[]` with a warning. Unknown blocks
  * are left untouched. Traversal (content, zones, slots, list rows) is shared with `readPageContent`.
  * `b.entries` `baseFilter`/`lockLimit`/`defaultSort` are enforced here (stored data cannot lift them), and items of
- * composed (and `usesLocale`) blocks get the reserved prop `_locale` (= `o.locale`).
+ * composed (and `usesLocale`) blocks get the reserved props `_locale` (= `o.locale`) and `_editor: false`.
  */
 export async function resolvePage(
   content: StoredPageContent,
@@ -120,7 +120,11 @@ export async function resolvePage(
       if (!def) return item;
       const props = mapFieldValues(def.fields, item.props, fn);
       // Reserved, never stored: composed blocks format prices/dates and pick texts for the rendered locale.
-      if (stamp && (def.composed || def.usesLocale)) props._locale = o.locale;
+      // `_editor: false` overrides any stored value, so editor-only output never reaches the website.
+      if (stamp && (def.composed || def.usesLocale)) {
+        props._locale = o.locale;
+        props._editor = false;
+      }
       return { ...item, props: mapSlots(def.fields, props, visit) };
     };
     return visit;
