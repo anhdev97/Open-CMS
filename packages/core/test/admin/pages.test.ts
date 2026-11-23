@@ -22,6 +22,17 @@ describe('pageStatus', () => {
   });
 });
 
+describe('pageStatus with the server flag', () => {
+  const pub = { publishedAt: '2026-01-02T00:00:00Z' };
+  it('trusts hasUnpublishedChanges over timestamps', () => {
+    expect(pageStatus({ updatedAt: '2026-01-03T00:00:00Z', hasUnpublishedChanges: false }, pub)).toBe('published');
+    expect(pageStatus({ updatedAt: '2026-01-01T00:00:00Z', hasUnpublishedChanges: true }, pub)).toBe('changed');
+  });
+  it('is still draft when never published', () => {
+    expect(pageStatus({ updatedAt: '2026-01-03T00:00:00Z', hasUnpublishedChanges: true }, null)).toBe('draft');
+  });
+});
+
 describe('slugToPath for the create dialog', () => {
   it('derives the path from the title', () => {
     expect(slugToPath('Giới thiệu')).toBe('/gioi-thieu');

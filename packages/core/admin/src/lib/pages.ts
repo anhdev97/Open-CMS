@@ -20,10 +20,15 @@ const ts = (v: string | Date) => new Date(v).getTime();
 
 /**
  * Status of a page from its draft row and published copy (`null` when never published):
- * draft = no published copy, changed = the draft was saved after publishing, published otherwise.
+ * draft = no published copy, changed = unpublished changes, published otherwise. The server's
+ * `hasUnpublishedChanges` flag wins (same source as the content list); timestamps are the fallback.
  */
-export function pageStatus(draft: { updatedAt: string | Date }, published: { publishedAt: string | Date } | null): PageStatus {
+export function pageStatus(
+  draft: { updatedAt: string | Date; hasUnpublishedChanges?: boolean },
+  published: { publishedAt: string | Date } | null,
+): PageStatus {
   if (!published) return 'draft';
+  if (typeof draft.hasUnpublishedChanges === 'boolean') return draft.hasUnpublishedChanges ? 'changed' : 'published';
   return ts(draft.updatedAt) > ts(published.publishedAt) ? 'changed' : 'published';
 }
 
