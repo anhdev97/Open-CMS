@@ -182,4 +182,45 @@ describe('createAutosave', () => {
     expect(save).toHaveBeenCalledTimes(2);
     expect(a.state).toBe('saved');
   });
+
+  it('rebase replaces the If-Match of the next save when nothing is in flight', async () => {
+    const calls: Saved[] = [];
+    const a = createAutosave<string>({
+      save: async (data, ifMatch) => {
+        calls.push({ data, ifMatch });
+        return { updatedAt: `t${calls.length}` };
+      },
+      debounceMs: 10,
+      ifMatch: 't0',
+    });
+    expect(a.rebase('p0')).toBe(true);
+    expect(a.ifMatch).toBe('p0');
+    a.change('a');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(calls).toEqual([{ data: 'a', ifMatch: 'p0' }]);
+    // A pending (debounced, not yet sent) change is sent with the rebased version.
+    a.change('b');
+    expect(a.rebase('p1')).toBe(true);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(calls[1]).toEqual({ data: 'b', ifMatch: 'p1' });
+  });
+
+  it('rebase is refused while a save is in flight and in conflict', async () => {
+    const first = deferred<{ updatedAt: string }>();
+    const a = createAutosave<string>({ save: () => first.promise, debounceMs: 10, ifMatch: 't0' });
+    a.change('a');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(a.state).toBe('saving');
+    expect(a.rebase('p0')).toBe(false);
+    first.resolve({ updatedAt: 't1' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(a.ifMatch).toBe('t1');
+
+    const c = createAutosave<string>({ save: async () => Promise.reject(stale), debounceMs: 10, ifMatch: 't0' });
+    c.change('x');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(c.state).toBe('conflict');
+    expect(c.rebase('p0')).toBe(false);
+    expect(c.ifMatch).toBe('t0');
+  });
 });

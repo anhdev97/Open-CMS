@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- **Publishing no longer changes the draft's `updatedAt`.** Only its `publishedAt` moves (`hasUnpublishedChanges`
+  stays `updatedAt > publishedAt`), so a save sent with the `If-Match` the editor saw before Publish succeeds
+  instead of answering 409 `stale_draft`. The page editor also re-reads the draft version after publishing.
 - A value that breaks a `unique` field on save or publish answers 409 `unique_violation` (with the field in
   `issues`) instead of a 500.
 - **Dev server shutdown on Ctrl+C.** Nest could hang on HTTP `server.close()` (HMR keep-alive) or

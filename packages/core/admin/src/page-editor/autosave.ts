@@ -26,6 +26,11 @@ export interface Autosave<T> {
   /** Latest local data (kept on conflict). */
   readonly data: T | undefined;
   subscribe(listener: (state: AutosaveState) => void): () => void;
+  /**
+   * Sets the `updatedAt` the next save sends (e.g. re-read after publishing). Refused (false) while a save is in
+   * flight (its response sets it) or in `conflict`. Pending local data is kept and saved with the new version.
+   */
+  rebase(updatedAt: string): boolean;
   /** Cancels a pending debounce; a save in flight still completes. */
   dispose(): void;
 }
@@ -126,6 +131,11 @@ export function createAutosave<T>(opts: AutosaveOptions<T>): Autosave<T> {
     },
     get data() {
       return latest;
+    },
+    rebase(updatedAt) {
+      if (inFlight || state === 'conflict' || state === 'saving') return false;
+      ifMatch = updatedAt;
+      return true;
     },
     subscribe(l) {
       listeners.add(l);

@@ -123,6 +123,31 @@ describe('pages API', () => {
     });
   });
 
+  describe('publish keeps the draft version', () => {
+    it('save -> publish -> save with the last-seen updatedAt is 200; no unpublished changes right after publish', async () => {
+      const c = await create({ title: 'Pub', path: '/pub-save' });
+      const id = c.body.data.documentId as string;
+      const patch = (body: unknown, ifMatch: string) =>
+        call(`${ADMIN}/${id}?locale=en-US`, { method: 'PATCH', body: JSON.stringify(body), headers: { 'if-match': `"${ifMatch}"` } });
+
+      const saved = await patch({ title: 'Pub 1' }, c.body.data.updatedAt);
+      expect(saved.status).toBe(200);
+      const seen = saved.body.data.updatedAt as string;
+
+      expect((await publish(id)).status).toBe(200);
+      const draft = await call(`${ADMIN}/${id}?locale=en-US&status=draft`);
+      expect(draft.body.data.updatedAt).toBe(seen);
+      expect(draft.body.data.hasUnpublishedChanges).toBe(false);
+      const listed = (await call(`${ADMIN}?locale=en-US&filter[documentId][in]=${id}`)).body.data[0];
+      expect(listed.hasUnpublishedChanges).toBe(false);
+
+      const after = await patch({ title: 'Pub 2' }, seen);
+      expect(after.status).toBe(200);
+      const changed = await call(`${ADMIN}/${id}?locale=en-US&status=draft`);
+      expect(changed.body.data.hasUnpublishedChanges).toBe(true);
+    });
+  });
+
   describe('unknown blocks', () => {
     let ghostId: string;
     it('publish with a block missing from the manifest -> 422 unknown_block', async () => {

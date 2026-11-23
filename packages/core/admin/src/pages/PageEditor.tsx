@@ -222,6 +222,13 @@ function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorPro
       }
       await publishPage(documentId);
       toast.success(t('pageEditor.published'));
+      // Publishing leaves the draft's updatedAt alone; re-read it anyway so the next autosave's If-Match matches
+      // the server (only when no save is in flight: that save's response carries the version).
+      try {
+        autosave.rebase((await getPage(documentId, locale)).updatedAt);
+      } catch {
+        // keep the current If-Match; a stale one surfaces as a conflict on the next save
+      }
     } catch (e) {
       if (e instanceof ApiError && e.code === 'unknown_block') {
         const names = e.issues.map((i) => (i as { path?: unknown[] }).path?.[0]).filter(Boolean).join(', ');
@@ -230,7 +237,7 @@ function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorPro
     } finally {
       setPublishing(false);
     }
-  }, [autosave, documentId]);
+  }, [autosave, documentId, locale]);
 
   const copyFromDefault = () => {
     const { title, path, seo } = fromEditorData(latest.current, registry, storedSeo);

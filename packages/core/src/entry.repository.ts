@@ -391,8 +391,9 @@ export class EntryRepository {
         await sql`insert into ${sql.table(rel)} (entry_id, target_id, sort_order)
           select ${pubId}, target_id, sort_order from ${sql.table(rel)} where entry_id = ${draftId}`.execute(trx);
       }
-      // Draft remembers when it was last published (drives hasUnpublishedChanges).
-      await trx.updateTable(main).set({ published_at: sql`now()`, updated_at: sql`now()` }).where('id', '=', draftId).execute();
+      // Draft remembers when it was last published (drives hasUnpublishedChanges: updated_at > published_at).
+      // Its updated_at is left alone: it is the editor's If-Match version, and publishing does not change the draft.
+      await trx.updateTable(main).set({ published_at: sql`now()` }).where('id', '=', draftId).execute();
       await trx
         .insertInto(SYSTEM_TABLES.entryVersions)
         .values({ content_type: def.apiId, document_id: documentId, snapshot: JSON.stringify(snapshot) })
