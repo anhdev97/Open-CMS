@@ -45,6 +45,7 @@ Fixed paths, none configurable: UI `/admin`, API `/api`, auth `/oauth2`, deliver
 | `auth` | `{}` | non-secret auth settings (`@opencloudcms/oauth2`: TTLs, password policy, rate limit, OIDC IdP) |
 | `web` | `{ enabled: true, dir: process.cwd(), dev: NODE_ENV !== 'production' }` | serve the project's Next app (admin at `/admin`, website at `/`) from Nest. `enabled: false` is API-only and never loads `next`; `/admin` is then 404, and the auth flow still redirects to `/admin/login`, so the host must serve its own UI there |
 | `cors.origins` | none | exact origins (no wildcard) allowed to read `/api/content/**` cross-origin |
+| `pages.blocks` | none | the project's block manifest (`blockManifest(blocks)` from `src/blocks`); publishing a page that uses another block fails with 422 `unknown_block`. Absent: no check, WARN at boot |
 | `env` | `process.env` | environment for the auth module (tests) |
 
 CORS applies to `GET`, `HEAD`, `OPTIONS` on `/api/content/**` only, without credentials. No other route
@@ -78,6 +79,133 @@ before `pnpm start`). Without a build, web routes answer 503 (`Web UI chưa đư
 Working on the admin inside this monorepo: `pnpm --filter @opencloudcms/core dev:admin` (`tsc -w`) next to
 `pnpm --filter my-store dev`. `dev:admin` does not copy `theme.css`; run `pnpm --filter @opencloudcms/core build`
 once on a fresh checkout first.
+
+## Page builder
+
+Website pages are **data** (the core content type `opencloudcmsPage`), built with drag and drop in the admin
+(`/admin/pages`, [Puck](https://puckeditor.com) `0.24.1`, pinned). Blocks are **code** in the project.
+
+### Blocks
+
+```tsx
+// src/blocks/product-grid/product-grid.block.tsx
+import { b, defineBlock } from '@opencloudcms/core/blocks';
+
+const COLUMNS = { 2: 'sm:grid-cols-2', 3: 'sm:grid-cols-3', 4: 'sm:grid-cols-4' } as const;
+
+export default defineBlock({
+  name: 'ProductGrid',                       // stable key stored in pages: PascalCase, unique
+  label: { 'en-US': 'Product grid', 'vi-VN': 'Lưới sản phẩm' },
+  category: 'commerce',                      // group in the editor's component list
+  icon: 'layout-grid',                       // lucide icon name
+  fields: {
+    heading: b.text({ label: 'Heading', default: 'Featured' }),
+    columns: b.select({ options: [2, 3, 4], default: 3 }),
+    products: b.entries('product', { limit: 12, sortable: true, filterable: true }),
+  },
+  render: ({ heading, columns, products }) => (
+    <section className="py-12">
+      <h2 className="text-2xl font-semibold">{heading}</h2>
+      <div className={`grid gap-6 ${COLUMNS[columns]}`}>
+        {products.map((p) => <p key={p.documentId}>{String(p.name)}</p>)}
+      </div>
+    </section>
+  ),
+});
+```
+
+```ts
+// src/blocks/index.ts
+import { coreBlocks, defineBlocks } from '@opencloudcms/core/blocks';
+import ProductGrid from './product-grid/product-grid.block';
+
+export default defineBlocks([...coreBlocks, ProductGrid]);
+```
+
+`defineBlocks` throws on a duplicate or non-PascalCase `name`, an unknown field kind or a `default` of the wrong
+type. `coreBlocks`: `Section`, `Columns`, `Grid`, `Spacer`, `Divider`, `Heading`, `Text`, `Image`, `Button`,
+`ButtonGroup`, `Card`, `Badge`, `Hero`, `FeatureList`, `CallToAction`, `FAQ`, `EntryList` (any content type:
+pick or query, list/grid/table).
+
+| Builder | Stored in the page | `render` receives | Editor input |
+|---|---|---|---|
+| `b.text`, `b.longText` | string | string | input / textarea |
+| `b.richText` | HTML string | rendered node | rich text editor |
+| `b.number`, `b.boolean`, `b.select`, `b.radio` | value | value | matching input |
+| `b.link` | `{ kind: 'url', href }` or `{ kind: 'page', documentId }` | `{ href }` (page path resolved; `null` if gone) | URL or page picker |
+| `b.image` | `{ assetId?, src, alt }` | `{ src, alt, width?, height? }` | asset picker or URL |
+| `b.color`, `b.spacing` | design-system token (`primary`, `muted`, `4`, …) | token | token list |
+| `b.entry(apiId)` | `{ documentId }` | resolved entry or `null` | entry search |
+| `b.entries(apiId, opts)` | `{ mode: 'pick', ids }` or `{ mode: 'query', filter, sort, limit }` | entry array | pick, or a filter on indexed/unique fields |
+| `b.list({ ...fields })` | array of objects | array of objects | repeatable rows |
+| `b.slot({ allow?, max? })` | nested blocks | `ReactNode` | drop zone |
+
+Only declared fields are stored. `version` (default `1`) is stored as `_v` on every block; when the props change
+shape, bump it and add `migrate: [{ from: 1, up: (props) => ({ ...props, … }) }]` (run when a page is read).
+
+**Rules for `render`** (the same file runs in the editor, in the browser, on the website, in a server component,
+and is imported by Nest for `blockManifest`):
+
+- isomorphic: no server-only APIs (`fs`, `next/headers`, …), no `fetch`, no database access; data comes in
+  through `b.entry` / `b.entries` / `b.link` / `b.image`, resolved in batches before rendering;
+- no CSS imports: Tailwind classes only, written out in full (`grid-cols-${n}` is never generated). The project's
+  `app/globals.css` scans the core blocks and `src/blocks`;
+- interactive parts go in a child component marked `'use client'`.
+
+### Wiring (written by `opencloudcms init`)
+
+| File | |
+|---|---|
+| `src/blocks/index.ts` | `export default defineBlocks([...coreBlocks, …])` |
+| `src/app.module.ts` | `pages: { blocks: blockManifest(blocks) }` (Nest loads `@opencloudcms/core/blocks` as CommonJS) |
+| `tsconfig.server.json` | `"jsx": "react-jsx"` (block files are TSX) |
+| `app/(admin)/admin/AdminWithBlocks.tsx` | `'use client'` wrapper: `<AdminApp blocks={blocks} />`; `[[...slug]]/page.tsx` re-exports it |
+| `app/(site)/[[...path]]/page.tsx` | `createCmsPage({ blocks })` from `@opencloudcms/core/blocks/next`: `default` = `Page`, `generateMetadata`, `dynamic = 'force-dynamic'` |
+| `app/(site)/%5F_opencloudcms/preview/route.ts`, `…/preview/exit/route.ts` | `createPreviewRoute()`, `createPreviewExitRoute()`. Next treats folders starting with `_` as private; `%5F` keeps the URL `/__opencloudcms/preview` |
+| `app/globals.css` | `@source "../node_modules/@opencloudcms/core/dist/blocks"; @source "../src/blocks";` |
+
+The renderer serves the page published at the request path in the default locale; a path without a page is
+`notFound()`; `/` without a page shows a welcome page. A file route of `app/(site)` (e.g. `blog/page.tsx`) wins
+over a page with the same path: `GET /api/admin/pages/shadowed` lists those paths (computed at boot) and the
+editor warns about them.
+
+### Preview
+
+- In the editor: the canvas renders the blocks with draft data (iframe, same `globals.css`).
+- On the website: "View on website" opens `/__opencloudcms/preview?page=<documentId>&locale=<locale>`. The route
+  checks the admin session against the API (`content.read`), turns on Next draft mode, sets
+  `opencloudcms_preview_locale` and redirects to the page path. In draft mode every catch-all page shows drafts
+  (including the entries of data blocks) with a "Viewing draft · Exit" bar; the session is checked on every request
+  and without it the published page is shown. There is no share token: someone without an admin account sees the
+  published page. Responses are `Cache-Control: private, no-store`.
+- Next marks its draft-mode cookie `Secure` in production, so the website preview needs https (or `localhost`).
+- After signing in from a preview link you land on `/admin`, not back on the preview.
+
+### API
+
+| | |
+|---|---|
+| `/api/admin/content/opencloudcmsPage/**` | the usual content API (CRUD, publish, versions); fields `title`, `path`, `seo`, `content` (all localizable) |
+| `GET /api/content/opencloudcmsPage/by-path?path=&locale=` | published page (public) |
+| `GET /api/admin/content/opencloudcmsPage/by-path?path=&locale=` | draft page (`content.read`, `no-store`) |
+| `GET /api/admin/pages/blocks-check` | `{ data, manifest }`: pages using blocks missing from `pages.blocks` |
+| `GET /api/admin/pages/shadowed` | `{ data: string[] }`: page paths served by a file route of the website |
+
+`path`: `/` or `/segment(/segment)*` with lowercase letters, digits and hyphens; unique per locale. Errors:
+422 `invalid_path`, 422 `path_reserved` (`/_next`, `/admin`, `/api`, `/oauth2`, `/__opencloudcms`), 409
+`unique_violation`, 409 `stale_draft` (the `If-Match` timestamp is not the current one), 422 `unknown_block` on
+publish (`issues: [{ path: [name], message: <count> }]`; send `{ "force": true }` to publish anyway). Unknown blocks
+render nothing on the website (one WARN per name) and appear as a removable placeholder in the editor.
+`apiId` `opencloudcmsPage` is reserved.
+
+### Limits
+
+- Puck is 0.x and pinned exactly; stored content carries `formatVersion` (the Puck minor) for data migrations.
+- The website serves the default locale only; other locales can be edited, published and previewed.
+- No caching: each request calls the API over loopback and resolves the data blocks.
+- Data blocks do not populate references inside entries (they stay ids).
+- The editor canvas shows the page body only (no website header/footer); "View on website" shows the full page.
+- Adding or changing a block is a code change (and a deploy); building and publishing pages works in production.
 
 ## i18n
 

@@ -197,7 +197,7 @@ Trang đi theo quyền nội dung của Spec B, áp cho `opencloudcmsPage` như 
 
 Không có token dùng được ngoài phiên: link preview chuyển tiếp cho người khác thì người đó chỉ thấy bản published. Muốn khách duyệt → tạo tài khoản admin cho họ.
 
-1. "Xem trên website" mở tab mới `/__opencloudcms/preview?page=<documentId>&locale=<locale>` — **route handler của Next** trong `app/(site)/__opencloudcms/preview/route.ts` (re-export từ core; builder chọn cách export phù hợp quy ước re-export của spec admin-nextjs §5.1).
+1. "Xem trên website" mở tab mới `/__opencloudcms/preview?page=<documentId>&locale=<locale>` — **route handler của Next** trong `app/(site)/%5F_opencloudcms/preview/route.ts` (re-export từ core; builder chọn cách export phù hợp quy ước re-export của spec admin-nextjs §5.1). Thư mục tên `%5F_opencloudcms` vì Next coi thư mục bắt đầu bằng `_` là private (không thành route); `%5F` là cách escape Next hỗ trợ, URL vẫn là `/__opencloudcms/...`.
 2. Route handler gọi loopback `GET /api/admin/content/opencloudcmsPage/<documentId>?status=draft&locale=` **chuyển tiếp cookie phiên** của request. 401/403/404 → redirect tới `/admin/login?next=<url preview>` (401) hoặc trả trang lỗi ngắn (403/404). Thành công → bật `draftMode()`, đặt cookie `opencloudcms_preview_locale=<locale>` (`HttpOnly`, `SameSite=Lax`, `Path=/`, cookie phiên trình duyệt), redirect tới `path` của bản draft ở locale đó.
 3. Catch-all `app/(site)/[[...path]]/page.tsx`: nếu `draftMode().isEnabled` → gọi `GET /api/admin/content/opencloudcmsPage/by-path` chuyển tiếp cookie phiên, và `resolvePage` dùng **fetcher admin chuyển tiếp cookie** ⇒ block dữ liệu lấy **draft** của entry (sản phẩm, bài viết…), trang giống hệt editor. Hiện **thanh "Đang xem bản nháp · Thoát"** cố định (thoát = `/__opencloudcms/preview/exit`: tắt draft mode, xoá cookie, về bản published).
 4. Đang ở draft mode mà phiên admin hết/không có quyền (API trả 401/403) → render bản published + thanh "Phiên xem nháp đã hết, đăng nhập lại" (link login). Không bao giờ trả draft khi không có phiên hợp lệ.
@@ -240,10 +240,10 @@ Không có token dùng được ngoài phiên: link preview chuyển tiếp cho 
 
 - `init` sinh:
   - `src/blocks/index.ts` (`defineBlocks([...coreBlocks])`), thư mục `src/blocks/` có một block ví dụ có comment.
-  - `app/(site)/[[...path]]/page.tsx` (re-export renderer của core; `generateMetadata` từ `seo`), `app/(site)/__opencloudcms/preview/route.ts` và `.../exit/route.ts`.
+  - `app/(site)/[[...path]]/page.tsx` (re-export renderer của core; `generateMetadata` từ `seo`), `app/(site)/%5F_opencloudcms/preview/route.ts` và `.../exit/route.ts` (URL `/__opencloudcms/preview`, xem §8.2).
   - Xoá `app/(site)/page.tsx` tĩnh; khi chưa có trang published ở `/`, renderer hiện **trang chào mừng** (nội dung trang chủ mẫu hiện tại + link "Dựng trang đầu tiên" tới `/admin/pages`).
 - Renderer: path không có trang → `notFound()` của Next (dùng `not-found.tsx` của website).
-- Renderer cần `blocks` của project ở cả admin lẫn website: admin nạp `src/blocks/index.ts` qua một file re-export trong `app/(admin)` do `init` sinh (ví dụ `app/(admin)/admin/blocks.ts`), truyền vào `AdminApp`. *(Cơ chế cụ thể để admin bundle block của project do builder chốt; ràng buộc: không bắt người dùng sửa route table của core.)*
+- Renderer cần `blocks` của project ở cả admin lẫn website: admin nạp `src/blocks/index.ts` qua client component `app/(admin)/admin/AdminWithBlocks.tsx` (`'use client'`, `<AdminApp blocks={blocks} />`) do `init` sinh; `[[...slug]]/page.tsx` re-export nó. *(Cơ chế cụ thể để admin bundle block của project do builder chốt; ràng buộc: không bắt người dùng sửa route table của core.)*
 - `examples/my-store`: block `ProductGrid`, trang `/` (Hero + ProductGrid query `product` mới nhất) và `/about`, seed bằng script dev.
 - README: khai báo block, kiểu field, quy tắc `render` isomorphic, preview, giới hạn.
 
