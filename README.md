@@ -260,7 +260,9 @@ everything else: the website renderer `app/(site)/[[...path]]/page.tsx`, the pre
 the editor, `blockManifest(blocks)` in `src/app.module.ts` (publishing a page with an unknown block fails) and the
 Tailwind sources. `render` must be isomorphic (it runs in the editor and on the website, and Nest imports the
 file): no server-only APIs, no data fetching (data fields such as `b.entries` arrive resolved), no CSS imports
-(Tailwind classes only). "View on website" previews the draft on the real site, for signed-in admins only.
+(Tailwind classes only). "View on website" previews the draft on the real site, for signed-in admins only. The editor autosaves with a draft
+conflict check per page document, not per locale: two people editing different locales of the same page see a
+conflict.
 Until a page is published at `/`, the home shows a welcome page. Field kinds, preview, API and limits:
 [`packages/core/README.md`](packages/core/README.md#page-builder). `examples/my-store` has a `ProductGrid` block
 and `pnpm --filter my-store seed:pages` publishes `/` (Hero + the newest products) and `/about`.

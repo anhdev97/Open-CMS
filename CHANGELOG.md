@@ -9,8 +9,8 @@
   instead of answering 409 `stale_draft`. The page editor also re-reads the draft version after publishing.
 - **Rich text of pages is sanitized.** The website rendered `b.richText` HTML through a Puck Suspense fallback
   that wrote the stored HTML as is (event handlers, `javascript:` links). Rich text is now normalized with the
-  editor's schema (`normalizeRichText`, `@tiptap/*` `3.35.0` pinned): on save by the server (`blockManifest` lists
-  each block's `richText` paths; regenerate nothing, `blockManifest(blocks)` picks them up), when content is read
+  editor's schema (`normalizeRichText`, `@tiptap/*` `3.35.0` pinned): on save by the server (`blockManifest` now lists
+  each block's `richText` paths; projects passing `blockManifest(blocks)` get them without changes), when content is read
   (`readPageContent`), and rendered in place on the website (`richTextFieldTransforms`).
 - A value that breaks a `unique` field on save or publish answers 409 `unique_violation` (with the field in
   `issues`) instead of a 500.
@@ -111,7 +111,7 @@
   - API: `GET /api/content/opencloudcmsPage/by-path` (published), `GET /api/admin/content/opencloudcmsPage/by-path`
     (draft, `no-store`), `GET /api/admin/pages/blocks-check`, `GET /api/admin/pages/shadowed` (paths served by a
     file route of `app/(site)`, warned about in the editor and the create dialog), `filter[documentId][in]` on list
-    APIs, `If-Match` on updates (409 `stale_draft`). Page `path` errors: 422 `invalid_path`, 422 `path_reserved`.
+    APIs, `If-Match` on `PATCH` updates (409 `stale_draft`; checked per page document, not per locale). Page `path` errors: 422 `invalid_path`, 422 `path_reserved`.
   - Website preview for signed-in admins (`/__opencloudcms/preview?page=&locale=`, Next draft mode, drafts of the
     page and of the entries its blocks show, `Cache-Control: private, no-store`). The admin CSP is unchanged.
   - `opencloudcms init` writes `src/blocks/` (with a commented example block), the catch-all renderer, the

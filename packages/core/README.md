@@ -203,7 +203,8 @@ editor warns about them.
 
 `path`: `/` or `/segment(/segment)*` with lowercase letters, digits and hyphens; unique per locale. Errors:
 422 `invalid_path`, 422 `path_reserved` (`/_next`, `/admin`, `/api`, `/oauth2`, `/__opencloudcms`), 409
-`unique_violation`, 409 `stale_draft` (the `If-Match` timestamp is not the current one), 422 `unknown_block` on
+`unique_violation`, 409 `stale_draft` (the `If-Match` timestamp is not the current one; the check is per page
+document, not per locale, so two people editing different locales of the same page get a conflict), 422 `unknown_block` on
 publish (`issues: [{ path: [name], message: <count> }]`; send `{ "force": true }` to publish anyway). Unknown blocks
 render nothing on the website (one WARN per name) and appear as a removable placeholder in the editor.
 A page whose `content` has another `formatVersion` (needs migration) is read-only in the editor and renders an
