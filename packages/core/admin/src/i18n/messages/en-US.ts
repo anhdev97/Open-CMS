@@ -436,6 +436,7 @@ export const enUS = {
     deleteAria: "Delete {title}",
     duplicated: "Page duplicated",
     deleteTitle: "Delete this page?",
+    showing: "Showing {shown} of {total} pages.",
     deleteDescription: "\"{title}\" will be deleted with its draft and published versions. This cannot be undone.",
     create: {
       title: "New page",

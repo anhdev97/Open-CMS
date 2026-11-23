@@ -385,6 +385,7 @@ const viVN: Messages = {
     deleteAria: 'Xoá {title}',
     duplicated: 'Đã nhân bản trang',
     deleteTitle: 'Xoá trang này?',
+    showing: 'Đang hiển thị {shown} trên {total} trang.',
     deleteDescription: '"{title}" sẽ bị xoá cùng bản nháp và bản đã xuất bản. Không thể hoàn tác.',
     create: {
       title: 'Trang mới',

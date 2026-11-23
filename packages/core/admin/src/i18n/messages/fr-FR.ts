@@ -385,6 +385,7 @@ const frFR: Messages = {
     deleteAria: 'Supprimer {title}',
     duplicated: 'Page dupliquée',
     deleteTitle: 'Supprimer cette page ?',
+    showing: 'Affichage de {shown} pages sur {total}.',
     deleteDescription: '« {title} » sera supprimée avec son brouillon et sa version publiée. Cette action est irréversible.',
     create: {
       title: 'Nouvelle page',

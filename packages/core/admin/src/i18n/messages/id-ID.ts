@@ -385,6 +385,7 @@ const idID: Messages = {
     deleteAria: 'Hapus {title}',
     duplicated: 'Halaman diduplikat',
     deleteTitle: 'Hapus halaman ini?',
+    showing: 'Menampilkan {shown} dari {total} halaman.',
     deleteDescription: '"{title}" akan dihapus beserta draf dan versi terbitnya. Tindakan ini tidak dapat dibatalkan.',
     create: {
       title: 'Halaman baru',

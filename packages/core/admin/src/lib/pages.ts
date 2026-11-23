@@ -32,9 +32,17 @@ export function pageStatus(
   return ts(draft.updatedAt) > ts(published.publishedAt) ? 'changed' : 'published';
 }
 
+/** The pages list shows at most this many pages (newest first). */
+export const PAGES_LIST_LIMIT = 100;
+
 export async function listPages(locale: string): Promise<{ data: PageEntry[]; total: number }> {
-  const r = await api<{ data: PageEntry[]; meta: { total: number } }>(`${base}?locale=${encodeURIComponent(locale)}&limit=100`);
+  const r = await api<{ data: PageEntry[]; meta: { total: number } }>(`${base}?locale=${encodeURIComponent(locale)}&limit=${PAGES_LIST_LIMIT}`);
   return { data: r.data, total: r.meta.total };
+}
+
+/** `{ shown, total }` for the "showing N of M" note when the list is cut short, else null. */
+export function listTruncation(shown: number, total: number): { shown: number; total: number } | null {
+  return total > shown ? { shown, total } : null;
 }
 
 export async function createPage(input: { title: string; path: string; locale: string }): Promise<PageEntry> {

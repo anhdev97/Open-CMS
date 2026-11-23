@@ -12,6 +12,7 @@ import {
   getShadowedPaths,
   isShadowedPath,
   listPages,
+  listTruncation,
   pageErrorMessageKey,
   pagePreviewUrl,
   pageStatus,
@@ -58,6 +59,11 @@ describe('page client', () => {
     api.mockResolvedValue({ data: [{ documentId: 'a' }], meta: { total: 1 } });
     await expect(listPages('vi-VN')).resolves.toEqual({ data: [{ documentId: 'a' }], total: 1 });
     expect(api).toHaveBeenCalledWith('/api/admin/content/opencloudcmsPage?locale=vi-VN&limit=100');
+  });
+  it('listTruncation: { shown, total } only when the list holds fewer pages than exist', () => {
+    expect(listTruncation(100, 250)).toEqual({ shown: 100, total: 250 });
+    expect(listTruncation(3, 3)).toBeNull();
+    expect(listTruncation(0, 0)).toBeNull();
   });
   it('createPage posts title and path in the locale', async () => {
     api.mockResolvedValue({ data: { documentId: 'n' } });

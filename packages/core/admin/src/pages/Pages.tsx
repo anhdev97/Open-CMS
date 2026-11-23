@@ -28,6 +28,7 @@ import {
   getShadowedPaths,
   isShadowedPath,
   listPages,
+  listTruncation,
   pageErrorMessageKey,
   pageStatus,
   type PageEntry,
@@ -134,6 +135,7 @@ export function Pages() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [locale, setLocale] = useState('');
   const [pages, setPages] = useState<PageEntry[] | null>(null);
+  const [total, setTotal] = useState(0);
   const [error, setError] = useState<Error | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<PageEntry | null>(null);
@@ -153,7 +155,10 @@ export function Pages() {
 
   const reload = useCallback(() => {
     if (!locale) return;
-    listPages(locale).then((r) => setPages(r.data), setError);
+    listPages(locale).then((r) => {
+      setPages(r.data);
+      setTotal(r.total);
+    }, setError);
   }, [locale]);
   useEffect(reload, [reload]);
 
@@ -277,6 +282,9 @@ export function Pages() {
           )}
         </CardContent>
       </Card>
+      {pages && listTruncation(pages.length, total) && (
+        <p className="text-sm text-muted-foreground">{t('pages.showing', { shown: pages.length, total })}</p>
+      )}
 
       {creating && (
         <CreatePageDialog
