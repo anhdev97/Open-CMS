@@ -4,7 +4,9 @@ import {
   PUCK_FORMAT_VERSION,
   coreBlocks,
   defineBlocks,
+  adminFetcher,
   defineComposedBlock,
+  publicFetcher,
   resolvePage,
   toPuckConfig,
   writePageContent,
@@ -155,6 +157,21 @@ describe('defineComposedBlock: render', () => {
     const def = defineComposedBlock(productCard());
     const out = render(def, { ctaLabel: 'x', entry: product('abc', { price: { amount: 1234.5, currency: 'EUR' } }), _locale: 'fr-FR' });
     expect(out).toMatch(/1\s?234,50\s?€/);
+  });
+
+  it('Price showCurrency: currency shown by default, plain number when false', () => {
+    const spec = (showCurrency?: boolean) =>
+      base({
+        name: showCurrency === false ? 'PlainPrice' : 'CurPrice',
+        binding: { apiId: 'product', mode: 'single' },
+        tree: { el: 'Price', props: showCurrency === undefined ? {} : { showCurrency }, bind: { value: { from: 'entry', path: 'price' } } },
+      });
+    const e = { entry: product('a', { price: { amount: 1234.5, currency: 'USD' } }), _locale: 'en-US' };
+    expect(render(defineComposedBlock(spec()), e)).toContain('$1,234.50');
+    const plain = render(defineComposedBlock(spec(false)), e);
+    expect(plain).toContain('1,234.5');
+    expect(plain).not.toContain('$');
+    expect(render(defineComposedBlock(spec()), { entry: product('a', { price: 7 }), _locale: 'en-US' })).toContain('>7<');
   });
 
   it('entryUrl: missing slug renders the button as a span', () => {
@@ -384,5 +401,103 @@ describe('resolvePage with composed blocks', () => {
     expect(h.props._locale).toBeUndefined();
     const stored = writePageContent(out, reg);
     expect((stored.data.content[0] as { props: Record<string, unknown> }).props).not.toHaveProperty('_locale');
+  });
+});
+
+describe('asset fields of entries', () => {
+  const U1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
+  const U2 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2';
+  const U3 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3';
+  const item = (type: string, props: Record<string, unknown>, id = type) => ({ type, props: { id, _v: 1, ...props } });
+  const page = (content: unknown[]) => ({ format: 'puck' as const, formatVersion: PUCK_FORMAT_VERSION, data: { root: { props: {} }, content } as never });
+  const O = { locale: 'en-US', defaultLocale: 'en-US' } as never;
+  const card = () =>
+    defineComposedBlock(
+      base({
+        name: 'AssetCard',
+        binding: { apiId: 'product', mode: 'single' },
+        tree: { el: 'Image', bind: { src: { from: 'entry', path: 'image' }, alt: { from: 'entry', path: 'image' } } },
+      }),
+    );
+  const grid = () =>
+    defineComposedBlock(
+      base({
+        name: 'AssetGrid',
+        binding: { apiId: 'product', mode: 'collection' },
+        tree: { el: 'Image', bind: { src: { from: 'entry', path: 'image' } } },
+      }),
+    );
+  const entries: Record<string, Entry> = {
+    e1: { documentId: 'e1', image: U1 },
+    e2: { documentId: 'e2', image: U2 },
+    e3: { documentId: 'e3', image: U3 },
+  };
+
+  it('defineComposedBlock records the entry paths bound to Image src/alt', () => {
+    expect(card().entryAssetPaths).toEqual(['image']);
+    expect(defineComposedBlock(productCard('NoAssetPaths')).entryAssetPaths).toEqual(['image', 'name']);
+    expect(defineComposedBlock(productGrid({}, 'NoImages')).entryAssetPaths).toBeUndefined();
+  });
+
+  it('two blocks, three entries: one assets() call; uuids become { url, alt } and render', async () => {
+    const reg = defineBlocks([card(), grid()]);
+    const assetCalls: string[][] = [];
+    const f: ContentFetcher = {
+      byIds: async (_a, ids) => ids.map((i) => entries[i]),
+      query: async () => [entries.e2, entries.e3],
+      pagePaths: async () => ({}),
+      assets: async (ids) => {
+        assetCalls.push([...ids].sort());
+        return ids.filter((i) => i !== U3).map((id) => ({ id, url: `https://cdn.example/${id.slice(-1)}.png`, alt: `alt ${id.slice(-1)}` }));
+      },
+    };
+    const out = await resolvePage(page([item('AssetCard', { entry: { documentId: 'e1' } }), item('AssetGrid', { entries: { mode: 'query' } })]), reg, f, O);
+    expect(assetCalls).toEqual([[U1, U2, U3]]);
+    const [c, g] = out.content as { type: string; props: Record<string, unknown> }[];
+    const cardHtml = render(reg.get('AssetCard')!, c.props);
+    expect(cardHtml).toContain('src="https://cdn.example/1.png"');
+    expect(cardHtml).toContain('alt="alt 1"');
+    const gridHtml = render(reg.get('AssetGrid')!, g.props);
+    expect(gridHtml).toContain('src="https://cdn.example/2.png"');
+    expect(gridHtml.match(/<img/g)).toHaveLength(1); // U3 missing → renders nothing
+    expect(entries.e1.image).toBe(U1); // fetched entries are not mutated
+  });
+
+  it('no asset paths or no uuids → no assets() call; failure → one warn, images render nothing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const reg = defineBlocks([card()]);
+    const assets = vi.fn(async () => {
+      throw new Error('boom');
+    });
+    const f: ContentFetcher = { byIds: async (_a, ids) => ids.map((i) => entries[i]), query: async () => [], pagePaths: async () => ({}), assets };
+    const out = await resolvePage(page([item('AssetCard', { entry: { documentId: 'e1' } }, 'a'), item('AssetCard', { entry: { documentId: 'e2' } }, 'b')]), reg, f, O);
+    expect(assets).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(render(reg.get('AssetCard')!, (out.content[0] as { props: Record<string, unknown> }).props)).toBe('');
+    const plain = { ...f, byIds: async (_a: string, ids: string[]) => ids.map((i) => ({ documentId: i, image: 'https://x/a.png' })) };
+    await resolvePage(page([item('AssetCard', { entry: { documentId: 'e1' } })]), reg, plain, O);
+    expect(assets).toHaveBeenCalledTimes(1);
+  });
+
+  it('fetchers: assets() batches ≤100 ids per request on the public and admin endpoints', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      calls.push(url);
+      const ids = new URL(url).searchParams.get('ids')!.split(',');
+      return new Response(JSON.stringify({ data: ids.map((id) => ({ id, url: `/u/${id}`, alt: null, width: 10, height: null, extra: 1 })) }), { status: 200 });
+    }));
+    try {
+      const ids = Array.from({ length: 150 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`);
+      const got = await publicFetcher('http://h/').assets!(ids);
+      expect(calls).toHaveLength(2);
+      expect(new URL(calls[0]).pathname).toBe('/api/content/assets');
+      expect(new URL(calls[0]).searchParams.get('ids')!.split(',')).toHaveLength(100);
+      expect(got).toHaveLength(150);
+      expect(got[0]).toEqual({ id: ids[0], url: `/u/${ids[0]}`, width: 10 });
+      await adminFetcher('http://h').assets!([ids[0]]);
+      expect(new URL(calls[2]).pathname).toBe('/api/admin/assets');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

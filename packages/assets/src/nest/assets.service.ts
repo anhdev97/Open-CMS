@@ -53,6 +53,8 @@ export interface AssetApiRow {
   createdAt: Date | string;
 }
 
+export type PublicAssetRow = Pick<AssetApiRow, 'id' | 'url' | 'alt' | 'width' | 'height' | 'mimeType'>;
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_LIST = 200;
 const MAX_BULK = 100;
@@ -111,6 +113,30 @@ export class AssetsService {
     @Optional() @Inject(STORAGE_PROVIDER) private readonly provider: StorageProvider | null = null,
     @Optional() @Inject(ASSETS_OPTIONS) private readonly options: AssetsModuleOptions | null = null,
   ) {}
+
+  /** `ids` query (`a,b,…`): 1–100 UUIDs, else 400. */
+  static parseIds(raw: unknown): string[] {
+    const ids = typeof raw === 'string' ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    if (ids.length === 0) throw new BadRequestException('ids must list 1 to 100 asset ids');
+    if (ids.length > MAX_BULK) throw new BadRequestException(`ids accepts at most ${MAX_BULK} ids`);
+    if (ids.some((id) => !UUID_RE.test(id))) throw new BadRequestException('ids must be a comma-separated list of UUIDs');
+    return [...new Set(ids)];
+  }
+
+  /** Existing assets among `ids` (unordered; missing ids are omitted). */
+  async byIds(ids: string[]): Promise<{ data: AssetApiRow[] }> {
+    const rows = await this.db.selectFrom(SYSTEM_TABLES.assets).selectAll().where('id', 'in', ids).execute();
+    return { data: rows.map(toApi) };
+  }
+
+  /**
+   * Public projection for the delivery API (`GET /api/content/assets?ids=`): only what a page needs to render an
+   * image. Asset files are already served from public URLs.
+   */
+  async publicByIds(ids: string[]): Promise<{ data: PublicAssetRow[] }> {
+    const { data } = await this.byIds(ids);
+    return { data: data.map(({ id, url, alt, width, height, mimeType }) => ({ id, url, alt, width, height, mimeType })) };
+  }
 
   /**
    * `folderId` omitted → all assets; `folderId=null` / query `root` → assets in root;

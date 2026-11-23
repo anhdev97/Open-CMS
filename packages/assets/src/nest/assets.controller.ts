@@ -75,7 +75,9 @@ export class AssetsController {
    */
   @RequirePermission('content.read')
   @Get('assets')
-  async list(@Query('limit') limit = '50', @Query('folderId') folderId?: string) {
+  async list(@Query('limit') limit = '50', @Query('folderId') folderId?: string, @Query('ids') ids?: string) {
+    // `ids=a,b` (1–100 UUIDs): those assets only (missing omitted); limit/folderId are ignored.
+    if (ids !== undefined) return { ...(await this.assets.byIds(AssetsService.parseIds(ids))), meta: { uploadEnabled: !!this.assetsOptions } };
     let filter: string | null | undefined;
     if (folderId === 'root') filter = null;
     else if (folderId != null && folderId !== '') filter = folderId;
@@ -126,5 +128,21 @@ export class AssetsUploadController {
       alt,
       folderId: folderId === '' || folderId === 'root' ? null : folderId,
     });
+  }
+}
+
+/**
+ * Delivery API (`/api/content/**` is public): `GET /api/content/assets?ids=a,b` → `{ data: [{ id, url, alt, width,
+ * height, mimeType }] }` for the existing assets among 1–100 UUIDs (400 otherwise). Used by `resolvePage` to render
+ * asset fields of entries. Not registered by `AssetsModule`: the host lists it before its `api/content/:apiId` route
+ * (Express matches in registration order). Shadows a content type with apiId `assets` on the delivery API.
+ */
+@Controller('api/content')
+export class PublicAssetsController {
+  constructor(@Inject(AssetsService) private readonly assets: AssetsService) {}
+
+  @Get('assets')
+  byIds(@Query('ids') ids?: string) {
+    return this.assets.publicByIds(AssetsService.parseIds(ids));
   }
 }

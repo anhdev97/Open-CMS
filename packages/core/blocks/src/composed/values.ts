@@ -3,8 +3,9 @@
 // - money    → `{ amount: number, currency: string }` (or null)
 // - date     → `'YYYY-MM-DD'`; datetime → ISO string in UTC (`…Z`)
 // - boolean  → `true | false` (or null)
-// - asset    → the asset id (uuid string) for a single asset: the API does not expand it, so it has no URL to render.
-//              URL strings (`url` fields) and `{ url | src, alt }` objects (resolved `b.image`, a future expansion) do.
+// - asset    → the asset id (uuid string) for a single asset. `resolvePage` replaces ids at the block's
+//              `entryAssetPaths` by `{ id, url, alt, width, height }` (ContentFetcher.assets); an unresolved id renders
+//              nothing. URL strings (`url` fields) and resolved `b.image` values (`{ src, alt }`) render too.
 import { safeHref } from '../ui/href';
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);

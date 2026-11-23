@@ -41,6 +41,18 @@ function manualField(f: ComposedField): BlockField {
   }
 }
 
+/** Entry paths bound to `Image.src`/`Image.alt` (asset ids there are resolved by `resolvePage`). */
+function imageEntryPaths(n: ComposedNode, out = new Set<string>()): Set<string> {
+  if (n.el === 'Image') {
+    for (const k of ['src', 'alt']) {
+      const s = n.bind?.[k];
+      if (s?.from === 'entry') out.add(s.path);
+    }
+  }
+  for (const c of n.children ?? []) imageEntryPaths(c, out);
+  return out;
+}
+
 /** `Slot` nodes in tree order (depth first). */
 function slotNodes(n: ComposedNode, out: ComposedNode[] = []): ComposedNode[] {
   if (n.el === 'Slot') out.push(n);
@@ -113,6 +125,7 @@ export function defineComposedBlock(spec: ComposedBlockSpec): ComposedBlockDefin
   for (const [k, f] of Object.entries(spec.fields)) fields[k] = manualField(f);
   Object.assign(fields, generated);
 
+  const assetPaths = [...imageEntryPaths(spec.tree)];
   return {
     name: spec.name,
     label: spec.label,
@@ -121,6 +134,7 @@ export function defineComposedBlock(spec: ComposedBlockSpec): ComposedBlockDefin
     version: spec.version,
     fields,
     composed: true,
+    ...(assetPaths.length ? { entryAssetPaths: assetPaths } : {}),
     spec,
     render: createComposedRender(spec, slots) as BlockDefinition['render'],
   };

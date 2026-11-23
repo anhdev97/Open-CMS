@@ -140,6 +140,9 @@ function validateBlock(d: unknown, index: number): string[] {
   if (!Number.isInteger(version) || (version as number) < 1) issues.push(`${where}: version must be a positive integer`);
   if (typeof d.render !== 'function') issues.push(`${where}: render must be a function`);
   if (d.composed !== undefined && d.composed !== true) issues.push(`${where}: composed must be true when set`);
+  if (d.entryAssetPaths !== undefined && !(Array.isArray(d.entryAssetPaths) && d.entryAssetPaths.every((p) => typeof p === 'string' && p))) {
+    issues.push(`${where}: entryAssetPaths must be an array of field names`);
+  }
   if (d.composed === true && 'spec' in d) {
     for (const i of validateComposedSpec(d.spec)) issues.push(`${where}: ${formatIssuePath(i.path)}: ${i.message}`);
   }

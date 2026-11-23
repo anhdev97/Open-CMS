@@ -1,5 +1,5 @@
 import type { Locale } from '@opencloudcms/schema';
-import type { ContentFetcher, Entry } from './resolve';
+import type { AssetRef, ContentFetcher, Entry } from './resolve';
 
 const MAX_IDS = 100;
 const PAGE_API_ID = 'opencloudcmsPage';
@@ -11,7 +11,7 @@ export class FetchError extends Error {
   }
 }
 
-type Mode = { prefix: string; draft: boolean; cookie?: string; credentials: boolean };
+type Mode = { prefix: string; draft: boolean; cookie?: string; credentials: boolean; assetsPath: string };
 
 function createFetcher(baseUrl: string, mode: Mode): ContentFetcher {
   const root = baseUrl.replace(/\/+$/, '');
@@ -20,9 +20,13 @@ function createFetcher(baseUrl: string, mode: Mode): ContentFetcher {
     const qs = new URLSearchParams();
     if (mode.draft) qs.set('status', 'draft');
     for (const [k, v] of params) qs.set(k, v);
+    return get<Entry>(`${mode.prefix}/${encodeURIComponent(apiId)}?${qs}`);
+  }
+
+  async function get<T>(pathAndQuery: string): Promise<T[]> {
     const headers: Record<string, string> = { accept: 'application/json' };
     if (mode.cookie) headers.cookie = mode.cookie;
-    const res = await fetch(`${root}${mode.prefix}/${encodeURIComponent(apiId)}?${qs}`, {
+    const res = await fetch(`${root}${pathAndQuery}`, {
       headers,
       ...(mode.credentials ? { credentials: 'include' as const } : {}),
       // Drafts are per session: never cached by the browser or by Next's fetch cache.
@@ -38,8 +42,27 @@ function createFetcher(baseUrl: string, mode: Mode): ContentFetcher {
       }
       throw new FetchError(message, res.status);
     }
-    const body = (await res.json()) as { data?: Entry[] };
+    const body = (await res.json()) as { data?: T[] };
     return Array.isArray(body.data) ? body.data : [];
+  }
+
+  async function assets(ids: string[]): Promise<AssetRef[]> {
+    const unique = [...new Set(ids)];
+    const out: AssetRef[] = [];
+    for (let i = 0; i < unique.length; i += MAX_IDS) {
+      const rows = await get<Record<string, unknown>>(`${mode.assetsPath}?${new URLSearchParams({ ids: unique.slice(i, i + MAX_IDS).join(',') })}`);
+      for (const a of rows) {
+        if (typeof a.id !== 'string' || typeof a.url !== 'string') continue;
+        out.push({
+          id: a.id,
+          url: a.url,
+          ...(typeof a.alt === 'string' ? { alt: a.alt } : {}),
+          ...(typeof a.width === 'number' ? { width: a.width } : {}),
+          ...(typeof a.height === 'number' ? { height: a.height } : {}),
+        });
+      }
+    }
+    return out;
   }
 
   async function byIds(apiId: string, ids: string[], locale: Locale): Promise<Entry[]> {
@@ -60,6 +83,7 @@ function createFetcher(baseUrl: string, mode: Mode): ContentFetcher {
 
   return {
     byIds,
+    assets,
     query(apiId, q, locale) {
       const params: [string, string][] = [['locale', locale], ['limit', String(q.limit)]];
       if (q.sort) params.push(['sort', q.sort]);
@@ -81,7 +105,7 @@ function createFetcher(baseUrl: string, mode: Mode): ContentFetcher {
 
 /** Published content over `/api/content/**` (no auth). */
 export function publicFetcher(baseUrl: string): ContentFetcher {
-  return createFetcher(baseUrl, { prefix: '/api/content', draft: false, credentials: false });
+  return createFetcher(baseUrl, { prefix: '/api/content', draft: false, credentials: false, assetsPath: '/api/content/assets' });
 }
 
 /**
@@ -89,5 +113,5 @@ export function publicFetcher(baseUrl: string): ContentFetcher {
  * `credentials: 'include'`; on the server pass the incoming `cookie` header to forward it.
  */
 export function adminFetcher(baseUrl: string, init: { cookie?: string } = {}): ContentFetcher {
-  return createFetcher(baseUrl, { prefix: '/api/admin/content', draft: true, cookie: init.cookie, credentials: !init.cookie });
+  return createFetcher(baseUrl, { prefix: '/api/admin/content', draft: true, cookie: init.cookie, credentials: !init.cookie, assetsPath: '/api/admin/assets' });
 }

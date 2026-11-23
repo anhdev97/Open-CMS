@@ -4,6 +4,9 @@ import type { BlockField, BlockRegistry, PuckData, ResolvedEntry } from './types
 
 export type Entry = ResolvedEntry;
 
+/** What `ContentFetcher.assets` returns per existing asset. */
+export type AssetRef = { id: string; url: string; alt?: string; width?: number; height?: number };
+
 export interface ContentFetcher {
   /** Entries by documentId (unordered; missing/unpublished ids are simply absent). */
   byIds(apiId: string, ids: string[], locale: Locale): Promise<Entry[]>;
@@ -14,7 +17,14 @@ export interface ContentFetcher {
   ): Promise<Entry[]>;
   /** documentId -> page path in `locale`, else in `defaultLocale`, else null. */
   pagePaths(ids: string[], locale: Locale, defaultLocale: Locale): Promise<Record<string, string | null>>;
+  /**
+   * Assets by id (unordered; missing ids are absent), for asset fields of entries rendered by blocks with
+   * `entryAssetPaths`. Optional: without it those asset ids stay unresolved (images render nothing).
+   */
+  assets?(ids: string[]): Promise<AssetRef[]>;
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
@@ -45,7 +55,12 @@ function querySpec(apiId: string, v: Record<string, unknown>, field?: EntriesFie
   };
 }
 
-/** Whether `e` satisfies every `baseFilter` equality (as the list API compares: booleans/numbers by value). */
+/**
+ * Whether `e` satisfies every `baseFilter` equality. Picked entries come from `byIds`, which cannot take the filter,
+ * so this approximates the list API's SQL equality in JS: numbers and money amounts compare numerically, everything
+ * else (booleans, text, dates, ids) by `String(value)`, and null/missing never matches. Datetimes compare as the ISO
+ * strings the API returns, so a filter value in another ISO form would not match. Accepted for v1 (controller ruling).
+ */
 function matchesBase(e: Entry, base: Record<string, string>): boolean {
   return Object.entries(base).every(([k, want]) => {
     const got = e[k];
@@ -196,5 +211,42 @@ export async function resolvePage(
         return v;
     }
   }, true);
-  return mapData(data as unknown as Record<string, unknown>, substitute);
+  const resolved = mapData(data as unknown as Record<string, unknown>, substitute);
+
+  // Pass 3: asset ids in entry fields listed by `entryAssetPaths` → one `assets` call → `{ id, url, alt, … }`.
+  const onEntries = (fn: (e: Entry, paths: readonly string[]) => Entry): ItemFn => {
+    const visit: ItemFn = (item) => {
+      if (!isItem(item)) return item;
+      const def = r.get(item.type);
+      if (!def) return item;
+      const paths = def.entryAssetPaths;
+      const props = paths?.length
+        ? mapFieldValues(def.fields, item.props, (field, v) => {
+            if (field.kind === 'entry') return isObj(v) ? fn(v as Entry, paths) : v;
+            if (field.kind === 'entries') return Array.isArray(v) ? v.map((e) => (isObj(e) ? fn(e as Entry, paths) : e)) : v;
+            return v;
+          })
+        : item.props;
+      return { ...item, props: mapSlots(def.fields, props, visit) };
+    };
+    return visit;
+  };
+  const assetIds = new Set<string>();
+  const isAssetId = (v: unknown): v is string => typeof v === 'string' && UUID_RE.test(v);
+  mapData(resolved as unknown as Record<string, unknown>, onEntries((e, paths) => {
+    for (const p of paths) if (isAssetId(e[p])) assetIds.add(e[p] as string);
+    return e;
+  }));
+  if (!assetIds.size || !f.assets) return resolved;
+  const found = await safe('assets', 'loading assets', [] as AssetRef[], () => f.assets!([...assetIds]));
+  const byAsset = new Map(found.map((a) => [a.id, a] as const));
+  if (!byAsset.size) return resolved;
+  return mapData(resolved as unknown as Record<string, unknown>, onEntries((e, paths) => {
+    let out = e;
+    for (const p of paths) {
+      const a = isAssetId(e[p]) ? byAsset.get(e[p] as string) : undefined;
+      if (a) out = { ...out, [p]: { ...a } }; // copy: fetched entries may be shared between blocks
+    }
+    return out;
+  }));
 }

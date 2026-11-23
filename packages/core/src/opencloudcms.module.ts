@@ -6,7 +6,7 @@ import { Inject, Logger, Module, RequestMethod, type BeforeApplicationShutdown, 
 import { HttpAdapterHost } from '@nestjs/core';
 import type { Kysely } from 'kysely';
 import { createDb, migrateUp, pendingMigrations } from '@opencloudcms/db';
-import { AssetsModule } from '@opencloudcms/assets';
+import { AssetsModule, PublicAssetsController } from '@opencloudcms/assets';
 import { OAuth2Module, type CoreReady } from '@opencloudcms/oauth2';
 import { resolveConfig } from '@opencloudcms/schema';
 import { ContentCorsMiddleware } from './http/content-cors.middleware';
@@ -89,7 +89,7 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, BeforeAppli
         }),
         AssetsModule.forRoot({ dbToken: OPENCLOUDCMS_DB, assets: input.assets ?? null }),
       ],
-      controllers: [PublicPagesController, AdminPagesController, PagesController, ContentController, AdminContentController, SchemaController, ContentGroupsController, LocalesController, SystemController, WorkflowController],
+      controllers: [PublicPagesController, PublicAssetsController, AdminPagesController, PagesController, ContentController, AdminContentController, SchemaController, ContentGroupsController, LocalesController, SystemController, WorkflowController],
       providers: [
         { provide: OPENCLOUDCMS_OPTIONS, useValue: options },
         { provide: OPENCLOUDCMS_DB, useFactory: () => createDb(options.config.database.url) },

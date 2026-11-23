@@ -82,4 +82,29 @@ describe('content API value shapes and filter coercion', () => {
     expect(await names('filter[stock]=0')).toEqual(['off']);
     expect(await names('filter[stock]=3')).toEqual(['on']);
   });
+
+  describe('asset lookup by ids', () => {
+    const missing = '99999999-9999-4999-8999-999999999999';
+    it('GET /api/content/assets?ids= is public and returns only id,url,alt,width,height,mimeType; missing ids omitted', async () => {
+      const res = await fetch(`${t.baseUrl}/api/content/assets?ids=${assetId},${missing}`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toEqual({ data: [{ id: assetId, url: 'https://x.example/a.png', alt: 'A', width: null, height: null, mimeType: null }] });
+    });
+    it('400 for no ids, a non-uuid or more than 100 ids', async () => {
+      const many = Array.from({ length: 101 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`).join(',');
+      for (const q of ['', 'ids=', 'ids=nope', `ids=${assetId},x`, `ids=${many}`]) {
+        expect((await fetch(`${t.baseUrl}/api/content/assets?${q}`)).status, q).toBe(400);
+      }
+    });
+    it('GET /api/admin/assets?ids= filters the admin list by ids', async () => {
+      const body = await (await call(`/api/admin/assets?ids=${assetId},${missing}`)).json();
+      expect(body.data.map((a: { id: string }) => a.id)).toEqual([assetId]);
+      expect(body.data[0]).toMatchObject({ url: 'https://x.example/a.png', alt: 'A' });
+      expect((await call('/api/admin/assets?ids=nope')).status).toBe(400);
+    });
+    it('the delivery list of a content type still works next to /api/content/assets', async () => {
+      expect((await fetch(`${t.baseUrl}/api/content/gadget`)).status).toBe(200);
+    });
+  });
 });

@@ -197,6 +197,11 @@ export interface BlockDefinition<F extends Record<string, BlockField> = Record<s
    * passes `_locale`/`_editor` to `render` (never stored: `writePageContent` drops undeclared props).
    */
   composed?: true;
+  /**
+   * Entry fields (of the block's `entry`/`entries` values) that hold an asset id: `resolvePage` replaces a uuid there
+   * by `{ id, url, alt, width, height }` (one `ContentFetcher.assets` call per page). Set by `defineComposedBlock`.
+   */
+  entryAssetPaths?: readonly string[];
 }
 
 export interface BlockRegistry {

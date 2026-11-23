@@ -108,7 +108,8 @@ function renderNode(ctx: Ctx, n: ComposedNode, key?: number): ReactNode {
       const img = readEntryImage(val(ctx, n, 'src'));
       if (!img) return null;
       // Explicit alt (bound or fixed) first, then the asset's own alt, then empty.
-      const alt = n.bind?.alt || p.alt !== undefined ? readText(val(ctx, n, 'alt')) || img.alt : img.alt;
+      const altV = val(ctx, n, 'alt');
+      const alt = n.bind?.alt || p.alt !== undefined ? readText(isObj(altV) ? altV.alt : altV) || img.alt : img.alt;
       return <Image key={key} src={img.src} alt={alt} ratio={tok<'auto'>(p.ratio)} rounded={p.rounded === true} />;
     }
     case 'Button':
@@ -118,7 +119,8 @@ function renderNode(ctx: Ctx, n: ComposedNode, key?: number): ReactNode {
     case 'Price': {
       const m = readEntryMoney(val(ctx, n, 'value'));
       if (!m) return null;
-      return <Price key={key} value={m.value} locale={ctx.locale} currency={m.currency} />;
+      // `showCurrency: false` (set by the builder for `currencyMode: 'market'` money fields) → plain number.
+      return <Price key={key} value={m.value} locale={ctx.locale} currency={p.showCurrency === false ? undefined : m.currency} />;
     }
     case 'Date':
       return (

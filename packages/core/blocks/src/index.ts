@@ -10,7 +10,7 @@ export { COLOR_TOKENS, SPACING_TOKENS } from './types';
 export type * from './types';
 export { collectBlockNames } from '@opencloudcms/schema';
 export type { BlockManifest, Locale, LocalizedText, StoredPageContent } from '@opencloudcms/schema';
-export { resolvePage, type ContentFetcher, type Entry } from './resolve';
+export { resolvePage, type AssetRef, type ContentFetcher, type Entry } from './resolve';
 export { adminFetcher, publicFetcher, FetchError } from './fetchers';
 export { coreBlocks } from './library';
 export { ComposedBlockError, defineComposedBlock, type ComposedBlockDefinition } from './composed';
