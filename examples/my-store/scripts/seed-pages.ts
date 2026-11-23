@@ -1,4 +1,6 @@
-// Dev seed for the page builder: publishes `/` (Hero + ProductGrid of the newest products) and `/about`.
+// Dev seed for the page builder: publishes `/` (Hero + ProductGrid of the newest products), `/shop` (the Block
+// Builder examples: ProductCard for one product, ActiveProducts for the products with active = true) and `/about`.
+// Without any product yet it first publishes three sample products (two on sale, one not).
 // Run after `opencloudcms migrate:up`:  pnpm seed:pages
 // A page that already exists at one of these paths (in the default locale) is left untouched.
 import 'reflect-metadata';
@@ -54,6 +56,25 @@ async function main() {
     };
     const content = (...items: ReturnType<typeof item>[]) => writePageContent({ root: { props: {} }, content: items } as never, blocks);
 
+    const admin = { id: undefined as unknown as string, permissions: ['content.update', 'content.publish'] as never[] };
+
+    // Sample products, only into an empty catalogue. New products are on sale (active: true) unless said otherwise.
+    const anyProduct = await entries.list('product', { status: 'draft', limit: 1 });
+    if (anyProduct.data.length === 0) {
+      const samples = [
+        { name: 'Linen shirt', slug: 'linen-shirt', price: { amount: 390000, currency: 'VND' }, active: true, featured: true },
+        { name: 'Canvas tote', slug: 'canvas-tote', price: { amount: 150000, currency: 'VND' }, active: true },
+        { name: 'Wool scarf (last season)', slug: 'wool-scarf', price: { amount: 250000, currency: 'VND' }, active: false },
+      ];
+      for (const p of samples) {
+        const { data: created } = await entries.create('product', p, locale);
+        await entries.publish('product', created.documentId, admin);
+        console.log(`published product ${p.slug} (${created.documentId}, active: ${p.active})`);
+      }
+    }
+    const onSale = await entries.list('product', { status: 'published', locale, filter: { active: 'true' }, sort: 'createdAt:asc', limit: 1 });
+    const pick = onSale.data[0]?.documentId;
+
     const pages = [
       {
         title: 'Home',
@@ -76,6 +97,18 @@ async function main() {
         ),
       },
       {
+        title: 'Shop',
+        path: '/shop',
+        seo: { title: 'Shop - my-store' },
+        content: content(
+          item('Heading', { text: 'Shop', level: 1 }),
+          // Composed blocks (src/blocks/product-card, src/blocks/active-products), made with the Block Builder.
+          ...(pick ? [item('ProductCard', { badge: 'Staff pick', entry: { documentId: pick } })] : []),
+          item('Heading', { text: 'On sale', level: 2 }),
+          item('ActiveProducts'),
+        ),
+      },
+      {
         title: 'About',
         path: '/about',
         seo: { title: 'About my-store' },
@@ -86,7 +119,6 @@ async function main() {
       },
     ];
 
-    const admin = { id: undefined as unknown as string, permissions: ['content.update', 'content.publish'] as never[] };
     for (const p of pages) {
       const existing = await entries.list(PAGE_API_ID, { status: 'draft', locale, filter: { path: p.path }, limit: 1 });
       if (existing.data.some((d) => d.locale === locale)) {

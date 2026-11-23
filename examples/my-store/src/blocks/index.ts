@@ -2,7 +2,11 @@
 // This file is imported by the admin editor, the website renderer and the server (blockManifest in
 // src/app.module.ts), so every block must be isomorphic: no server-only APIs, no data fetching in render
 // (data comes in through b.entry / b.entries / b.link / b.image props), no CSS imports (Tailwind classes only).
+//
+// Blocks made in the admin Block Builder (Settings > Blocks: ProductCard, ActiveProducts) live in
+// src/blocks/<name>/<name>.block.ts and are listed in ./composed.ts, which the builder rewrites.
 import { coreBlocks, defineBlocks } from '@opencloudcms/core/blocks';
+import { composedBlocks } from './composed';
 import ProductGrid from './product-grid/product-grid.block';
 
-export default defineBlocks([...coreBlocks, ProductGrid]);
+export default defineBlocks([...coreBlocks, ...composedBlocks, ProductGrid]);

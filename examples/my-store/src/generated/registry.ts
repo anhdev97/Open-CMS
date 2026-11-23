@@ -164,6 +164,16 @@ export const productDefinition: ContentTypeDefinition = {
       "indexed": false,
       "unique": false,
       "options": {}
+    },
+    {
+      "id": "fld_git2h07p",
+      "name": "active",
+      "kind": "boolean",
+      "required": false,
+      "localizable": false,
+      "indexed": true,
+      "unique": false,
+      "options": {}
     }
   ],
   "group": "shop",

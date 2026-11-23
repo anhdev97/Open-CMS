@@ -3,6 +3,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import ts from 'typescript';
+import { isComposedIndexWired, printComposedIndex } from '@opencloudcms/codegen';
+import { resolveConfig } from '@opencloudcms/schema';
 import { runInit } from '../src/init';
 import { dbNameFor, packageNameFor } from '../src/init/names';
 
@@ -69,6 +71,7 @@ describe('runInit', () => {
       'package.json',
       'postcss.config.mjs',
       'src/app.module.ts',
+      'src/blocks/composed.ts',
       'src/blocks/example/example.block.tsx',
       'src/blocks/index.ts',
       'src/content-groups.ts',
@@ -216,8 +219,15 @@ describe('runInit', () => {
 
     const blocks = read(dir, 'src/blocks/index.ts');
     expect(blocks).toContain("import { coreBlocks, defineBlocks } from '@opencloudcms/core/blocks';");
-    expect(blocks).toContain('export default defineBlocks([...coreBlocks]);');
+    expect(blocks).toContain("import { composedBlocks } from './composed';");
+    expect(blocks).toContain('export default defineBlocks([...coreBlocks, ...composedBlocks]);');
     expect(blocks).toContain("// import Example from './example/example.block';");
+    expect(blocks).toContain('defineBlocks([...coreBlocks, ...composedBlocks, Example])');
+    // The managed index is byte-identical to what the Block Builder prints for no blocks.
+    expect(read(dir, 'src/blocks/composed.ts')).toBe(printComposedIndex([]));
+    expect(read(dir, 'src/blocks/composed.ts')).toContain('export const composedBlocks = [];');
+    // The builder's "wired" check sees the generated index.
+    expect(isComposedIndexWired(resolveConfig({ database: { url: 'postgres://x' } } as any, dir))).toBe(true);
     const example = read(dir, 'src/blocks/example/example.block.tsx');
     expect(example).toContain("import { b, defineBlock } from '@opencloudcms/core/blocks';");
     expect(example).toContain('export default defineBlock({');
@@ -268,9 +278,12 @@ describe('runInit', () => {
     const readme = read(dir, 'README.md');
     expect(readme).toContain('src/blocks');
     expect(readme).toContain('/admin/pages');
+    expect(readme).toContain('/admin/settings/blocks');
+    expect(readme).toContain('src/blocks/composed.ts');
 
     for (const f of [
       'src/blocks/index.ts',
+      'src/blocks/composed.ts',
       'src/blocks/example/example.block.tsx',
       'app/(site)/[[...path]]/page.tsx',
       'app/(site)/%5F_opencloudcms/preview/route.ts',

@@ -232,11 +232,15 @@ export const blocksIndexTs = (): string => `// Blocks of the page builder (/admi
 // This file is imported by the admin editor, the website renderer and the server (blockManifest in
 // src/app.module.ts), so every block must be isomorphic: no server-only APIs, no data fetching in render
 // (data comes in through b.entry / b.entries / b.link / b.image props), no CSS imports (Tailwind classes only).
+//
+// Blocks made in the admin Block Builder (Settings > Blocks) live in src/blocks/<name>/<name>.block.ts and are
+// listed in ./composed.ts, which the builder rewrites. Keep the import and the spread below.
 import { coreBlocks, defineBlocks } from '@opencloudcms/core/blocks';
+import { composedBlocks } from './composed';
 // import Example from './example/example.block';
 
-export default defineBlocks([...coreBlocks]);
-// To add the example: uncomment the import above and use \`defineBlocks([...coreBlocks, Example])\`.
+export default defineBlocks([...coreBlocks, ...composedBlocks]);
+// To add the example: uncomment the import above and use \`defineBlocks([...coreBlocks, ...composedBlocks, Example])\`.
 `;
 
 export const exampleBlockTsx = (): string => `// An example block. To offer it in the page editor, register it in src/blocks/index.ts.
@@ -400,7 +404,8 @@ An OpenCloudCMS project: a NestJS backend (\`src/\`) and one Next.js app (\`app/
 
 \`\`\`
 src/                  NestJS: main.ts, app.module.ts, content types, hooks, generated code
-  blocks/             page-builder blocks (index.ts registers them; example/ is a commented sample)
+  blocks/             page-builder blocks (index.ts registers them; example/ is a commented sample;
+                      composed.ts lists the blocks made in the admin Block Builder)
   locales.ts          website languages (managed from Settings > Languages)
   content-groups.ts   sidebar groups of content types (managed from Settings > Content types)
 app/                  Next.js App Router: one app for the admin and the website
@@ -455,7 +460,11 @@ Limitation: Next keeps its cache in \`.next/cache\` on disk, so caching is only 
 - Blocks live in \`src/blocks\` and are registered in \`src/blocks/index.ts\` (\`defineBlocks([...coreBlocks, YourBlock])\`).
   The admin editor, the website and the server all import that file, so \`render\` must be isomorphic: no server-only
   APIs, no data fetching (use \`b.entry\` / \`b.entries\` / \`b.link\` / \`b.image\` fields), no CSS imports (Tailwind classes only).
-- Adding or changing a block is a code change; building and publishing pages works in production too.
+- Blocks can also be made without code in the admin Block Builder (\`/admin/settings/blocks\`, in dev): each one is a
+  \`src/blocks/<name>/<name>.block.ts\` file (\`defineComposedBlock\`) listed in the managed \`src/blocks/composed.ts\`,
+  which \`src/blocks/index.ts\` spreads. Commit these files; "Export to TSX" turns a block into ordinary code.
+- Adding or changing a block is a code change (also from the Block Builder): production needs a rebuild to see it;
+  building and publishing pages works in production too.
 - "View on website" in the editor opens a draft preview (signed-in admins only; over https in production).
 
 ## Languages
