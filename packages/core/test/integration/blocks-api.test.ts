@@ -210,6 +210,12 @@ describe('blocks API (editable)', () => {
     expect(r.status).toBe(409);
     expect(r.body.error.code).toBe('block_in_use');
     expect(r.body.error.issues).toEqual([{ path: ['ProductTile'], message: '1' }]);
+    // Only the boolean true confirms.
+    for (const confirmBreaking of ['false', 1, 'true']) {
+      const x = await put('ProductTile', { spec: single, confirmBreaking });
+      expect(x.status).toBe(409);
+      expect(x.body.error.code).toBe('block_in_use');
+    }
     expect(fs.readFileSync(path.join(blocksDir(), 'product-tile', 'product-tile.block.ts'), 'utf8')).toContain("mode: 'collection'");
 
     const ok = await put('ProductTile', { spec: single, confirmBreaking: true });
@@ -291,6 +297,29 @@ describe('blocks API (editable)', () => {
     } finally {
       fs.rmSync(path.dirname(bad), { recursive: true, force: true });
     }
+  });
+
+  it('a composed block whose own file is broken stays composed and can be fixed by saving it', async () => {
+    expect((await put('FixMe', { spec: banner('FixMe', 'blk_fixme1') })).status).toBe(200);
+    const file = path.join(blocksDir(), 'fix-me', 'fix-me.block.ts');
+    fs.writeFileSync(file, "import { defineComposedBlock } from '@opencloudcms/core/blocks';\nexport default defineComposedBlock({ name: 'FixMe' });\n");
+    const list = await call(BLOCKS);
+    const item = list.body.data.find((d: any) => d.name === 'FixMe');
+    expect(item).toMatchObject({ source: 'composed', file: 'src/blocks/fix-me/fix-me.block.ts', version: 1 });
+    expect(item.problems).toHaveLength(1);
+    expect(item.problems[0]).toMatch(/^file does not load: /);
+    expect(list.body.loadErrors.map((e: any) => e.file)).toEqual(['src/blocks/fix-me/fix-me.block.ts']);
+    expect((await call(`${BLOCKS}/FixMe`)).body.error.code).toBe('composed_blocks_broken');
+
+    const fixed = await put('FixMe', { spec: banner('FixMe', 'blk_fixme1') });
+    expect(fixed.status).toBe(200);
+    expect(fixed.body.spec.version).toBe(1);
+    expect(fs.readFileSync(file, 'utf8')).toContain("name: 'FixMe'");
+    expect(fs.readFileSync(file, 'utf8')).toContain("category: 'Marketing'");
+    const after = await call(BLOCKS);
+    expect(after.body.loadErrors).toEqual([]);
+    expect(after.body.data.find((d: any) => d.name === 'FixMe')).toMatchObject({ source: 'composed', problems: [], label: { 'en-US': 'FixMe' } });
+    expect((await call(`${BLOCKS}/FixMe`, { method: 'DELETE' })).status).toBe(200);
   });
 
   it('Content Type Builder preview warns about composed blocks that a change breaks', async () => {

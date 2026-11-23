@@ -52,6 +52,8 @@ export interface BlockListItem {
   problems: string[];
 }
 
+const NAME_RE = /^[A-Z][A-Za-z0-9]{0,63}$/;
+
 const invalid = (issues: ComposedIssue[], message = 'Invalid block') =>
   new UnprocessableEntityException({ code: 'invalid_block', message, issues });
 
@@ -81,6 +83,16 @@ export class BlocksService {
   private isOtherBlock(name: string, composed: Set<string>): boolean {
     if (composed.has(name)) return false;
     return CORE_BLOCK_NAMES.includes(name) || (this.manifest.current() ?? []).some((m) => m.name === name);
+  }
+
+  /**
+   * Error of the composed file of `name` (its own `src/blocks/<kebab>/<kebab>.block.ts`) when the loader could not
+   * read it: such a block is still composed (a hand edit broke it) and may be fixed by saving it again.
+   */
+  private ownLoadError(name: string, errors: { file: string; message: string }[]) {
+    if (!NAME_RE.test(name)) return undefined;
+    const file = composedBlockFile(this.options.config, name);
+    return errors.find((e) => e.file === file);
   }
 
   private toHttp(e: unknown): never {
@@ -121,6 +133,19 @@ export class BlocksService {
         };
       }
       const m = manifest.find((x) => x.name === name)!;
+      const broken = this.ownLoadError(name, errors);
+      if (broken) {
+        return {
+          name,
+          label: name,
+          category: null,
+          source: 'composed',
+          file: this.rel(broken.file),
+          version: m.version,
+          usage: usage.get(name) ?? 0,
+          problems: [`file does not load: ${broken.message}`],
+        };
+      }
       return {
         name,
         label: name,
@@ -148,8 +173,8 @@ export class BlocksService {
       const problems = composedBlockProblems([hit.spec], this.registry.all())[name] ?? [];
       return { spec: hit.spec, file: this.rel(hit.file), usage, problems };
     }
-    const own = /^[A-Z][A-Za-z0-9]{0,63}$/.test(name) ? errors.filter((e) => e.file === composedBlockFile(config, name)) : [];
-    if (own.length) this.toHttp(new ComposedBlocksLoadError(own));
+    const own = this.ownLoadError(name, errors);
+    if (own) this.toHttp(new ComposedBlocksLoadError([own]));
     if (this.isOtherBlock(name, new Set())) {
       throw new ConflictException({ code: 'not_composed', message: `Block "${name}" is not a composed block; edit it in code` });
     }
@@ -163,8 +188,10 @@ export class BlocksService {
     const spec = body!.spec as ComposedBlockSpec;
     const config = this.options.config;
     return this.queue.run(async () => {
-      const { specs } = await loadComposedBlocks(config);
+      const { specs, errors } = await loadComposedBlocks(config);
       const byName = new Map(specs.map((s) => [s.spec.name, s.spec]));
+      // Its own file is broken: still a composed block, which this save may replace.
+      const brokenOwn = !byName.has(spec.name) && !!this.ownLoadError(spec.name, errors);
       const renamedFrom = specs.find((s) => s.spec.id === spec.id && s.spec.name !== spec.name);
       if ((spec.name !== name && byName.has(name)) || renamedFrom) {
         const from = renamedFrom?.spec.name ?? name;
@@ -172,16 +199,22 @@ export class BlocksService {
       }
       if (spec.name !== name) throw invalid([{ path: ['name'], message: `name must match the URL ("${name}")` }]);
       const prev = byName.get(spec.name) ?? null;
-      if (this.isOtherBlock(spec.name, new Set(byName.keys())) || (prev && prev.id !== spec.id)) {
+      const composedNames = new Set([...byName.keys(), ...(brokenOwn ? [spec.name] : [])]);
+      if (this.isOtherBlock(spec.name, composedNames) || (prev && prev.id !== spec.id)) {
         throw new ConflictException({ code: 'block_name_taken', message: `A block named "${spec.name}" already exists` });
       }
       const typeIssues = checkSpecAgainstTypes(spec, this.registry.all());
       if (typeIssues.length) throw invalid(typeIssues, 'Block does not fit the content types');
-      if (prev && !body!.confirmBreaking && isBreakingChange(prev, spec)) {
+      if (prev && body!.confirmBreaking !== true && isBreakingChange(prev, spec)) {
         const pages = (await this.pages.blockUsage()).get(spec.name) ?? 0;
         if (pages) throw inUse(spec.name, pages);
       }
-      const next = withAutoVersion(prev, spec);
+      let next = withAutoVersion(prev, spec);
+      if (brokenOwn) {
+        // Unknown previous spec: keep at least the version pages were saved with.
+        const live = (this.manifest.current() ?? []).find((m) => m.name === spec.name)?.version ?? 1;
+        next = { ...next, version: Math.max(next.version, live) };
+      }
       const extra = [blocksDir(config)];
       const before = captureProjectFiles(config, extra);
       try {
@@ -200,8 +233,7 @@ export class BlocksService {
     const config = this.options.config;
     return this.queue.run(async () => {
       const { specs, errors } = await loadComposedBlocks(config);
-      const valid = /^[A-Z][A-Za-z0-9]{0,63}$/.test(name);
-      const exists = specs.some((s) => s.spec.name === name) || (valid && errors.some((e) => e.file === composedBlockFile(config, name)));
+      const exists = specs.some((s) => s.spec.name === name) || !!this.ownLoadError(name, errors);
       if (!exists) {
         if (this.isOtherBlock(name, new Set())) {
           throw new ConflictException({ code: 'not_composed', message: `Block "${name}" is not a composed block; remove it in code` });
