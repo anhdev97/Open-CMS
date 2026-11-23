@@ -9,3 +9,4 @@ export * from './locales';
 export * from './groups';
 export * from './permissions';
 export * from './pages';
+export * from './composed-block';
