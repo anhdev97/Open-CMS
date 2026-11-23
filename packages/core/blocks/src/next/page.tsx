@@ -9,6 +9,7 @@ import { isItem, isObj, mapData, mapSlots, type ItemFn } from '../content';
 import { adminFetcher, FetchError, publicFetcher } from '../fetchers';
 import { toPuckConfig } from '../puck-config';
 import { resolvePage, type ContentFetcher } from '../resolve';
+import { richTextFieldTransforms } from '../richtext-render';
 import type { BlockRegistry, CustomFieldRenderers, PuckConfig, PuckData } from '../types';
 import { PreviewBar, type PreviewBarVariant } from './PreviewBar';
 import { Welcome } from './Welcome';
@@ -178,7 +179,7 @@ export function createCmsPage(o: CreateCmsPageOptions): {
     return (
       <>
         <main data-opencloudcms-site="" lang={r.locale}>
-          <Render config={configFor(r.locale)} data={data} />
+          <Render config={configFor(r.locale)} data={data} fieldTransforms={richTextFieldTransforms} />
         </main>
         {bar}
       </>

@@ -45,7 +45,7 @@ Fixed paths, none configurable: UI `/admin`, API `/api`, auth `/oauth2`, deliver
 | `auth` | `{}` | non-secret auth settings (`@opencloudcms/oauth2`: TTLs, password policy, rate limit, OIDC IdP) |
 | `web` | `{ enabled: true, dir: process.cwd(), dev: NODE_ENV !== 'production' }` | serve the project's Next app (admin at `/admin`, website at `/`) from Nest. `enabled: false` is API-only and never loads `next`; `/admin` is then 404, and the auth flow still redirects to `/admin/login`, so the host must serve its own UI there |
 | `cors.origins` | none | exact origins (no wildcard) allowed to read `/api/content/**` cross-origin |
-| `pages.blocks` | none | the project's block manifest (`blockManifest(blocks)` from `src/blocks`); publishing a page that uses another block fails with 422 `unknown_block`. Absent: no check, WARN at boot |
+| `pages.blocks` | none | the project's block manifest (`blockManifest(blocks)` from `src/blocks`); publishing a page that uses another block fails with 422 `unknown_block`, and the `b.richText` values it lists are normalized on save. Absent: no check, no normalization on save, WARN at boot |
 | `env` | `process.env` | environment for the auth module (tests) |
 
 CORS applies to `GET`, `HEAD`, `OPTIONS` on `/api/content/**` only, without credentials. No other route
@@ -130,7 +130,7 @@ pick or query, list/grid/table).
 | Builder | Stored in the page | `render` receives | Editor input |
 |---|---|---|---|
 | `b.text`, `b.longText` | string | string | input / textarea |
-| `b.richText` | HTML string | rendered node | rich text editor |
+| `b.richText` | HTML string (normalized: only what the editor produces) | rendered node (sanitized HTML) | rich text editor |
 | `b.number`, `b.boolean`, `b.select`, `b.radio` | value | value | matching input |
 | `b.link` | `{ kind: 'url', href }` or `{ kind: 'page', documentId }` | `{ href }` (page path resolved; `null` if gone) | URL or page picker |
 | `b.image` | `{ assetId?, src, alt }` | `{ src, alt, width?, height? }` | asset picker or URL |
@@ -139,6 +139,12 @@ pick or query, list/grid/table).
 | `b.entries(apiId, opts)` | `{ mode: 'pick', ids }` or `{ mode: 'query', filter, sort, limit }` | entry array | pick, or a filter on indexed/unique fields |
 | `b.list({ ...fields })` | array of objects | array of objects | repeatable rows |
 | `b.slot({ allow?, max? })` | nested blocks | `ReactNode` | drop zone |
+
+Rich text is parsed with the editor's schema (tiptap, the extensions of Puck's `richtext` field) and written back
+(`normalizeRichText`): other tags, event handlers, `style` other than text alignment and links other than
+`http(s)`/`mailto`/… (no `javascript:`) are dropped. The server does it on save (blocks listed with `richText` paths in
+`pages.blocks`), `readPageContent` on read, and the website renders it in place (no stored HTML is ever written
+unsanitized).
 
 Only declared fields are stored. `version` (default `1`) is stored as `_v` on every block; when the props change
 shape, bump it and add `migrate: [{ from: 1, up: (props) => ({ ...props, … }) }]` (run when a page is read).

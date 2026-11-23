@@ -1,6 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "paths": { "#tiptap-html": ["./node_modules/@tiptap/html/dist/server/index.d.cts"] }
+  },
   "include": ["src"],
   "exclude": ["admin"]
 }

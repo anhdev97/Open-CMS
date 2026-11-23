@@ -32,7 +32,7 @@ describe('pages API', () => {
   const publish = (id: string, body?: unknown) => call(`${ADMIN}/${id}/publish`, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) });
 
   beforeAll(async () => {
-    t = await createCoreTestApp({ locales: ['en-US', 'vi-VN'], pages: { blocks: [{ name: 'Heading', version: 1 }, { name: 'Text', version: 1 }] } });
+    t = await createCoreTestApp({ locales: ['en-US', 'vi-VN'], pages: { blocks: [{ name: 'Heading', version: 1 }, { name: 'Text', version: 1, richText: ['content'] }] } });
     const setup = await fetch(`${t.baseUrl}/api/auth/setup`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', origin: t.url },
@@ -148,6 +148,28 @@ describe('pages API', () => {
     });
   });
 
+  describe('rich text', () => {
+    const evil = '<img src=x onerror="alert(1)"><a href="javascript:alert(2)">x</a>';
+    const textPage = (html: string) => ({
+      format: 'puck',
+      formatVersion: 24,
+      data: { root: {}, content: [{ type: 'Text', props: { id: 't1', _v: 1, content: html, align: 'left' } }] },
+    });
+
+    it('is normalized on create and update (no event handlers, no javascript: links)', async () => {
+      const c = await create({ title: 'Rich', path: '/rich', content: textPage(evil) });
+      expect(c.status).toBe(201);
+      const stored = c.body.data.content.data.content[0].props.content;
+      expect(stored).toBe('<p>x</p>');
+      const id = c.body.data.documentId;
+      const u = await call(`${ADMIN}/${id}?locale=en-US`, { method: 'PATCH', body: JSON.stringify({ content: textPage(`<p>ok</p>${evil}`) }) });
+      expect(u.status).toBe(200);
+      const row = await call(`${ADMIN}/${id}?locale=en-US`);
+      expect(JSON.stringify(row.body.data.content)).not.toMatch(/onerror|javascript:|<img/);
+      expect(row.body.data.content.data.content[0].props.content).toBe('<p>ok</p><p>x</p>');
+    });
+  });
+
   describe('unknown blocks', () => {
     let ghostId: string;
     it('publish with a block missing from the manifest -> 422 unknown_block', async () => {
@@ -163,7 +185,7 @@ describe('pages API', () => {
       expect((await publish(ghostId, { force: true })).status).toBe(200);
       const r = await call('/api/admin/pages/blocks-check');
       expect(r.status).toBe(200);
-      expect(r.body.manifest).toEqual([{ name: 'Heading', version: 1 }, { name: 'Text', version: 1 }]);
+      expect(r.body.manifest).toEqual([{ name: 'Heading', version: 1 }, { name: 'Text', version: 1, richText: ['content'] }]);
       expect(r.body.data).toEqual([{ documentId: ghostId, locale: 'en-US', title: 'Ghosts', unknown: ['Ghost'] }]);
     });
 

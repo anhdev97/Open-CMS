@@ -5,7 +5,8 @@
     "moduleResolution": "node10",
     "esModuleInterop": true,
     "declaration": false,
-    "outDir": "../dist/blocks-cjs"
+    "outDir": "../dist/blocks-cjs",
+    "paths": { "#tiptap-html": ["../node_modules/@tiptap/html/dist/server/index.d.cts"] }
   },
   "exclude": ["src/next"]
 }

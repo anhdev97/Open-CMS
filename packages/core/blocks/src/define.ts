@@ -167,6 +167,22 @@ export function defineBlocks(list: BlockDefinition<any>[]): BlockRegistry {
 }
 
 /** `{ name, version }` of every block, for the server-side unknown-block check. */
+function richTextPaths(fields: Record<string, BlockField>, prefix = ''): string[] {
+  const out: string[] = [];
+  for (const [k, f] of Object.entries(fields)) {
+    if (f.kind === 'richText') out.push(prefix + k);
+    else if (f.kind === 'list') out.push(...richTextPaths(f.fields, `${prefix}${k}[].`));
+  }
+  return out;
+}
+
+/**
+ * Name and version of every block, plus the prop paths of its `b.richText` fields (`richText`, list rows as
+ * `rows[].note`; omitted when none): the server normalizes those values on save.
+ */
 export function blockManifest(r: BlockRegistry): BlockManifest {
-  return r.list.map((d) => ({ name: d.name, version: d.version ?? 1 }));
+  return r.list.map((d) => {
+    const richText = richTextPaths(d.fields as Record<string, BlockField>);
+    return { name: d.name, version: d.version ?? 1, ...(richText.length ? { richText } : {}) };
+  });
 }

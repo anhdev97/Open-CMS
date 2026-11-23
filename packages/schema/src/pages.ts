@@ -53,7 +53,11 @@ export type StoredPageContent = {
   data: { root: unknown; content: unknown[]; zones?: Record<string, unknown[]> };
 };
 
-export type BlockManifest = { name: string; version: number }[];
+/**
+ * The blocks a project defines (`blockManifest`). `richText`: prop paths of the block's `b.richText` fields
+ * (`'body'`, `'rows[].note'` inside list rows), normalized by the server when a page is saved.
+ */
+export type BlockManifest = { name: string; version: number; richText?: string[] }[];
 
 function isItem(v: unknown): v is { type: string; props?: unknown } {
   if (!v || typeof v !== 'object') return false;

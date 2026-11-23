@@ -379,6 +379,8 @@ export default defineContentType({
   await api(admin, 'POST', `/api/admin/content/product/${product.documentId}/publish`);
   const PUB = 'Smoke published heading';
   const DRAFT = 'Smoke draft heading';
+  // Rich text with an event handler and a javascript: link: normalized on save, rendered in place on the site.
+  const RICH = '<p>Smoke rich <strong>text</strong></p><img src=x onerror="alert(1)"><a href="javascript:alert(2)">bad</a>';
   const pageContent = (heading) => ({
     format: 'puck',
     formatVersion: PUCK_FORMAT_VERSION,
@@ -386,6 +388,7 @@ export default defineContentType({
       root: { props: {} },
       content: [
         { type: 'Heading', props: { id: 'heading-1', _v: 1, text: heading, level: 1, align: 'left' } },
+        { type: 'Text', props: { id: 'text-1', _v: 1, content: RICH, align: 'left' } },
         {
           type: 'EntryList',
           props: { id: 'list-1', _v: 1, apiId: 'product', source: { mode: 'pick', ids: [product.documentId] }, layout: 'list', fields: [{ name: 'name' }] },
@@ -400,12 +403,14 @@ export default defineContentType({
   assert(r.res.status === 200 && r.text.includes(PUB), `GET / after publish lacks "${PUB}" (${r.res.status})`);
   assert(r.text.includes('Acme Published'), 'GET / lacks the published product (EntryList)');
   assert(!r.res.headers.has('content-security-policy'), 'GET / (page) must not carry a Content-Security-Policy');
+  assert(r.text.includes('Smoke rich <strong>text</strong>'), 'GET / lacks the Text block rich text');
+  assert(!/onerror|javascript:alert/.test(r.text), 'GET / contains unsanitized rich text (onerror / javascript:)');
   // Tailwind scans the core blocks (@source dist/blocks): the Heading level-1 class is in the site CSS.
   const cssHrefs = [...r.text.matchAll(/href="(\/_next\/static\/[^"]+\.css)"/g)].map((m) => m[1]);
   assert(cssHrefs.length > 0, 'GET / links no stylesheet');
   const css = (await Promise.all(cssHrefs.map(async (h) => (await send(h)).text()))).join('\n');
   assert(css.includes('sm\\:text-5xl'), 'site CSS lacks the core block class sm:text-5xl (Tailwind @source of dist/blocks)');
-  ok(`page / with a Heading published: GET / contains "${PUB}" + the product, block classes in the CSS, no Content-Security-Policy`);
+  ok(`page / with a Heading published: GET / contains "${PUB}" + sanitized rich text + the product, block classes in the CSS, no Content-Security-Policy`);
 
   await api(admin, 'PATCH', `${pageApi}/${page.documentId}?locale=en-US`, { content: pageContent(DRAFT) });
   await api(admin, 'PATCH', `/api/admin/content/product/${product.documentId}`, { name: 'Acme Draft' });

@@ -95,6 +95,17 @@ describe('blockManifest', () => {
     ]);
   });
 
+  it('lists the paths of b.richText fields (list rows as `name[].field`) so the server can normalize them', () => {
+    const rich = defineBlock({
+      name: 'Rich',
+      label: 'Rich',
+      category: 'basic',
+      fields: { body: b.richText(), title: b.text(), rows: b.list({ note: b.richText(), deep: b.list({ x: b.richText() }) }) },
+      render: () => null,
+    });
+    expect(blockManifest(defineBlocks([rich]))).toEqual([{ name: 'Rich', version: 1, richText: ['body', 'rows[].note', 'rows[].deep[].x'] }]);
+  });
+
   describe('entries apiIdFrom', () => {
     const block = (fields: Record<string, unknown>) =>
       defineBlock({ name: 'Feed', label: 'Feed', category: 'data', fields, render: () => null } as any);

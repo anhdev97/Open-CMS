@@ -1,6 +1,7 @@
 import { UnprocessableEntityException } from '@nestjs/common';
 import { collectBlockNames, validatePagePath, type BlockManifest, type StoredPageContent } from '@opencloudcms/schema';
 import type { HookRegistration } from '../options';
+import { normalizeStoredRichText } from './richtext';
 
 function checkPath(data: Record<string, unknown>): void {
   // A draft may omit the path (publish requires it); when present it must be valid.
@@ -17,11 +18,26 @@ export function unknownBlocks(content: unknown, manifest: BlockManifest): Map<st
   return out;
 }
 
-/** Registered by ContentRegistry for the core page type. Without a manifest, publishing never checks blocks. */
+/** `b.richText` values of the saved `content` normalized (no scripts, event handlers or `javascript:` links). */
+function normalizeContent(data: Record<string, unknown>, manifest: BlockManifest | undefined): Record<string, unknown> {
+  if (!manifest || !('content' in data)) return data;
+  return { ...data, content: normalizeStoredRichText(data.content, manifest) };
+}
+
+/**
+ * Registered by ContentRegistry for the core page type. Without a manifest, publishing never checks blocks and
+ * rich text is not normalized on save (the website renderer still sanitizes it).
+ */
 export function createPageHooks(manifest: BlockManifest | undefined): HookRegistration['hooks'] {
   return {
-    beforeCreate: (data) => checkPath(data),
-    beforeUpdate: (data) => checkPath(data),
+    beforeCreate: (data) => {
+      checkPath(data);
+      return normalizeContent(data, manifest);
+    },
+    beforeUpdate: (data) => {
+      checkPath(data);
+      return normalizeContent(data, manifest);
+    },
     beforePublish: (doc, ctx) => {
       if (!manifest || ctx.force) return;
       const total = new Map<string, number>();

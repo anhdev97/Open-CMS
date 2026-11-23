@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { renderToString } from 'react-dom/server';
 import { prerender } from 'react-dom/static';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -124,6 +125,22 @@ describe('createCmsPage: published (draft mode off)', () => {
     expect(out).toContain('bg-muted');
     expect(out).toContain('Inside slot');
     expect(out).toContain('<strong>bold</strong>');
+  });
+
+  it('rich text is sanitized and rendered synchronously (no raw stored HTML, even on first render)', async () => {
+    const evil = '<img src=x onerror="alert(1)"><a href="javascript:alert(2)">x</a>';
+    const text = { type: 'Text', props: { id: 't1', _v: 1, content: evil, align: 'left' } };
+    const list = { type: 'Text', props: { id: 't2', _v: 1, content: '<p>ok <strong>b</strong></p>', align: 'left' } };
+    routes(publicByPath({ '/about': page({ content: content(text, list) }) }));
+    const node = await cms.Page(params('about'));
+    for (const out of [renderToString(node as never), await html(node)]) {
+      expect(out).not.toContain('onerror');
+      expect(out).not.toContain('javascript:');
+      expect(out).not.toContain('<img');
+      expect(out).not.toContain('<!--$'); // rendered in place: no Suspense boundary, no fallback
+      expect(out).toContain('<p>x</p>');
+      expect(out).toContain('<strong>b</strong>');
+    }
   });
 
   it('no page at / shows the welcome page linking to /admin/pages', async () => {

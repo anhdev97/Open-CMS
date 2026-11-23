@@ -9,6 +9,7 @@ import {
   adminFetcher,
   coreBlocks,
   defineBlocks,
+  normalizePageRichText,
   readPageContent,
   type BlockDefinition,
   type BlockField,
@@ -104,7 +105,12 @@ function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorPro
 
   // The server falls back to the default locale: then this locale has no translation yet.
   const missing = (entry.locale ?? locale) !== locale;
-  const stored = useMemo(() => readPageContent(entry.content, registry), [entry, registry]);
+  // Rich text reaches Puck only normalized (its loading fallbacks write the HTML they get unsanitized):
+  // `readPageContent` does it for `ok`; a page that needs migration is shown read-only and never saved back.
+  const stored = useMemo(() => {
+    const s = readPageContent(entry.content, registry);
+    return s.status === 'needs-migration' ? { ...s, data: normalizePageRichText(s.data, registry) } : s;
+  }, [entry, registry]);
   const migration = !missing && stored.status === 'needs-migration';
   const readOnly = migration || !can('content.update');
   const canPublish = !migration && (can('content.update') || can('content.publish'));

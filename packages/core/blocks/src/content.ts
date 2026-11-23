@@ -1,5 +1,6 @@
 import type { StoredPageContent } from '@opencloudcms/schema';
 import { PUCK_FORMAT_VERSION } from './puck-config';
+import { normalizeRichText } from './richtext';
 import type { BlockField, BlockRegistry, PuckData } from './types';
 
 export type PageContentStatus = 'ok' | 'empty' | 'needs-migration';
@@ -38,6 +39,33 @@ function pickDeclared(fields: Record<string, BlockField>, props: Record<string, 
   return out;
 }
 
+/** Copy of `props` with every `b.richText` value normalized (also in list rows); slot items go through `fn`. */
+function normalizeFields(fields: Record<string, BlockField>, props: Record<string, unknown>, fn: ItemFn): Record<string, unknown> {
+  const out = { ...props };
+  for (const [k, f] of Object.entries(fields)) {
+    if (!Object.prototype.hasOwnProperty.call(props, k)) continue;
+    const v = props[k];
+    if (f.kind === 'richText') out[k] = normalizeRichText(v);
+    else if (f.kind === 'slot' && Array.isArray(v)) out[k] = v.map(fn);
+    else if (f.kind === 'list' && Array.isArray(v)) out[k] = v.map((row) => (isObj(row) ? normalizeFields(f.fields, row, fn) : row));
+  }
+  return out;
+}
+
+/**
+ * Copy of `data` with every `b.richText` prop of a known block (also in slots and list rows) passed through
+ * `normalizeRichText`, so no stored HTML reaches the page unsanitized. `readPageContent` already does this for `ok`.
+ */
+export function normalizePageRichText(data: PuckData, r: BlockRegistry): PuckData {
+  const visit: ItemFn = (item) => {
+    if (!isItem(item)) return item;
+    const def = r.get(item.type);
+    if (!def) return item;
+    return { ...item, props: normalizeFields(def.fields, item.props, visit) };
+  };
+  return mapData(data as unknown as Record<string, unknown>, visit);
+}
+
 function readItem(r: BlockRegistry): ItemFn {
   const visit: ItemFn = (item) => {
     if (!isItem(item)) return item;
@@ -54,7 +82,7 @@ function readItem(r: BlockRegistry): ItemFn {
       v++;
     }
     const stamp = migrating ? { _v: version } : _v !== undefined ? { _v } : {};
-    return { ...item, props: { ...(id !== undefined ? { id } : {}), ...mapSlots(def.fields, props, visit), ...stamp } };
+    return { ...item, props: { ...(id !== undefined ? { id } : {}), ...normalizeFields(def.fields, props, visit), ...stamp } };
   };
   return visit;
 }
@@ -91,7 +119,8 @@ export function mapData(d: Record<string, unknown>, fn: ItemFn): PuckData {
  * - `null`, `{}` or a non-object → `empty` (blank canvas).
  * - another `formatVersion` or an unrecognised shape → `needs-migration`; `data` is returned untouched
  *   (the stored `data` when present, else a blank canvas) and must not be saved back.
- * - otherwise `ok`, with item props migrated from their stored `_v` to the block's `version`.
+ * - otherwise `ok`, with item props migrated from their stored `_v` to the block's `version` and `b.richText`
+ *   values normalized (`normalizeRichText`: only what the rich text editor can produce, no scripts or `javascript:`).
  * Unknown blocks are kept as-is.
  */
 export function readPageContent(raw: unknown, r: BlockRegistry): ReadPageContentResult {
