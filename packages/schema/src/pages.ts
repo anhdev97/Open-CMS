@@ -8,6 +8,14 @@ export const CORE_API_IDS: readonly string[] = [PAGE_API_ID];
 
 export const isCoreApiId = (apiId: string): boolean => CORE_API_IDS.includes(apiId);
 
+/**
+ * apiIds a project may not use: the core-owned types plus `assets`, whose delivery path `/api/content/assets` is the
+ * public asset lookup. Rejected in project schema files and by the Content Type Builder.
+ */
+export const RESERVED_API_IDS: readonly string[] = [...CORE_API_IDS, 'assets'];
+
+export const isReservedApiId = (apiId: string): boolean => RESERVED_API_IDS.includes(apiId);
+
 /** First path segments that belong to the CMS itself (compared case-insensitively). */
 export const RESERVED_PATH_SEGMENTS: readonly string[] = ['admin', 'api', 'oauth2', '__opencloudcms', '_next'];
 

@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createJiti } from 'jiti';
 import type { ContentGroupDefinition, ContentTypeDefinition, OpenCloudCmsConfig, ResolvedConfig } from '@opencloudcms/schema';
-import { CONFIG_FILE_NAMES, CORE_API_IDS, normalizeDefinition, resolveConfig } from '@opencloudcms/schema';
+import { CONFIG_FILE_NAMES, RESERVED_API_IDS, normalizeDefinition, resolveConfig } from '@opencloudcms/schema';
 
 function freshJiti(root: string) {
   // No caches: the admin UI rewrites schema files while the process is running.
@@ -59,10 +59,10 @@ function walk(dir: string): string[] {
   });
 }
 
-/** Core-owned apiIds (the page type) cannot be redefined by a project. */
+/** Reserved apiIds (core-owned types such as the page type, and `assets`) cannot be defined by a project. */
 export function assertNoCoreApiIds(defs: Pick<ContentTypeDefinition, 'apiId'>[]): void {
   for (const d of defs) {
-    if (CORE_API_IDS.includes(d.apiId)) throw new Error(`apiId "${d.apiId}" is reserved by OpenCloudCMS`);
+    if (RESERVED_API_IDS.includes(d.apiId)) throw new Error(`apiId "${d.apiId}" is reserved by OpenCloudCMS`);
   }
 }
 

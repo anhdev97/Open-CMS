@@ -23,7 +23,7 @@ import { RequirePermission } from '@opencloudcms/oauth2';
 import { captureProjectFiles, createMigration, DiffError, previewChange, restoreProjectFiles, writeSchemaChange } from '@opencloudcms/codegen';
 import { migrateUp } from '@opencloudcms/db';
 import type { ContentTypeDefinition } from '@opencloudcms/schema';
-import { FIELD_KINDS, SchemaValidationError, isCoreApiId, newId } from '@opencloudcms/schema';
+import { FIELD_KINDS, SchemaValidationError, isCoreApiId, isReservedApiId, newId } from '@opencloudcms/schema';
 import { OPENCLOUDCMS_DB, OPENCLOUDCMS_OPTIONS, type ResolvedOpenCloudCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
 import { SchemaWriteQueue } from './schema-write-queue';
@@ -50,8 +50,15 @@ export class SchemaBuilderService {
     }
   }
 
-  /** Core-owned types (the page type) cannot be created, changed or removed through the Builder. */
+  /**
+   * Core-owned types (the page type) cannot be created, changed or removed through the Builder, and reserved apiIds
+   * (`assets`) cannot be used.
+   */
   private assertNotCore(change: { upsert?: ContentTypeDefinition; removeId?: string }) {
+    const up0 = change.upsert;
+    if (up0 && !isCoreApiId(up0.apiId) && isReservedApiId(up0.apiId)) {
+      throw new ConflictException({ code: 'core_type', message: `apiId "${up0.apiId}" is reserved by OpenCloudCMS` });
+    }
     const coreIds = this.registry.all().filter((d) => this.registry.isCore(d.apiId)).map((d) => d.id);
     const up = change.upsert;
     const hit = (up && (isCoreApiId(up.apiId) || coreIds.includes(up.id))) || (change.removeId && coreIds.includes(change.removeId));

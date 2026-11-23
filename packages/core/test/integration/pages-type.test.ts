@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { diffSchemas, executeStatement, loadDefinitions, planMigration } from '@opencloudcms/codegen';
+import { assertNoCoreApiIds, diffSchemas, executeStatement, loadDefinitions, planMigration } from '@opencloudcms/codegen';
 import { resolveConfig, defineContentType, f } from '@opencloudcms/schema';
 import { loginAs } from '../../../oauth2/test/support/login';
 import { createCoreTestApp, type CoreTestApp } from '../support/core-app';
@@ -175,6 +175,31 @@ describe('core-owned opencloudcmsPage type', () => {
     const renamed = defineContentType({ id: pageType.id, apiId: 'somethingElse', displayName: 'x', fields: { a: f.text({ id: 'fld_zz' }) } } as any);
     expect((await call('/api/admin/content-types', { method: 'POST', body: JSON.stringify({ definition: renamed }) })).status).toBe(409);
     expect((await call(`/api/admin/content-types/${pageType.id}`, { method: 'DELETE' })).status).toBe(409);
+  });
+
+  it('the schema builder refuses the reserved apiId assets with 409 core_type', async () => {
+    const def = defineContentType({ id: 'ct_assets1', apiId: 'assets', displayName: 'Assets', fields: { a: f.text({ id: 'fld_asst01' }) } } as any);
+    for (const url of ['/api/admin/content-types', '/api/admin/content-types/plan']) {
+      const res = await call(url, { method: 'POST', body: JSON.stringify({ definition: def }) });
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe('core_type');
+      expect(res.body.error.message).toBe('apiId "assets" is reserved by OpenCloudCMS');
+    }
+  });
+
+  it('a project schema file with apiId assets fails to load (loader and pipeline check)', async () => {
+    expect(() => assertNoCoreApiIds([{ apiId: 'assets' }])).toThrow('apiId "assets" is reserved by OpenCloudCMS');
+    expect(() => assertNoCoreApiIds([{ apiId: 'asset' }, { apiId: 'products' }])).not.toThrow();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opencloudcms-reserved-'));
+    try {
+      const dir = path.join(root, 'src', 'content-types', 'assets');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'assets.schema.ts'), `export default { id: 'ct_mine', apiId: 'assets', displayName: 'Mine', fields: [] };\n`);
+      const config = resolveConfig({ database: { url: 'postgres://x' } }, root);
+      await expect(loadDefinitions(config)).rejects.toThrow('apiId "assets" is reserved by OpenCloudCMS');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('a project schema file with apiId opencloudcmsPage fails to load', async () => {
