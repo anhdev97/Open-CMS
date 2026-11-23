@@ -136,18 +136,27 @@ function listFiles(dir: string): string[] {
   });
 }
 
-export function captureProjectFiles(config: ResolvedConfig): FileSnapshot {
+function pruneEmptyDirs(dir: string, removeSelf: boolean): void {
+  if (!fs.existsSync(dir)) return;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.isDirectory()) pruneEmptyDirs(path.join(dir, e.name), true);
+  }
+  if (removeSelf && !fs.readdirSync(dir).length) fs.rmdirSync(dir);
+}
+
+export function captureProjectFiles(config: ResolvedConfig, extraDirs: string[] = []): FileSnapshot {
   const snap: FileSnapshot = new Map();
-  for (const dir of [config.contentTypesDir, config.generatedDir, config.migrationsDir]) {
+  for (const dir of [config.contentTypesDir, config.generatedDir, config.migrationsDir, ...extraDirs]) {
     for (const f of listFiles(dir)) snap.set(f, fs.readFileSync(f, 'utf8'));
   }
   return snap;
 }
 
-export function restoreProjectFiles(config: ResolvedConfig, snap: FileSnapshot): void {
-  for (const dir of [config.contentTypesDir, config.generatedDir, config.migrationsDir]) {
+export function restoreProjectFiles(config: ResolvedConfig, snap: FileSnapshot, extraDirs: string[] = []): void {
+  for (const dir of [config.contentTypesDir, config.generatedDir, config.migrationsDir, ...extraDirs]) {
     for (const f of listFiles(dir)) if (!snap.has(f)) fs.rmSync(f);
   }
+  for (const dir of extraDirs) pruneEmptyDirs(dir, false);
   for (const [f, content] of snap) {
     if (!fs.existsSync(f) || fs.readFileSync(f, 'utf8') !== content) {
       fs.mkdirSync(path.dirname(f), { recursive: true });
