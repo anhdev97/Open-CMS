@@ -25,6 +25,15 @@ describe('core migration stream with contributed sources', () => {
   });
   afterAll(async () => {
     await db?.destroy();
+    // `destroy()` resolves once Terminate is sent, not once backends exit; dropping WITH (FORCE) right away can
+    // SIGTERM a backend whose client then emits FATAL 57P01 with no listener (uncaught). Wait for sessions to go
+    // (same approach as packages/oauth2/test/support/db.ts).
+    const deadline = Date.now() + 5_000;
+    for (;;) {
+      const { rows } = await admin.query('select count(*)::int as n from pg_stat_activity where datname = $1', [name]);
+      if (rows[0].n === 0 || Date.now() > deadline) break;
+      await new Promise((r) => setTimeout(r, 10));
+    }
     await admin.query(`drop database if exists ${name} with (force)`);
     await admin.end();
   });
