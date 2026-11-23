@@ -94,4 +94,37 @@ describe('blockManifest', () => {
       { name: 'ProductGrid', version: 3 },
     ]);
   });
+
+  describe('entries apiIdFrom', () => {
+    const block = (fields: Record<string, unknown>) =>
+      defineBlock({ name: 'Feed', label: 'Feed', category: 'data', fields, render: () => null } as any);
+
+    it('accepts an empty apiId with apiIdFrom naming a sibling text or select field', () => {
+      expect(() => defineBlocks([block({ type: b.text(), source: b.entries('', { apiIdFrom: 'type' }) })])).not.toThrow();
+      expect(() =>
+        defineBlocks([block({ type: b.select({ options: ['post', 'product'] }), source: b.entries('', { apiIdFrom: 'type' }) })]),
+      ).not.toThrow();
+      expect(() =>
+        defineBlocks([block({ rows: b.list({ type: b.text(), source: b.entries('', { apiIdFrom: 'type' }) }) })]),
+      ).not.toThrow();
+    });
+
+    it('rejects an empty apiId without apiIdFrom', () => {
+      expect(() => defineBlocks([block({ source: b.entries('') })])).toThrow(/Feed.*"source".*apiId must be a non-empty string/);
+    });
+
+    it('rejects apiIdFrom naming a missing field, itself, or a sibling outside the row', () => {
+      expect(() => defineBlocks([block({ source: b.entries('', { apiIdFrom: 'type' }) })])).toThrow(/Feed.*"source".*apiIdFrom "type"/);
+      expect(() => defineBlocks([block({ source: b.entries('', { apiIdFrom: 'source' }) })])).toThrow(/apiIdFrom "source"/);
+      expect(() =>
+        defineBlocks([block({ type: b.text(), rows: b.list({ source: b.entries('', { apiIdFrom: 'type' }) }) })]),
+      ).toThrow(/"rows.source".*apiIdFrom "type"/);
+    });
+
+    it('rejects apiIdFrom naming a field that is not text or select', () => {
+      expect(() => defineBlocks([block({ flag: b.boolean(), source: b.entries('', { apiIdFrom: 'flag' }) })])).toThrow(
+        /Feed.*"source".*apiIdFrom "flag".*text or select/,
+      );
+    });
+  });
 });

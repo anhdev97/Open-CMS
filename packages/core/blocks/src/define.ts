@@ -21,7 +21,7 @@ function validateLabel(v: unknown, where: string): string[] {
   return validateLocalizedText(v, where);
 }
 
-function validateField(f: unknown, block: string, path: string): string[] {
+function validateField(f: unknown, block: string, path: string, siblings: Record<string, unknown>): string[] {
   const where = `${block}: field "${path}"`;
   if (!isObj(f) || typeof f.kind !== 'string') return [`${where}: not a field (use b.*)`];
   const issues = validateLabel(f.label, `${where}: label`);
@@ -73,7 +73,14 @@ function validateField(f: unknown, block: string, path: string): string[] {
       break;
     case 'entry':
     case 'entries':
-      if (typeof f.apiId !== 'string' || (!f.apiId && !(f.kind === 'entries' && f.apiIdFrom))) issues.push(`${where}: apiId must be a non-empty string`);
+      if (f.kind === 'entries' && f.apiIdFrom !== undefined) {
+        const from = f.apiIdFrom;
+        const sibling = typeof from === 'string' && from !== path.split('.').pop() ? siblings[from] : undefined;
+        if (typeof from !== 'string' || !isObj(sibling) || (sibling.kind !== 'text' && sibling.kind !== 'select')) {
+          issues.push(`${where}: apiIdFrom ${show(from)} must name a sibling text or select field`);
+        }
+        if (typeof f.apiId !== 'string') issues.push(`${where}: apiId must be a string`);
+      } else if (typeof f.apiId !== 'string' || !f.apiId) issues.push(`${where}: apiId must be a non-empty string`);
       if (f.kind === 'entries' && f.limit !== undefined && !(Number.isInteger(f.limit) && (f.limit as number) > 0)) {
         issues.push(`${where}: limit must be a positive integer`);
       }
@@ -102,7 +109,7 @@ function validateFields(fields: Record<string, unknown>, block: string, prefix: 
     const at = `${block}: field "${path}"`;
     if (!FIELD_KEY_RE.test(key)) issues.push(`${at}: invalid field name`);
     else if (RESERVED_PROPS.includes(key)) issues.push(`${at}: "${key}" is reserved`);
-    issues.push(...validateField(f, block, path));
+    issues.push(...validateField(f, block, path, fields));
   }
   return issues;
 }
