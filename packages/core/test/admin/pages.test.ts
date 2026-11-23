@@ -9,6 +9,8 @@ import {
   deletePage,
   duplicatePage,
   getPage,
+  getShadowedPaths,
+  isShadowedPath,
   listPages,
   pageErrorMessageKey,
   pagePreviewUrl,
@@ -130,5 +132,23 @@ describe('page editor client', () => {
   });
   it('pagePreviewUrl points at the website preview route', () => {
     expect(pagePreviewUrl('a b', 'vi-VN')).toBe('/__opencloudcms/preview?page=a%20b&locale=vi-VN');
+  });
+});
+
+describe('shadowed paths', () => {
+  it('getShadowedPaths reads the endpoint once and caches it', async () => {
+    api.mockResolvedValue({ data: ['/blog'] });
+    const a = await getShadowedPaths();
+    const b = await getShadowedPaths();
+    expect(a).toEqual(['/blog']);
+    expect(b).toBe(a);
+    expect(api).toHaveBeenCalledTimes(1);
+    expect(api).toHaveBeenCalledWith('/api/admin/pages/shadowed');
+  });
+  it('isShadowedPath matches exactly', () => {
+    expect(isShadowedPath('/blog', ['/blog'])).toBe(true);
+    expect(isShadowedPath('/blog/x', ['/blog'])).toBe(false);
+    expect(isShadowedPath('/', [])).toBe(false);
+    expect(isShadowedPath(undefined, ['/'])).toBe(false);
   });
 });

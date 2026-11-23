@@ -28,7 +28,7 @@ import { ApiError } from '../lib/api-error';
 import { useCan } from '../lib/can';
 import { pickEditorLocale } from '../lib/locales';
 import { useAdminNavigate, useAdminParams } from '../lib/nav';
-import { getPage, pageErrorMessageKey, pagePreviewUrl, publishPage, savePage, type PageEntry } from '../lib/pages';
+import { getPage, getShadowedPaths, pageErrorMessageKey, pagePreviewUrl, publishPage, savePage, type PageEntry } from '../lib/pages';
 import type { Meta } from '../lib/types';
 import { BlocksContext } from '../page-editor/blocks-context';
 import { ContentTypeField } from '../page-editor/ContentTypeField';
@@ -119,6 +119,15 @@ function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorPro
   const storedSeo = entry.seo as PageSeo | null | undefined;
   const lastBody = useRef(JSON.stringify(fromEditorData(initial, registry, storedSeo)));
   const getPuck = useRef<ReturnType<typeof useGetPuck> | null>(null);
+
+  const [shadowedPaths, setShadowedPaths] = useState<string[]>([]);
+  useEffect(() => {
+    let live = true;
+    void getShadowedPaths().then((l) => live && setShadowedPaths(l));
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const unknownTypes = useMemo(() => unknownBlockTypes(initial, registry), [initial, registry]);
 
@@ -240,6 +249,7 @@ function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorPro
     saveState,
     saveError: saveState === 'error' && autosave.error ? errorMessage(autosave.error) : null,
     readOnly,
+    shadowedPaths,
     canPublish,
     publishing,
     onBack: () => void leave('/pages'),

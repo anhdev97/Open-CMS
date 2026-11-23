@@ -443,6 +443,7 @@ export const enUS = {
       titleLabel: "Title",
       pathLabel: "Path",
       pathHelp: "Starts with \"/\"; lowercase letters, digits and hyphens.",
+      pathShadowed: "The website already has a file route at this path (app/(site)), so this page will not be shown there.",
       submit: "Create page",
       submitting: "Creating…",
     },
@@ -489,6 +490,7 @@ export const enUS = {
     leaveDescription: "Your latest changes could not be saved. If you leave now they are lost.",
     leaveConfirm: "Leave without saving",
     previewNotSaved: "Your latest changes are not saved: the website preview shows the last saved draft.",
+    shadowed: "Not shown on the website: a file route in app/(site) already serves {path}.",
     slotFull: "This area holds at most {max} blocks.",
     unknownBlock: "Block \"{name}\" is no longer in the project. Select it and delete it.",
     categories: {

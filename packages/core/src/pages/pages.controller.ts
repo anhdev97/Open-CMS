@@ -38,4 +38,12 @@ export class PagesController {
   blocksCheck() {
     return this.pages.blocksCheck();
   }
+
+  /** `{ data: string[] }`: page paths that a file route of the website shadows (the editor warns about them). */
+  @RequirePermission('content.read')
+  @Header('Cache-Control', 'no-store')
+  @Get('shadowed')
+  shadowed() {
+    return this.pages.shadowed();
+  }
 }

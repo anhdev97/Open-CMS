@@ -392,6 +392,7 @@ const viVN: Messages = {
       titleLabel: 'Tiêu đề',
       pathLabel: 'Đường dẫn',
       pathHelp: 'Bắt đầu bằng "/"; chữ thường, chữ số và dấu gạch ngang.',
+      pathShadowed: "Website đã có một route dạng file ở path này (app/(site)), nên trang này sẽ không được hiển thị ở đó.",
       submit: 'Tạo trang',
       submitting: 'Đang tạo…',
     },
@@ -438,6 +439,7 @@ const viVN: Messages = {
     leaveDescription: "Các thay đổi mới nhất của bạn chưa lưu được. Nếu rời đi bây giờ, chúng sẽ bị mất.",
     leaveConfirm: "Rời đi không lưu",
     previewNotSaved: "Các thay đổi mới nhất chưa được lưu: bản xem trên website là bản nháp đã lưu gần nhất.",
+    shadowed: "Không hiển thị trên website: một route dạng file trong app/(site) đang phục vụ {path}.",
     slotFull: "Vùng này chứa tối đa {max} block.",
     unknownBlock: "Block \"{name}\" không còn trong dự án. Hãy chọn và xoá nó.",
     categories: {

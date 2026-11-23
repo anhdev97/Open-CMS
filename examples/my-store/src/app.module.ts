@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 import { OpenCloudCmsModule } from "@opencloudcms/core";
+import { blockManifest } from "@opencloudcms/core/blocks";
 import config from "../opencloudcms.config";
+import blocks from "./blocks";
 import contentGroups from "./content-groups";
 import { contentTypes } from "./generated";
 import { hooks } from "./extensions";
@@ -22,6 +24,8 @@ const projectRoot = findProjectRoot(__dirname);
       schemaEditable: process.env.NODE_ENV !== "production",
       // One Next app (app/) serves the admin at /admin and the website everywhere else.
       web: { dir: projectRoot },
+      // Page builder: publishing a page that uses a block missing from src/blocks fails with 422 unknown_block.
+      pages: { blocks: blockManifest(blocks) },
       assets: {
         provider: "local",
         local: {

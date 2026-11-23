@@ -94,3 +94,22 @@ export async function unpublishPage(id: string): Promise<void> {
 export function pagePreviewUrl(id: string, locale: string): string {
   return `/__opencloudcms/preview?page=${encodeURIComponent(id)}&locale=${encodeURIComponent(locale)}`;
 }
+
+let shadowed: Promise<string[]> | null = null;
+
+/**
+ * Paths served by a file route of the website (`app/(site)/**\/page.tsx`), which wins over a page built here.
+ * Fixed for the server's lifetime, so read once per admin load; a failure yields `[]` (no warning) and is retried next call.
+ */
+export function getShadowedPaths(): Promise<string[]> {
+  shadowed ??= api<{ data: string[] }>('/api/admin/pages/shadowed').then(
+    (r) => r.data,
+    () => {
+      shadowed = null;
+      return [];
+    },
+  );
+  return shadowed;
+}
+
+export const isShadowedPath = (path: string | null | undefined, list: readonly string[]): boolean => !!path && list.includes(path);

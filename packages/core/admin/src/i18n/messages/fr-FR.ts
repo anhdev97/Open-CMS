@@ -392,6 +392,7 @@ const frFR: Messages = {
       titleLabel: 'Titre',
       pathLabel: 'Chemin',
       pathHelp: 'Commence par « / » ; minuscules, chiffres et tirets.',
+      pathShadowed: "Le site a déjà une route fichier pour ce chemin (app/(site)) : cette page n’y sera pas affichée.",
       submit: 'Créer la page',
       submitting: 'Création…',
     },
@@ -438,6 +439,7 @@ const frFR: Messages = {
     leaveDescription: "Vos dernières modifications n’ont pas pu être enregistrées. Si vous quittez maintenant, elles seront perdues.",
     leaveConfirm: "Quitter sans enregistrer",
     previewNotSaved: "Vos dernières modifications ne sont pas enregistrées : l’aperçu du site montre le dernier brouillon enregistré.",
+    shadowed: "Non affichée sur le site : une route fichier dans app/(site) sert déjà {path}.",
     slotFull: "Cette zone contient au plus {max} blocs.",
     unknownBlock: "Le bloc « {name} » n’est plus dans le projet. Sélectionnez-le et supprimez-le.",
     categories: {

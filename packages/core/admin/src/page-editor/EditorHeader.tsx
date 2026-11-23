@@ -1,9 +1,10 @@
-import { ArrowLeftIcon, ExternalLinkIcon, Redo2Icon, Undo2Icon } from 'lucide-react';
+import { ArrowLeftIcon, ExternalLinkIcon, Redo2Icon, TriangleAlertIcon, Undo2Icon } from 'lucide-react';
 import { createContext, useContext, useEffect } from 'react';
 import { createUsePuck, useGetPuck } from '@puckeditor/core';
 import { Button } from '../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { t } from '../i18n';
+import { isShadowedPath } from '../lib/pages';
 import type { AutosaveState } from './autosave';
 
 const usePuck = createUsePuck();
@@ -15,6 +16,8 @@ export interface HeaderModel {
   /** Shown next to the save state when it is `error`. */
   saveError: string | null;
   readOnly: boolean;
+  /** Paths a file route of the website serves first (`GET /api/admin/pages/shadowed`): warn when the page uses one. */
+  shadowedPaths: readonly string[];
   canPublish: boolean;
   publishing: boolean;
   onBack(): void;
@@ -59,6 +62,12 @@ export function EditorHeader() {
       <div className="flex min-w-0 flex-1 items-baseline gap-2">
         <h1 className="truncate text-sm font-semibold">{title || t('content.untitled')}</h1>
         <span className="truncate font-mono text-xs text-muted-foreground">{path}</span>
+        {isShadowedPath(path, m.shadowedPaths) && (
+          <span role="status" className="inline-flex min-w-0 items-center gap-1 self-center text-xs text-warning">
+            <TriangleAlertIcon aria-hidden="true" className="size-3.5 shrink-0" />
+            <span className="truncate">{t('pageEditor.shadowed', { path: path ?? '' })}</span>
+          </span>
+        )}
       </div>
       <Select value={m.locale} onValueChange={m.onLocaleChange}>
         <SelectTrigger size="sm" aria-label={t('pageEditor.localeLabel')}>

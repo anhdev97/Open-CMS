@@ -45,6 +45,11 @@ describe.skipIf(!built)('blocks output (run `pnpm --filter @opencloudcms/core bu
       require: './dist/blocks-cjs/index.js',
     });
     expect(pkg.exports['.'].default).toBe('./dist/index.js');
+    // `moduleResolution: node` (the generated tsconfig.server.json) ignores `exports`: typesVersions maps the subpaths.
+    expect(pkg.typesVersions).toEqual({
+      '*': { blocks: ['dist/blocks/index.d.ts'], 'blocks/next': ['dist/blocks/next/index.d.ts'] },
+    });
+    for (const p of Object.values(pkg.typesVersions['*']).flat() as string[]) expect(fs.existsSync(path.join(pkgRoot, p)), p).toBe(true);
   });
 
   it('builds ./blocks/next as ESM only, outside the CommonJS build and the isomorphic entry', () => {

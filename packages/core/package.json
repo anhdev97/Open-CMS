@@ -6,6 +6,12 @@
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "blocks": ["dist/blocks/index.d.ts"],
+      "blocks/next": ["dist/blocks/next/index.d.ts"]
+    }
+  },
   "files": [
     "dist"
   ],

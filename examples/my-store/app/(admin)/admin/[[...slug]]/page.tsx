@@ -1,1 +1,1 @@
-export { default } from '@opencloudcms/core/admin';
+export { default } from '../AdminWithBlocks';

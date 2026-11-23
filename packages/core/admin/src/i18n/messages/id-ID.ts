@@ -392,6 +392,7 @@ const idID: Messages = {
       titleLabel: 'Judul',
       pathLabel: 'Path',
       pathHelp: 'Diawali "/"; huruf kecil, angka, dan tanda hubung.',
+      pathShadowed: "Website sudah memiliki rute file di path ini (app/(site)), jadi halaman ini tidak akan ditampilkan di sana.",
       submit: 'Buat halaman',
       submitting: 'Membuat…',
     },
@@ -438,6 +439,7 @@ const idID: Messages = {
     leaveDescription: "Perubahan terakhir Anda gagal disimpan. Jika keluar sekarang, perubahan itu akan hilang.",
     leaveConfirm: "Keluar tanpa menyimpan",
     previewNotSaved: "Perubahan terakhir Anda belum tersimpan: pratinjau situs menampilkan draf terakhir yang tersimpan.",
+    shadowed: "Tidak ditampilkan di website: rute file di app/(site) sudah melayani {path}.",
     slotFull: "Area ini memuat paling banyak {max} blok.",
     unknownBlock: "Blok \"{name}\" sudah tidak ada di proyek. Pilih lalu hapus blok ini.",
     categories: {

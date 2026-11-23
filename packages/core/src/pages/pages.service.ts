@@ -5,6 +5,7 @@ import { EntriesService } from '../entries.service';
 import { OPENCLOUDCMS_DB, OPENCLOUDCMS_OPTIONS, type ResolvedOpenCloudCmsOptions } from '../options';
 import { ContentRegistry } from '../registry.service';
 import { unknownBlocks } from './page.hooks';
+import { shadowedPagePaths } from './shadowed';
 
 export interface BlocksCheckItem {
   documentId: string;
@@ -16,6 +17,7 @@ export interface BlocksCheckItem {
 @Injectable()
 export class PagesService implements OnModuleInit {
   private readonly logger = new Logger('OpenCloudCms');
+  private shadowedPaths: string[] = [];
 
   constructor(
     @Inject(EntriesService) private readonly entries: EntriesService,
@@ -25,6 +27,9 @@ export class PagesService implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
+    const web = this.options.web;
+    // Computed once at boot: file routes only change with a code change (and a restart).
+    this.shadowedPaths = web?.enabled === false ? [] : shadowedPagePaths(web?.dir ?? process.cwd());
     if (!this.options.pages?.blocks) {
       this.logger.warn('pages.blocks is not set: publishing pages does not check for unknown blocks. Pass the project block manifest as `pages: { blocks }` to OpenCloudCmsModule.forRoot.');
     }
@@ -39,6 +44,11 @@ export class PagesService implements OnModuleInit {
     const hit = data.find((d) => d.locale === loc);
     if (!hit) throw new NotFoundException(`No page at ${path}`);
     return { data: hit };
+  }
+
+  /** Static paths of the website's own file routes (`app/(site)/**\/page.*`): Next serves them before any page built here. */
+  shadowed(): { data: string[] } {
+    return { data: [...this.shadowedPaths] };
   }
 
   /** Pages (drafts and published, per locale) that use blocks missing from the manifest. */

@@ -21,7 +21,17 @@ import { useFormat } from '../i18n/hooks';
 import { api } from '../lib/api';
 import { Link, useAdminNavigate } from '../lib/nav';
 import { pickEditorLocale } from '../lib/locales';
-import { createPage, deletePage, duplicatePage, listPages, pageErrorMessageKey, pageStatus, type PageEntry } from '../lib/pages';
+import {
+  createPage,
+  deletePage,
+  duplicatePage,
+  getShadowedPaths,
+  isShadowedPath,
+  listPages,
+  pageErrorMessageKey,
+  pageStatus,
+  type PageEntry,
+} from '../lib/pages';
 import type { Meta } from '../lib/types';
 
 function CreatePageDialog({ locale, onOpenChange, onCreated }: { locale: string; onOpenChange: (open: boolean) => void; onCreated: (p: PageEntry) => void }) {
@@ -31,6 +41,15 @@ function CreatePageDialog({ locale, onOpenChange, onCreated }: { locale: string;
   const [pathError, setPathError] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [busy, setBusy] = useState(false);
+  const [shadowed, setShadowed] = useState<string[]>([]);
+  useEffect(() => {
+    let live = true;
+    void getShadowedPaths().then((l) => live && setShadowed(l));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const shadowedWarning = !pathError && isShadowedPath(path, shadowed);
 
   const onTitle = (v: string) => {
     setTitle(v);
@@ -88,6 +107,11 @@ function CreatePageDialog({ locale, onOpenChange, onCreated }: { locale: string;
             <p id="page-path-help" role={pathError ? 'alert' : undefined} className={pathError ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>
               {pathError ?? t('pages.create.pathHelp')}
             </p>
+            {shadowedWarning && (
+              <p role="status" className="text-sm text-warning">
+                {t('pages.create.pathShadowed')}
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
