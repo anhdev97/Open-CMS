@@ -9,7 +9,7 @@ export const CORE_API_IDS: readonly string[] = [PAGE_API_ID];
 export const isCoreApiId = (apiId: string): boolean => CORE_API_IDS.includes(apiId);
 
 /** First path segments that belong to the CMS itself (compared case-insensitively). */
-export const RESERVED_PATH_SEGMENTS: readonly string[] = ['admin', 'api', '__opencloudcms', '_next'];
+export const RESERVED_PATH_SEGMENTS: readonly string[] = ['admin', 'api', 'oauth2', '__opencloudcms', '_next'];
 
 const SEGMENT_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 

@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { collectBlockNames, PAGE_API_ID, slugToPath, validatePagePath, type StoredPageContent } from '../src';
 
 describe('validatePagePath', () => {
-  it.each(['/', '/about', '/a/b-c', '/adminx'])('accepts %s', (p) => {
+  it.each(['/', '/about', '/a/b-c', '/adminx', '/oauth2x'])('accepts %s', (p) => {
     expect(validatePagePath(p)).toEqual({ ok: true });
   });
   it.each(['/About', '/a/', 'a', '/a//b', '/a_b', ''])('rejects %s as invalid_path', (p) => {
     expect(validatePagePath(p)).toMatchObject({ ok: false, code: 'invalid_path' });
   });
-  it.each(['/admin', '/Admin/x', '/api', '/__opencloudcms/x', '/_next/x'])('rejects %s as path_reserved', (p) => {
+  it.each(['/admin', '/Admin/x', '/api', '/__opencloudcms/x', '/_next/x', '/oauth2', '/OAuth2/x'])('rejects %s as path_reserved', (p) => {
     expect(validatePagePath(p)).toMatchObject({ ok: false, code: 'path_reserved' });
   });
 });

@@ -94,11 +94,22 @@ describe('core-owned opencloudcmsPage type', () => {
     const a = await create({ title: 'A', path: '/dup' });
     expect(a.status).toBe(201);
     const b = await create({ title: 'B', path: '/dup' });
-    expect(b.status).toBeGreaterThanOrEqual(400);
+    expect(b.status).toBe(500);
+    expect(b.body.error.code).toBe('internal_error');
     const dupDraft = await create({ title: 'B', path: '/dup' }, 'vi-VN');
     expect(dupDraft.status).toBe(201);
-    // unique index is (locale, status, path): published rows collide per locale too
-    expect(b.status).not.toBe(201);
+  });
+
+  it('a draft may reuse the path of a published page in the same locale (unique index is per status)', async () => {
+    const a = await create({ title: 'X', path: '/x' });
+    expect((await call(`${API}/${a.body.data.documentId}/publish`, { method: 'POST' })).status).toBe(200);
+    // A's own draft row still holds /x, so a new draft collides with it, not with the published row.
+    const b = await create({ title: 'X2', path: '/x' });
+    expect(b.status).toBe(500);
+    // Free the draft path of A: the published row alone no longer blocks a new draft.
+    expect((await call(`${API}/${a.body.data.documentId}`, { method: 'PUT', body: JSON.stringify({ path: '/x-old' }) })).status).toBe(200);
+    const c = await create({ title: 'X3', path: '/x' });
+    expect(c.status).toBe(201);
   });
 
   it('rejects reserved and malformed paths with 422', async () => {
