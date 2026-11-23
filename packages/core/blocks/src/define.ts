@@ -1,4 +1,4 @@
-import { validateLocalizedText, type BlockManifest } from '@opencloudcms/schema';
+import { validateComposedSpec, validateLocalizedText, type BlockManifest } from '@opencloudcms/schema';
 import { optionValue } from './fields';
 import { COLOR_TOKENS, SPACING_TOKENS, type BlockDefinition, type BlockField, type BlockRegistry } from './types';
 
@@ -14,6 +14,8 @@ export function defineBlock<F extends Record<string, BlockField>>(d: BlockDefini
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const show = (v: unknown) => JSON.stringify(v);
+/** `['tree', 'children', 0, 'el']` → `tree.children.0.el`. */
+export const formatIssuePath = (path: readonly (string | number)[]) => (path.length ? path.join('.') : '(spec)');
 
 function validateLabel(v: unknown, where: string): string[] {
   if (v === undefined) return [];
@@ -84,6 +86,16 @@ function validateField(f: unknown, block: string, path: string, siblings: Record
       if (f.kind === 'entries' && f.limit !== undefined && !(Number.isInteger(f.limit) && (f.limit as number) > 0)) {
         issues.push(`${where}: limit must be a positive integer`);
       }
+      if (f.kind === 'entries') {
+        if (f.baseFilter !== undefined && (!isObj(f.baseFilter) || !Object.values(f.baseFilter).every((v) => typeof v === 'string'))) {
+          issues.push(`${where}: baseFilter must map field names to strings`);
+        }
+        if (f.defaultSort !== undefined && (typeof f.defaultSort !== 'string' || !/^[^:]+:(asc|desc)$/.test(f.defaultSort))) {
+          issues.push(`${where}: defaultSort must be "field:asc" or "field:desc"`);
+        }
+        if (f.lockLimit !== undefined && typeof f.lockLimit !== 'boolean') issues.push(`${where}: lockLimit must be a boolean`);
+        if (d !== undefined && !(isObj(d) && (d.mode === 'pick' || d.mode === 'query'))) bad("a { mode: 'pick' | 'query' } value");
+      }
       break;
     case 'list':
       if (!isObj(f.fields)) issues.push(`${where}: list fields must be an object`);
@@ -127,6 +139,10 @@ function validateBlock(d: unknown, index: number): string[] {
   const version = d.version ?? 1;
   if (!Number.isInteger(version) || (version as number) < 1) issues.push(`${where}: version must be a positive integer`);
   if (typeof d.render !== 'function') issues.push(`${where}: render must be a function`);
+  if (d.composed !== undefined && d.composed !== true) issues.push(`${where}: composed must be true when set`);
+  if (d.composed === true && 'spec' in d) {
+    for (const i of validateComposedSpec(d.spec)) issues.push(`${where}: ${formatIssuePath(i.path)}: ${i.message}`);
+  }
   if (!isObj(d.fields)) issues.push(`${where}: fields must be an object`);
   else issues.push(...validateFields(d.fields, where, ''));
   if (d.migrate !== undefined) {

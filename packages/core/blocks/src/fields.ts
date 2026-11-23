@@ -81,7 +81,7 @@ export function fieldDefault(f: BlockField): unknown {
     case 'entry':
       return null;
     case 'entries':
-      return { mode: 'pick', ids: [] };
+      return f.default ?? { mode: 'pick', ids: [] };
     case 'list':
       return f.default ?? [];
     case 'slot':

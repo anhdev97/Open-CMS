@@ -84,6 +84,17 @@ export interface EntriesBlockField extends FieldBase {
   limit?: number;
   sortable?: boolean;
   filterable?: boolean;
+  /**
+   * Fixed equality filters, enforced by `resolvePage` and never stored: merged over the stored query filter (base wins
+   * on the same field); picked entries that do not match are dropped.
+   */
+  baseFilter?: Record<string, string>;
+  /** `field:asc|desc`. Used when the stored query has no sort, and always when `sortable` is not true. */
+  defaultSort?: string;
+  /** `resolvePage` uses `limit` whatever the stored value (and caps picks to it). */
+  lockLimit?: boolean;
+  /** Value when the block is inserted. Default `{ mode: 'pick', ids: [] }`. */
+  default?: StoredEntries;
 }
 export interface ListBlockField<S extends Record<string, BlockField> = Record<string, BlockField>> extends FieldBase {
   kind: 'list';
@@ -181,6 +192,11 @@ export interface BlockDefinition<F extends Record<string, BlockField> = Record<s
   fields: F;
   migrate?: BlockMigration[];
   render(props: ResolvedProps<F>): ReactNode;
+  /**
+   * Set by `defineComposedBlock`. `resolvePage` stamps the reserved prop `_locale` on its items and the Puck config
+   * passes `_locale`/`_editor` to `render` (never stored: `writePageContent` drops undeclared props).
+   */
+  composed?: true;
 }
 
 export interface BlockRegistry {
