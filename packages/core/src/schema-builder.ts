@@ -9,6 +9,7 @@ import {
   Body,
   Controller,
   Delete,
+  ConflictException,
   ForbiddenException,
   Get,
   HttpCode,
@@ -22,7 +23,7 @@ import { RequirePermission } from '@opencloudcms/oauth2';
 import { captureProjectFiles, createMigration, DiffError, previewChange, restoreProjectFiles, writeSchemaChange } from '@opencloudcms/codegen';
 import { migrateUp } from '@opencloudcms/db';
 import type { ContentTypeDefinition } from '@opencloudcms/schema';
-import { FIELD_KINDS, SchemaValidationError, newId } from '@opencloudcms/schema';
+import { FIELD_KINDS, SchemaValidationError, isCoreApiId, newId } from '@opencloudcms/schema';
 import { OPENCLOUDCMS_DB, OPENCLOUDCMS_OPTIONS, type ResolvedOpenCloudCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
 import { SchemaWriteQueue } from './schema-write-queue';
@@ -49,7 +50,18 @@ export class SchemaBuilderService {
     }
   }
 
+  /** Core-owned types (the page type) cannot be created, changed or removed through the Builder. */
+  private assertNotCore(change: { upsert?: ContentTypeDefinition; removeId?: string }) {
+    const coreIds = this.registry.all().filter((d) => this.registry.isCore(d.apiId)).map((d) => d.id);
+    const up = change.upsert;
+    const hit = (up && (isCoreApiId(up.apiId) || coreIds.includes(up.id))) || (change.removeId && coreIds.includes(change.removeId));
+    if (hit) {
+      throw new ConflictException({ code: 'core_type', message: 'This content type is owned by OpenCloudCMS and cannot be changed in the Builder' });
+    }
+  }
+
   async preview(change: { upsert?: ContentTypeDefinition; removeId?: string }) {
+    this.assertNotCore(change);
     try {
       const r = await previewChange(this.options.config, change);
       return { changed: r.diff.changed, summary: r.plan.summary, warnings: r.plan.warnings, sql: r.sql };
@@ -60,6 +72,7 @@ export class SchemaBuilderService {
 
   apply(change: { upsert?: ContentTypeDefinition; removeId?: string }) {
     this.assertEditable();
+    this.assertNotCore(change);
     return this.queue.run(async () => {
       const config = this.options.config;
       const before = captureProjectFiles(config);
@@ -120,7 +133,7 @@ export class SchemaController {
   /** Definitions drive the entry forms of every role, so reads need a session only; changes need settings.content-types. */
   @Get('content-types')
   list() {
-    return { data: this.registry.all() };
+    return { data: this.registry.list() };
   }
 
   @Get('content-types/:apiId')

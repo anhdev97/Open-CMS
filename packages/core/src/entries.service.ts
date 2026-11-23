@@ -112,7 +112,14 @@ export class EntriesService {
   }
 
   /** `user` absent = trusted server-side call: the In review lock (B7) does not apply. */
-  async update(apiId: string, documentId: string, body: unknown, locale?: string, user?: Pick<RequestUser, 'permissions'>) {
+  async update(
+    apiId: string,
+    documentId: string,
+    body: unknown,
+    locale?: string,
+    user?: Pick<RequestUser, 'permissions'>,
+    opts?: { expectedUpdatedAt?: string },
+  ) {
     const def = this.registry.get(apiId);
     const loc = this.locale(locale);
     let data = this.validate(def, body, 'draft');
@@ -120,7 +127,7 @@ export class EntriesService {
       const r = await h.beforeUpdate?.(data, { ...this.ctx(apiId, loc), documentId });
       if (r && typeof r === 'object') data = r as Row;
     }
-    await this.repo.update(def, documentId, data, loc, (trx) => this.workflow.guardUpdate(trx, def, documentId, user));
+    await this.repo.update(def, documentId, data, loc, (trx) => this.workflow.guardUpdate(trx, def, documentId, user), opts?.expectedUpdatedAt);
     return this.get(apiId, documentId, 'draft', loc);
   }
 

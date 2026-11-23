@@ -14,7 +14,7 @@ import { assertValidSchema, normalizeDefinition } from '@opencloudcms/schema';
 import { generateCode, staleGeneratedFiles, writeGeneratedFiles } from './codegen';
 import { compileStatement } from './ddl';
 import { diffSchemas, type DiffResult } from './diff';
-import { loadContentGroups, loadDefinitions, type LoadedDefinition } from './loader';
+import { assertNoCoreApiIds, loadContentGroups, loadDefinitions, type LoadedDefinition } from './loader';
 import { migrationStamp, renderMigrationFile, slugifyMigrationName, suggestMigrationName } from './migration-file';
 import { planMigration, type MigrationPlan } from './plan';
 import { printSchemaFile } from './printer';
@@ -53,6 +53,7 @@ export async function computePlan(
   opts: { definitions?: ContentTypeDefinition[]; now?: Date } = {},
 ): Promise<PlanResult> {
   const definitions = opts.definitions ?? (await loadDefinitions(config)).map((l) => l.def);
+  assertNoCoreApiIds(definitions);
   assertValidSchema(definitions, await loadContentGroups(config));
   const snapshot = readSnapshot(config.migrationsDir);
   const diff = diffSchemas(snapshot.contentTypes, definitions);

@@ -1,19 +1,25 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { ContentGroupDefinition, ContentTypeDefinition } from '@opencloudcms/schema';
-import { buildEntryValidator } from '@opencloudcms/schema';
+import { buildEntryValidator, PAGE_API_ID } from '@opencloudcms/schema';
+import { pageHooks } from './pages/page.hooks';
+import { pageType } from './pages/page.type';
 import { OPENCLOUDCMS_OPTIONS, type EntryHooks, type ResolvedOpenCloudCmsOptions } from './options';
 
 /** In-memory registry of content types. Reloaded after the builder applies a migration. */
 @Injectable()
 export class ContentRegistry {
   private byApiId = new Map<string, ContentTypeDefinition>();
+  /** Core-owned types: survive `reload`, never written to project schema files or snapshots. */
+  private coreById = new Map<string, { def: ContentTypeDefinition; hidden: boolean; editable: boolean }>();
   private contentGroups: ContentGroupDefinition[] = [];
   private validators = new Map<string, ReturnType<typeof buildEntryValidator>>();
   private hooks = new Map<string, EntryHooks[]>();
 
   constructor(@Inject(OPENCLOUDCMS_OPTIONS) options: ResolvedOpenCloudCmsOptions) {
+    this.registerCore(pageType, { hidden: true, editable: false });
     this.reload(options.contentTypes);
     this.reloadGroups(options.contentGroups ?? []);
+    this.hooks.set(PAGE_API_ID, [pageHooks]);
     for (const h of options.hooks) this.hooks.set(h.apiId, [...(this.hooks.get(h.apiId) ?? []), h.hooks]);
   }
 
@@ -30,12 +36,28 @@ export class ContentRegistry {
     return [...this.contentGroups];
   }
 
+  registerCore(def: ContentTypeDefinition, opts: { hidden: boolean; editable: boolean }): void {
+    this.coreById.set(def.apiId, { def, ...opts });
+    this.validators.clear();
+  }
+
+  isCore(apiId: string): boolean {
+    return this.coreById.has(apiId);
+  }
+
+  /** Every type, core ones included (internal use: locale usage, review queue, group checks). */
   all(): ContentTypeDefinition[] {
-    return [...this.byApiId.values()];
+    return [...[...this.coreById.values()].map((c) => c.def), ...this.byApiId.values()];
+  }
+
+  /** Types shown to the Builder and the admin meta; hidden core types only with `includeHidden`. */
+  list(opts: { includeHidden?: boolean } = {}): ContentTypeDefinition[] {
+    const core = [...this.coreById.values()].filter((c) => opts.includeHidden || !c.hidden).map((c) => c.def);
+    return [...core, ...this.byApiId.values()];
   }
 
   get(apiId: string): ContentTypeDefinition {
-    const def = this.byApiId.get(apiId);
+    const def = this.coreById.get(apiId)?.def ?? this.byApiId.get(apiId);
     if (!def) throw new NotFoundException(`Unknown content type "${apiId}"`);
     return def;
   }

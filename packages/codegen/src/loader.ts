@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createJiti } from 'jiti';
 import type { ContentGroupDefinition, ContentTypeDefinition, OpenCloudCmsConfig, ResolvedConfig } from '@opencloudcms/schema';
-import { CONFIG_FILE_NAMES, normalizeDefinition, resolveConfig } from '@opencloudcms/schema';
+import { CONFIG_FILE_NAMES, CORE_API_IDS, normalizeDefinition, resolveConfig } from '@opencloudcms/schema';
 
 function freshJiti(root: string) {
   // No caches: the admin UI rewrites schema files while the process is running.
@@ -59,6 +59,13 @@ function walk(dir: string): string[] {
   });
 }
 
+/** Core-owned apiIds (the page type) cannot be redefined by a project. */
+export function assertNoCoreApiIds(defs: Pick<ContentTypeDefinition, 'apiId'>[]): void {
+  for (const d of defs) {
+    if (CORE_API_IDS.includes(d.apiId)) throw new Error(`apiId "${d.apiId}" is reserved by OpenCloudCMS`);
+  }
+}
+
 export async function loadDefinitions(config: ResolvedConfig): Promise<LoadedDefinition[]> {
   const jiti = freshJiti(config.root);
   const out: LoadedDefinition[] = [];
@@ -67,7 +74,9 @@ export async function loadDefinitions(config: ResolvedConfig): Promise<LoadedDef
     if (!mod || typeof mod !== 'object' || !('apiId' in mod)) {
       throw new Error(`${path.relative(config.root, file)} must \`export default defineContentType({...})\``);
     }
-    out.push({ def: normalizeDefinition(mod), file });
+    const def = normalizeDefinition(mod);
+    assertNoCoreApiIds([def]);
+    out.push({ def, file });
   }
   return out;
 }

@@ -165,6 +165,51 @@ export const coreMigrations: Record<string, Migration> = {
       await db.schema.dropTable(SYSTEM_TABLES.assetFolders).execute();
     },
   },
+  '0006_pages': {
+    /**
+     * Tables of the core-owned `opencloudcmsPage` content type. This is exactly what the codegen DDL produces for
+     * packages/core/src/pages/page.type.ts (guarded by the drift test in core's pages-type integration test).
+     */
+    async up(db) {
+      await db.schema
+        .createTable('ct_opencloudcms_page')
+        .addColumn('id', sql`uuid`, (col) => col.notNull())
+        .addColumn('document_id', sql`uuid`, (col) => col.notNull())
+        .addColumn('status', sql`varchar(16)`, (col) => col.notNull())
+        .addColumn('created_at', sql`timestamptz`, (col) => col.notNull().defaultTo(sql`now()`))
+        .addColumn('updated_at', sql`timestamptz`, (col) => col.notNull().defaultTo(sql`now()`))
+        .addColumn('published_at', sql`timestamptz`)
+        .addPrimaryKeyConstraint('ct_opencloudcms_page_pkey', ['id'])
+        .execute();
+      await db.schema
+        .createIndex('ct_opencloudcms_page_document_status_uq')
+        .on('ct_opencloudcms_page')
+        .columns(['document_id', 'status'])
+        .unique()
+        .execute();
+      await db.schema
+        .createTable('ct_opencloudcms_page_l10n')
+        .addColumn('entry_id', sql`uuid`, (col) => col.notNull().references('ct_opencloudcms_page.id').onDelete('cascade'))
+        .addColumn('locale', sql`varchar(16)`, (col) => col.notNull())
+        .addColumn('status', sql`varchar(16)`, (col) => col.notNull())
+        .addColumn('title', sql`varchar(255)`)
+        .addColumn('path', sql`varchar(255)`)
+        .addColumn('seo', sql`jsonb`)
+        .addColumn('content', sql`jsonb`)
+        .addPrimaryKeyConstraint('ct_opencloudcms_page_l10n_pkey', ['entry_id', 'locale'])
+        .execute();
+      await db.schema
+        .createIndex('ct_opencloudcms_page_l10n_path_uq')
+        .on('ct_opencloudcms_page_l10n')
+        .columns(['locale', 'status', 'path'])
+        .unique()
+        .execute();
+    },
+    async down(db) {
+      await db.schema.dropTable('ct_opencloudcms_page_l10n').execute();
+      await db.schema.dropTable('ct_opencloudcms_page').execute();
+    },
+  },
 };
 
 /* ----------------------------- project ---------------------------- */

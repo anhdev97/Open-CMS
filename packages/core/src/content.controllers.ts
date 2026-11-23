@@ -7,8 +7,10 @@ import {
   Inject,
   Param,
   ParseUUIDPipe,
+  Headers,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { CurrentUser, RequirePermission, type RequestUser } from '@opencloudcms/oauth2';
@@ -33,6 +35,12 @@ export function parseListQuery(query: Record<string, unknown>): ListParams {
     offset: query.offset as string | undefined,
     filter,
   };
+}
+
+/** `If-Match: "<iso>"` or `<iso>` -> the ISO string; absent header = no optimistic check. */
+function ifMatchValue(header: string | undefined): string | undefined {
+  const v = header?.trim().replace(/^W\//, '').replace(/^"(.*)"$/, '$1');
+  return v ? v : undefined;
 }
 
 /** Storefront / delivery API: published content only, no auth. */
@@ -97,8 +105,23 @@ export class AdminContentController {
     @Body() body: unknown,
     @CurrentUser() user: RequestUser,
     @Query('locale') locale?: string,
+    @Headers('if-match') ifMatch?: string,
   ) {
-    return this.entries.update(apiId, documentId, body, locale, user);
+    return this.entries.update(apiId, documentId, body, locale, user, { expectedUpdatedAt: ifMatchValue(ifMatch) });
+  }
+
+  /** Same as PATCH (the page builder saves with PUT); `If-Match: <updatedAt ISO>` enables the stale-draft check. */
+  @RequirePermission('content.update')
+  @Put(':apiId/:documentId')
+  replace(
+    @Param('apiId') apiId: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Body() body: unknown,
+    @CurrentUser() user: RequestUser,
+    @Query('locale') locale?: string,
+    @Headers('if-match') ifMatch?: string,
+  ) {
+    return this.entries.update(apiId, documentId, body, locale, user, { expectedUpdatedAt: ifMatchValue(ifMatch) });
   }
 
   @Post(':apiId/:documentId/publish')

@@ -4,7 +4,7 @@
  * the migrations, so runtime and schema can't drift apart.
  */
 import { randomUUID } from 'node:crypto';
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { sql, type Kysely } from 'kysely';
 import type { ContentTypeDefinition, FieldDefinition } from '@opencloudcms/schema';
 import { fieldColumns, fieldStorage, isMultiRelation, l10nTable, mainTable, SYSTEM_TABLES } from '@opencloudcms/schema';
@@ -124,12 +124,30 @@ export class EntryRepository {
     return documentId;
   }
 
-  async update(def: ContentTypeDefinition, documentId: string, data: Row, locale: string, inTrx?: InTransaction): Promise<void> {
+  /** `expectedUpdatedAt` (ISO): optimistic check against the draft row, 409 `stale_draft` on mismatch. */
+  async update(
+    def: ContentTypeDefinition,
+    documentId: string,
+    data: Row,
+    locale: string,
+    inTrx?: InTransaction,
+    expectedUpdatedAt?: string,
+  ): Promise<void> {
     const { main, l10n, rels } = this.split(def, data);
     await this.db.transaction().execute(async (trx) => {
       await inTrx?.(trx);
-      const id = await this.findRowId(trx, def, documentId, 'draft');
-      if (!id) throw new NotFoundException(`${def.apiId} ${documentId} not found`);
+      const current = await trx
+        .selectFrom(mainTable(def))
+        .select(['id', 'updated_at'])
+        .where('document_id', '=', documentId)
+        .where('status', '=', 'draft')
+        .forUpdate()
+        .executeTakeFirst();
+      if (!current) throw new NotFoundException(`${def.apiId} ${documentId} not found`);
+      const id = current.id as string;
+      if (expectedUpdatedAt !== undefined && new Date(expectedUpdatedAt).getTime() !== new Date(current.updated_at as Date).getTime()) {
+        throw new ConflictException({ code: 'stale_draft', message: 'The draft was changed since it was loaded', updatedAt: iso(current.updated_at) });
+      }
       await trx.updateTable(mainTable(def)).set({ ...main, updated_at: sql`now()` }).where('id', '=', id).execute();
       if (Object.keys(l10n).length) {
         await trx

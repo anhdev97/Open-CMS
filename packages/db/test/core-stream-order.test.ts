@@ -38,13 +38,14 @@ describe('core migration stream with contributed sources', () => {
       '0003_workflow',
       '0004_assets_storage',
       '0005_asset_folders',
+      '0006_pages',
       'oauth2_0001_init',
     ]);
 
     let ran = false;
-    registerCoreMigrations({ '0006_future_core': { async up() { ran = true; }, async down() {} } });
+    registerCoreMigrations({ '0007_future_core': { async up() { ran = true; }, async down() {} } });
     const second = await migrateUp(db, NO_PROJECT_MIGRATIONS);
-    expect(second.map((r) => [r.name, r.status])).toEqual([['0006_future_core', 'Success']]);
+    expect(second.map((r) => [r.name, r.status])).toEqual([['0007_future_core', 'Success']]);
     expect(ran).toBe(true);
   });
 
