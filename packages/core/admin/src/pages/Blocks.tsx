@@ -1,5 +1,5 @@
 import { BlocksIcon, CheckIcon, CopyIcon, FileCodeIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { localizedText } from '@opencloudcms/schema';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -21,6 +21,7 @@ import {
   COMPOSED_INDEX_SPREAD,
   deleteBlock,
   ejectBlock,
+  ejectInstructions,
   listBlocks,
   type BlockListItem,
   type BlocksResponse,
@@ -32,6 +33,8 @@ type Outcome = { kind: 'deleted'; name: string; files: string[] } | ({ kind: 'ej
 
 function CopyLine({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
   return (
     <div className="flex items-start gap-2 rounded-md border bg-muted/40 p-2">
       <code className="min-w-0 flex-1 break-all whitespace-pre-wrap font-mono text-sm">{text}</code>
@@ -41,10 +44,14 @@ function CopyLine({ text, label }: { text: string; label: string }) {
         size="icon-sm"
         aria-label={label}
         onClick={() => {
-          void navigator.clipboard?.writeText(text).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-          });
+          (navigator.clipboard?.writeText(text) ?? Promise.reject(new Error('no clipboard'))).then(
+            () => {
+              setCopied(true);
+              clearTimeout(timer.current);
+              timer.current = setTimeout(() => setCopied(false), 2000);
+            },
+            () => toast.error(t('blocks.copyFailed')),
+          );
         }}
       >
         {copied ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}
@@ -150,7 +157,8 @@ export function Blocks() {
             <Alert variant="warning">
               <AlertDescription className="space-y-2">
                 <p className="font-medium">{t('blocks.ejectedAddLine')}</p>
-                <CopyLine text={outcome.importLine} label={t('blocks.copyImport')} />
+                <CopyLine text={ejectInstructions(outcome.name, outcome.importLine).importLine} label={t('blocks.copyImport')} />
+                <CopyLine text={ejectInstructions(outcome.name, outcome.importLine).listEntry} label={t('blocks.copyListEntry')} />
                 <p>{t('blocks.ejectedRestartNote', { name: outcome.name })}</p>
               </AlertDescription>
             </Alert>

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const api = vi.fn();
 vi.mock('../../admin/src/lib/api', () => ({ api: (...a: unknown[]) => api(...a) }));
 
-import { blockActions, blockErrorMessageKey, deleteBlock, ejectBlock, getBlock, listBlocks, saveBlock, COMPOSED_INDEX_IMPORT, COMPOSED_INDEX_SPREAD } from '../../admin/src/lib/blocks';
+import { blockActions, blockErrorMessageKey, deleteBlock, ejectBlock, getBlock, listBlocks, saveBlock, COMPOSED_INDEX_IMPORT, ejectInstructions, COMPOSED_INDEX_SPREAD } from '../../admin/src/lib/blocks';
 import { ApiError } from '../../admin/src/lib/api-error';
 
 beforeEach(() => api.mockReset());
@@ -74,5 +74,14 @@ describe('composed index lines', () => {
   it('are exact', () => {
     expect(COMPOSED_INDEX_IMPORT).toBe("import { composedBlocks } from './composed';");
     expect(COMPOSED_INDEX_SPREAD).toBe('...composedBlocks');
+  });
+});
+
+describe('ejectInstructions', () => {
+  it('gives the import line and the defineBlocks list entry', () => {
+    expect(ejectInstructions('ProductCard', "import ProductCard from './product-card/product-card.block';")).toEqual({
+      importLine: "import ProductCard from './product-card/product-card.block';",
+      listEntry: 'ProductCard,',
+    });
   });
 });

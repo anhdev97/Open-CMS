@@ -89,3 +89,8 @@ export function blockErrorMessageKey(e: unknown): string | null {
   if (!(e instanceof ApiError)) return null;
   return Object.hasOwn(ERROR_KEYS, e.code) ? ERROR_KEYS[e.code]! : null;
 }
+
+/** The two lines to add to `src/blocks/index.ts` after an eject: the import and the entry for the `defineBlocks` list. */
+export function ejectInstructions(name: string, importLine: string): { importLine: string; listEntry: string } {
+  return { importLine, listEntry: `${name},` };
+}
