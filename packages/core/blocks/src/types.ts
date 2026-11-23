@@ -77,7 +77,10 @@ export interface EntryBlockField extends FieldBase {
 }
 export interface EntriesBlockField extends FieldBase {
   kind: 'entries';
+  /** Content type api id. Pass `''` together with `apiIdFrom` when the editor chooses the type per block. */
   apiId: string;
+  /** Name of a sibling text prop that holds the api id at render/resolve time (overrides `apiId`). */
+  apiIdFrom?: string;
   limit?: number;
   sortable?: boolean;
   filterable?: boolean;

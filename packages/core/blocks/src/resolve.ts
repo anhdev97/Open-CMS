@@ -44,7 +44,7 @@ const filterKey = (q: QuerySpec) => JSON.stringify([q.apiId, q.filter ? Object.e
 function mapFieldValues(
   fields: Record<string, BlockField>,
   props: Record<string, unknown>,
-  fn: (field: DataField, value: unknown) => unknown,
+  fn: (field: DataField, value: unknown, apiId: string | null) => unknown,
 ): Record<string, unknown> {
   const out = { ...props };
   for (const [k, f] of Object.entries(fields)) {
@@ -53,7 +53,8 @@ function mapFieldValues(
     if (f.kind === 'list') {
       if (Array.isArray(v)) out[k] = v.map((row) => (isObj(row) ? mapFieldValues(f.fields, row, fn) : row));
     } else if (f.kind === 'entry' || f.kind === 'entries' || f.kind === 'link' || f.kind === 'image') {
-      out[k] = fn(f, v);
+      const apiId = f.kind === 'entries' && f.apiIdFrom ? str(props[f.apiIdFrom]) : 'apiId' in f ? str(f.apiId) : null;
+      out[k] = fn(f, v, apiId);
     }
   }
   return out;
@@ -76,7 +77,7 @@ export async function resolvePage(
   const queries = new Map<string, QuerySpec>();
   const pageIds = new Set<string>();
 
-  const walk = (fn: (field: DataField, value: unknown) => unknown): ItemFn => {
+  const walk = (fn: (field: DataField, value: unknown, apiId: string | null) => unknown): ItemFn => {
     const visit: ItemFn = (item) => {
       if (!isItem(item)) return item;
       const def = r.get(item.type);
@@ -93,12 +94,12 @@ export async function resolvePage(
   };
 
   // Pass 1: collect.
-  const collect = walk((field, v) => {
-    if (field.kind === 'entry' && isObj(v) && str(v.documentId)) idSet(field.apiId).add(v.documentId as string);
-    else if (field.kind === 'entries' && isObj(v)) {
-      if (v.mode === 'pick' && Array.isArray(v.ids)) for (const id of v.ids) if (str(id)) idSet(field.apiId).add(id);
+  const collect = walk((field, v, apiId) => {
+    if (field.kind === 'entry' && apiId && isObj(v) && str(v.documentId)) idSet(apiId).add(v.documentId as string);
+    else if (field.kind === 'entries' && apiId && isObj(v)) {
+      if (v.mode === 'pick' && Array.isArray(v.ids)) for (const id of v.ids) if (str(id)) idSet(apiId).add(id);
       if (v.mode === 'query') {
-        const q = querySpec(field.apiId, v);
+        const q = querySpec(apiId, v);
         queries.set(queryKey(q), q);
       }
     } else if (field.kind === 'link' && isObj(v) && v.kind === 'page' && str(v.documentId)) pageIds.add(v.documentId as string);
@@ -143,20 +144,20 @@ export async function resolvePage(
   ]);
 
   // Pass 2: substitute.
-  const substitute = walk((field, v) => {
+  const substitute = walk((field, v, apiId) => {
     switch (field.kind) {
       case 'entry': {
         const id = isObj(v) ? str(v.documentId) : null;
-        return (id && byId.get(field.apiId)?.get(id)) || null;
+        return (id && apiId && byId.get(apiId)?.get(id)) || null;
       }
       case 'entries': {
-        if (!isObj(v)) return [];
+        if (!isObj(v) || !apiId) return [];
         if (v.mode === 'pick') {
-          const map = byId.get(field.apiId);
+          const map = byId.get(apiId);
           const ordered = Array.isArray(v.ids) ? v.ids : [];
           return ordered.flatMap((id) => (typeof id === 'string' && map?.get(id)) || []);
         }
-        if (v.mode === 'query') return queried.get(queryKey(querySpec(field.apiId, v))) ?? [];
+        if (v.mode === 'query') return queried.get(queryKey(querySpec(apiId, v))) ?? [];
         return [];
       }
       case 'link': {

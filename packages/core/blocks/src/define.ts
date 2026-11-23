@@ -73,7 +73,7 @@ function validateField(f: unknown, block: string, path: string): string[] {
       break;
     case 'entry':
     case 'entries':
-      if (typeof f.apiId !== 'string' || !f.apiId) issues.push(`${where}: apiId must be a non-empty string`);
+      if (typeof f.apiId !== 'string' || (!f.apiId && !(f.kind === 'entries' && f.apiIdFrom))) issues.push(`${where}: apiId must be a non-empty string`);
       if (f.kind === 'entries' && f.limit !== undefined && !(Number.isInteger(f.limit) && (f.limit as number) > 0)) {
         issues.push(`${where}: limit must be a positive integer`);
       }
