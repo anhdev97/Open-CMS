@@ -265,7 +265,30 @@ conflict check per page document, not per locale: two people editing different l
 conflict.
 Until a page is published at `/`, the home shows a welcome page. Field kinds, preview, API and limits:
 [`packages/core/README.md`](packages/core/README.md#page-builder). `examples/my-store` has a `ProductGrid` block
-and `pnpm --filter my-store seed:pages` publishes `/` (Hero + the newest products) and `/about`.
+and `pnpm --filter my-store seed:pages` publishes `/` (Hero + the newest products), `/shop` (the two composed blocks
+below; three sample products first when the catalogue is empty) and `/about`.
+
+### Block Builder
+
+Blocks can also be built without code in **Settings > Blocks** (`/admin/settings/blocks`, dev only, like the Content
+Type Builder): drop elements (`Box`, `Stack`, `Columns`, `Grid`, `Card`, `Slot`, `Heading`, `Text`, `Image`,
+`Button`, `Badge`, `Price`, `Date`, `Divider`, `Spacer`) on a canvas, bind them to one entry or to a list of entries
+of a content type, and save. The builder writes `src/blocks/<name>/<name>.block.ts`
+(`export default defineComposedBlock({ ... })`, readable and editable by hand) and the managed index
+`src/blocks/composed.ts`; commit both. `src/blocks/index.ts` spreads that index (written by `opencloudcms init`):
+
+```ts
+import { composedBlocks } from './composed';
+
+export default defineBlocks([...coreBlocks, ...composedBlocks]);
+```
+
+A list block can carry a **fixed filter** (equality on an indexed or unique field, e.g. `active = true`): it is
+applied when the page is resolved and wins over whatever filter a page editor stored. "Export as TSX" turns a
+composed block into an ordinary TSX block built on the exported `ui` primitives. Limits: equality filters only,
+and production needs a rebuild to see a new or changed block. `examples/my-store` ships `ProductCard` (one product,
+picked per page) and `ActiveProducts` (products with `active = true`, 4-column grid). Details:
+[`packages/core/README.md`](packages/core/README.md#composed-blocks-block-builder).
 
 ## Users, groups and review
 

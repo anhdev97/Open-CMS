@@ -462,7 +462,7 @@ Limitation: Next keeps its cache in \`.next/cache\` on disk, so caching is only 
   APIs, no data fetching (use \`b.entry\` / \`b.entries\` / \`b.link\` / \`b.image\` fields), no CSS imports (Tailwind classes only).
 - Blocks can also be made without code in the admin Block Builder (\`/admin/settings/blocks\`, in dev): each one is a
   \`src/blocks/<name>/<name>.block.ts\` file (\`defineComposedBlock\`) listed in the managed \`src/blocks/composed.ts\`,
-  which \`src/blocks/index.ts\` spreads. Commit these files; "Export to TSX" turns a block into ordinary code.
+  which \`src/blocks/index.ts\` spreads. Commit these files; "Export as TSX" turns a block into ordinary code.
 - Adding or changing a block is a code change (also from the Block Builder): production needs a rebuild to see it;
   building and publishing pages works in production too.
 - "View on website" in the editor opens a draft preview (signed-in admins only; over https in production).

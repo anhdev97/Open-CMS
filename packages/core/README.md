@@ -158,11 +158,84 @@ and is imported by Nest for `blockManifest`):
   `app/globals.css` scans the core blocks and `src/blocks`;
 - interactive parts go in a child component marked `'use client'`.
 
+### Composed blocks (Block Builder)
+
+**Settings > Blocks** (`/admin/settings/blocks`, permission `settings.content-types`) builds blocks without code:
+drag elements onto a canvas, bind them to a content type, save. Like the Content Type Builder it writes files, so
+saving works only where the schema is editable (dev); in production the screens are read-only and a new or changed
+block needs a rebuild and deploy. Each block is one file that you commit and may edit by hand:
+
+```ts
+// src/blocks/active-products/active-products.block.ts (examples/my-store)
+import { defineComposedBlock } from '@opencloudcms/core/blocks';
+
+export default defineComposedBlock({
+  id: 'blk_activeprods01',              // ^blk_[a-z0-9]{6,}$, stable
+  name: 'ActiveProducts',               // PascalCase, stored in pages, cannot change after the first save
+  label: { 'en-US': 'Products on sale', 'vi-VN': 'Sản phẩm đang bán' },
+  category: 'commerce',
+  version: 1,                           // bumped by the builder on breaking changes
+  binding: {
+    apiId: 'product',
+    mode: 'collection',                 // or 'single' (one entry picked in the page editor); omit for a static block
+    filter: [{ field: 'active', value: true }],   // fixed filter: always applied
+    sort: { field: 'createdAt', direction: 'desc' },
+    limit: 8,
+    layout: { kind: 'grid', columns: 4 },
+    options: { emptyText: { 'en-US': 'No products on sale yet.' } },
+  },
+  fields: {},                           // manual fields: text, longText, richText, number, boolean, select, image, link
+  tree: {
+    el: 'Card',
+    props: { padding: '4' },
+    children: [
+      { el: 'Heading', props: { level: 3 }, bind: { text: { from: 'entry', path: 'name' } } },
+      { el: 'Price', props: { showCurrency: false }, bind: { value: { from: 'entry', path: 'price' } } },
+    ],
+  },
+});
+```
+
+The builder also rewrites `src/blocks/composed.ts` (`export const composedBlocks = [...]`, sorted by name). It never
+edits `src/blocks/index.ts`, which must spread that list (`opencloudcms init` writes it; the Blocks page warns when
+it is missing):
+
+```ts
+import { composedBlocks } from './composed';
+
+export default defineBlocks([...coreBlocks, ...composedBlocks, ProductGrid]);
+```
+
+- **Elements:** `Box`, `Stack`, `Columns`, `Grid`, `Card`, `Slot` (a drop zone for other blocks; not inside a
+  collection item), `Heading`, `Text`, `Image`, `Button`, `Badge`, `Price`, `Date`, `Divider`, `Spacer`. `props` take
+  design tokens only (colors `primary`, `muted`, …; spacing `0`–`24`; sizes and variants such as `level: 1–4`,
+  Button `variant`/`size`, Badge `variant`, Image `ratio`/`rounded`, Price `showCurrency`, Date `format`/`timeZone`).
+- **Bind sources** (`bind: { <prop>: source }`): `{ from: 'entry', path }`, `{ from: 'entryUrl' }` (from
+  `binding.urlPattern`, e.g. `/products/{slug}`), `{ from: 'field', name }` (a manual field), `{ from: 'const', value }`.
+  Kinds must match: text props ← text/longText/slug/email, `Text.html` ← richText, `Image.src` ← asset/url, `Price` ←
+  number/money, `Date` ← date/datetime, `Button.href` ← url. Reference, taxonomy and multiple fields cannot be bound.
+  `showIf: { from: 'entry' | 'field', path | name, is: 'present' | 'absent' }` hides an element.
+- **Fixed filters** are equality only, on `indexed` or `unique` fields. They are enforced when the page is resolved
+  and win over the page editor's filter on the same field (a page that stores `active: 'false'` still lists only
+  `active = true`); picked entries that do not match are dropped. `options.editorFilter` / `editorSort` /
+  `editorLimit` / `editorLayout` (collection only, default off) let page editors add filters, change the sort or
+  limit, or pick the layout.
+- **Versions:** removing or renaming a manual field, changing its kind, or changing `binding.apiId`, `mode`, or adding
+  or removing the binding bumps `version`. If pages use the block the builder asks first (409 `block_in_use`).
+- **Assets:** an `Image` bound to an asset field shows the asset: the ids are resolved in one call per page
+  (`GET /api/content/assets?ids=`, public, at most 100 ids, `{ id, url, alt, width, height, mimeType }`).
+- **Export as TSX** (eject) turns a composed block into an ordinary `<name>.block.tsx` built on the public `ui`
+  primitives (`ui.Box`, `ui.Stack`, `ui.Columns`, `ui.Grid`, `ui.Card`, `ui.Heading`, `ui.Text`, `ui.Image`, `ui.Button`,
+  `ui.Badge`, `ui.Price`, `ui.DateText`, `ui.Divider`, `ui.Spacer`, `ui.layoutClass`, `ui.safeHref`) and
+  `composedHelpers`; both are exported from `@opencloudcms/core/blocks` for hand-written blocks too. The block leaves
+  `composed.ts`: add the printed import and list entry to `src/blocks/index.ts`.
+
 ### Wiring (written by `opencloudcms init`)
 
 | File | |
 |---|---|
-| `src/blocks/index.ts` | `export default defineBlocks([...coreBlocks, …])` |
+| `src/blocks/index.ts` | `export default defineBlocks([...coreBlocks, ...composedBlocks, …])` |
+| `src/blocks/composed.ts` | `export const composedBlocks = [];` (managed by the Block Builder) |
 | `src/app.module.ts` | `pages: { blocks: blockManifest(blocks) }` (Nest loads `@opencloudcms/core/blocks` as CommonJS) |
 | `tsconfig.server.json` | `"jsx": "react-jsx"` (block files are TSX) |
 | `app/(admin)/admin/AdminWithBlocks.tsx` | `'use client'` wrapper: `<AdminApp blocks={blocks} />`; `[[...slug]]/page.tsx` re-exports it |
@@ -200,6 +273,15 @@ editor warns about them.
 | `GET /api/admin/content/opencloudcmsPage/by-path?path=&locale=` | draft page (`content.read`, `no-store`) |
 | `GET /api/admin/pages/blocks-check` | `{ data, manifest }`: pages using blocks missing from `pages.blocks` |
 | `GET /api/admin/pages/shadowed` | `{ data: string[] }`: page paths served by a file route of the website |
+| `GET /api/admin/blocks` | `{ editable, composedIndexWired, data, loadErrors }`: every block with `source` (`core`, `code`, `composed`), `usage` (pages using it) and `problems` |
+| `GET` / `PUT` / `DELETE /api/admin/blocks/:name` | a composed block: `{ spec, file, usage, problems }`; save `{ spec, confirmBreaking? }`; delete (`?force=1` when used) |
+| `POST /api/admin/blocks/:name/eject` | export as TSX: `{ file, importLine, files }` |
+| `GET /api/content/assets?ids=` | public asset lookup (1–100 ids) used to render asset fields |
+
+Blocks API (permission `settings.content-types`; writes only when the schema is editable, else 403 as in the Content
+Type Builder): 422 `invalid_block` (`issues`), 422 `name_immutable`, 409 `block_name_taken`, 409 `not_composed` (core or
+code block), 409 `block_in_use` (`issues: [{ path: [name], message: <pages> }]`; resend with `confirmBreaking: true`),
+409 `composed_blocks_broken` (another block file does not load; nothing is written).
 
 `path`: `/` or `/segment(/segment)*` with lowercase letters, digits and hyphens; unique per locale. Errors:
 422 `invalid_path`, 422 `path_reserved` (`/_next`, `/admin`, `/api`, `/oauth2`, `/__opencloudcms`), 409
@@ -209,7 +291,7 @@ publish (`issues: [{ path: [name], message: <count> }]`; send `{ "force": true }
 render nothing on the website (one WARN per name) and appear as a removable placeholder in the editor.
 A page whose `content` has another `formatVersion` (needs migration) is read-only in the editor and renders an
 empty body on the website (one WARN per page and locale).
-`apiId` `opencloudcmsPage` is reserved.
+`apiId` `opencloudcmsPage` is reserved, and so is `assets` (the public asset lookup `/api/content/assets`).
 
 ### Limits
 
@@ -218,7 +300,11 @@ empty body on the website (one WARN per page and locale).
 - No caching: each request calls the API over loopback and resolves the data blocks.
 - Data blocks do not populate references inside entries (they stay ids).
 - The editor canvas shows the page body only (no website header/footer); "View on website" shows the full page.
-- Adding or changing a block is a code change (and a deploy); building and publishing pages works in production.
+- Adding or changing a block is a code change (and a deploy), also from the Block Builder: production needs a
+  rebuild to see a new block. Building and publishing pages works in production.
+- Composed blocks: fixed and editor filters are equality only, on indexed or unique fields (no `price > x`,
+  `stock > 0`); the shared renderer has no arbitrary logic (export as TSX when you need it); a hand-edited block file
+  the builder cannot load is reported, and saving other blocks is refused until it is fixed.
 
 ## i18n
 

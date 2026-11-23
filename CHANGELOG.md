@@ -14,6 +14,9 @@
   (`readPageContent`), and rendered in place on the website (`richTextFieldTransforms`).
 - A value that breaks a `unique` field on save or publish answers 409 `unique_violation` (with the field in
   `issues`) instead of a 500.
+- **Core link buttons drop unsafe URLs.** The links of `Button`, `ButtonGroup`, `Card`, `Hero` and `CallToAction` go
+  through `safeHref` (also exported as `ui.safeHref`): only `http(s):`, `mailto:`, `tel:`, root-relative paths, `#…`
+  and `?…` stay links; anything else (`javascript:`, `data:`, `//host`, `/\host`) renders as plain text.
 - **Dev server shutdown on Ctrl+C.** Nest could hang on HTTP `server.close()` (HMR keep-alive) or
   `next.close()` when Turbopack/PostCSS workers died from the process-group SIGINT. `@opencloudcms/core`
   now drops open connections before dispose, times out Web UI close + `db.destroy()`, SIGKILLs remaining
@@ -22,6 +25,9 @@
 
 ### Breaking changes
 
+- **The content type API id `assets` is reserved** (the public asset lookup `GET /api/content/assets?ids=`). A project
+  that has a content type with `apiId: 'assets'` no longer loads (`apiId "assets" is reserved by OpenCloudCMS`): rename
+  its `apiId` (and migrate its tables) before upgrading.
 - **`opencloudcms init` no longer writes a static home page.** `app/(site)/page.tsx` is replaced by the page-builder
   catch-all `app/(site)/[[...path]]/page.tsx`, which shows a welcome page at `/` until a page is published there.
   Existing projects keep their files; to adopt the page builder, copy from a fresh `opencloudcms init`:
@@ -98,6 +104,45 @@
 
 ### Added
 
+- **Block Builder** (Settings > Blocks, `/admin/settings/blocks`, permission `settings.content-types`): build page
+  blocks with drag and drop from design-system elements (`Box`, `Stack`, `Columns`, `Grid`, `Card`, `Slot`, `Heading`,
+  `Text`, `Image`, `Button`, `Badge`, `Price`, `Date`, `Divider`, `Spacer`), bound to nothing, to one entry or to a
+  list of entries of a content type, with manual fields, a live canvas with sample entries, and four admin languages.
+  Saving writes files (dev only, like the Content Type Builder); the page editor can use a saved block at once,
+  production needs a rebuild.
+  - Each block is `src/blocks/<name>/<name>.block.ts` exporting `defineComposedBlock({ id, name, label, category,
+    version, binding?, fields, tree })` (new in `@opencloudcms/core/blocks`, with `ComposedBlockError` and the
+    `ComposedBlockSpec` type). The builder keeps `src/blocks/composed.ts` (`composedBlocks`, sorted by name) and never
+    edits `src/blocks/index.ts`. **Existing projects:** create `src/blocks/composed.ts` (or let the first save create
+    it) and add to `src/blocks/index.ts`:
+
+    ```ts
+    import { composedBlocks } from './composed';
+
+    export default defineBlocks([...coreBlocks, ...composedBlocks /* , your blocks */]);
+    ```
+  - List blocks take a **fixed filter** (equality on indexed or unique fields), sort, limit, grid/list layout and
+    an empty text; the fixed filter is enforced when the page is resolved and wins over the page editor's filter on
+    the same field. `b.entries` gains `baseFilter`, `defaultSort`, `lockLimit` and `default` for hand-written blocks
+    too; the page editor shows fixed filters read-only and hides the controls a block turns off.
+  - API `/api/admin/blocks` (list with `source` and page `usage`, get, save, delete, `POST …/eject`). Errors:
+    422 `invalid_block`, 422 `name_immutable`, 409 `block_name_taken`, 409 `block_in_use` (resend with
+    `confirmBreaking: true`), 409 `not_composed`, 409 `composed_blocks_broken`. Breaking changes bump `version`.
+    Saving a content type warns when a composed block uses a field it removes.
+  - **Export as TSX** turns a composed block into an ordinary `.block.tsx` file. New public exports for hand-written
+    blocks: the `ui` primitives (`ui.Box`, `ui.Stack`, `ui.Columns`, `ui.Grid`, `ui.Card`, `ui.Heading`, `ui.Text`,
+    `ui.Image`, `ui.Button`, `ui.Badge`, `ui.Price`, `ui.DateText`, `ui.Divider`, `ui.Spacer`, `ui.layoutClass`,
+    `ui.safeHref`) and `composedHelpers`; `CORE_BLOCK_NAMES`.
+  - Public **`GET /api/content/assets?ids=`** (1–100 ids; `{ id, url, alt, width, height, mimeType }`): an `Image`
+    bound to an asset field renders the asset (one lookup per page; `ContentFetcher.assets` in the built-in fetchers).
+  - `ui.DateText` takes `timeZone` (default UTC; date-only values never shift).
+  - `opencloudcms init` writes the empty `src/blocks/composed.ts` and spreads it in `src/blocks/index.ts`.
+    `examples/my-store` adds an indexed `product.active` field (migration with a backfill to `true`), the composed
+    blocks `ProductCard` and `ActiveProducts` (`active = true`, 4-column grid) and a seeded `/shop` page. The smoke
+    test builds a project with a composed block and checks that the fixed filter holds against page data that asks
+    for `active = false`.
+  - Limits: filters are equality only on indexed or unique fields; production needs a rebuild to see a new or
+    changed block; the shared renderer has no arbitrary logic (export as TSX for that).
 - **Page builder and website preview.** Pages are built with drag and drop in the admin (**Pages**, `/admin/pages`,
   Puck `0.24.1` pinned) and stored in the core content type `opencloudcmsPage` (`title`, `path`, `seo`, `content`,
   localizable, draft/published/versions through `/api/admin/content/opencloudcmsPage/**`).
