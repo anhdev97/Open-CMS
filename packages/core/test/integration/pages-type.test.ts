@@ -94,8 +94,9 @@ describe('core-owned opencloudcmsPage type', () => {
     const a = await create({ title: 'A', path: '/dup' });
     expect(a.status).toBe(201);
     const b = await create({ title: 'B', path: '/dup' });
-    expect(b.status).toBe(500);
-    expect(b.body.error.code).toBe('internal_error');
+    expect(b.status).toBe(409);
+    expect(b.body.error.code).toBe('unique_violation');
+    expect(b.body.error.issues).toEqual([{ path: ['path'], message: 'already used' }]);
     const dupDraft = await create({ title: 'B', path: '/dup' }, 'vi-VN');
     expect(dupDraft.status).toBe(201);
   });
@@ -105,7 +106,8 @@ describe('core-owned opencloudcmsPage type', () => {
     expect((await call(`${API}/${a.body.data.documentId}/publish`, { method: 'POST' })).status).toBe(200);
     // A's own draft row still holds /x, so a new draft collides with it, not with the published row.
     const b = await create({ title: 'X2', path: '/x' });
-    expect(b.status).toBe(500);
+    expect(b.status).toBe(409);
+    expect(b.body.error.code).toBe('unique_violation');
     // Free the draft path of A: the published row alone no longer blocks a new draft.
     expect((await call(`${API}/${a.body.data.documentId}`, { method: 'PUT', body: JSON.stringify({ path: '/x-old' }) })).status).toBe(200);
     const c = await create({ title: 'X3', path: '/x' });

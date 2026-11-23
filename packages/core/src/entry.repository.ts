@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { sql, type Kysely } from 'kysely';
 import type { ContentTypeDefinition, FieldDefinition } from '@opencloudcms/schema';
-import { fieldColumns, fieldStorage, isMultiRelation, l10nTable, mainTable, SYSTEM_TABLES } from '@opencloudcms/schema';
+import { fieldColumns, fieldIndex, fieldStorage, isMultiRelation, l10nTable, mainTable, SYSTEM_TABLES } from '@opencloudcms/schema';
 import { OPENCLOUDCMS_DB, type PublishedDocument } from './options';
 
 type Row = Record<string, any>;
@@ -65,11 +65,34 @@ function parseFilterValue(field: FieldDefinition, raw: string): unknown {
   return raw;
 }
 
+/**
+ * Postgres unique violation (23505) -> 409 `unique_violation`. The field is found from the violated index name,
+ * which is the one `fieldIndex` generates for unique fields; unknown indexes (e.g. document/status) omit `issues`.
+ */
+export function mapUniqueViolation(def: ContentTypeDefinition, e: unknown): unknown {
+  const err = e as { code?: string; constraint?: string };
+  if (err?.code !== '23505') return e;
+  const field = def.fields.find((f) => fieldIndex(def, f)?.name === err.constraint);
+  return new ConflictException({
+    code: 'unique_violation',
+    message: field ? `${field.name} is already used` : 'A unique value is already used',
+    ...(field ? { issues: [{ path: [field.name], message: 'already used' }] } : {}),
+  });
+}
+
 const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : (v as string | null) ?? null);
 
 @Injectable()
 export class EntryRepository {
   constructor(@Inject(OPENCLOUDCMS_DB) private readonly db: Kysely<any>) {}
+
+  private async writeTx(def: ContentTypeDefinition, fn: (trx: Kysely<any>) => Promise<void>): Promise<void> {
+    try {
+      await this.db.transaction().execute(fn);
+    } catch (e) {
+      throw mapUniqueViolation(def, e);
+    }
+  }
 
   /** Splits API input into main-table columns, l10n columns and relation lists. */
   private split(def: ContentTypeDefinition, data: Row) {
@@ -114,7 +137,7 @@ export class EntryRepository {
     const documentId = randomUUID();
     const id = randomUUID();
     const { main, l10n, rels } = this.split(def, data);
-    await this.db.transaction().execute(async (trx) => {
+    await this.writeTx(def, async (trx) => {
       await trx.insertInto(mainTable(def)).values({ id, document_id: documentId, status: 'draft', ...main }).execute();
       if (Object.keys(l10n).length) {
         await trx.insertInto(l10nTable(def)).values({ entry_id: id, locale, status: 'draft', ...l10n }).execute();
@@ -134,7 +157,7 @@ export class EntryRepository {
     expectedUpdatedAt?: string,
   ): Promise<void> {
     const { main, l10n, rels } = this.split(def, data);
-    await this.db.transaction().execute(async (trx) => {
+    await this.writeTx(def, async (trx) => {
       await inTrx?.(trx);
       const current = await trx
         .selectFrom(mainTable(def))
@@ -332,7 +355,7 @@ export class EntryRepository {
       const s = fieldStorage(def, field);
       if (s.mode === 'columns') (s.location === 'main' ? mainCols : l10nCols).push(...s.columns.map((c) => c.name));
     }
-    await this.db.transaction().execute(async (trx) => {
+    await this.writeTx(def, async (trx) => {
       await inTrx?.(trx);
       const draftId = await this.findRowId(trx, def, documentId, 'draft');
       if (!draftId) throw new NotFoundException(`${def.apiId} ${documentId} not found`);
