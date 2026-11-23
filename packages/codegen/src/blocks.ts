@@ -6,7 +6,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createJiti } from 'jiti';
 import type { ComposedBlockSpec, ResolvedConfig } from '@opencloudcms/schema';
-import { validateComposedSpec } from '@opencloudcms/schema';
+import { validateComposedSpec, type ComposedIssue } from '@opencloudcms/schema';
+
+const NAME_RE = /^[A-Z][A-Za-z0-9]{0,63}$/;
 
 const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const MAX_INLINE = 90;
@@ -188,7 +190,18 @@ export async function loadComposedBlocks(
       errors.push({ file, message: (e as Error).message });
     }
   }
-  return { specs, errors };
+  // Two files declaring the same block name are ambiguous: report both instead of picking one.
+  const byName = new Map<string, { spec: ComposedBlockSpec; file: string }[]>();
+  for (const s of specs) byName.set(s.spec.name, [...(byName.get(s.spec.name) ?? []), s]);
+  const dupes = new Set<string>();
+  for (const [name, list] of byName) {
+    if (list.length < 2) continue;
+    for (const s of list) {
+      dupes.add(s.file);
+      errors.push({ file: s.file, message: `Duplicate block name "${name}" (also declared in ${list.filter((o) => o !== s).map((o) => o.file).join(', ')})` });
+    }
+  }
+  return { specs: specs.filter((s) => !dupes.has(s.file)), errors };
 }
 
 /** True when `src/blocks/index.ts` imports `composedBlocks` (the builder never edits that file). */
@@ -206,15 +219,44 @@ export class ComposedBlocksLoadError extends Error {
   }
 }
 
+/** Thrown when the spec to upsert is invalid or the name to remove is not a valid block name. */
+export class ComposedBlockInvalidError extends Error {
+  constructor(public readonly issues: ComposedIssue[]) {
+    super(`Invalid composed block: ${issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    this.name = 'ComposedBlockInvalidError';
+  }
+}
+
+/** Thrown when the target file of an upsert is already owned by a different block name (kebab-case collision). */
+export class ComposedBlockConflictError extends Error {
+  constructor(public readonly name: string, public readonly file: string, public readonly ownerName: string) {
+    super(`Block "${name}" would write ${file}, which belongs to block "${ownerName}"`);
+    this.name = 'ComposedBlockConflictError';
+  }
+}
+
+function assertInside(config: ResolvedConfig, file: string): void {
+  const rel = path.relative(blocksDir(config), path.resolve(file));
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) throw new Error(`Refusing to touch ${file}: outside ${blocksDir(config)}`);
+}
+
 /**
  * Upserts / removes one composed block file and regenerates `composed.ts`. Returns the paths written or removed.
  * Does not snapshot; callers wrap it with captureProjectFiles/restoreProjectFiles if they need rollback.
+ * Throws ComposedBlockInvalidError, ComposedBlocksLoadError (another block file is broken) or
+ * ComposedBlockConflictError before writing anything.
  */
 export async function writeComposedBlocks(
   config: ResolvedConfig,
   change: { upsert?: ComposedBlockSpec; removeName?: string },
 ): Promise<string[]> {
-  const touched: string[] = [];
+  if (change.removeName !== undefined && !NAME_RE.test(change.removeName)) {
+    throw new ComposedBlockInvalidError([{ path: ['name'], message: 'name must be PascalCase (^[A-Z][A-Za-z0-9]{0,63}$)' }]);
+  }
+  if (change.upsert) {
+    const issues = validateComposedSpec(change.upsert);
+    if (issues.length) throw new ComposedBlockInvalidError(issues);
+  }
   const { specs, errors } = await loadComposedBlocks(config);
   // A broken file of the block being written or removed may be replaced; any other broken file blocks the write
   // (it would silently vanish from composed.ts and break pages that use it).
@@ -222,27 +264,43 @@ export async function writeComposedBlocks(
   for (const n of [change.upsert?.name, change.removeName]) if (n) own.add(composedBlockFile(config, n));
   const blocking = errors.filter((e) => !own.has(e.file));
   if (blocking.length) throw new ComposedBlocksLoadError(blocking);
-  const byName = new Map(specs.map((s) => [s.spec.name, s]));
 
+  const byName = new Map(specs.map((s) => [s.spec.name, s]));
+  let removeFile: string | undefined;
+  let upsertFile: string | undefined;
   if (change.removeName) {
-    const existing = byName.get(change.removeName);
-    const file = existing?.file ?? composedBlockFile(config, change.removeName);
-    const dir = path.dirname(file);
-    if (fs.existsSync(dir)) {
-      fs.rmSync(dir, { recursive: true, force: true });
-      touched.push(dir);
+    removeFile = byName.get(change.removeName)?.file ?? composedBlockFile(config, change.removeName);
+    assertInside(config, removeFile);
+  }
+  if (change.upsert) {
+    const spec = change.upsert;
+    const target = composedBlockFile(config, spec.name);
+    const owner = specs.find((s) => s.file === target && s.spec.name !== spec.name);
+    if (owner) throw new ComposedBlockConflictError(spec.name, target, owner.spec.name);
+    upsertFile = byName.get(spec.name)?.file ?? target;
+    assertInside(config, upsertFile);
+  }
+
+  const touched: string[] = [];
+  if (change.removeName && removeFile) {
+    if (fs.existsSync(removeFile)) {
+      fs.rmSync(removeFile);
+      touched.push(removeFile);
+      // Only the block's own folder (src/blocks/<kebab>), and only when it is now empty.
+      const folder = path.dirname(removeFile);
+      if (folder === path.join(blocksDir(config), kebab(change.removeName)) && !fs.readdirSync(folder).length) {
+        fs.rmdirSync(folder);
+        touched.push(folder);
+      }
     }
     byName.delete(change.removeName);
   }
 
-  if (change.upsert) {
-    const spec = change.upsert;
-    const existing = byName.get(spec.name);
-    const file = existing?.file ?? composedBlockFile(config, spec.name);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, printComposedBlockFile(spec));
-    touched.push(file);
-    byName.set(spec.name, { spec, file });
+  if (change.upsert && upsertFile) {
+    fs.mkdirSync(path.dirname(upsertFile), { recursive: true });
+    fs.writeFileSync(upsertFile, printComposedBlockFile(change.upsert));
+    touched.push(upsertFile);
+    byName.set(change.upsert.name, { spec: change.upsert, file: upsertFile });
   }
 
   const dir = blocksDir(config);

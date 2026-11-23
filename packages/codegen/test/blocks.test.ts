@@ -6,6 +6,8 @@ import { resolveConfig, type ComposedBlockSpec } from '@opencloudcms/schema';
 import {
   blocksDir,
   captureProjectFiles,
+  ComposedBlockConflictError,
+  ComposedBlockInvalidError,
   ComposedBlocksLoadError,
   composedBlockFile,
   isComposedIndexWired,
@@ -175,6 +177,79 @@ describe('composed block files', () => {
     project(root, { 'alpha/alpha.block.ts': "import { defineComposedBlock } from '@opencloudcms/core/blocks';\nexport default defineComposedBlock({ ;;" });
     await writeComposedBlocks(c, { removeName: 'Alpha' });
     expect(fs.existsSync(path.join(root, 'src/blocks/alpha'))).toBe(false);
+  });
+
+  it('removing a hand-placed block file leaves siblings and index.ts alone', async () => {
+    const root = tmp();
+    const c = cfg(root);
+    project(root, {
+      'foo.block.ts': printComposedBlockFile(spec({ id: 'blk_foo123', name: 'Foo' })),
+      'index.ts': 'export const blocks = [];\n',
+      'other/other.block.tsx': 'export default 1;\n',
+    });
+    await writeComposedBlocks(c, { removeName: 'Foo' });
+    expect(fs.existsSync(path.join(root, 'src/blocks/foo.block.ts'))).toBe(false);
+    expect(fs.existsSync(path.join(root, 'src/blocks/index.ts'))).toBe(true);
+    expect(fs.existsSync(path.join(root, 'src/blocks/other/other.block.tsx'))).toBe(true);
+  });
+
+  it('keeps the block folder when it still holds other files', async () => {
+    const root = tmp();
+    const c = cfg(root);
+    await writeComposedBlocks(c, { upsert: spec() });
+    project(root, { 'product-card/notes.md': 'x' });
+    await writeComposedBlocks(c, { removeName: 'ProductCard' });
+    expect(fs.existsSync(path.join(root, 'src/blocks/product-card/notes.md'))).toBe(true);
+  });
+
+  it('rejects invalid input before touching anything', async () => {
+    const root = tmp();
+    const c = cfg(root);
+    project(root, { 'index.ts': 'x\n' });
+    for (const removeName of ['.', '..', '../x', 'lower', '']) {
+      await expect(writeComposedBlocks(c, { removeName })).rejects.toBeInstanceOf(ComposedBlockInvalidError);
+    }
+    const err: any = await writeComposedBlocks(c, { upsert: spec({ name: 'bad' }) }).catch((e) => e);
+    expect(err).toBeInstanceOf(ComposedBlockInvalidError);
+    expect(err.issues.length).toBeGreaterThan(0);
+    expect(fs.readdirSync(path.join(root, 'src/blocks'))).toEqual(['index.ts']);
+  });
+
+  it('rejects a kebab-case collision with another block', async () => {
+    const root = tmp();
+    const c = cfg(root);
+    await writeComposedBlocks(c, { upsert: spec({ id: 'blk_html11', name: 'HtmlBlock' }) });
+    const err = await writeComposedBlocks(c, { upsert: spec({ id: 'blk_html22', name: 'HTMLBlock' }) }).catch((e) => e);
+    expect(err).toBeInstanceOf(ComposedBlockConflictError);
+    expect((await loadComposedBlocks(c)).specs.map((s) => s.spec.id)).toEqual(['blk_html11']);
+  });
+
+  it('reports two files declaring the same name as load errors', async () => {
+    const root = tmp();
+    project(root, {
+      'a/a.block.ts': printComposedBlockFile(spec()),
+      'b/b.block.ts': printComposedBlockFile(spec({ id: 'blk_other1' })),
+    });
+    const { specs, errors } = await loadComposedBlocks(cfg(root));
+    expect(specs).toEqual([]);
+    expect(errors).toHaveLength(2);
+    expect(errors[0].message).toMatch(/Duplicate block name "ProductCard"/);
+  });
+
+  it('restore keeps a pre-existing empty dir and binary files intact, removes only new dirs', async () => {
+    const root = tmp();
+    const c = cfg(root);
+    const bin = Buffer.from([0xff, 0xfe, 0x00, 0x80, 0xc3, 0x28]);
+    project(root, { 'keep/.gitkeep': '' });
+    fs.mkdirSync(path.join(root, 'src/blocks/empty'));
+    fs.writeFileSync(path.join(root, 'src/blocks/keep/data.bin'), bin);
+    const snap = captureProjectFiles(c, [blocksDir(c)]);
+    fs.writeFileSync(path.join(root, 'src/blocks/keep/data.bin'), 'changed');
+    fs.mkdirSync(path.join(root, 'src/blocks/newdir/deep'), { recursive: true });
+    restoreProjectFiles(c, snap, [blocksDir(c)]);
+    expect(fs.readFileSync(path.join(root, 'src/blocks/keep/data.bin')).equals(bin)).toBe(true);
+    expect(fs.existsSync(path.join(root, 'src/blocks/empty'))).toBe(true);
+    expect(fs.existsSync(path.join(root, 'src/blocks/newdir'))).toBe(false);
   });
 
   it('isComposedIndexWired checks src/blocks/index.ts', () => {

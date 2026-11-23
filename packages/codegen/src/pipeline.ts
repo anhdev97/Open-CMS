@@ -126,7 +126,10 @@ export async function checkSchema(config: ResolvedConfig): Promise<SchemaCheck> 
 /* step (e.g. applying the migration) fails.                             */
 /* ------------------------------------------------------------------ */
 
-export type FileSnapshot = Map<string, string>;
+export type FileSnapshot = Map<string, Buffer>;
+
+/** Directories that existed (under the extra dirs) when a snapshot was captured. */
+const snapshotDirs = new WeakMap<FileSnapshot, Set<string>>();
 
 function listFiles(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
@@ -136,19 +139,26 @@ function listFiles(dir: string): string[] {
   });
 }
 
-function pruneEmptyDirs(dir: string, removeSelf: boolean): void {
+function listDirs(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  return [dir, ...fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? listDirs(path.join(dir, e.name)) : []))];
+}
+
+/** Removes directories that are empty and were not present at capture (deepest first). */
+function pruneNewEmptyDirs(dir: string, existed: Set<string>): void {
   if (!fs.existsSync(dir)) return;
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (e.isDirectory()) pruneEmptyDirs(path.join(dir, e.name), true);
+    if (e.isDirectory()) pruneNewEmptyDirs(path.join(dir, e.name), existed);
   }
-  if (removeSelf && !fs.readdirSync(dir).length) fs.rmdirSync(dir);
+  if (!existed.has(dir) && !fs.readdirSync(dir).length) fs.rmdirSync(dir);
 }
 
 export function captureProjectFiles(config: ResolvedConfig, extraDirs: string[] = []): FileSnapshot {
   const snap: FileSnapshot = new Map();
   for (const dir of [config.contentTypesDir, config.generatedDir, config.migrationsDir, ...extraDirs]) {
-    for (const f of listFiles(dir)) snap.set(f, fs.readFileSync(f, 'utf8'));
+    for (const f of listFiles(dir)) snap.set(f, fs.readFileSync(f));
   }
+  snapshotDirs.set(snap, new Set(extraDirs.flatMap(listDirs)));
   return snap;
 }
 
@@ -156,9 +166,10 @@ export function restoreProjectFiles(config: ResolvedConfig, snap: FileSnapshot, 
   for (const dir of [config.contentTypesDir, config.generatedDir, config.migrationsDir, ...extraDirs]) {
     for (const f of listFiles(dir)) if (!snap.has(f)) fs.rmSync(f);
   }
-  for (const dir of extraDirs) pruneEmptyDirs(dir, false);
+  const existed = snapshotDirs.get(snap) ?? new Set<string>();
+  for (const dir of extraDirs) pruneNewEmptyDirs(dir, existed);
   for (const [f, content] of snap) {
-    if (!fs.existsSync(f) || fs.readFileSync(f, 'utf8') !== content) {
+    if (!fs.existsSync(f) || !fs.readFileSync(f).equals(content)) {
       fs.mkdirSync(path.dirname(f), { recursive: true });
       fs.writeFileSync(f, content);
     }
