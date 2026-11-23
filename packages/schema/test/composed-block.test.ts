@@ -50,6 +50,23 @@ describe('validateComposedSpec', () => {
   });
 });
 
+describe('select fields', () => {
+  const sel = () => mut(single(), (s) => (s.fields.size = { kind: 'select', options: ['s', 'm', 'l'], default: 'm' }));
+  it('validates options', () => {
+    expect(validateComposedSpec(sel())).toEqual([]);
+    expect(paths(mut(sel(), (s) => delete s.fields.size.options))).toEqual(['fields.size.options']);
+    expect(paths(mut(sel(), (s) => (s.fields.size.options = [])))).toEqual(['fields.size.options']);
+    expect(paths(mut(sel(), (s) => (s.fields.size.options = ['a', 'a'])))).toEqual(['fields.size.options']);
+    expect(paths(mut(sel(), (s) => (s.fields.size.options = [true])))).toEqual(['fields.size.options']);
+    expect(paths(mut(sel(), (s) => (s.fields.size.default = 'xl')))).toEqual(['fields.size.default']);
+    expect(paths(mut(single(), (s) => (s.fields.cta.options = ['a'])))).toEqual(['fields.cta.options']);
+  });
+  it('removing an option is breaking, adding is not', () => {
+    expect(isBreakingChange(sel(), mut(sel(), (s) => (s.fields.size.options = ['s', 'm'])))).toBe(true);
+    expect(isBreakingChange(sel(), mut(sel(), (s) => s.fields.size.options.push('xl')))).toBe(false);
+  });
+});
+
 describe('composedManifestEntry', () => {
   it('lists richText fields', () => {
     expect(composedManifestEntry(single())).toEqual({ name: 'ProductHero', version: 1, richText: ['body'] });

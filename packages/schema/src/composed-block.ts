@@ -44,6 +44,8 @@ export interface ComposedField {
   kind: ComposedFieldKind;
   label?: LocalizedText | string;
   default?: unknown;
+  /** Required for `select`, not allowed on other kinds. */
+  options?: (string | number)[];
 }
 
 export interface ComposedBinding {
@@ -150,6 +152,15 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
       fieldNames.add(name);
       if (!isObj(f) || !(COMPOSED_FIELD_KINDS as readonly string[]).includes(f.kind as string)) {
         add(['fields', name, 'kind'], `kind must be one of ${COMPOSED_FIELD_KINDS.join(', ')}`);
+        continue;
+      }
+      if (f.kind === 'select') {
+        const o = f.options;
+        const ok = Array.isArray(o) && o.length > 0 && o.every((x) => typeof x === 'string' || typeof x === 'number') && new Set(o).size === o.length;
+        if (!ok) add(['fields', name, 'options'], 'select requires a non-empty array of unique strings or numbers');
+        else if (f.default !== undefined && !o.includes(f.default as string | number)) add(['fields', name, 'default'], 'default must be one of the options');
+      } else if (f.options !== undefined) {
+        add(['fields', name, 'options'], 'options are only allowed on select fields');
       }
     }
   }
@@ -230,6 +241,7 @@ export function isBreakingChange(prev: ComposedBlockSpec, next: ComposedBlockSpe
   for (const [name, f] of Object.entries(prev.fields ?? {})) {
     const n = next.fields?.[name];
     if (!n || n.kind !== f.kind) return true;
+    if (f.kind === 'select' && (f.options ?? []).some((o) => !(n.options ?? []).includes(o))) return true;
   }
   const a = prev.binding;
   const b = next.binding;
