@@ -54,7 +54,7 @@ describe('pages API', () => {
     beforeAll(async () => {
       id = (await create({ title: 'About', path: '/about', content: puck('Heading') })).body.data.documentId;
       expect((await publish(id)).status).toBe(200);
-      expect((await call(`${ADMIN}/${id}`, { method: 'PUT', body: JSON.stringify({ title: 'About (draft)' }) })).status).toBe(200);
+      expect((await call(`${ADMIN}/${id}`, { method: 'PATCH', body: JSON.stringify({ title: 'About (draft)' }) })).status).toBe(200);
     });
 
     it('public returns the published row only', async () => {

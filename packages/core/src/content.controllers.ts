@@ -10,7 +10,6 @@ import {
   Headers,
   Patch,
   Post,
-  Put,
   Query,
 } from '@nestjs/common';
 import { CurrentUser, RequirePermission, type RequestUser } from '@opencloudcms/oauth2';
@@ -105,23 +104,10 @@ export class AdminContentController {
     return this.entries.create(apiId, body, locale);
   }
 
+  /** Partial update of the draft; `If-Match: <updatedAt ISO>` enables the stale-draft check (409 `stale_draft`). */
   @RequirePermission('content.update')
   @Patch(':apiId/:documentId')
   update(
-    @Param('apiId') apiId: string,
-    @Param('documentId', ParseUUIDPipe) documentId: string,
-    @Body() body: unknown,
-    @CurrentUser() user: RequestUser,
-    @Query('locale') locale?: string,
-    @Headers('if-match') ifMatch?: string,
-  ) {
-    return this.entries.update(apiId, documentId, body, locale, user, { expectedUpdatedAt: ifMatchValue(ifMatch) });
-  }
-
-  /** Same as PATCH (the page builder saves with PUT); `If-Match: <updatedAt ISO>` enables the stale-draft check. */
-  @RequirePermission('content.update')
-  @Put(':apiId/:documentId')
-  replace(
     @Param('apiId') apiId: string,
     @Param('documentId', ParseUUIDPipe) documentId: string,
     @Body() body: unknown,

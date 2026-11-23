@@ -109,7 +109,7 @@ describe('core-owned opencloudcmsPage type', () => {
     expect(b.status).toBe(409);
     expect(b.body.error.code).toBe('unique_violation');
     // Free the draft path of A: the published row alone no longer blocks a new draft.
-    expect((await call(`${API}/${a.body.data.documentId}`, { method: 'PUT', body: JSON.stringify({ path: '/x-old' }) })).status).toBe(200);
+    expect((await call(`${API}/${a.body.data.documentId}`, { method: 'PATCH', body: JSON.stringify({ path: '/x-old' }) })).status).toBe(200);
     const c = await create({ title: 'X3', path: '/x' });
     expect(c.status).toBe(201);
   });
@@ -118,7 +118,7 @@ describe('core-owned opencloudcmsPage type', () => {
     const a = await create({ title: 'PA', path: '/pub' });
     const aId = a.body.data.documentId;
     expect((await call(`${API}/${aId}/publish`, { method: 'POST' })).status).toBe(200);
-    expect((await call(`${API}/${aId}`, { method: 'PUT', body: JSON.stringify({ path: '/pub-old' }) })).status).toBe(200);
+    expect((await call(`${API}/${aId}`, { method: 'PATCH', body: JSON.stringify({ path: '/pub-old' }) })).status).toBe(200);
     const b = await create({ title: 'PB', path: '/pub' });
     expect(b.status).toBe(201);
     const res = await call(`${API}/${b.body.data.documentId}/publish`, { method: 'POST' });
@@ -135,7 +135,7 @@ describe('core-owned opencloudcmsPage type', () => {
     expect(bad.status).toBe(422);
     expect(bad.body.error.code).toBe('invalid_path');
     const id = (await create({ title: 'ok', path: '/okpath' })).body.data.documentId;
-    const upd = await call(`${API}/${id}`, { method: 'PUT', body: JSON.stringify({ path: '/api/x' }) });
+    const upd = await call(`${API}/${id}`, { method: 'PATCH', body: JSON.stringify({ path: '/api/x' }) });
     expect(upd.status).toBe(422);
     expect(upd.body.error.code).toBe('path_reserved');
   });
@@ -144,22 +144,24 @@ describe('core-owned opencloudcmsPage type', () => {
     const c = await create({ title: 'Opt', path: '/opt' });
     const id = c.body.data.documentId;
     const first = c.body.data.updatedAt as string;
-    const put = (body: unknown, ifMatch?: string) =>
-      call(`${API}/${id}`, { method: 'PUT', body: JSON.stringify(body), headers: ifMatch ? { 'if-match': ifMatch } : {} });
+    const patch = (body: unknown, ifMatch?: string) =>
+      call(`${API}/${id}`, { method: 'PATCH', body: JSON.stringify(body), headers: ifMatch ? { 'if-match': ifMatch } : {} });
 
-    const ok = await put({ title: 'Opt 2' }, first);
+    const ok = await patch({ title: 'Opt 2' }, first);
     expect(ok.status).toBe(200);
     expect(ok.body.data.title).toBe('Opt 2');
     const next = ok.body.data.updatedAt as string;
     expect(next).not.toBe(first);
 
-    const stale = await put({ title: 'Opt 3' }, first);
+    const stale = await patch({ title: 'Opt 3' }, first);
     expect(stale.status).toBe(409);
     expect(stale.body.error.code).toBe('stale_draft');
     expect((await call(`${API}/${id}`)).body.data.title).toBe('Opt 2');
 
-    expect((await put({ title: 'Opt 4' }, next)).status).toBe(200);
-    expect((await put({ title: 'Opt 5' })).status).toBe(200);
+    expect((await patch({ title: 'Opt 4' }, next)).status).toBe(200);
+    expect((await patch({ title: 'Opt 5' })).status).toBe(200);
+    // Updates are PATCH only (no PUT alias).
+    expect((await call(`${API}/${id}`, { method: 'PUT', body: JSON.stringify({ title: 'Opt 6' }) })).status).toBe(404);
   });
 
   it('the schema builder refuses core apiIds with 409 core_type', async () => {
