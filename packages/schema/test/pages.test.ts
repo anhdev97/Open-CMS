@@ -45,6 +45,35 @@ describe('collectBlockNames', () => {
     };
     expect(collectBlockNames(c).get('Text')).toBe(1);
   });
+  it('counts blocks in root slot props (data.root.props)', () => {
+    const c: StoredPageContent = {
+      format: 'puck',
+      formatVersion: 1,
+      data: { root: { props: { header: [{ type: 'Nav', props: { links: [{ type: 'Link', props: {} }] } }] } }, content: [] },
+    };
+    expect(collectBlockNames(c).get('Nav')).toBe(1);
+    expect(collectBlockNames(c).get('Link')).toBe(1);
+  });
+  it('counts slots nested inside array-field rows', () => {
+    const c: StoredPageContent = {
+      format: 'puck',
+      formatVersion: 1,
+      data: { root: {}, content: [{ type: 'Tabs', props: { tabs: [{ label: 'a', body: [{ type: 'Text', props: {} }] }] } }] },
+    };
+    expect(collectBlockNames(c).get('Text')).toBe(1);
+  });
+  it('does not count a plain JSON object shaped like an item that is not in an array', () => {
+    const c: StoredPageContent = {
+      format: 'puck',
+      formatVersion: 1,
+      data: {
+        root: { props: { meta: { type: 'x', props: {} } } },
+        content: [{ type: 'Embed', props: { config: { type: 'Ghost', props: { a: 1 }, nested: { type: 'Ghost2', props: {} } } } }],
+      },
+    };
+    const names = collectBlockNames(c);
+    expect([...names.keys()]).toEqual(['Embed']);
+  });
   it('is empty for null', () => {
     expect(collectBlockNames(null).size).toBe(0);
     expect(collectBlockNames(undefined).size).toBe(0);

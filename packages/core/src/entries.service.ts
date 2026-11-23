@@ -148,7 +148,7 @@ export class EntriesService {
    * `publish`: direct publish (a `content.publish` holder may skip review, ruling R11). `approve`: publish what
    * was submitted; only from In review (409 `invalid_transition`). Both run the same pipeline and clear the row.
    */
-  async publish(apiId: string, documentId: string, user: Pick<RequestUser, 'id' | 'permissions'>, action: 'publish' | 'approve' = 'publish') {
+  async publish(apiId: string, documentId: string, user: Pick<RequestUser, 'id' | 'permissions'>, action: 'publish' | 'approve' = 'publish', opts: { force?: boolean } = {}) {
     const def = this.registry.get(apiId);
     this.assertCanPublish(def, user);
     const doc = await this.repo.exportDocument(def, documentId, 'draft');
@@ -167,7 +167,7 @@ export class EntriesService {
     });
     if (issues.length) throw new BadRequestException({ message: `Cannot publish ${apiId}: validation failed`, issues });
 
-    const ctx = this.ctx(apiId, this.options.config.defaultLocale);
+    const ctx = { ...this.ctx(apiId, this.options.config.defaultLocale), force: opts.force === true };
     for (const h of this.registry.hooksFor(apiId)) await h.beforePublish?.(doc, ctx);
     await this.repo.publish(def, documentId, doc, (trx) => this.workflow.guardPublish(trx, def, documentId, user, action));
     for (const h of this.registry.hooksFor(apiId)) await h.afterPublish?.(doc, ctx);

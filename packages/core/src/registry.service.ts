@@ -1,7 +1,7 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { ContentGroupDefinition, ContentTypeDefinition } from '@opencloudcms/schema';
 import { buildEntryValidator, PAGE_API_ID } from '@opencloudcms/schema';
-import { pageHooks } from './pages/page.hooks';
+import { createPageHooks } from './pages/page.hooks';
 import { pageType } from './pages/page.type';
 import { OPENCLOUDCMS_OPTIONS, type EntryHooks, type ResolvedOpenCloudCmsOptions } from './options';
 
@@ -19,7 +19,7 @@ export class ContentRegistry {
     this.registerCore(pageType, { hidden: true, editable: false });
     this.reload(options.contentTypes);
     this.reloadGroups(options.contentGroups ?? []);
-    this.hooks.set(PAGE_API_ID, [pageHooks]);
+    this.hooks.set(PAGE_API_ID, [createPageHooks(options.pages?.blocks)]);
     for (const h of options.hooks) this.hooks.set(h.apiId, [...(this.hooks.get(h.apiId) ?? []), h.hooks]);
   }
 

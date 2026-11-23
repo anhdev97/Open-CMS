@@ -80,6 +80,17 @@ export function mapUniqueViolation(def: ContentTypeDefinition, e: unknown): unkn
   });
 }
 
+const MAX_DOCUMENT_IDS = 100;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** `filter[documentId][in]=a,b`: 1..100 uuids. */
+function parseDocumentIds(raw: string): string[] {
+  const ids = raw.split(',').map((s) => s.trim());
+  if (ids.length > MAX_DOCUMENT_IDS) throw new BadRequestException(`filter[documentId][in] accepts at most ${MAX_DOCUMENT_IDS} ids`);
+  if (ids.some((id) => !UUID_RE.test(id))) throw new BadRequestException('filter[documentId][in] must be a comma-separated list of UUIDs');
+  return [...new Set(ids)];
+}
+
 const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : (v as string | null) ?? null);
 
 @Injectable()
@@ -265,6 +276,11 @@ export class EntryRepository {
     }
 
     for (const [name, raw] of Object.entries(q.filters)) {
+      if (name === 'documentId[in]') {
+        // Only for documentId; allowed regardless of `indexed`.
+        query = query.where('m.document_id', 'in', parseDocumentIds(raw));
+        continue;
+      }
       const field = def.fields.find((f) => f.name === name);
       if (!field) throw new BadRequestException(`Unknown filter field "${name}"`);
       if (!field.indexed && !field.unique) {

@@ -1,7 +1,7 @@
 import type { Kysely } from 'kysely';
 import type { AssetsModuleOptions } from '@opencloudcms/assets';
 import type { AuthFileConfig } from '@opencloudcms/oauth2';
-import type { ContentGroupDefinition, ContentTypeDefinition, OpenCloudCmsConfig, ResolvedConfig } from '@opencloudcms/schema';
+import type { BlockManifest, ContentGroupDefinition, ContentTypeDefinition, OpenCloudCmsConfig, ResolvedConfig } from '@opencloudcms/schema';
 import type { LoadNext } from './web';
 
 export const OPENCLOUDCMS_OPTIONS = Symbol('OPENCLOUDCMS_OPTIONS');
@@ -13,6 +13,8 @@ export interface HookContext {
   apiId: string;
   locale: string;
   db: Kysely<any>;
+  /** Set on publish when the request asked to skip validation hooks that honour it (pages: `{ force: true }`). */
+  force?: boolean;
 }
 
 export interface EntryHooks {
@@ -76,6 +78,12 @@ export interface OpenCloudCmsModuleOptions {
   assets?: AssetsModuleOptions;
   /** Exact origins allowed to read `/api/content/**` cross-origin (GET, HEAD, OPTIONS; no credentials). */
   cors?: { origins: string[] };
+  /**
+   * Page builder: the blocks the project defines (`blockManifest` from its block files). When set, publishing a
+   * page that uses other blocks fails with 422 `unknown_block` (unless the request sends `force: true`).
+   * Absent: no check (a warning is logged at boot).
+   */
+  pages?: { blocks?: BlockManifest };
   /** Environment for the auth module. Default `process.env`. */
   env?: NodeJS.ProcessEnv;
 }

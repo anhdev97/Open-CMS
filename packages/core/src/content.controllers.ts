@@ -22,10 +22,18 @@ export function parseListQuery(query: Record<string, unknown>): ListParams {
   const filter: Record<string, string> = {};
   for (const [k, v] of Object.entries(query)) {
     const m = /^filter\[([A-Za-z0-9]+)\]$/.exec(k);
-    if (m) filter[m[1]] = String(v);
+    if (m) {
+      filter[m[1]] = String(v);
+      continue;
+    }
+    const inm = /^filter\[([A-Za-z0-9]+)\]\[in\]$/.exec(k);
+    if (inm) filter[`${inm[1]}[in]`] = String(v);
   }
   if (query.filter && typeof query.filter === 'object') {
-    for (const [k, v] of Object.entries(query.filter as Record<string, unknown>)) filter[k] = String(v);
+    for (const [k, v] of Object.entries(query.filter as Record<string, unknown>)) {
+      if (v && typeof v === 'object' && !Array.isArray(v) && 'in' in v) filter[`${k}[in]`] = String((v as { in: unknown }).in);
+      else filter[k] = String(v);
+    }
   }
   return {
     locale: query.locale as string | undefined,
@@ -126,8 +134,13 @@ export class AdminContentController {
 
   @Post(':apiId/:documentId/publish')
   @HttpCode(200)
-  publish(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string, @CurrentUser() user: RequestUser) {
-    return this.entries.publish(apiId, documentId, user);
+  publish(
+    @Param('apiId') apiId: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @CurrentUser() user: RequestUser,
+    @Body() body?: { force?: unknown } | null,
+  ) {
+    return this.entries.publish(apiId, documentId, user, 'publish', { force: body?.force === true });
   }
 
   /** Publish an entry that is In review (spec B §6.4 "Approve & publish"). */

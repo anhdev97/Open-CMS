@@ -61,26 +61,37 @@ function isItem(v: unknown): v is { type: string; props?: unknown } {
   return typeof o.type === 'string' && !!o.props && typeof o.props === 'object' && !Array.isArray(o.props);
 }
 
-function walk(value: unknown, out: Map<string, number>): void {
-  if (Array.isArray(value)) {
-    for (const v of value) walk(v, out);
-    return;
+const isPlainObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * A prop value can hold slot content only as an array. Items in the array are counted (and their own props
+ * visited); other plain objects in the array are array-field rows whose values may be slots. A bare object
+ * value (not in an array) is plain JSON and is never counted.
+ */
+function visitValue(value: unknown, out: Map<string, number>): void {
+  if (!Array.isArray(value)) return;
+  for (const el of value) {
+    if (isItem(el)) {
+      out.set(el.type, (out.get(el.type) ?? 0) + 1);
+      for (const v of Object.values(el.props as Record<string, unknown>)) visitValue(v, out);
+    } else if (isPlainObject(el)) {
+      for (const v of Object.values(el)) visitValue(v, out);
+    }
   }
-  if (!value || typeof value !== 'object') return;
-  if (isItem(value)) {
-    out.set(value.type, (out.get(value.type) ?? 0) + 1);
-    walk(value.props, out);
-    return;
-  }
-  for (const v of Object.values(value)) walk(v, out);
 }
 
-/** Block name -> occurrences, over root content, zones and slot props. */
+/**
+ * Block name -> occurrences, over `content`, `zones` and slot fields (arrays of `{ type, props }` among the props
+ * of items and of `root.props`). Limitation: without the block registry a slot cannot be told from an ordinary
+ * array prop, so a JSON array prop whose elements look like `{ type: string, props: object }` counts as items.
+ */
 export function collectBlockNames(c: StoredPageContent | null | undefined): Map<string, number> {
   const out = new Map<string, number>();
   const data = c?.data;
   if (!data) return out;
-  walk(data.content, out);
-  for (const zone of Object.values(data.zones ?? {})) walk(zone, out);
+  visitValue(data.content, out);
+  for (const zone of Object.values(data.zones ?? {})) visitValue(zone, out);
+  const rootProps = (data.root as { props?: unknown } | null | undefined)?.props;
+  if (isPlainObject(rootProps)) for (const v of Object.values(rootProps)) visitValue(v, out);
   return out;
 }
