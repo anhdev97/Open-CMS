@@ -27,9 +27,9 @@ export function filterableFields(ct: ContentTypeDefinition): FieldDefinition[] {
 export interface EntriesControls {
   /** Pick ⇄ query select (hidden only for `filterable: false`, as before). */
   modeSelect: boolean;
-  /** "Add filter": only `filterable: true`. */
+  /** "Add filter": hidden only for `filterable: false` (composed blocks always set it). */
   addFilter: boolean;
-  /** Sort: only `sortable: true` (otherwise `resolvePage` uses `defaultSort`). */
+  /** Sort: hidden only for `sortable: false` (then `resolvePage` uses `defaultSort` when set). */
   sort: boolean;
   /** Editable limit; false when `lockLimit` (then `lockedLimit` is the limit shown read-only). */
   limit: boolean;
@@ -41,8 +41,8 @@ export interface EntriesControls {
 export function entriesFieldControls(f: EntriesBlockField): EntriesControls {
   return {
     modeSelect: f.filterable !== false,
-    addFilter: f.filterable === true,
-    sort: f.sortable === true,
+    addFilter: f.filterable !== false,
+    sort: f.sortable !== false,
     limit: f.lockLimit !== true,
     lockedLimit: f.lockLimit === true ? (f.limit ?? 10) : null,
     fixed: Object.entries(f.baseFilter ?? {}).map(([field, value]) => ({ field, value })),

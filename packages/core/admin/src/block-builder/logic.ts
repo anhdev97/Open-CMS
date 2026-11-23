@@ -308,3 +308,29 @@ export function fieldUsage(tree: ComposedNode, name: string): number {
     (n.children ?? []).reduce((a, c) => a + uses(c), 0);
   return uses(tree);
 }
+
+export type ResetNote = { key: string; count?: number };
+
+/**
+ * What changing or removing the content type resets: the binding's settings beyond `apiId`/`mode`, and the elements
+ * that read the entry (`entry`/`entryUrl` sources or an `entry` show-if). Empty = nothing to confirm.
+ */
+export function bindingResetNotes(b: ComposedBinding | undefined, tree: ComposedNode): ResetNote[] {
+  const out: ResetNote[] = [];
+  if (b) {
+    if (b.filter?.length) out.push({ key: 'filters', count: b.filter.length });
+    if (b.sort) out.push({ key: 'sort' });
+    if (b.limit !== undefined) out.push({ key: 'limit' });
+    if (b.layout) out.push({ key: 'layout' });
+    const o = b.options ?? {};
+    if (o.editorFilter || o.editorSort || o.editorLimit || o.editorLayout) out.push({ key: 'editorOptions' });
+    if (Object.values(o.emptyText ?? {}).some((v) => typeof v === 'string' && v.trim())) out.push({ key: 'emptyText' });
+    if (b.urlPattern?.trim()) out.push({ key: 'urlPattern' });
+  }
+  const reads = (n: ComposedNode): number =>
+    (Object.values(n.bind ?? {}).some((s) => s.from === 'entry' || s.from === 'entryUrl') || n.showIf?.from === 'entry' ? 1 : 0) +
+    (n.children ?? []).reduce((a, c) => a + reads(c), 0);
+  const count = reads(tree);
+  if (count) out.push({ key: 'entryElements', count });
+  return out;
+}

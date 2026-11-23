@@ -292,8 +292,10 @@ describe('entriesFieldControls', () => {
     expect(entriesFieldControls(ef({ sortable: true, filterable: true, limit: 12 }))).toEqual({
       modeSelect: true, addFilter: true, sort: true, limit: true, lockedLimit: null, fixed: [],
     });
-    expect(entriesFieldControls(ef({ limit: 12 }))).toMatchObject({ addFilter: false, sort: false, limit: true });
+    // unset → shown (resolvePage still applies stored filters/sort); explicit false → hidden
+    expect(entriesFieldControls(ef({ limit: 12 }))).toMatchObject({ modeSelect: true, addFilter: true, sort: true, limit: true });
     expect(entriesFieldControls(ef({ filterable: false }))).toMatchObject({ modeSelect: false, addFilter: false });
+    expect(entriesFieldControls(ef({ sortable: false }))).toMatchObject({ sort: false, addFilter: true });
   });
   it('locked limit and fixed filters (composed collections)', () => {
     const c = entriesFieldControls(ef({ limit: 8, lockLimit: true, filterable: false, sortable: false, baseFilter: { featured: 'true', stock: '3' } }));

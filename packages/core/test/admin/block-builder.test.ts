@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ComposedBlockSpec } from '@opencloudcms/schema';
 import {
   ENTRY_PROP_KINDS as CLIENT_KINDS,
+  bindingResetNotes,
   breakingNotes,
   buildSpec,
   changeSummary,
@@ -330,5 +331,49 @@ describe('fieldUsage', () => {
     expect(fieldUsage(tree, 'cta')).toBe(2);
     expect(fieldUsage(tree, 'link')).toBe(1);
     expect(fieldUsage(tree, 'other')).toBe(0);
+  });
+});
+
+describe('bindingResetNotes', () => {
+  const tree = {
+    el: 'Card',
+    children: [
+      { el: 'Heading', bind: { text: { from: 'entry', path: 'name' } } },
+      { el: 'Button', bind: { href: { from: 'entryUrl' } }, showIf: { from: 'entry', path: 'slug', is: 'present' } },
+      { el: 'Text', bind: { text: { from: 'const', value: 'x' } }, showIf: { from: 'entry', path: 'slug', is: 'present' } },
+    ],
+  } as never;
+  it('nothing to lose: no binding, or only apiId/mode and no entry binds', () => {
+    expect(bindingResetNotes(undefined, { el: 'Box' })).toEqual([]);
+    expect(bindingResetNotes({ apiId: 'product', mode: 'collection' }, { el: 'Box' })).toEqual([]);
+  });
+  it('lists the binding settings and the elements reading the entry', () => {
+    expect(
+      bindingResetNotes(
+        {
+          apiId: 'product',
+          mode: 'collection',
+          urlPattern: '/p/{slug}',
+          filter: [{ field: 'active', value: true }, { field: 'stock', value: 1 }],
+          sort: { field: 'createdAt', direction: 'desc' },
+          limit: 8,
+          layout: { kind: 'list' },
+          options: { editorSort: true, emptyText: { 'en-US': 'None' } },
+        },
+        tree,
+      ),
+    ).toEqual([
+      { key: 'filters', count: 2 },
+      { key: 'sort' },
+      { key: 'limit' },
+      { key: 'layout' },
+      { key: 'editorOptions' },
+      { key: 'emptyText' },
+      { key: 'urlPattern' },
+      { key: 'entryElements', count: 3 },
+    ]);
+  });
+  it('empty filter list, false switches and empty texts are not losses', () => {
+    expect(bindingResetNotes({ apiId: 'p', mode: 'single', filter: [], urlPattern: ' ', options: { editorSort: false, emptyText: { 'en-US': '' } } }, { el: 'Box' })).toEqual([]);
   });
 });

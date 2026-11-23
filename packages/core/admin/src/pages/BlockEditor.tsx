@@ -31,6 +31,7 @@ import { BuilderContext, CanvasContext, type BuilderModel, type CanvasModel } fr
 import { buildBuilderConfig } from '../block-builder/element-config';
 import { AllowField, ShowIfField, SourcesField } from '../block-builder/ElementPanel';
 import {
+  bindingResetNotes,
   breakingNotes,
   buildSpec,
   changeSummary,
@@ -41,6 +42,7 @@ import {
   showCurrencyFor,
   type BlockDraft,
   type ChangeNote,
+  type ResetNote,
 } from '../block-builder/logic';
 import { canvasFieldValues, imageEntryPaths, loadSamples, placeholderEntry } from '../block-builder/sample-data';
 import { puckToTree, treeToPuck, type BuilderPuckData } from '../block-builder/tree-puck';
@@ -249,6 +251,17 @@ function Builder({ meta, types: allTypes, detail }: BuilderProps) {
     dispatch({ type: 'save' });
   };
 
+  // ---- content type change: resets the binding; confirm when that loses settings or entry bindings ----
+  const [typeChange, setTypeChange] = useState<{ apiId: string | null; notes: ResetNote[] } | null>(null);
+  const applyType = (apiId: string | null) =>
+    setDraftState((d) => {
+      if (!apiId) {
+        const { binding: _b, ...rest } = d;
+        return { ...rest, category: d.category === 'data' ? 'basic' : d.category };
+      }
+      return { ...d, binding: { apiId, mode: d.binding?.mode ?? 'single' }, category: d.category === 'basic' ? 'data' : d.category };
+    });
+
   // ---- leaving ----
   const [leaving, setLeaving] = useState(false);
   const warnOnUnload = dirty && !readOnly;
@@ -275,14 +288,12 @@ function Builder({ meta, types: allTypes, detail }: BuilderProps) {
     locale,
     locales: meta.locales,
     onBack: back,
-    onType: (apiId) =>
-      setDraftState((d) => {
-        if (!apiId) {
-          const { binding: _b, ...rest } = d;
-          return { ...rest, category: d.category === 'data' ? 'basic' : d.category };
-        }
-        return { ...d, binding: { apiId, mode: d.binding?.mode ?? 'single' }, category: d.category === 'basic' ? 'data' : d.category };
-      }),
+    onType: (apiId) => {
+      if (apiId === (draft.binding?.apiId ?? null)) return;
+      const notes = bindingResetNotes(draft.binding, tree);
+      if (notes.length) setTypeChange({ apiId, notes });
+      else applyType(apiId);
+    },
     onMode: (mode) => setDraftState((d) => (d.binding ? { ...d, binding: { ...d.binding, mode } } : d)),
     onSample: setSampleId,
     onLocale: setLocale,
@@ -427,6 +438,17 @@ function Builder({ meta, types: allTypes, detail }: BuilderProps) {
         confirmLabel={t('blockBuilder.inUse.confirm')}
         destructive
         onConfirm={() => dispatch({ type: 'confirm' })}
+      />
+      <ConfirmDialog
+        open={typeChange !== null}
+        onOpenChange={(o) => !o && setTypeChange(null)}
+        title={t(typeChange?.apiId ? 'blockBuilder.typeChange.title' : 'blockBuilder.typeChange.removeTitle')}
+        description={`${t('blockBuilder.typeChange.description')} ${(typeChange?.notes ?? [])
+          .map((n) => t(`blockBuilder.typeChange.${n.key}`, n.count === undefined ? undefined : { count: n.count }))
+          .join('; ')}.`}
+        confirmLabel={t('blockBuilder.typeChange.confirm')}
+        destructive
+        onConfirm={() => typeChange && applyType(typeChange.apiId)}
       />
       <ConfirmDialog
         open={leaving}
