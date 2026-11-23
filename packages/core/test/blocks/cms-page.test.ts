@@ -183,6 +183,23 @@ describe('createCmsPage: published (draft mode off)', () => {
     const ghostWarns = warn.mock.calls.filter((c) => String(c[0]).includes('Ghost'));
     expect(ghostWarns).toHaveLength(1);
   });
+
+  it('content that needs migration (other formatVersion) renders no body and warns once per page', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const old = { format: 'puck', formatVersion: 1, data: { root: { props: {} }, content: [heading('OLD-FORMAT')] } };
+    routes(publicByPath({ '/old': page({ documentId: 'p-old', path: '/old', content: old }) }));
+    for (let i = 0; i < 2; i++) {
+      const out = await html(await cms.Page(params('old')));
+      expect(out).not.toContain('OLD-FORMAT');
+      expect(out).toContain('data-opencloudcms-site');
+      expect(notFound).not.toHaveBeenCalled();
+    }
+    const migrationWarns = warn.mock.calls.filter((c) => String(c[0]).includes('p-old'));
+    expect(migrationWarns).toHaveLength(1);
+    expect(String(migrationWarns[0][0])).toMatch(/migrat/i);
+    // Fetches only the page: nothing is resolved for content that is not rendered.
+    expect(calls().every((c) => c.url.pathname.endsWith('/by-path'))).toBe(true);
+  });
 });
 
 describe('createCmsPage: draft mode', () => {

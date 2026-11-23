@@ -5,7 +5,7 @@ import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import { Render } from '@puckeditor/core/rsc';
 import { PAGE_API_ID, type Locale, type StoredPageContent } from '@opencloudcms/schema';
-import { isItem, isObj, mapData, mapSlots, type ItemFn } from '../content';
+import { isItem, isObj, mapData, mapSlots, readPageContent, type ItemFn } from '../content';
 import { adminFetcher, FetchError, publicFetcher } from '../fetchers';
 import { toPuckConfig } from '../puck-config';
 import { resolvePage, type ContentFetcher } from '../resolve';
@@ -52,6 +52,17 @@ function warnUnknownBlocks(data: PuckData, r: BlockRegistry): void {
     return item;
   };
   mapData(data as unknown as Record<string, unknown>, visit);
+}
+
+/** Content stored in another format version is not rendered (the editor shows it read-only); logged once per page. */
+const warnedMigration = new Set<string>();
+function warnNeedsMigration(documentId: string, locale: Locale): void {
+  const key = `${documentId}:${locale}`;
+  if (warnedMigration.has(key)) return;
+  warnedMigration.add(key);
+  console.warn(
+    `[OpenCloudCMS] Page ${documentId} (${locale}) is stored in another content format version and needs migration; its body is not rendered.`,
+  );
 }
 
 /** `undefined` → `/`; anything that is not a valid page path → null (never sent to the API). */
@@ -171,15 +182,21 @@ export function createCmsPage(o: CreateCmsPageOptions): {
         </>
       );
     }
-    const data = await resolvePage((r.entry.content ?? null) as StoredPageContent, o.blocks, r.fetcher, {
-      locale: r.locale,
-      defaultLocale: r.defaultLocale,
-    });
-    warnUnknownBlocks(data, o.blocks);
+    let body: ReactNode = null;
+    if (readPageContent(r.entry.content ?? null, o.blocks).status === 'needs-migration') {
+      warnNeedsMigration(r.entry.documentId, r.locale);
+    } else {
+      const data = await resolvePage((r.entry.content ?? null) as StoredPageContent, o.blocks, r.fetcher, {
+        locale: r.locale,
+        defaultLocale: r.defaultLocale,
+      });
+      warnUnknownBlocks(data, o.blocks);
+      body = <Render config={configFor(r.locale)} data={data} fieldTransforms={richTextFieldTransforms} />;
+    }
     return (
       <>
         <main data-opencloudcms-site="" lang={r.locale}>
-          <Render config={configFor(r.locale)} data={data} fieldTransforms={richTextFieldTransforms} />
+          {body}
         </main>
         {bar}
       </>

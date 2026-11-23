@@ -202,6 +202,8 @@ editor warns about them.
 `unique_violation`, 409 `stale_draft` (the `If-Match` timestamp is not the current one), 422 `unknown_block` on
 publish (`issues: [{ path: [name], message: <count> }]`; send `{ "force": true }` to publish anyway). Unknown blocks
 render nothing on the website (one WARN per name) and appear as a removable placeholder in the editor.
+A page whose `content` has another `formatVersion` (needs migration) is read-only in the editor and renders an
+empty body on the website (one WARN per page and locale).
 `apiId` `opencloudcmsPage` is reserved.
 
 ### Limits
