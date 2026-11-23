@@ -21,6 +21,8 @@ const redirect = (location: string): Response =>
  * `GET /__opencloudcms/preview?page=<documentId>&locale=<Locale>` (spec §8.2 step 2). Loads the draft through the
  * admin API with the caller's session cookie; only when that succeeds is draft mode enabled. There is no token: a
  * forwarded link only works for someone with a valid admin session and `content.read`.
+ * `baseUrl` (default `http://127.0.0.1:${PORT ?? 4000}`): the request cookies (the admin session) are forwarded to it,
+ * so it must be this server itself (loopback or the site's own origin), never another host.
  */
 export function createPreviewRoute(o: { baseUrl?: string } = {}): { GET(req: Request): Promise<Response> } {
   return {

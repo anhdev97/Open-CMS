@@ -19,7 +19,11 @@ export type CmsPageProps = { params: Promise<{ path?: string[] }> };
 
 export type CreateCmsPageOptions = {
   blocks: BlockRegistry;
-  /** Loopback URL of the API. Default `http://127.0.0.1:${process.env.PORT ?? 4000}`. */
+  /**
+   * Loopback URL of the API. Default `http://127.0.0.1:${process.env.PORT ?? 4000}`.
+   * In draft mode the visitor's request cookies (the admin session) are forwarded to this URL, so it must be this
+   * server itself (loopback or the site's own origin), never another host.
+   */
   baseUrl?: string;
   /** Heading of the welcome page shown at `/` while no page is published there. */
   siteName?: string;

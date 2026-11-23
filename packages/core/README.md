@@ -170,6 +170,10 @@ and is imported by Nest for `blockManifest`):
 | `app/(site)/%5F_opencloudcms/preview/route.ts`, `…/preview/exit/route.ts` | `createPreviewRoute()`, `createPreviewExitRoute()`. Next treats folders starting with `_` as private; `%5F` keeps the URL `/__opencloudcms/preview` |
 | `app/globals.css` | `@source "../node_modules/@opencloudcms/core/dist/blocks"; @source "../src/blocks";` |
 
+`createCmsPage` and `createPreviewRoute` call the API at `baseUrl` (default `http://127.0.0.1:${PORT ?? 4000}`). In
+draft mode (and in the preview route) they forward the visitor's cookies, including the admin session, to `baseUrl`:
+it must be this server itself (loopback or the site's own origin), never another host.
+
 The renderer serves the page published at the request path in the default locale; a path without a page is
 `notFound()`; `/` without a page shows a welcome page. A file route of `app/(site)` (e.g. `blog/page.tsx`) wins
 over a page with the same path: `GET /api/admin/pages/shadowed` lists those paths (computed at boot) and the
