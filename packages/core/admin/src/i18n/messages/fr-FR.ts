@@ -434,6 +434,10 @@ const frFR: Messages = {
     missingDescription: "Cette page n’a pas de contenu en {locale}. Partez d’une page vide ou copiez la version {defaultLocale}.",
     copyFrom: "Copier depuis {defaultLocale}",
     startEmpty: "Partir de zéro",
+    leaveTitle: "Quitter sans enregistrer ?",
+    leaveDescription: "Vos dernières modifications n’ont pas pu être enregistrées. Si vous quittez maintenant, elles seront perdues.",
+    leaveConfirm: "Quitter sans enregistrer",
+    previewNotSaved: "Vos dernières modifications ne sont pas enregistrées : l’aperçu du site montre le dernier brouillon enregistré.",
     slotFull: "Cette zone contient au plus {max} blocs.",
     unknownBlock: "Le bloc « {name} » n’est plus dans le projet. Sélectionnez-le et supprimez-le.",
     categories: {

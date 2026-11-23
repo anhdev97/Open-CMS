@@ -1,7 +1,7 @@
 // Puck's stylesheet without its external font @import (rsms.me): the admin CSP allows only same-origin styles.
 import '@puckeditor/core/no-external.css';
 import { TriangleAlertIcon, XIcon } from 'lucide-react';
-import { createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement } from 'react';
+import { createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Puck, type Data, type Dictionary, type useGetPuck } from '@puckeditor/core';
@@ -10,14 +10,13 @@ import {
   coreBlocks,
   defineBlocks,
   readPageContent,
-  resolvePage,
-  writePageContent,
   type BlockDefinition,
   type BlockField,
   type BlockRegistry,
   type PuckData,
 } from '@opencloudcms/core/blocks';
 import type { Locale } from '@opencloudcms/schema';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
 import { Button } from '../components/ui/button';
@@ -31,7 +30,6 @@ import { pickEditorLocale } from '../lib/locales';
 import { useAdminNavigate, useAdminParams } from '../lib/nav';
 import { getPage, pageErrorMessageKey, pagePreviewUrl, publishPage, savePage, type PageEntry } from '../lib/pages';
 import type { Meta } from '../lib/types';
-import { createAutosave } from '../page-editor/autosave';
 import { BlocksContext } from '../page-editor/blocks-context';
 import { ContentTypeField } from '../page-editor/ContentTypeField';
 import { buildEditorConfig } from '../page-editor/editor-config';
@@ -39,7 +37,8 @@ import { EditorInfoContext, ResolvedContext, type EditorInfo } from '../page-edi
 import { EditorHeader, HeaderContext, type HeaderModel } from '../page-editor/EditorHeader';
 import { EntriesField } from '../page-editor/EntriesField';
 import { EntryField } from '../page-editor/EntryPicker';
-import { dataSignature, fromEditorData, indexResolved, previewProps, slotOverflows, toEditorData, unknownBlockTypes, type ResolvedItem } from '../page-editor/field-logic';
+import { fromEditorData, previewProps, slotOverflows, toEditorData, unknownBlockTypes, type PageSeo } from '../page-editor/field-logic';
+import { UNSAVED_STATES, useAutosave, usePreviewResolution } from '../page-editor/hooks';
 import { ImageField } from '../page-editor/ImageField';
 import { LinkField } from '../page-editor/LinkField';
 import { fieldTypes } from '../page-editor/puck-fields';
@@ -111,70 +110,26 @@ function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorPro
   const canPublish = !migration && (can('content.update') || can('content.publish'));
 
   const [initial, setInitial] = useState<PuckData>(() =>
-    toEditorData({ title: entry.title, path: entry.path, seo: entry.seo as never }, missing ? EMPTY : stored.data),
+    toEditorData({ title: entry.title, path: entry.path, seo: entry.seo as PageSeo | null }, missing ? EMPTY : stored.data),
   );
   const [puckKey, setPuckKey] = useState(0);
   const [offerCopy, setOfferCopy] = useState(missing && stored.status === 'ok');
   const [publishing, setPublishing] = useState(false);
-  const [resolved, setResolved] = useState<ReadonlyMap<string, ResolvedItem>>(new Map());
   const latest = useRef<PuckData>(initial);
-  const lastBody = useRef(JSON.stringify(fromEditorData(initial, registry)));
+  const storedSeo = entry.seo as PageSeo | null | undefined;
+  const lastBody = useRef(JSON.stringify(fromEditorData(initial, registry, storedSeo)));
   const getPuck = useRef<ReturnType<typeof useGetPuck> | null>(null);
 
   const unknownTypes = useMemo(() => unknownBlockTypes(initial, registry), [initial, registry]);
 
-  const autosave = useMemo(
-    () =>
-      createAutosave<PuckData>({
-        save: (data, ifMatch) => savePage(documentId, locale, fromEditorData(data, registry), ifMatch),
-        debounceMs: 1500,
-        ifMatch: entry.updatedAt,
-      }),
-    [documentId, locale, registry, entry.updatedAt],
-  );
-  const saveState = useSyncExternalStore(autosave.subscribe, () => autosave.state, () => autosave.state);
-
-  // Leaving the editor (unmount, tab close) saves what is pending.
-  useEffect(() => {
-    const onUnload = (e: BeforeUnloadEvent) => {
-      if (autosave.state !== 'dirty' && autosave.state !== 'saving') return;
-      void autosave.flush();
-      e.preventDefault();
-    };
-    window.addEventListener('beforeunload', onUnload);
-    return () => {
-      window.removeEventListener('beforeunload', onUnload);
-      void autosave.flush().finally(() => autosave.dispose());
-    };
-  }, [autosave]);
+  const { autosave, state: saveState } = useAutosave<PuckData>({
+    save: (data, ifMatch) => savePage(documentId, locale, fromEditorData(data, registry, storedSeo), ifMatch),
+    debounceMs: 1500,
+    ifMatch: entry.updatedAt,
+  });
 
   // Preview: resolve data fields through the admin API, 300 ms after the last data-field change.
-  const signature = useRef('');
-  const resolveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const resolveSeq = useRef(0);
-  const scheduleResolve = useCallback(
-    (data: PuckData) => {
-      const sig = dataSignature(data, registry);
-      if (sig === signature.current) return;
-      signature.current = sig;
-      if (resolveTimer.current) clearTimeout(resolveTimer.current);
-      resolveTimer.current = setTimeout(() => {
-        const seq = ++resolveSeq.current;
-        const content = writePageContent(data, registry);
-        void resolvePage(content, registry, fetcher, { locale, defaultLocale }).then(
-          (out) => seq === resolveSeq.current && setResolved(indexResolved(content.data as PuckData, out, registry)),
-          () => undefined,
-        );
-      }, RESOLVE_DEBOUNCE_MS);
-    },
-    [registry, locale, defaultLocale],
-  );
-  useEffect(() => {
-    scheduleResolve(initial);
-    return () => {
-      if (resolveTimer.current) clearTimeout(resolveTimer.current);
-    };
-  }, [initial, scheduleResolve]);
+  const { resolved, schedule: scheduleResolve } = usePreviewResolution(registry, initial, fetcher, { locale, defaultLocale }, RESOLVE_DEBOUNCE_MS);
 
   const onChange = useCallback(
     (data: Data) => {
@@ -182,12 +137,12 @@ function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorPro
       latest.current = d;
       scheduleResolve(d);
       if (readOnly) return;
-      const body = JSON.stringify(fromEditorData(d, registry));
+      const body = JSON.stringify(fromEditorData(d, registry, storedSeo));
       if (body === lastBody.current) return; // Puck also reports loads and selection-only updates
       lastBody.current = body;
       autosave.change(d);
     },
-    [autosave, readOnly, registry, scheduleResolve],
+    [autosave, readOnly, registry, scheduleResolve, storedSeo],
   );
 
   // Puck 0.24 slots have no `max`: undo a drop that overfills a `b.slot({ max })`.
@@ -237,10 +192,13 @@ function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorPro
   const overrides = useMemo(() => ({ header: () => createElement(EditorHeader), fieldTypes }), []);
   const dictionary = useMemo(() => puckDictionary(), [adminLocale]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Leaving saves first; if edits are still not saved (error, conflict) the user must confirm losing them.
+  const [leaveTo, setLeaveTo] = useState<string | null>(null);
   const leave = useCallback(
     async (to: string) => {
       await autosave.flush();
-      navigate(to);
+      if (UNSAVED_STATES.includes(autosave.state)) setLeaveTo(to);
+      else navigate(to);
     },
     [autosave, navigate],
   );
@@ -266,13 +224,13 @@ function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorPro
   }, [autosave, documentId]);
 
   const copyFromDefault = () => {
-    const { title, path, seo } = fromEditorData(latest.current, registry);
+    const { title, path, seo } = fromEditorData(latest.current, registry, storedSeo);
     const next = toEditorData({ title, path, seo }, stored.data);
     setOfferCopy(false);
     setInitial(next);
     setPuckKey((k) => k + 1);
     latest.current = next;
-    lastBody.current = JSON.stringify(fromEditorData(next, registry));
+    lastBody.current = JSON.stringify(fromEditorData(next, registry, storedSeo));
     autosave.change(next);
   };
 
@@ -291,6 +249,7 @@ function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorPro
     onViewOnWebsite: () => {
       const tab = window.open('', '_blank');
       void autosave.flush().then(() => {
+        if (autosave.state === 'error' || autosave.state === 'conflict') toast.warning(t('pageEditor.previewNotSaved'));
         if (!tab) return;
         tab.opener = null;
         tab.location.href = pagePreviewUrl(documentId, locale);
@@ -345,6 +304,15 @@ function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorPro
           </AlertDescription>
         </Alert>
       )}
+      <ConfirmDialog
+        open={leaveTo !== null}
+        onOpenChange={(o) => !o && setLeaveTo(null)}
+        title={t('pageEditor.leaveTitle')}
+        description={t('pageEditor.leaveDescription')}
+        confirmLabel={t('pageEditor.leaveConfirm')}
+        destructive
+        onConfirm={() => leaveTo !== null && navigate(leaveTo)}
+      />
       <div className="min-h-0 flex-1">
         <EditorInfoContext.Provider value={info}>
           <ResolvedContext.Provider value={resolved}>

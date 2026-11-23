@@ -195,6 +195,14 @@ describe('toEditorData / fromEditorData', () => {
     expect(body.seo).toEqual({ title: 'T', description: 'D', noindex: true });
     expect(body.content).toMatchObject({ format: 'puck', data: { root: { props: {} }, content: [{ type: 'Head', props: { id: 'h1', text: 'Hi', _v: 1 } }] } });
   });
+  it('keeps stored SEO keys the editor does not edit (e.g. image) and overlays only the edited ones', () => {
+    const stored = { title: 'Old', description: 'D', image: { src: '/og.png', alt: 'OG' }, custom: 1 };
+    const data = toEditorData({ title: 'A', path: '/a', seo: stored }, { root: { props: {} }, content: [] } as PuckData);
+    (data.root.props as Record<string, unknown>).seoTitle = 'New';
+    (data.root.props as Record<string, unknown>).seoDescription = '';
+    const body = fromEditorData(data, registry, stored);
+    expect(body.seo).toEqual({ title: 'New', image: { src: '/og.png', alt: 'OG' }, custom: 1 });
+  });
   it('omits empty SEO values', () => {
     const body = fromEditorData(toEditorData({ title: 'A', path: '/' }, { root: { props: {} }, content: [] } as PuckData), registry);
     expect(body.seo).toEqual({});

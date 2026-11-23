@@ -485,6 +485,10 @@ export const enUS = {
     missingDescription: "This page has no content in {locale}. Start from an empty page or copy the {defaultLocale} version.",
     copyFrom: "Copy from {defaultLocale}",
     startEmpty: "Start empty",
+    leaveTitle: "Leave without saving?",
+    leaveDescription: "Your latest changes could not be saved. If you leave now they are lost.",
+    leaveConfirm: "Leave without saving",
+    previewNotSaved: "Your latest changes are not saved: the website preview shows the last saved draft.",
     slotFull: "This area holds at most {max} blocks.",
     unknownBlock: "Block \"{name}\" is no longer in the project. Select it and delete it.",
     categories: {

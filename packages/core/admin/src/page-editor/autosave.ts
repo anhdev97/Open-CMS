@@ -68,6 +68,9 @@ export function createAutosave<T>(opts: AutosaveOptions<T>): Autosave<T> {
     error = null;
     setState('saving');
     const p = (async () => {
+      // Yield first: `inFlight = p` below must be set before this body can reach `finally` (a save that throws
+      // synchronously would otherwise leave `inFlight` set forever).
+      await null;
       try {
         const r = await opts.save(data, ifMatch);
         ifMatch = r.updatedAt;

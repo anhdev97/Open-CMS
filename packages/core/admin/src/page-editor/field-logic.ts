@@ -205,6 +205,8 @@ export interface PageSeo {
   title?: string;
   description?: string;
   noindex?: boolean;
+  /** Other keys (e.g. `image`) are kept as stored; the editor does not edit them. */
+  [key: string]: unknown;
 }
 
 /** Page fields edited in Puck's root panel. */
@@ -230,17 +232,24 @@ export function toEditorData(page: { title?: string | null; path?: string | null
   } as PuckData;
 }
 
-/** Request body for saving the page: title, path, SEO from the root props; the rest as stored content. */
+/**
+ * Request body for saving the page: title, path, SEO from the root props; the rest as stored content.
+ * `storedSeo` is the page's current `seo`: keys the editor does not edit (e.g. `image`) are carried over.
+ */
 export function fromEditorData(
   data: PuckData,
   registry: BlockRegistry,
+  storedSeo?: PageSeo | null,
 ): { title: string; path: string; seo: PageSeo; content: StoredPageContent } {
   const root = (data.root ?? {}) as { props?: Props };
   const props = root.props ?? {};
   const rest: Props = {};
   for (const [k, v] of Object.entries(props)) if (!(ROOT_KEYS as readonly string[]).includes(k)) rest[k] = v;
   const str = (v: unknown) => (typeof v === 'string' ? v : '');
-  const seo: PageSeo = {};
+  const seo: PageSeo = { ...(isObj(storedSeo) ? storedSeo : {}) };
+  delete seo.title;
+  delete seo.description;
+  delete seo.noindex;
   if (str(props.seoTitle).trim()) seo.title = str(props.seoTitle).trim();
   if (str(props.seoDescription).trim()) seo.description = str(props.seoDescription).trim();
   if (props.seoNoindex === true) seo.noindex = true;

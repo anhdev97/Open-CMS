@@ -434,6 +434,10 @@ const viVN: Messages = {
     missingDescription: "Trang này chưa có nội dung bằng {locale}. Bắt đầu từ trang trống hoặc sao chép bản {defaultLocale}.",
     copyFrom: "Sao chép từ {defaultLocale}",
     startEmpty: "Bắt đầu trống",
+    leaveTitle: "Rời đi mà không lưu?",
+    leaveDescription: "Các thay đổi mới nhất của bạn chưa lưu được. Nếu rời đi bây giờ, chúng sẽ bị mất.",
+    leaveConfirm: "Rời đi không lưu",
+    previewNotSaved: "Các thay đổi mới nhất chưa được lưu: bản xem trên website là bản nháp đã lưu gần nhất.",
     slotFull: "Vùng này chứa tối đa {max} block.",
     unknownBlock: "Block \"{name}\" không còn trong dự án. Hãy chọn và xoá nó.",
     categories: {

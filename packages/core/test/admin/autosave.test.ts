@@ -165,4 +165,21 @@ describe('createAutosave', () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(save).not.toHaveBeenCalled();
   });
+
+  it('survives a save that throws synchronously (later saves still run)', async () => {
+    let calls = 0;
+    const save = vi.fn((): Promise<{ updatedAt: string }> => {
+      if (++calls === 1) throw new Error('sync');
+      return Promise.resolve({ updatedAt: 't1' });
+    });
+    const a = createAutosave<string>({ save, debounceMs: 10 });
+    a.change('a');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(a.state).toBe('error');
+    expect((a.error as Error).message).toBe('sync');
+    a.change('b');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(a.state).toBe('saved');
+  });
 });

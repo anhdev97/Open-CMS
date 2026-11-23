@@ -434,6 +434,10 @@ const idID: Messages = {
     missingDescription: "Halaman ini belum punya konten dalam {locale}. Mulai dari halaman kosong atau salin versi {defaultLocale}.",
     copyFrom: "Salin dari {defaultLocale}",
     startEmpty: "Mulai kosong",
+    leaveTitle: "Keluar tanpa menyimpan?",
+    leaveDescription: "Perubahan terakhir Anda gagal disimpan. Jika keluar sekarang, perubahan itu akan hilang.",
+    leaveConfirm: "Keluar tanpa menyimpan",
+    previewNotSaved: "Perubahan terakhir Anda belum tersimpan: pratinjau situs menampilkan draf terakhir yang tersimpan.",
     slotFull: "Area ini memuat paling banyak {max} blok.",
     unknownBlock: "Blok \"{name}\" sudah tidak ada di proyek. Pilih lalu hapus blok ini.",
     categories: {
