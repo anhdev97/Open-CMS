@@ -16,7 +16,8 @@
   `issues`) instead of a 500.
 - **Core link buttons drop unsafe URLs.** The links of `Button`, `ButtonGroup`, `Card`, `Hero` and `CallToAction` go
   through `safeHref` (also exported as `ui.safeHref`): only `http(s):`, `mailto:`, `tel:`, root-relative paths, `#…`
-  and `?…` stay links; anything else (`javascript:`, `data:`, `//host`, `/\host`) renders as plain text.
+  and `?…` stay links; anything else (`javascript:`, `data:`, `//host`, `/\host`) renders as plain text. Tab, CR
+  and LF are removed before the check (browsers ignore them, so `/<TAB>/evil.com` is `//evil.com`).
 - **Dev server shutdown on Ctrl+C.** Nest could hang on HTTP `server.close()` (HMR keep-alive) or
   `next.close()` when Turbopack/PostCSS workers died from the process-group SIGINT. `@opencloudcms/core`
   now drops open connections before dispose, times out Web UI close + `db.destroy()`, SIGKILLs remaining
@@ -25,6 +26,11 @@
 
 ### Breaking changes
 
+- **Core link buttons drop links they used to render.** Because of `safeHref` (see Fixed), existing page content
+  whose `Button`, `ButtonGroup`, `Card`, `Hero` or `CallToAction` links are relative without a leading `/`
+  (`contact`, `./x`, `../x`, `www.example.com`) or use a scheme outside `http(s):`, `mailto:`, `tel:` (`sms:`,
+  `whatsapp:`, `ftp:`, app deep links, …) now renders as plain text instead of a link. Edit those links to a
+  root-relative path (`/contact`) or a full `https://` URL.
 - **The content type API id `assets` is reserved** (the public asset lookup `GET /api/content/assets?ids=`). A project
   that has a content type with `apiId: 'assets'` no longer loads (`apiId "assets" is reserved by OpenCloudCMS`): rename
   its `apiId` (and migrate its tables) before upgrading.
