@@ -10,9 +10,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.mkdirSync('dist/admin/styles',{recursive:true});fs.copyFileSync('admin/src/styles/theme.css','dist/admin/styles/theme.css')\" && tsc -p tsconfig.json && tsc -p admin/tsconfig.json && node -e \"require('fs').cpSync('admin/src/styles/theme.css','dist/admin/styles/theme.css')\"",
+    "build": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.mkdirSync('dist/admin/styles',{recursive:true});fs.copyFileSync('admin/src/styles/theme.css','dist/admin/styles/theme.css')\" && tsc -p tsconfig.json && tsc -p admin/tsconfig.json && tsc -p blocks/tsconfig.json && tsc -p blocks/tsconfig.cjs.json && node -e \"require('fs').cpSync('admin/src/styles/theme.css','dist/admin/styles/theme.css')\"",
     "dev:admin": "tsc -w -p admin/tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p admin/tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p admin/tsconfig.json --noEmit && tsc -p blocks/tsconfig.json --noEmit && tsc -p blocks/tsconfig.cjs.json --noEmit"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
@@ -21,6 +21,7 @@
     "@opencloudcms/db": "workspace:*",
     "@opencloudcms/oauth2": "workspace:*",
     "@opencloudcms/schema": "workspace:*",
+    "@puckeditor/core": "0.24.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "express": "^5.2.1",
@@ -69,6 +70,11 @@
     "./admin/layout": {
       "types": "./dist/admin/layout.d.ts",
       "default": "./dist/admin/layout.js"
+    },
+    "./blocks": {
+      "types": "./dist/blocks/index.d.ts",
+      "import": "./dist/blocks/index.js",
+      "require": "./dist/blocks-cjs/index.js"
     },
     "./admin/theme.css": {
       "style": "./dist/admin/styles/theme.css",
