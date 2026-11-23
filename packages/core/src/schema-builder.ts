@@ -20,11 +20,12 @@ import {
 } from '@nestjs/common';
 import type { Kysely } from 'kysely';
 import { RequirePermission } from '@opencloudcms/oauth2';
-import { captureProjectFiles, createMigration, DiffError, previewChange, restoreProjectFiles, writeSchemaChange } from '@opencloudcms/codegen';
+import { captureProjectFiles, createMigration, definitionsWith, DiffError, loadComposedBlocks, previewChange, restoreProjectFiles, writeSchemaChange } from '@opencloudcms/codegen';
 import { migrateUp } from '@opencloudcms/db';
 import type { ContentTypeDefinition } from '@opencloudcms/schema';
 import { FIELD_KINDS, SchemaValidationError, isCoreApiId, isReservedApiId, newId } from '@opencloudcms/schema';
 import { OPENCLOUDCMS_DB, OPENCLOUDCMS_OPTIONS, type ResolvedOpenCloudCmsOptions } from './options';
+import { composedBlockProblems } from './block-builder/blocks-checks';
 import { ContentRegistry } from './registry.service';
 import { SchemaWriteQueue } from './schema-write-queue';
 
@@ -67,11 +68,31 @@ export class SchemaBuilderService {
     }
   }
 
+  /**
+   * Warnings (never errors) for composed blocks that the project types `after` would break: problems that they
+   * do not have with the current types (a removed / renamed / no longer indexed field, a removed type).
+   */
+  private async blockWarnings(after: ContentTypeDefinition[]): Promise<string[]> {
+    let specs;
+    try {
+      specs = (await loadComposedBlocks(this.options.config)).specs.map((s) => s.spec);
+    } catch {
+      return [];
+    }
+    if (!specs.length) return [];
+    const core = this.registry.all().filter((d) => this.registry.isCore(d.apiId));
+    const before = composedBlockProblems(specs, this.registry.all());
+    const now = composedBlockProblems(specs, [...core, ...after]);
+    return specs.flatMap((s) => (now[s.name] ?? []).filter((p) => !(before[s.name] ?? []).includes(p)).map((p) => `Block "${s.name}": ${p}`));
+  }
+
   async preview(change: { upsert?: ContentTypeDefinition; removeId?: string }) {
     this.assertNotCore(change);
     try {
       const r = await previewChange(this.options.config, change);
-      return { changed: r.diff.changed, summary: r.plan.summary, warnings: r.plan.warnings, sql: r.sql };
+      const { definitions } = await definitionsWith(this.options.config, change);
+      const blocks = await this.blockWarnings(definitions);
+      return { changed: r.diff.changed, summary: r.plan.summary, warnings: [...r.plan.warnings, ...blocks], sql: r.sql };
     } catch (e) {
       toHttp(e);
     }
@@ -95,6 +116,7 @@ export class SchemaBuilderService {
             issues: [(e as Error).message],
           });
         }
+        const blocks = await this.blockWarnings(written.definitions);
         this.registry.reload(written.definitions);
         const rel = (p: string) => path.relative(config.root, p);
         return {
@@ -104,7 +126,7 @@ export class SchemaBuilderService {
           generated: result.generated.map(rel),
           applied: runs.map((r) => r.name),
           summary: result.status === 'up-to-date' ? [] : result.plan.plan.summary,
-          warnings: result.status === 'up-to-date' ? [] : result.plan.plan.warnings,
+          warnings: [...(result.status === 'up-to-date' ? [] : result.plan.plan.warnings), ...blocks],
           sql: result.status === 'up-to-date' ? [] : result.plan.sql,
         };
       } catch (e) {

@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { blockManifest, defineBlocks, resolvePage, toPuckConfig, writePageContent, type CustomFieldRenderers } from '../../blocks/src';
+import { CORE_BLOCK_NAMES, blockManifest, defineBlocks, resolvePage, toPuckConfig, writePageContent, type CustomFieldRenderers } from '../../blocks/src';
 import { coreBlocks } from '../../blocks/src/library';
 
 const NAMES = [
@@ -21,6 +21,7 @@ describe('coreBlocks', () => {
   it('defines exactly the expected blocks and passes defineBlocks', () => {
     expect(coreBlocks.map((x) => x.name)).toEqual(NAMES);
     expect(blockManifest(registry).map((m) => m.name)).toEqual(NAMES);
+    expect(CORE_BLOCK_NAMES).toEqual(NAMES);
   });
 
   it('labels every block and select option in all four locales', () => {

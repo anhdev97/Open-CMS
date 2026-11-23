@@ -8,7 +8,7 @@ export { normalizeRichText } from './richtext';
 export { RichTextHtml, richTextFieldTransforms } from './richtext-render';
 export { COLOR_TOKENS, SPACING_TOKENS } from './types';
 export type * from './types';
-export { collectBlockNames } from '@opencloudcms/schema';
+export { CORE_BLOCK_NAMES, collectBlockNames } from '@opencloudcms/schema';
 export type { BlockManifest, Locale, LocalizedText, StoredPageContent } from '@opencloudcms/schema';
 export { resolvePage, type AssetRef, type ContentFetcher, type Entry } from './resolve';
 export { adminFetcher, publicFetcher, FetchError } from './fetchers';

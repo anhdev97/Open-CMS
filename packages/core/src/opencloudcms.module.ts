@@ -11,6 +11,9 @@ import { OAuth2Module, type CoreReady } from '@opencloudcms/oauth2';
 import { resolveConfig } from '@opencloudcms/schema';
 import { ContentCorsMiddleware } from './http/content-cors.middleware';
 import { JsonBodyParserMiddleware } from './http/body-parser.middleware';
+import { BlocksController } from './block-builder/blocks.controller';
+import { BlocksService } from './block-builder/blocks.service';
+import { PageBlocksManifest } from './block-builder/page-blocks-manifest';
 import { AdminContentController, ContentController, WorkflowController } from './content.controllers';
 import { AdminPagesController, PagesController, PublicPagesController } from './pages/pages.controller';
 import { PagesService } from './pages/pages.service';
@@ -89,10 +92,11 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, BeforeAppli
         }),
         AssetsModule.forRoot({ dbToken: OPENCLOUDCMS_DB, assets: input.assets ?? null }),
       ],
-      controllers: [PublicPagesController, PublicAssetsController, AdminPagesController, PagesController, ContentController, AdminContentController, SchemaController, ContentGroupsController, LocalesController, SystemController, WorkflowController],
+      controllers: [PublicPagesController, PublicAssetsController, AdminPagesController, PagesController, ContentController, AdminContentController, SchemaController, BlocksController, ContentGroupsController, LocalesController, SystemController, WorkflowController],
       providers: [
         { provide: OPENCLOUDCMS_OPTIONS, useValue: options },
         { provide: OPENCLOUDCMS_DB, useFactory: () => createDb(options.config.database.url) },
+        PageBlocksManifest,
         ContentRegistry,
         EntryRepository,
         EntriesService,
@@ -100,11 +104,12 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, BeforeAppli
         PagesService,
         SchemaWriteQueue,
         SchemaBuilderService,
+        BlocksService,
         ContentGroupsService,
         LocalesService,
         { provide: CORE_READY_CORE, useValue: new DeferredCoreReady() },
       ],
-      exports: [OPENCLOUDCMS_DB, CORE_READY_CORE, ContentRegistry, EntriesService],
+      exports: [OPENCLOUDCMS_DB, CORE_READY_CORE, ContentRegistry, EntriesService, PageBlocksManifest],
     };
   }
 

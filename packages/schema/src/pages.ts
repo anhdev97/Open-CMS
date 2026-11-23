@@ -62,6 +62,15 @@ export type StoredPageContent = {
 };
 
 /**
+ * Names of the ready-made `coreBlocks` of `@opencloudcms/core/blocks` (kept here, React-free, so the server can
+ * tell core blocks from project blocks; a blocks test checks it against `coreBlocks`).
+ */
+export const CORE_BLOCK_NAMES: readonly string[] = [
+  'Section', 'Columns', 'Grid', 'Spacer', 'Divider', 'Heading', 'Text', 'Image', 'Button', 'ButtonGroup',
+  'Card', 'Badge', 'Hero', 'FeatureList', 'CallToAction', 'FAQ', 'EntryList',
+];
+
+/**
  * The blocks a project defines (`blockManifest`). `richText`: prop paths of the block's `b.richText` fields
  * (`'body'`, `'rows[].note'` inside list rows), normalized by the server when a page is saved.
  */
