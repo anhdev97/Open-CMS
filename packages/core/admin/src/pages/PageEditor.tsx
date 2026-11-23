@@ -12,7 +12,6 @@ import {
   normalizePageRichText,
   readPageContent,
   type BlockDefinition,
-  type BlockField,
   type BlockRegistry,
   type PuckData,
 } from '@opencloudcms/core/blocks';
@@ -38,7 +37,7 @@ import { EditorInfoContext, ResolvedContext, type EditorInfo } from '../page-edi
 import { EditorHeader, HeaderContext, type HeaderModel } from '../page-editor/EditorHeader';
 import { EntriesField } from '../page-editor/EntriesField';
 import { EntryField } from '../page-editor/EntryPicker';
-import { fromEditorData, previewProps, slotOverflows, toEditorData, unknownBlockTypes, type PageSeo } from '../page-editor/field-logic';
+import { canvasProps, fromEditorData, slotOverflows, toEditorData, unknownBlockTypes, type PageSeo } from '../page-editor/field-logic';
 import { UNSAVED_STATES, useAutosave, usePreviewResolution } from '../page-editor/hooks';
 import { ImageField } from '../page-editor/ImageField';
 import { LinkField } from '../page-editor/LinkField';
@@ -83,10 +82,23 @@ function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** Canvas render of one block: data fields come from the latest preview resolution (see `previewProps`). */
-function PreviewBlock({ def, render, props }: { def: BlockDefinition<any>; render: (p: Record<string, unknown>) => ReactElement; props: Record<string, unknown> }) {
+/**
+ * Canvas render of one block: data fields come from the latest preview resolution; composed (and `usesLocale`)
+ * blocks render in the page's content `locale`, like the website (see `canvasProps`).
+ */
+function PreviewBlock({
+  def,
+  render,
+  props,
+  locale,
+}: {
+  def: BlockDefinition<any>;
+  render: (p: Record<string, unknown>) => ReactElement;
+  props: Record<string, unknown>;
+  locale: Locale;
+}) {
   const resolved = useContext(ResolvedContext);
-  return render(previewProps(def.fields as Record<string, BlockField>, props, resolved.get(String(props.id))));
+  return render(canvasProps(def, props, resolved.get(String(props.id)), locale));
 }
 
 interface EditorProps {
@@ -183,7 +195,7 @@ function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorPro
   const config = useMemo(() => {
     const wrapRender = (name: string, render: (p: Record<string, unknown>) => ReactElement) => {
       const def = registry.get(name)!;
-      return (props: Record<string, unknown>) => createElement(PreviewBlock, { def, render, props });
+      return (props: Record<string, unknown>) => createElement(PreviewBlock, { def, render, props, locale });
     };
     const c = buildEditorConfig(
       registry,
@@ -202,7 +214,7 @@ function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorPro
       if (title !== `pageEditor.categories.${key}`) cat.title = title;
     }
     return c;
-  }, [registry, adminLocale, unknownTypes]);
+  }, [registry, adminLocale, locale, unknownTypes]);
 
   const overrides = useMemo(() => ({ header: () => createElement(EditorHeader), fieldTypes }), []);
   const dictionary = useMemo(() => puckDictionary(), [adminLocale]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -4,6 +4,7 @@ import {
   COLOR_TOKENS,
   SPACING_TOKENS,
   writePageContent,
+  type BlockDefinition,
   type BlockField,
   type BlockRegistry,
   type EntriesBlockField,
@@ -140,6 +141,25 @@ export function previewProps(fields: Record<string, BlockField>, live: Props, re
         return previewProps(f.fields as Record<string, BlockField>, row, r);
       });
     }
+  }
+  return out;
+}
+
+/**
+ * Props for a block render in the canvas (`previewProps`), plus the reserved props of composed (and `usesLocale`)
+ * blocks: `_locale` = the page's content locale (not the admin UI locale, so prices, dates and texts match the
+ * website) and `_editor: true`.
+ */
+export function canvasProps(
+  def: Pick<BlockDefinition<any>, 'fields' | 'composed' | 'usesLocale'>,
+  live: Props,
+  resolved: ResolvedItem | undefined,
+  locale: Locale,
+): Props {
+  const out = previewProps(def.fields as Record<string, BlockField>, live, resolved);
+  if (def.composed || def.usesLocale) {
+    out._locale = locale;
+    out._editor = true;
   }
   return out;
 }

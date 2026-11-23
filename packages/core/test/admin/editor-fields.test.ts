@@ -1,6 +1,21 @@
+import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { b, coreBlocks, defineBlock, defineBlocks, writePageContent, type PuckData } from '@opencloudcms/core/blocks';
 import {
+  PUCK_FORMAT_VERSION,
+  b,
+  coreBlocks,
+  defineBlock,
+  defineBlocks,
+  defineComposedBlock,
+  resolvePage,
+  toPuckConfig,
+  writePageContent,
+  type ContentFetcher,
+  type CustomFieldRenderers,
+  type PuckData,
+} from '@opencloudcms/core/blocks';
+import {
+  canvasProps,
   contentTypeOptions,
   dataSignature,
   editorFilterFields,
@@ -311,5 +326,63 @@ describe('entriesFieldControls', () => {
   it('labels a fixed condition with the field label and a readable value', () => {
     expect(fixedConditionText({ field: 'featured', value: 'true' }, field('featured', { kind: 'boolean', label: 'Featured' }), (k: string) => (k.endsWith('yes') ? 'Yes' : 'No'))).toBe('Featured = Yes');
     expect(fixedConditionText({ field: 'stock', value: '3' }, undefined, () => '')).toBe('stock = 3');
+  });
+});
+
+describe('canvas locale of composed blocks', () => {
+  const card = defineComposedBlock({
+    id: 'blk_canvas01',
+    name: 'PriceCard',
+    label: { 'en-US': 'Price card' },
+    category: 'commerce',
+    version: 1,
+    binding: { apiId: 'product', mode: 'single' },
+    fields: {},
+    tree: { el: 'Card', children: [{ el: 'Heading', bind: { text: { from: 'entry', path: 'name' } } }, { el: 'Price', bind: { value: { from: 'entry', path: 'price' } } }] },
+  });
+  const reg = defineBlocks([...coreBlocks, card]);
+  const stored = { root: { props: {} }, content: [{ type: 'PriceCard', props: { id: 'c1', entry: { documentId: 'p1' } } }] } as unknown as PuckData;
+  const fetcher: ContentFetcher = {
+    byIds: async (_a, ids) => ids.map((documentId) => ({ documentId, name: 'Áo', price: { amount: 1200000, currency: 'VND' } })),
+    query: async () => [],
+    pagePaths: async () => ({}),
+  };
+  const noFields = {} as CustomFieldRenderers;
+
+  it('canvasProps stamps the page content locale and _editor on composed/usesLocale blocks only', () => {
+    const live = { id: 'c1', entry: { documentId: 'p1' }, _editor: false };
+    expect(canvasProps(card, live, undefined, 'vi-VN')).toMatchObject({ _locale: 'vi-VN', _editor: true });
+    const plain = reg.get('Heading')!;
+    const out = canvasProps(plain, { id: 'h', text: 'x' }, undefined, 'vi-VN');
+    expect(out).not.toHaveProperty('_locale');
+    expect(out).not.toHaveProperty('_editor');
+  });
+
+  it('page builder preview (admin en-US) renders the same HTML as the website for a vi-VN page', async () => {
+    const page = { format: 'puck' as const, formatVersion: PUCK_FORMAT_VERSION, data: stored };
+    const resolved = await resolvePage(page as never, reg, fetcher, { locale: 'vi-VN', defaultLocale: 'en-US' });
+    const resolvedProps = (resolved.content[0] as { props: Record<string, unknown> }).props;
+
+    const site = toPuckConfig(reg, { locale: 'vi-VN', customFields: noFields }).components.PriceCard.render as unknown as (p: unknown) => unknown;
+    const siteHtml = renderToString(site({ ...resolvedProps, puck: { isEditing: false } }) as never);
+
+    const index = indexResolved(stored, resolved, reg);
+    const editor = buildEditorConfig(
+      reg,
+      {
+        locale: 'en-US',
+        customFields: noFields,
+        token: (() => null) as never,
+        contentType: (() => null) as never,
+        unknown: () => null as never,
+        wrapRender: (name, render) => (props) => render(canvasProps(reg.get(name)!, props, index.get(String(props.id)), 'vi-VN')),
+      },
+      [],
+    );
+    const canvas = editor.components.PriceCard.render as unknown as (p: unknown) => unknown;
+    const canvasHtml = renderToString(canvas({ id: 'c1', entry: { documentId: 'p1' }, puck: { isEditing: true } }) as never);
+
+    expect(siteHtml).toContain('1.200.000');
+    expect(canvasHtml).toBe(siteHtml);
   });
 });
