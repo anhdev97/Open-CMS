@@ -16,7 +16,7 @@ import { AuthContext, type AuthContextValue, type AuthUser } from './AuthContext
 type State = { status: 'loading' } | { status: 'ready'; user: AuthUser } | { status: 'error'; error: Error };
 
 /** Wraps every route except `/setup` and `/login` (spec §5.2): checks the session, then renders the layout. */
-export function AuthGate({ children }: { children: ReactNode }) {
+export function AuthGate({ children, fullScreen = false }: { children: ReactNode; fullScreen?: boolean }) {
   const navigate = useAdminNavigate();
   const [state, setState] = useState<State>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
@@ -96,7 +96,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={value}>
-      <AppLayout user={value.user} onLogout={() => void value.logout()}>
+      <AppLayout user={value.user} fullScreen={fullScreen} onLogout={() => void value.logout()}>
         {children}
       </AppLayout>
     </AuthContext.Provider>

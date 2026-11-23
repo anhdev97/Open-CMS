@@ -11,7 +11,7 @@ import { RouteGuard } from './router/RouteGuard';
 export default function AdminApp() {
   useLocale(); // re-render the route tree (state kept) when the admin language changes
   const { slug } = useParams<{ slug?: string[] }>();
-  const { id, params, guarded } = matchRoute(slug);
+  const { id, params, guarded, fullScreen } = matchRoute(slug);
   const Page = pages[id];
   const page = (
     <AdminParamsContext.Provider value={params}>
@@ -20,7 +20,7 @@ export default function AdminApp() {
       </RouteGuard>
     </AdminParamsContext.Provider>
   );
-  return guarded ? <AuthGate>{page}</AuthGate> : page;
+  return guarded ? <AuthGate fullScreen={fullScreen}>{page}</AuthGate> : page;
 }
 
 export {

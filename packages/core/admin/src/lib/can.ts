@@ -21,6 +21,8 @@ const ROUTE_PERMISSIONS: Partial<Record<RouteId, Permission>> = {
   settingsLanguages: 'settings.languages',
   content: 'content.read',
   assets: 'content.read',
+  pages: 'content.read',
+  pageEditor: 'content.read',
 };
 
 /** The permission a route needs; `undefined` means any signed-in user. */
