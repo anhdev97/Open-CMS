@@ -25,6 +25,8 @@ function createFetcher(baseUrl: string, mode: Mode): ContentFetcher {
     const res = await fetch(`${root}${mode.prefix}/${encodeURIComponent(apiId)}?${qs}`, {
       headers,
       ...(mode.credentials ? { credentials: 'include' as const } : {}),
+      // Drafts are per session: never cached by the browser or by Next's fetch cache.
+      ...(mode.draft ? { cache: 'no-store' as const } : {}),
     });
     if (!res.ok) {
       let message = `${res.status} ${res.statusText}`.trim();

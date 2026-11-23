@@ -77,6 +77,10 @@
       "import": "./dist/blocks/index.js",
       "require": "./dist/blocks-cjs/index.js"
     },
+    "./blocks/next": {
+      "types": "./dist/blocks/next/index.d.ts",
+      "import": "./dist/blocks/next/index.js"
+    },
     "./admin/theme.css": {
       "style": "./dist/admin/styles/theme.css",
       "default": "./dist/admin/styles/theme.css"

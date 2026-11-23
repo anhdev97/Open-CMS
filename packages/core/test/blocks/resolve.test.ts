@@ -268,6 +268,7 @@ describe('fetchers', () => {
     expect(q.searchParams.get('sort')).toBe('createdAt:desc');
     expect(q.searchParams.get('limit')).toBe('4');
     expect((calls[1].init as RequestInit).credentials).toBeUndefined();
+    expect((calls[1].init as RequestInit).cache).toBeUndefined();
   });
 
   it('byIds splits more than 100 ids into several requests', async () => {
@@ -288,6 +289,8 @@ describe('fetchers', () => {
     const init = calls[1].init as RequestInit;
     expect((init.headers as Record<string, string>).cookie).toBe('sid=1');
     expect(init.credentials).toBeUndefined();
+    // Drafts are never cached (browser or Next fetch cache).
+    expect(calls.map((c) => (c.init as RequestInit).cache)).toEqual(['no-store', 'no-store']);
   });
 
   it('non-2xx throws an Error carrying status', async () => {

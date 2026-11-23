@@ -6,5 +6,6 @@
     "esModuleInterop": true,
     "declaration": false,
     "outDir": "../dist/blocks-cjs"
-  }
+  },
+  "exclude": ["src/next"]
 }

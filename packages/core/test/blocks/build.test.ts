@@ -47,6 +47,26 @@ describe.skipIf(!built)('blocks output (run `pnpm --filter @opencloudcms/core bu
     expect(pkg.exports['.'].default).toBe('./dist/index.js');
   });
 
+  it('builds ./blocks/next as ESM only, outside the CommonJS build and the isomorphic entry', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(pkgRoot, 'package.json'), 'utf8'));
+    expect(pkg.exports['./blocks/next']).toEqual({
+      types: './dist/blocks/next/index.d.ts',
+      import: './dist/blocks/next/index.js',
+    });
+    expect(fs.existsSync(path.join(esm, 'next', 'index.js'))).toBe(true);
+    expect(fs.existsSync(path.join(esm, 'next', 'index.d.ts'))).toBe(true);
+    expect(fs.readFileSync(path.join(esm, 'next', 'page.js'), 'utf8')).toMatch(/from ['"]@puckeditor\/core\/rsc['"]/);
+    expect(fs.existsSync(path.join(cjs, 'next'))).toBe(false);
+    for (const f of walk(cjs).filter((p) => p.endsWith('.js'))) {
+      expect(fs.readFileSync(f, 'utf8'), f).not.toMatch(/require\(['"]next[/'"]/);
+    }
+    for (const f of walk(esm).filter((p) => p.endsWith('.js') && !p.includes(`${path.sep}next${path.sep}`))) {
+      const text = fs.readFileSync(f, 'utf8');
+      expect(text, f).not.toMatch(/from ['"]next[/'"]/);
+      expect(text, f).not.toMatch(/from ['"]\.\/next/);
+    }
+  });
+
   it('can be required from Node and runs defineBlocks / blockManifest under CJS', () => {
     const script = `
       const blocks = require('@opencloudcms/core/blocks');
