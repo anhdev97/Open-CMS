@@ -4,10 +4,10 @@
  * the migrations, so runtime and schema can't drift apart.
  */
 import { randomUUID } from 'node:crypto';
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { sql, type Kysely } from 'kysely';
 import type { ContentTypeDefinition, FieldDefinition } from '@opencloudcms/schema';
-import { fieldColumns, fieldStorage, isMultiRelation, l10nTable, mainTable, SYSTEM_TABLES } from '@opencloudcms/schema';
+import { fieldColumns, fieldIndex, fieldStorage, isMultiRelation, l10nTable, mainTable, SYSTEM_TABLES } from '@opencloudcms/schema';
 import { OPENCLOUDCMS_DB, type PublishedDocument } from './options';
 
 type Row = Record<string, any>;
@@ -65,11 +65,45 @@ function parseFilterValue(field: FieldDefinition, raw: string): unknown {
   return raw;
 }
 
+/**
+ * Postgres unique violation (23505) -> 409 `unique_violation`. The field is found from the violated index name,
+ * which is the one `fieldIndex` generates for unique fields; unknown indexes (e.g. document/status) omit `issues`.
+ */
+export function mapUniqueViolation(def: ContentTypeDefinition, e: unknown): unknown {
+  const err = e as { code?: string; constraint?: string };
+  if (err?.code !== '23505') return e;
+  const field = def.fields.find((f) => fieldIndex(def, f)?.name === err.constraint);
+  return new ConflictException({
+    code: 'unique_violation',
+    message: field ? `${field.name} is already used` : 'A unique value is already used',
+    ...(field ? { issues: [{ path: [field.name], message: 'already used' }] } : {}),
+  });
+}
+
+const MAX_DOCUMENT_IDS = 100;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** `filter[documentId][in]=a,b`: 1..100 uuids. */
+function parseDocumentIds(raw: string): string[] {
+  const ids = raw.split(',').map((s) => s.trim());
+  if (ids.length > MAX_DOCUMENT_IDS) throw new BadRequestException(`filter[documentId][in] accepts at most ${MAX_DOCUMENT_IDS} ids`);
+  if (ids.some((id) => !UUID_RE.test(id))) throw new BadRequestException('filter[documentId][in] must be a comma-separated list of UUIDs');
+  return [...new Set(ids)];
+}
+
 const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : (v as string | null) ?? null);
 
 @Injectable()
 export class EntryRepository {
   constructor(@Inject(OPENCLOUDCMS_DB) private readonly db: Kysely<any>) {}
+
+  private async writeTx(def: ContentTypeDefinition, fn: (trx: Kysely<any>) => Promise<void>): Promise<void> {
+    try {
+      await this.db.transaction().execute(fn);
+    } catch (e) {
+      throw mapUniqueViolation(def, e);
+    }
+  }
 
   /** Splits API input into main-table columns, l10n columns and relation lists. */
   private split(def: ContentTypeDefinition, data: Row) {
@@ -114,7 +148,7 @@ export class EntryRepository {
     const documentId = randomUUID();
     const id = randomUUID();
     const { main, l10n, rels } = this.split(def, data);
-    await this.db.transaction().execute(async (trx) => {
+    await this.writeTx(def, async (trx) => {
       await trx.insertInto(mainTable(def)).values({ id, document_id: documentId, status: 'draft', ...main }).execute();
       if (Object.keys(l10n).length) {
         await trx.insertInto(l10nTable(def)).values({ entry_id: id, locale, status: 'draft', ...l10n }).execute();
@@ -124,12 +158,30 @@ export class EntryRepository {
     return documentId;
   }
 
-  async update(def: ContentTypeDefinition, documentId: string, data: Row, locale: string, inTrx?: InTransaction): Promise<void> {
+  /** `expectedUpdatedAt` (ISO): optimistic check against the draft row, 409 `stale_draft` on mismatch. */
+  async update(
+    def: ContentTypeDefinition,
+    documentId: string,
+    data: Row,
+    locale: string,
+    inTrx?: InTransaction,
+    expectedUpdatedAt?: string,
+  ): Promise<void> {
     const { main, l10n, rels } = this.split(def, data);
-    await this.db.transaction().execute(async (trx) => {
+    await this.writeTx(def, async (trx) => {
       await inTrx?.(trx);
-      const id = await this.findRowId(trx, def, documentId, 'draft');
-      if (!id) throw new NotFoundException(`${def.apiId} ${documentId} not found`);
+      const current = await trx
+        .selectFrom(mainTable(def))
+        .select(['id', 'updated_at'])
+        .where('document_id', '=', documentId)
+        .where('status', '=', 'draft')
+        .forUpdate()
+        .executeTakeFirst();
+      if (!current) throw new NotFoundException(`${def.apiId} ${documentId} not found`);
+      const id = current.id as string;
+      if (expectedUpdatedAt !== undefined && new Date(expectedUpdatedAt).getTime() !== new Date(current.updated_at as Date).getTime()) {
+        throw new ConflictException({ code: 'stale_draft', message: 'The draft was changed since it was loaded', updatedAt: iso(current.updated_at) });
+      }
       await trx.updateTable(mainTable(def)).set({ ...main, updated_at: sql`now()` }).where('id', '=', id).execute();
       if (Object.keys(l10n).length) {
         await trx
@@ -224,6 +276,11 @@ export class EntryRepository {
     }
 
     for (const [name, raw] of Object.entries(q.filters)) {
+      if (name === 'documentId[in]') {
+        // Only for documentId; allowed regardless of `indexed`.
+        query = query.where('m.document_id', 'in', parseDocumentIds(raw));
+        continue;
+      }
       const field = def.fields.find((f) => f.name === name);
       if (!field) throw new BadRequestException(`Unknown filter field "${name}"`);
       if (!field.indexed && !field.unique) {
@@ -314,7 +371,7 @@ export class EntryRepository {
       const s = fieldStorage(def, field);
       if (s.mode === 'columns') (s.location === 'main' ? mainCols : l10nCols).push(...s.columns.map((c) => c.name));
     }
-    await this.db.transaction().execute(async (trx) => {
+    await this.writeTx(def, async (trx) => {
       await inTrx?.(trx);
       const draftId = await this.findRowId(trx, def, documentId, 'draft');
       if (!draftId) throw new NotFoundException(`${def.apiId} ${documentId} not found`);
@@ -334,8 +391,9 @@ export class EntryRepository {
         await sql`insert into ${sql.table(rel)} (entry_id, target_id, sort_order)
           select ${pubId}, target_id, sort_order from ${sql.table(rel)} where entry_id = ${draftId}`.execute(trx);
       }
-      // Draft remembers when it was last published (drives hasUnpublishedChanges).
-      await trx.updateTable(main).set({ published_at: sql`now()`, updated_at: sql`now()` }).where('id', '=', draftId).execute();
+      // Draft remembers when it was last published (drives hasUnpublishedChanges: updated_at > published_at).
+      // Its updated_at is left alone: it is the editor's If-Match version, and publishing does not change the draft.
+      await trx.updateTable(main).set({ published_at: sql`now()` }).where('id', '=', draftId).execute();
       await trx
         .insertInto(SYSTEM_TABLES.entryVersions)
         .values({ content_type: def.apiId, document_id: documentId, snapshot: JSON.stringify(snapshot) })

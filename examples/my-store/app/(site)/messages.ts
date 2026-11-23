@@ -3,16 +3,8 @@
 import { defineMessages } from '@opencloudcms/core';
 
 export const messages = defineMessages({
-  'en-US': {
-    home: {
-      tagline: 'A website and its OpenCloudCMS admin, served by one Next.js app.',
-      openAdmin: 'Open admin',
-    },
-  },
-  'vi-VN': {
-    home: {
-      tagline: 'Một website và trang quản trị OpenCloudCMS, chạy trong cùng một ứng dụng Next.js.',
-      openAdmin: 'Mở trang quản trị',
-    },
-  },
+  // Add strings per language, e.g. 'en-US': { footer: { contact: 'Contact us' } }, 'vi-VN': { footer: { contact: 'Liên hệ' } },
+  // and read them with createTranslator(messages, locale)('footer.contact').
+  'en-US': {},
+  'vi-VN': {},
 });

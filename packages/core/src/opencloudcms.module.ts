@@ -12,6 +12,8 @@ import { resolveConfig } from '@opencloudcms/schema';
 import { ContentCorsMiddleware } from './http/content-cors.middleware';
 import { JsonBodyParserMiddleware } from './http/body-parser.middleware';
 import { AdminContentController, ContentController, WorkflowController } from './content.controllers';
+import { AdminPagesController, PagesController, PublicPagesController } from './pages/pages.controller';
+import { PagesService } from './pages/pages.service';
 import { EntriesService } from './entries.service';
 import { EntryRepository } from './entry.repository';
 import { LocalesController, LocalesService } from './locales';
@@ -87,7 +89,7 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, BeforeAppli
         }),
         AssetsModule.forRoot({ dbToken: OPENCLOUDCMS_DB, assets: input.assets ?? null }),
       ],
-      controllers: [ContentController, AdminContentController, SchemaController, ContentGroupsController, LocalesController, SystemController, WorkflowController],
+      controllers: [PublicPagesController, AdminPagesController, PagesController, ContentController, AdminContentController, SchemaController, ContentGroupsController, LocalesController, SystemController, WorkflowController],
       providers: [
         { provide: OPENCLOUDCMS_OPTIONS, useValue: options },
         { provide: OPENCLOUDCMS_DB, useFactory: () => createDb(options.config.database.url) },
@@ -95,6 +97,7 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, BeforeAppli
         EntryRepository,
         EntriesService,
         WorkflowService,
+        PagesService,
         SchemaWriteQueue,
         SchemaBuilderService,
         ContentGroupsService,

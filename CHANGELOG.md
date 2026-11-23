@@ -4,6 +4,16 @@
 
 ### Fixed
 
+- **Publishing no longer changes the draft's `updatedAt`.** Only its `publishedAt` moves (`hasUnpublishedChanges`
+  stays `updatedAt > publishedAt`), so a save sent with the `If-Match` the editor saw before Publish succeeds
+  instead of answering 409 `stale_draft`. The page editor also re-reads the draft version after publishing.
+- **Rich text of pages is sanitized.** The website rendered `b.richText` HTML through a Puck Suspense fallback
+  that wrote the stored HTML as is (event handlers, `javascript:` links). Rich text is now normalized with the
+  editor's schema (`normalizeRichText`, `@tiptap/*` `3.35.0` pinned): on save by the server (`blockManifest` now lists
+  each block's `richText` paths; projects passing `blockManifest(blocks)` get them without changes), when content is read
+  (`readPageContent`), and rendered in place on the website (`richTextFieldTransforms`).
+- A value that breaks a `unique` field on save or publish answers 409 `unique_violation` (with the field in
+  `issues`) instead of a 500.
 - **Dev server shutdown on Ctrl+C.** Nest could hang on HTTP `server.close()` (HMR keep-alive) or
   `next.close()` when Turbopack/PostCSS workers died from the process-group SIGINT. `@opencloudcms/core`
   now drops open connections before dispose, times out Web UI close + `db.destroy()`, SIGKILLs remaining
@@ -12,6 +22,16 @@
 
 ### Breaking changes
 
+- **`opencloudcms init` no longer writes a static home page.** `app/(site)/page.tsx` is replaced by the page-builder
+  catch-all `app/(site)/[[...path]]/page.tsx`, which shows a welcome page at `/` until a page is published there.
+  Existing projects keep their files; to adopt the page builder, copy from a fresh `opencloudcms init`:
+  `src/blocks/`, `app/(site)/[[...path]]/page.tsx`, `app/(site)/%5F_opencloudcms/`, `app/(admin)/admin/AdminWithBlocks.tsx`
+  (and make `[[...slug]]/page.tsx` re-export it), the `@source` lines of `app/globals.css`, `"jsx": "react-jsx"` in
+  `tsconfig.server.json` and `pages: { blocks: blockManifest(blocks) }` in `src/app.module.ts`; then delete your
+  `app/(site)/page.tsx` (a file route at `/` would hide the page built for `/`).
+- **The content type API id `opencloudcmsPage` is reserved** for the core page content type (tables
+  `ct_opencloudcms_page`, `ct_opencloudcms_page_l10n`, created by a core migration). A project content type cannot
+  use it.
 - **The project and npm packages are renamed to OpenCloudCMS and `@opencloudcms/*`.** Install
   `@opencloudcms/cli`, run the `opencloudcms` binary, use `opencloudcms.config.ts` / `.js`, rename environment
   variables to `OPENCLOUDCMS_*`, and update imports to the new package scope. No compatibility aliases are
@@ -78,6 +98,25 @@
 
 ### Added
 
+- **Page builder and website preview.** Pages are built with drag and drop in the admin (**Pages**, `/admin/pages`,
+  Puck `0.24.1` pinned) and stored in the core content type `opencloudcmsPage` (`title`, `path`, `seo`, `content`,
+  localizable, draft/published/versions through `/api/admin/content/opencloudcmsPage/**`).
+  - New subpath **`@opencloudcms/core/blocks`** (isomorphic; ESM for bundlers, CommonJS for Nest): `defineBlock`,
+    `defineBlocks`, field builders `b.*`, `coreBlocks` (layout, basic, marketing, `EntryList`), `blockManifest`,
+    `resolvePage`, `readPageContent` / `writePageContent`. `typesVersions` maps it for `moduleResolution: node`.
+  - New subpath **`@opencloudcms/core/blocks/next`** (Next only, ESM): `createCmsPage` (catch-all renderer +
+    `generateMetadata`), `createPreviewRoute`, `createPreviewExitRoute`, `PreviewBar`, `Welcome`.
+  - `AdminApp` takes `blocks`; option `pages: { blocks }` (manifest) makes publish fail with 422 `unknown_block`
+    for blocks the project no longer has (`force: true` overrides).
+  - API: `GET /api/content/opencloudcmsPage/by-path` (published), `GET /api/admin/content/opencloudcmsPage/by-path`
+    (draft, `no-store`), `GET /api/admin/pages/blocks-check`, `GET /api/admin/pages/shadowed` (paths served by a
+    file route of `app/(site)`, warned about in the editor and the create dialog), `filter[documentId][in]` on list
+    APIs, `If-Match` on `PATCH` updates (409 `stale_draft`; checked per page document, not per locale). Page `path` errors: 422 `invalid_path`, 422 `path_reserved`.
+  - Website preview for signed-in admins (`/__opencloudcms/preview?page=&locale=`, Next draft mode, drafts of the
+    page and of the entries its blocks show, `Cache-Control: private, no-store`). The admin CSP is unchanged.
+  - `opencloudcms init` writes `src/blocks/` (with a commented example block), the catch-all renderer, the
+    preview routes, the admin wrapper, `blockManifest` in `src/app.module.ts`, `jsx` in `tsconfig.server.json` and
+    the Tailwind sources. `examples/my-store` adds a `ProductGrid` block and `pnpm seed:pages`.
 - `@opencloudcms/assets`: local, S3, and GCS storage providers; multipart upload with WebP `thumb` / `medium` /
   `large` variants; register-by-URL unchanged when `assets` is omitted. Core migration `0004_assets_storage`
   adds `storage_key`, `provider`, and `variants` on `opencms_assets`. Configure via `OpenCloudCmsModule.forRoot({
@@ -112,6 +151,8 @@
 - Every `opencloudcms` command loads the project's `.env`.
 - `scripts/smoke-init.mjs`, run in CI: scaffolds a project, adds a `review: true` content type, boots it and walks
   setup, login, logout and the groups + review workflow (Contenter submits, Reviewer rejects then approves) over HTTP.
+  It also publishes a page, checks that drafts stay private, walks the website preview (with and without a
+  session) and the editor's CSP nonce.
 
 ### Fixed
 

@@ -30,6 +30,7 @@ export interface CoreTestAppOptions {
   /** Default `{ enabled: false }`: most tests have no Next app. */
   web?: OpenCloudCmsModuleOptions['web'];
   cors?: OpenCloudCmsModuleOptions['cors'];
+  pages?: OpenCloudCmsModuleOptions['pages'];
   /** false: leave the database empty and without autoMigrate, so startup must refuse. Default true. */
   migrate?: boolean;
   env?: Record<string, string>;
@@ -86,6 +87,7 @@ export async function createCoreTestApp(opts: CoreTestAppOptions = {}): Promise<
           env,
           web: opts.web ?? { enabled: false },
           cors: opts.cors,
+          pages: opts.pages,
           contentGroups: opts.contentGroups,
           schemaEditable: opts.schemaEditable ?? true,
           autoMigrate: opts.migrate !== false,

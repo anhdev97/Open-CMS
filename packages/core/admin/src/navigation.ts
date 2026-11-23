@@ -1,4 +1,4 @@
-import { LanguagesIcon, ShieldCheckIcon, UsersIcon, WrenchIcon, type LucideIcon } from 'lucide-react';
+import { FileTextIcon, LanguagesIcon, ShieldCheckIcon, UsersIcon, WrenchIcon, type LucideIcon } from 'lucide-react';
 import type { Permission } from '@opencloudcms/schema';
 
 export interface SettingsItem {
@@ -15,4 +15,9 @@ export const settingsItems: SettingsItem[] = [
   { to: '/settings/groups', label: 'nav.groups', icon: ShieldCheckIcon, permission: 'settings.groups' },
   { to: '/settings/content-types', label: 'nav.contentTypesSettings', icon: WrenchIcon, permission: 'settings.content-types' },
   { to: '/settings/languages', label: 'nav.languages', icon: LanguagesIcon, permission: 'settings.languages' },
+];
+
+/** Top-level items shown above the content groups. */
+export const primaryItems: SettingsItem[] = [
+  { to: '/pages', label: 'nav.pages', icon: FileTextIcon, permission: 'content.read' },
 ];

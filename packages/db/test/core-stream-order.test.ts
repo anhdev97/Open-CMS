@@ -25,6 +25,15 @@ describe('core migration stream with contributed sources', () => {
   });
   afterAll(async () => {
     await db?.destroy();
+    // `destroy()` resolves once Terminate is sent, not once backends exit; dropping WITH (FORCE) right away can
+    // SIGTERM a backend whose client then emits FATAL 57P01 with no listener (uncaught). Wait for sessions to go
+    // (same approach as packages/oauth2/test/support/db.ts).
+    const deadline = Date.now() + 5_000;
+    for (;;) {
+      const { rows } = await admin.query('select count(*)::int as n from pg_stat_activity where datname = $1', [name]);
+      if (rows[0].n === 0 || Date.now() > deadline) break;
+      await new Promise((r) => setTimeout(r, 10));
+    }
     await admin.query(`drop database if exists ${name} with (force)`);
     await admin.end();
   });
@@ -38,13 +47,14 @@ describe('core migration stream with contributed sources', () => {
       '0003_workflow',
       '0004_assets_storage',
       '0005_asset_folders',
+      '0006_pages',
       'oauth2_0001_init',
     ]);
 
     let ran = false;
-    registerCoreMigrations({ '0006_future_core': { async up() { ran = true; }, async down() {} } });
+    registerCoreMigrations({ '0007_future_core': { async up() { ran = true; }, async down() {} } });
     const second = await migrateUp(db, NO_PROJECT_MIGRATIONS);
-    expect(second.map((r) => [r.name, r.status])).toEqual([['0006_future_core', 'Success']]);
+    expect(second.map((r) => [r.name, r.status])).toEqual([['0007_future_core', 'Success']]);
     expect(ran).toBe(true);
   });
 

@@ -227,6 +227,46 @@ gets **only** the i18n API above, every other name of `@opencloudcms/core` is `u
 the Node runtime (not Edge). The generated `app/(site)/messages.ts` is server-only; a client component that
 needs messages imports `defineMessages` from `@opencloudcms/core/admin` and keeps its own messages file.
 
+## Page builder
+
+Website pages are built with drag and drop in the admin (**Pages**, `/admin/pages`) and stored as content (the
+core content type `opencloudcmsPage`: `title`, `path`, `seo`, `content`, per locale, draft/published). Blocks are
+React components declared in your project:
+
+```tsx
+// src/blocks/product-grid/product-grid.block.tsx
+import { b, defineBlock } from '@opencloudcms/core/blocks';
+
+export default defineBlock({
+  name: 'ProductGrid',
+  label: { 'en-US': 'Product grid', 'vi-VN': 'Lưới sản phẩm' },
+  category: 'commerce',
+  fields: {
+    heading: b.text({ default: 'Featured' }),
+    products: b.entries('product', { limit: 12, sortable: true, filterable: true }),
+  },
+  render: ({ heading, products }) => (
+    <section className="py-12">
+      <h2 className="text-2xl font-semibold">{heading}</h2>
+      <ul>{products.map((p) => <li key={p.documentId}>{String(p.name)}</li>)}</ul>
+    </section>
+  ),
+});
+```
+
+Register it in `src/blocks/index.ts` (`defineBlocks([...coreBlocks, ProductGrid])`). `opencloudcms init` writes
+everything else: the website renderer `app/(site)/[[...path]]/page.tsx`, the preview routes
+`app/(site)/%5F_opencloudcms/preview/**` (URL `/__opencloudcms/preview`), the admin wrapper that passes the blocks to
+the editor, `blockManifest(blocks)` in `src/app.module.ts` (publishing a page with an unknown block fails) and the
+Tailwind sources. `render` must be isomorphic (it runs in the editor and on the website, and Nest imports the
+file): no server-only APIs, no data fetching (data fields such as `b.entries` arrive resolved), no CSS imports
+(Tailwind classes only). "View on website" previews the draft on the real site, for signed-in admins only. The editor autosaves with a draft
+conflict check per page document, not per locale: two people editing different locales of the same page see a
+conflict.
+Until a page is published at `/`, the home shows a welcome page. Field kinds, preview, API and limits:
+[`packages/core/README.md`](packages/core/README.md#page-builder). `examples/my-store` has a `ProductGrid` block
+and `pnpm --filter my-store seed:pages` publishes `/` (Hero + the newest products) and `/about`.
+
 ## Users, groups and review
 
 Access is granted by **permission groups**. A user belongs to one or more groups; their permissions are the
@@ -301,7 +341,7 @@ export default defineHooks('product', {
 ## Roadmap
 
 - v0.2: markets/sites/currencies as first-class entities, RBAC scoped by market + locale, webhooks, ~~asset upload with storage adapters (local/S3/GCS via `@opencloudcms/assets`)~~ (done)
-- v0.3: widget schema + page builder, Next.js preview (draft mode), `@opencloudcms/sdk` + React widget renderer
+- v0.3: ~~page builder, Next.js preview (draft mode)~~ (done), `@opencloudcms/sdk` + React widget renderer
 - v0.4: plugin API (custom field kinds, storage), scheduled publishing, translation workflow, ~~`opencloudcms init` scaffolder~~ (done)
 
 ## License

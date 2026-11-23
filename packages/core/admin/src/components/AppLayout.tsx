@@ -37,7 +37,7 @@ import { Link, useAdminPathname } from '../lib/nav';
 import { api } from '../lib/api';
 import { useLocale } from '../i18n/hooks';
 import { buildSidebarTree, UNGROUPED_KEY, type SidebarTypeInput } from '../lib/sidebar-tree';
-import { settingsItems } from '../navigation';
+import { primaryItems, settingsItems } from '../navigation';
 import { useAuth } from '../auth/AuthContext';
 import { can, visibleSettingsItems } from '../lib/can';
 import { cn } from '../lib/utils';
@@ -194,6 +194,7 @@ function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {link('/', t('nav.home'), <HomeIcon aria-hidden="true" />)}
+              {visibleSettingsItems(primaryItems, user.permissions).map(({ to, label, icon: Icon }) => link(to, t(label), <Icon aria-hidden="true" />))}
               {canRead && link('/assets', t('nav.assets'), <ImageIcon aria-hidden="true" />)}
             </SidebarMenu>
           </SidebarGroupContent>
@@ -293,11 +294,14 @@ interface AppLayoutProps {
   user: LayoutUser;
   /** Called by "Log out"; AuthGate supplies it. */
   onLogout?: () => void;
+  /** Skip the sidebar and top bar (the page editor owns the whole viewport). */
+  fullScreen?: boolean;
   children: ReactNode;
 }
 
 /** Sidebar + top bar + content area. Below 768px the sidebar becomes a sheet (shadcn sidebar behaviour). */
-export function AppLayout({ user, onLogout, children }: AppLayoutProps) {
+export function AppLayout({ user, onLogout, fullScreen = false, children }: AppLayoutProps) {
+  if (fullScreen) return <div className="flex min-h-svh w-full flex-col">{children}</div>;
   return (
     <SidebarProvider>
       <a

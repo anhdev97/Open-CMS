@@ -6,13 +6,19 @@
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "blocks": ["dist/blocks/index.d.ts"],
+      "blocks/next": ["dist/blocks/next/index.d.ts"]
+    }
+  },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.mkdirSync('dist/admin/styles',{recursive:true});fs.copyFileSync('admin/src/styles/theme.css','dist/admin/styles/theme.css')\" && tsc -p tsconfig.json && tsc -p admin/tsconfig.json && node -e \"require('fs').cpSync('admin/src/styles/theme.css','dist/admin/styles/theme.css')\"",
+    "build": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.mkdirSync('dist/admin/styles',{recursive:true});fs.copyFileSync('admin/src/styles/theme.css','dist/admin/styles/theme.css')\" && tsc -p tsconfig.json && tsc -p blocks/tsconfig.json && tsc -p blocks/tsconfig.cjs.json && tsc -p admin/tsconfig.json && node -e \"require('fs').cpSync('admin/src/styles/theme.css','dist/admin/styles/theme.css')\"",
     "dev:admin": "tsc -w -p admin/tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p admin/tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p blocks/tsconfig.json --noEmit && tsc -p blocks/tsconfig.cjs.json --noEmit && tsc -p admin/tsconfig.json --noEmit"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
@@ -21,9 +27,29 @@
     "@opencloudcms/db": "workspace:*",
     "@opencloudcms/oauth2": "workspace:*",
     "@opencloudcms/schema": "workspace:*",
+    "@puckeditor/core": "0.24.1",
+    "@tiptap/core": "3.35.0",
+    "@tiptap/extension-blockquote": "3.35.0",
+    "@tiptap/extension-bold": "3.35.0",
+    "@tiptap/extension-code": "3.35.0",
+    "@tiptap/extension-code-block": "3.35.0",
+    "@tiptap/extension-document": "3.35.0",
+    "@tiptap/extension-hard-break": "3.35.0",
+    "@tiptap/extension-heading": "3.35.0",
+    "@tiptap/extension-horizontal-rule": "3.35.0",
+    "@tiptap/extension-italic": "3.35.0",
+    "@tiptap/extension-link": "3.35.0",
+    "@tiptap/extension-list": "3.35.0",
+    "@tiptap/extension-paragraph": "3.35.0",
+    "@tiptap/extension-strike": "3.35.0",
+    "@tiptap/extension-text": "3.35.0",
+    "@tiptap/extension-text-align": "3.35.0",
+    "@tiptap/extension-underline": "3.35.0",
+    "@tiptap/html": "3.35.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "express": "^5.2.1",
+    "happy-dom": "21.0.4",
     "kysely": "^0.28.0",
     "lucide-react": "^1.57.0",
     "radix-ui": "^1.8.1",
@@ -56,6 +82,9 @@
     "rxjs": "^7.8.2",
     "tailwindcss": "^4.3.3"
   },
+  "imports": {
+    "#tiptap-html": { "require": "@tiptap/html/server", "default": "@tiptap/html" }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -69,6 +98,15 @@
     "./admin/layout": {
       "types": "./dist/admin/layout.d.ts",
       "default": "./dist/admin/layout.js"
+    },
+    "./blocks": {
+      "types": "./dist/blocks/index.d.ts",
+      "import": "./dist/blocks/index.js",
+      "require": "./dist/blocks-cjs/index.js"
+    },
+    "./blocks/next": {
+      "types": "./dist/blocks/next/index.d.ts",
+      "import": "./dist/blocks/next/index.js"
     },
     "./admin/theme.css": {
       "style": "./dist/admin/styles/theme.css",

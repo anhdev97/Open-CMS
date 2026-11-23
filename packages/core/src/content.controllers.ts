@@ -7,6 +7,7 @@ import {
   Inject,
   Param,
   ParseUUIDPipe,
+  Headers,
   Patch,
   Post,
   Query,
@@ -20,10 +21,18 @@ export function parseListQuery(query: Record<string, unknown>): ListParams {
   const filter: Record<string, string> = {};
   for (const [k, v] of Object.entries(query)) {
     const m = /^filter\[([A-Za-z0-9]+)\]$/.exec(k);
-    if (m) filter[m[1]] = String(v);
+    if (m) {
+      filter[m[1]] = String(v);
+      continue;
+    }
+    const inm = /^filter\[([A-Za-z0-9]+)\]\[in\]$/.exec(k);
+    if (inm) filter[`${inm[1]}[in]`] = String(v);
   }
   if (query.filter && typeof query.filter === 'object') {
-    for (const [k, v] of Object.entries(query.filter as Record<string, unknown>)) filter[k] = String(v);
+    for (const [k, v] of Object.entries(query.filter as Record<string, unknown>)) {
+      if (v && typeof v === 'object' && !Array.isArray(v) && 'in' in v) filter[`${k}[in]`] = String((v as { in: unknown }).in);
+      else filter[k] = String(v);
+    }
   }
   return {
     locale: query.locale as string | undefined,
@@ -33,6 +42,12 @@ export function parseListQuery(query: Record<string, unknown>): ListParams {
     offset: query.offset as string | undefined,
     filter,
   };
+}
+
+/** `If-Match: "<iso>"` or `<iso>` -> the ISO string; absent header = no optimistic check. */
+function ifMatchValue(header: string | undefined): string | undefined {
+  const v = header?.trim().replace(/^W\//, '').replace(/^"(.*)"$/, '$1');
+  return v ? v : undefined;
 }
 
 /** Storefront / delivery API: published content only, no auth. */
@@ -89,6 +104,7 @@ export class AdminContentController {
     return this.entries.create(apiId, body, locale);
   }
 
+  /** Partial update of the draft; `If-Match: <updatedAt ISO>` enables the stale-draft check (409 `stale_draft`). */
   @RequirePermission('content.update')
   @Patch(':apiId/:documentId')
   update(
@@ -97,14 +113,20 @@ export class AdminContentController {
     @Body() body: unknown,
     @CurrentUser() user: RequestUser,
     @Query('locale') locale?: string,
+    @Headers('if-match') ifMatch?: string,
   ) {
-    return this.entries.update(apiId, documentId, body, locale, user);
+    return this.entries.update(apiId, documentId, body, locale, user, { expectedUpdatedAt: ifMatchValue(ifMatch) });
   }
 
   @Post(':apiId/:documentId/publish')
   @HttpCode(200)
-  publish(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string, @CurrentUser() user: RequestUser) {
-    return this.entries.publish(apiId, documentId, user);
+  publish(
+    @Param('apiId') apiId: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @CurrentUser() user: RequestUser,
+    @Body() body?: { force?: unknown } | null,
+  ) {
+    return this.entries.publish(apiId, documentId, user, 'publish', { force: body?.force === true });
   }
 
   /** Publish an entry that is In review (spec B §6.4 "Approve & publish"). */

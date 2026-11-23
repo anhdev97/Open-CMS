@@ -36,6 +36,8 @@ export const tsconfigServerJson = (): string =>
         emitDecoratorMetadata: true,
         esModuleInterop: true,
         skipLibCheck: true,
+        // Block files (src/blocks/**/*.block.tsx) are TSX: the server imports them for blockManifest.
+        jsx: 'react-jsx',
         outDir: 'dist',
         rootDir: '.',
       },
@@ -106,7 +108,9 @@ bootstrap().catch((e: unknown) => {
 
 export const appModuleTs = (): string => `import { Module } from '@nestjs/common';
 import { OpenCloudCmsModule } from '@opencloudcms/core';
+import { blockManifest } from '@opencloudcms/core/blocks';
 import config from '../opencloudcms.config';
+import blocks from './blocks';
 import contentGroups from './content-groups';
 import { contentTypes } from './generated';
 import { hooks } from './extensions';
@@ -128,6 +132,8 @@ const projectRoot = findProjectRoot(__dirname);
       // One Next app (app/) serves the admin at /admin and the website everywhere else.
       // Set \`web: { enabled: false }\` to serve only the API (no admin, no website).
       web: { dir: projectRoot },
+      // Page builder: publishing a page that uses a block missing from src/blocks fails with 422 unknown_block.
+      pages: { blocks: blockManifest(blocks) },
     }),
   ],
 })
@@ -142,7 +148,19 @@ export const metadata = adminMetadata;
 export default AdminLayout;
 `;
 
-export const adminPageTsx = (): string => `export { default } from '@opencloudcms/core/admin';
+export const adminPageTsx = (): string => `export { default } from '../AdminWithBlocks';
+`;
+
+/** The project registry holds functions (render), so only a client component can hand it to AdminApp. */
+export const adminWithBlocksTsx = (): string => `'use client';
+// The admin with the page-builder blocks of this project (src/blocks). A client component: the block
+// registry holds functions, which a server component cannot pass to AdminApp.
+import AdminApp from '@opencloudcms/core/admin';
+import blocks from '../../../src/blocks';
+
+export default function AdminWithBlocks() {
+  return <AdminApp blocks={blocks} />;
+}
 `;
 
 export const siteLayoutTsx = (name: string): string => `import '../globals.css';
@@ -169,47 +187,105 @@ export const siteMessagesTs = (): string => `// Strings of the website. Server c
 import { defineMessages } from '@opencloudcms/core';
 
 export const messages = defineMessages({
-  'en-US': {
-    home: {
-      tagline: 'A website and its OpenCloudCMS admin, served by one Next.js app.',
-      openAdmin: 'Open admin',
-    },
-  },
-  'vi-VN': {
-    home: {
-      tagline: 'Một website và trang quản trị OpenCloudCMS, chạy trong cùng một ứng dụng Next.js.',
-      openAdmin: 'Mở trang quản trị',
-    },
-  },
+  // Add strings per language, e.g. 'en-US': { footer: { contact: 'Contact us' } }, 'vi-VN': { footer: { contact: 'Liên hệ' } },
+  // and read them with createTranslator(messages, locale)('footer.contact').
+  'en-US': {},
+  'vi-VN': {},
 });
 `;
 
-export const sitePageTsx = (name: string): string => `import { createTranslator } from '@opencloudcms/core';
-import locales from '../../src/locales';
-import { messages } from './messages';
+/** Catch-all website renderer: pages built in /admin/pages (published; drafts in preview), Welcome at `/` until one exists. */
+export const siteCatchAllPageTsx = (name: string): string => `// Every website path that no other route of app/(site) handles: the page published at that path in the admin
+// (Pages), rendered with the blocks of src/blocks. Draft mode (website preview) shows drafts to signed-in admins.
+// Until a page is published at /, the home shows a welcome page. A path without a page is a 404 (not-found.tsx).
+import { createCmsPage } from '@opencloudcms/core/blocks/next';
+import blocks from '../../../src/blocks';
 
-export default function HomePage() {
-  const t = createTranslator(messages, locales.defaultLocale);
-  return (
-    <main data-opencloudcms-site="" className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-4 px-6">
-      <h1 className="text-3xl font-semibold tracking-tight">${name}</h1>
-      <p className="text-muted-foreground">{t('home.tagline')}</p>
-      <p>
-        <a
-          href="/admin"
-          className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          {t('home.openAdmin')}
-        </a>
-      </p>
-    </main>
-  );
-}
+const cms = createCmsPage({ blocks, siteName: '${name}' });
+
+// Next only reads segment config written literally in this file.
+export const dynamic = 'force-dynamic';
+export default cms.Page;
+export const generateMetadata = cms.generateMetadata;
+`;
+
+/**
+ * Website preview of a draft (\`/__opencloudcms/preview?page=&locale=\`). The folder is \`%5F_opencloudcms\`: Next treats
+ * folders starting with \`_\` as private, \`%5F\` is its documented escape for a URL segment starting with \`_\`.
+ */
+export const previewRouteTs = (): string => `// Website preview (draft mode) for signed-in admins: /__opencloudcms/preview?page=<documentId>&locale=<locale>.
+// The folder is named %5F_opencloudcms because Next treats folders starting with "_" as private.
+import { createPreviewRoute } from '@opencloudcms/core/blocks/next';
+
+export const dynamic = 'force-dynamic';
+export const { GET } = createPreviewRoute();
+`;
+
+export const previewExitRouteTs = (): string => `// Leaves the website preview: /__opencloudcms/preview/exit (turns draft mode off, back to the published page).
+import { createPreviewExitRoute } from '@opencloudcms/core/blocks/next';
+
+export const dynamic = 'force-dynamic';
+export const { GET } = createPreviewExitRoute();
+`;
+
+export const blocksIndexTs = (): string => `// Blocks of the page builder (/admin/pages): the core library plus your own.
+// This file is imported by the admin editor, the website renderer and the server (blockManifest in
+// src/app.module.ts), so every block must be isomorphic: no server-only APIs, no data fetching in render
+// (data comes in through b.entry / b.entries / b.link / b.image props), no CSS imports (Tailwind classes only).
+import { coreBlocks, defineBlocks } from '@opencloudcms/core/blocks';
+// import Example from './example/example.block';
+
+export default defineBlocks([...coreBlocks]);
+// To add the example: uncomment the import above and use \`defineBlocks([...coreBlocks, Example])\`.
+`;
+
+export const exampleBlockTsx = (): string => `// An example block. To offer it in the page editor, register it in src/blocks/index.ts.
+//
+// - \`name\` is the stable key stored in page data: PascalCase and unique. Renaming it orphans existing pages
+//   (publishing them then fails with unknown_block), so treat it like a database column name.
+// - \`fields\` use the b.* builders; \`render\` receives their values (data fields arrive already resolved).
+// - \`render\` runs in the editor (browser) and on the website (server): no server-only APIs, no fetch,
+//   no CSS imports. Style with Tailwind classes written out in full (app/globals.css scans src/blocks).
+// - Changing the shape of the props? Bump \`version\` and add a \`migrate\` step (see the README).
+import { b, defineBlock } from '@opencloudcms/core/blocks';
+
+const TONE = {
+  neutral: 'bg-muted text-foreground',
+  primary: 'bg-primary text-primary-foreground',
+} as const;
+
+export default defineBlock({
+  name: 'Example',
+  label: { 'en-US': 'Example', 'vi-VN': 'Ví dụ' },
+  category: 'basic',
+  icon: 'sparkles',
+  fields: {
+    title: b.text({ label: 'Title', default: 'Hello from src/blocks' }),
+    body: b.longText({ label: 'Body', default: 'Edit this block in src/blocks/example/example.block.tsx.' }),
+    tone: b.select({
+      label: 'Tone',
+      options: [
+        { value: 'neutral', label: 'Neutral' },
+        { value: 'primary', label: 'Primary' },
+      ],
+      default: 'neutral',
+    }),
+  },
+  render: ({ title, body, tone }) => (
+    <section className={\`rounded-xl px-6 py-8 \${TONE[tone]}\`}>
+      <h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
+      {body ? <p className="mt-2 opacity-90">{body}</p> : null}
+    </section>
+  ),
+});
 `;
 
 export const globalsCss = (): string => `@import "tailwindcss";
 @import "@opencloudcms/core/admin/theme.css";
 @source "../node_modules/@opencloudcms/core/dist/admin";
+/* Page builder: classes of the core blocks (and the preview bar), and of this project's blocks. */
+@source "../node_modules/@opencloudcms/core/dist/blocks";
+@source "../src/blocks";
 `;
 
 /** `link` (set by `--link`): the core is a symlink outside the project; Turbopack and output tracing only follow files under their root. */
@@ -324,12 +400,15 @@ An OpenCloudCMS project: a NestJS backend (\`src/\`) and one Next.js app (\`app/
 
 \`\`\`
 src/                  NestJS: main.ts, app.module.ts, content types, hooks, generated code
+  blocks/             page-builder blocks (index.ts registers them; example/ is a commented sample)
   locales.ts          website languages (managed from Settings > Languages)
   content-groups.ts   sidebar groups of content types (managed from Settings > Content types)
 app/                  Next.js App Router: one app for the admin and the website
-  (admin)/            root layout + page of the admin (re-exported from @opencloudcms/core)
-  (site)/             root layout, home page and strings (messages.ts) of the website: yours to change
-  globals.css         Tailwind v4 + the admin theme
+  (admin)/            root layout + page of the admin (AdminWithBlocks.tsx passes src/blocks to the editor)
+  (site)/             root layout and strings (messages.ts) of the website: yours to change
+    [[...path]]/      renders the pages built in the admin (Pages)
+    %5F_opencloudcms/ website preview routes (/__opencloudcms/preview and /exit)
+  globals.css         Tailwind v4 + the admin theme (scans the core blocks and src/blocks)
 migrations/           SQL migrations (opencloudcms migrate:create / migrate:up)
 next.config.ts        Next config
 tsconfig.json         for Next; tsconfig.server.json is for the NestJS server
@@ -365,9 +444,19 @@ Configuration lives in \`.env\` (see \`.env.example\`). Every \`opencloudcms\` c
 
 ## Website
 
-The website is the \`app/(site)\` route group; edit it like any Next app. To run only the API and no admin or website, set \`web: { enabled: false }\` in \`OpenCloudCmsModule.forRoot({ ... })\` (\`src/app.module.ts\`).
+The website is the \`app/(site)\` route group; edit it like any Next app. Pages built in the admin (\`/admin/pages\`) are
+served by \`app/(site)/[[...path]]/page.tsx\`; until a page is published at \`/\` the home shows a welcome page. A file route
+you add (for example \`app/(site)/blog/page.tsx\`) wins over a page with the same path, and the editor warns about it. To run only the API and no admin or website, set \`web: { enabled: false }\` in \`OpenCloudCmsModule.forRoot({ ... })\` (\`src/app.module.ts\`).
 
 Limitation: Next keeps its cache in \`.next/cache\` on disk, so caching is only correct when a single instance runs.
+
+## Page builder
+
+- Blocks live in \`src/blocks\` and are registered in \`src/blocks/index.ts\` (\`defineBlocks([...coreBlocks, YourBlock])\`).
+  The admin editor, the website and the server all import that file, so \`render\` must be isomorphic: no server-only
+  APIs, no data fetching (use \`b.entry\` / \`b.entries\` / \`b.link\` / \`b.image\` fields), no CSS imports (Tailwind classes only).
+- Adding or changing a block is a code change; building and publishing pages works in production too.
+- "View on website" in the editor opens a draft preview (signed-in admins only; over https in production).
 
 ## Languages
 

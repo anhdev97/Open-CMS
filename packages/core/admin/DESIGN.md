@@ -63,6 +63,16 @@ Commit the generated file unchanged, then show it on the `/_ui` page (`src/pages
 - UI text is English and lives only in `src/i18n/messages/*` (en-US is the source), read through `t()`.
 - Modules imported by root vitest tests (`lib/api.ts` once the API client is added, `lib/api-error.ts`, `lib/format-issue.ts`, `i18n/messages/en-US.ts`, ...) use relative imports only; the `@/` alias no longer exists because `tsc` does not rewrite it on emit.
 
+## Page editor
+
+`/admin/pages/:documentId?locale=` is a full-screen [Puck](https://puckeditor.com) editor (`src/pages/PageEditor.tsx`, parts in `src/page-editor/`).
+
+- **Chrome.** Puck's `overrides.header` is `EditorHeader` (back, title + path, locale, undo/redo, "View on website", save state, Save, Publish). `overrides.fieldTypes` (`puck-fields.tsx`) swaps Puck's text, textarea, number, select and radio inputs for `components/ui`. Puck keeps its own layout, drawer, outline, viewport/zoom controls and array/rich-text fields; their strings come from `pageEditor.puck.*` through Puck's `dictionary`.
+- **Data fields** are Puck custom fields built from `components/ui`: `LinkField` (URL or page), `ImageField` (the content editor's asset picker and upload via `FieldInput`, or a URL, plus alt text), `EntryField`/`EntryPicker` (search drafts of the type), `EntriesField` (pick, or filter on `indexed`/`unique` fields + sort + limit), `TokenField` (`b.color`/`b.spacing`: design tokens only) and `ContentTypeField` (the text prop named by an entries field's `apiIdFrom`). Every field renders its own label with `FieldShell`.
+- **Canvas.** Puck's iframe copies the host page's styles, so blocks are drawn with the same `app/globals.css` as the website. Puck's CSS is imported as `@puckeditor/core/no-external.css`: the default `puck.css` `@import`s a font from rsms.me, which the admin CSP blocks (and the failed import breaks the editor chunk). Data fields are shown resolved (`resolvePage` with the admin fetcher, 300 ms after a data-field change); before that they get empty values (`previewProps`).
+- **Saving.** `autosave.ts` debounces 1.5 s, sends `If-Match` with the last `updatedAt`, stops on `409 stale_draft` (conflict banner with Reload) and saves on Save, locale switch, back, unmount and before unload.
+- **States.** Unknown blocks are delete-only placeholders (`UnknownBlock`, hidden from the drawer). `needs-migration` content is read-only with a warning banner and is never saved. A locale without a translation offers "Copy from <default locale>". `b.slot({ max })` is enforced by undoing the drop that overfills a slot (Puck 0.24 slots have no `max`).
+
 ## Dev workflow
 
 Run `pnpm --filter @opencloudcms/core dev:admin` (`tsc -w`, emits to `dist/admin`) next to the example host app (`examples/my-store`), whose Next dev server bundles the admin from `dist/admin`. Edit `src/`, `tsc` re-emits, Next hot-reloads. `pnpm --filter @opencloudcms/core build` produces the full output including `theme.css`; `dev:admin` does not copy `theme.css`, so on a fresh checkout run that build once before `dev:admin`.

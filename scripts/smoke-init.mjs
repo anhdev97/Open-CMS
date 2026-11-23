@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Smoke test for `opencloudcms init` (spec §8): scaffold a project linked to this repo, install, migrate,
-// add a review-workflow content type (generate + migrate:create), build it, run it in production and walk the site/admin checks,
-// the setup/login/logout chain and the groups + review workflow (Contenter submits, Reviewer rejects then approves) over HTTP.
+// add a review-workflow content type and a product type (generate + migrate:create), build it, run it in production and walk
+// the site/admin checks, the setup/login/logout chain, the page builder + draft preview (page-builder spec §12) and the
+// groups + review workflow (Contenter submits, Reviewer rejects then approves) over HTTP.
 // Exit code 0 = pass, 1 = fail.
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -32,6 +33,28 @@ function run(cmd, args, opts = {}) {
   log(`$ ${cmd} ${args.join(' ')}`);
   const r = spawnSync(cmd, args, { stdio: 'inherit', ...opts });
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} exited with ${r.status ?? r.signal}`);
+}
+
+/**
+ * `next build`, retried once only when it stops with Next's `SecurityFatalError`: under a coding agent Next ends the
+ * first build of a project to print an upgrade notice and lets the same command continue on retry (the build itself
+ * had succeeded). Nothing is upgraded; any other failure fails the smoke.
+ */
+function nextBuild(app, env) {
+  const args = [join(app, 'node_modules/next/dist/bin/next'), 'build'];
+  for (let attempt = 1; ; attempt++) {
+    log(`$ node ${args.join(' ')}`);
+    const r = spawnSync('node', args, { cwd: app, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(r.stdout ?? '');
+    process.stderr.write(r.stderr ?? '');
+    if (r.status === 0) return;
+    const notice = `${r.stdout}${r.stderr}`.includes('SecurityFatalError');
+    if (attempt === 1 && notice) {
+      log('next build stopped to show its upgrade notice (not acted on); retrying once');
+      continue;
+    }
+    throw new Error(`next build exited with ${r.status ?? r.signal}`);
+  }
 }
 
 async function withAdminDb(fn) {
@@ -133,6 +156,18 @@ async function main() {
   for (const f of ['src/locales.ts', 'src/content-groups.ts', 'app/(site)/messages.ts']) assert(existsSync(join(app, f)), `init did not write ${f}`);
   assert(readFileSync(join(app, 'src/locales.ts'), 'utf8').includes("locales: ['en-US']"), 'src/locales.ts is not en-US only');
   ok('src/locales.ts (en-US), src/content-groups.ts, app/(site)/messages.ts present');
+  for (const f of [
+    'src/blocks/index.ts',
+    'src/blocks/example/example.block.tsx',
+    'app/(site)/[[...path]]/page.tsx',
+    'app/(site)/%5F_opencloudcms/preview/route.ts',
+    'app/(site)/%5F_opencloudcms/preview/exit/route.ts',
+    'app/(admin)/admin/AdminWithBlocks.tsx',
+  ]) {
+    assert(existsSync(join(app, f)), `init did not write ${f}`);
+  }
+  assert(!existsSync(join(app, 'app/(site)/page.tsx')), 'init still writes the static app/(site)/page.tsx');
+  ok('page builder files present (src/blocks, catch-all, preview routes, admin wrapper); no static home');
 
   // pnpm: use the repo's pinned version via corepack; plain `pnpm` outside the repo may try another version
   const corepack = spawnSync('corepack', ['--version'], { stdio: 'ignore' });
@@ -159,12 +194,28 @@ export default defineContentType({
 });
 `,
   );
+  // A plain product type for the page builder steps (an EntryList block shows its draft in preview only).
+  mkdirSync(join(app, 'src/content-types/product'), { recursive: true });
+  writeFileSync(
+    join(app, 'src/content-types/product/product.schema.ts'),
+    `import { defineContentType, f } from '@opencloudcms/schema';
+
+export default defineContentType({
+  id: 'ct_smokeproduct',
+  apiId: 'product',
+  displayName: 'Product',
+  fields: {
+    name: f.text({ id: 'fld_smprod_name', required: true }),
+  },
+});
+`,
+  );
   const cli = join(app, 'node_modules/@opencloudcms/cli/bin/opencloudcms.js');
   run('node', [cli, 'generate'], { cwd: app });
-  run('node', [cli, 'migrate:create', 'add-article'], { cwd: app });
+  run('node', [cli, 'migrate:create', 'add-article-product'], { cwd: app });
   assert(readFileSync(join(app, 'src/generated/registry.ts'), 'utf8').match(/"?review"?: true/), 'generated registry lacks review: true for article');
   assert(readFileSync(join(app, 'migrations/_snapshot.json'), 'utf8').includes('"article"'), 'migrations/_snapshot.json lacks article');
-  ok('article schema (review: true) -> opencloudcms generate + opencloudcms migrate:create');
+  ok('article (review: true) + product schemas -> opencloudcms generate + opencloudcms migrate:create');
 
   // Registry-install approximation: with symlinks preserved, @types/node must come from the project's own devDependencies.
   run('node', [join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.server.json', '--noEmit', '--preserveSymlinks'], { cwd: app });
@@ -176,7 +227,7 @@ export default defineContentType({
   delete env.DATABASE_URL;
   // the project's `build` script: Nest (tsc) then Next
   run('node', [join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.server.json'], { cwd: app, env });
-  run('node', [join(app, 'node_modules/next/dist/bin/next'), 'build'], { cwd: app, env });
+  nextBuild(app, env);
   ok('project build (tsc -p tsconfig.server.json + next build)');
   run('node', [cli, 'migrate:up'], { cwd: app, env });
   ok('opencloudcms migrate:up');
@@ -250,9 +301,12 @@ export default defineContentType({
   assert((siteRes.headers.get('content-type') ?? '').startsWith('text/html'), 'GET / is not text/html');
   assert(siteHtml.includes('data-opencloudcms-site'), 'GET / lacks data-opencloudcms-site');
   assert(!siteRes.headers.has('content-security-policy'), 'GET / must not carry a Content-Security-Policy');
-  const tagline = 'A website and its OpenCloudCMS admin, served by one Next.js app.';
-  assert(readFileSync(join(app, 'app/(site)/messages.ts'), 'utf8').includes(tagline), 'messages.ts lacks the en-US tagline');
-  assert(siteHtml.includes(tagline), 'GET / lacks the en-US string of app/(site)/messages.ts');
+  // No page is published at / yet: the catch-all renders the welcome page (en-US copy, link to /admin/pages).
+  assert(siteHtml.includes('A website and its OpenCloudCMS admin, served by one Next.js app.'), 'GET / lacks the welcome text');
+  assert(siteHtml.includes('href="/admin/pages"'), 'GET / welcome page lacks the link to /admin/pages');
+  const nopeRes = await send('/no-such-page');
+  await nopeRes.text();
+  assert(nopeRes.status === 404, `GET /no-such-page -> ${nopeRes.status} (expected 404)`);
 
   const slashRes = await send('/admin/');
   assert(slashRes.status === 308, `GET /admin/ -> ${slashRes.status} (expected 308)`);
@@ -280,7 +334,7 @@ export default defineContentType({
   const me0 = await send('/api/auth/me');
   const me0Body = await me0.json();
   assert(me0.status === 409 && me0Body.error?.code === 'setup_required', `GET /api/auth/me before setup -> ${me0.status} ${JSON.stringify(me0Body)}`);
-  ok('/ site (en-US messages), /admin/ -> 308, /admin nonce+noindex, static immutable; GET /api/auth/me -> 409 setup_required');
+  ok('/ welcome page (no page yet), unknown path -> 404, /admin/ -> 308, /admin nonce+noindex, static immutable; GET /api/auth/me -> 409 setup_required');
 
   // 3. first super_admin
   const setup = await post('/api/auth/setup', { email, name: 'Smoke Admin', password: pw });
@@ -300,6 +354,117 @@ export default defineContentType({
   assert(JSON.stringify(locBody.locales) === JSON.stringify(['en-US']) && locBody.defaultLocale === 'en-US', `GET /api/admin/locales -> ${JSON.stringify(locBody)}`);
   assert(locBody.editable === false, `GET /api/admin/locales in production must not be editable: ${JSON.stringify(locBody)}`);
   ok("GET /api/admin/locales -> locales: ['en-US'], not editable in production");
+
+  // 4b. page builder + draft preview (page-builder spec §12)
+  const api = async (b, method, path, body) => {
+    const res = method === 'GET' ? await b.send(path) : await b[method.toLowerCase()](path, body);
+    const text = await res.text();
+    assert(res.status < 300, `${method} ${path} -> ${res.status} ${text}`);
+    return text ? JSON.parse(text) : undefined;
+  };
+  const page$ = async (b, path) => {
+    const res = await b.send(path);
+    return { res, text: await res.text() };
+  };
+  const { PUCK_FORMAT_VERSION } = createRequire(join(app, 'package.json'))('@opencloudcms/core/blocks');
+  assert(Number.isInteger(PUCK_FORMAT_VERSION), 'PUCK_FORMAT_VERSION from @opencloudcms/core/blocks (CommonJS)');
+
+  const check = await api(admin, 'GET', '/api/admin/pages/blocks-check');
+  assert(check.manifest?.some((m) => m.name === 'Heading') && check.manifest.some((m) => m.name === 'EntryList'), `blocks-check manifest: ${JSON.stringify(check.manifest)}`);
+  const shadowed = await api(admin, 'GET', '/api/admin/pages/shadowed');
+  assert(JSON.stringify(shadowed) === JSON.stringify({ data: [] }), `GET /api/admin/pages/shadowed -> ${JSON.stringify(shadowed)}`);
+  ok('server loaded src/blocks (blocks-check manifest has the core blocks); /api/admin/pages/shadowed -> [] (catch-all only)');
+
+  const product = (await api(admin, 'POST', '/api/admin/content/product', { name: 'Acme Published' })).data;
+  await api(admin, 'POST', `/api/admin/content/product/${product.documentId}/publish`);
+  const PUB = 'Smoke published heading';
+  const DRAFT = 'Smoke draft heading';
+  // Rich text with an event handler and a javascript: link: normalized on save, rendered in place on the site.
+  const RICH = '<p>Smoke rich <strong>text</strong></p><img src=x onerror="alert(1)"><a href="javascript:alert(2)">bad</a>';
+  const pageContent = (heading) => ({
+    format: 'puck',
+    formatVersion: PUCK_FORMAT_VERSION,
+    data: {
+      root: { props: {} },
+      content: [
+        { type: 'Heading', props: { id: 'heading-1', _v: 1, text: heading, level: 1, align: 'left' } },
+        { type: 'Text', props: { id: 'text-1', _v: 1, content: RICH, align: 'left' } },
+        {
+          type: 'EntryList',
+          props: { id: 'list-1', _v: 1, apiId: 'product', source: { mode: 'pick', ids: [product.documentId] }, layout: 'list', fields: [{ name: 'name' }] },
+        },
+      ],
+    },
+  });
+  const pageApi = '/api/admin/content/opencloudcmsPage';
+  const page = (await api(admin, 'POST', `${pageApi}?locale=en-US`, { title: 'Home', path: '/', content: pageContent(PUB) })).data;
+  await api(admin, 'POST', `${pageApi}/${page.documentId}/publish`);
+  let r = await page$(browser(), '/');
+  assert(r.res.status === 200 && r.text.includes(PUB), `GET / after publish lacks "${PUB}" (${r.res.status})`);
+  assert(r.text.includes('Acme Published'), 'GET / lacks the published product (EntryList)');
+  assert(!r.res.headers.has('content-security-policy'), 'GET / (page) must not carry a Content-Security-Policy');
+  assert(r.text.includes('Smoke rich <strong>text</strong>'), 'GET / lacks the Text block rich text');
+  assert(!/onerror|javascript:alert/.test(r.text), 'GET / contains unsanitized rich text (onerror / javascript:)');
+  // Tailwind scans the core blocks (@source dist/blocks): the Heading level-1 class is in the site CSS.
+  const cssHrefs = [...r.text.matchAll(/href="(\/_next\/static\/[^"]+\.css)"/g)].map((m) => m[1]);
+  assert(cssHrefs.length > 0, 'GET / links no stylesheet');
+  const css = (await Promise.all(cssHrefs.map(async (h) => (await send(h)).text()))).join('\n');
+  assert(css.includes('sm\\:text-5xl'), 'site CSS lacks the core block class sm:text-5xl (Tailwind @source of dist/blocks)');
+  ok(`page / with a Heading published: GET / contains "${PUB}" + sanitized rich text + the product, block classes in the CSS, no Content-Security-Policy`);
+
+  await api(admin, 'PATCH', `${pageApi}/${page.documentId}?locale=en-US`, { content: pageContent(DRAFT) });
+  await api(admin, 'PATCH', `/api/admin/content/product/${product.documentId}`, { name: 'Acme Draft' });
+  r = await page$(browser(), '/');
+  assert(r.text.includes(PUB) && !r.text.includes(DRAFT), 'GET / (anonymous) shows the draft heading');
+  assert(r.text.includes('Acme Published') && !r.text.includes('Acme Draft'), 'GET / (anonymous) shows the draft product');
+  ok('draft edits of the page and the product: anonymous GET / still shows the published versions');
+
+  const previewUrl = `/__opencloudcms/preview?page=${page.documentId}&locale=en-US`;
+  const pv = await send(previewUrl);
+  await pv.text();
+  const pvTo = redirect(pv, 'preview (signed in)');
+  assert(pvTo.pathname === '/', `preview redirected to ${pvTo.href}`);
+  assert((pv.headers.get('cache-control') ?? '').includes('no-store'), `preview cache-control: ${pv.headers.get('cache-control')}`);
+  assert(admin.jar.has('__prerender_bypass') && admin.jar.has('opencloudcms_preview_locale'), 'preview did not set the draft-mode cookies');
+  r = await page$(admin, '/');
+  assert(r.text.includes(DRAFT) && !r.text.includes(PUB), 'GET / in draft mode lacks the draft heading');
+  assert(r.text.includes('Acme Draft') && !r.text.includes('Acme Published'), 'GET / in draft mode lacks the draft product');
+  assert(r.text.includes('data-opencloudcms-preview="draft"'), 'GET / in draft mode lacks the preview bar');
+  assert((r.res.headers.get('cache-control') ?? '').includes('no-store'), `draft-mode GET / cache-control: ${r.res.headers.get('cache-control')}`);
+  ok('signed in: preview URL -> 307 / with draft-mode cookies; GET / shows the draft heading, the draft product and the preview bar');
+
+  r = await page$(browser(), '/');
+  assert(r.text.includes(PUB) && !r.text.includes(DRAFT) && !r.text.includes('Acme Draft'), 'GET / (anonymous) after a draft render shows draft content');
+  const stranger = browser();
+  const noSession = await stranger.send(previewUrl);
+  await noSession.text();
+  const toLogin = redirect(noSession, 'preview (no session)');
+  assert(toLogin.pathname === '/admin/login', `preview without a session redirected to ${toLogin.href}`);
+  assert(!stranger.jar.has('__prerender_bypass'), 'preview without a session enabled draft mode');
+  const draftOnly = browser();
+  for (const c of admin.jar.cookies.values()) if (c.name !== 'oc_session') draftOnly.jar.cookies.set(`${c.name}\0${c.path}`, c);
+  assert(draftOnly.jar.has('__prerender_bypass') && !draftOnly.jar.has('oc_session'), 'could not copy the draft-mode cookies alone');
+  r = await page$(draftOnly, '/');
+  assert(r.res.status === 200 && r.text.includes(PUB) && !r.text.includes(DRAFT) && !r.text.includes('Acme Draft'), 'GET / with draft-mode cookies but no session shows draft content');
+  ok('preview without a session -> /admin/login (no draft mode); draft-mode cookies without a session -> published page');
+
+  const ed = await send(`/admin/pages/${page.documentId}`);
+  const edHtml = await ed.text();
+  assert(ed.status === 200, `GET /admin/pages/<id> -> ${ed.status}`);
+  const edNonce = /'nonce-([^']+)'/.exec(ed.headers.get('content-security-policy') ?? '')?.[1];
+  assert(edNonce, `GET /admin/pages/<id> CSP has no nonce: ${ed.headers.get('content-security-policy')}`);
+  const edScripts = edHtml.match(/<script\b[^>]*>/g) ?? [];
+  assert(edScripts.length > 0, 'GET /admin/pages/<id> has no <script>');
+  for (const tag of edScripts) assert(tag.includes(`nonce="${edNonce}"`), `editor script without the CSP nonce: ${tag}`);
+  ok('GET /admin/pages/<id>: CSP nonce on every script');
+
+  const exit = await send('/__opencloudcms/preview/exit');
+  await exit.text();
+  redirect(exit, 'preview exit');
+  assert(!admin.jar.has('opencloudcms_preview_locale'), 'preview exit kept the preview locale cookie');
+  r = await page$(admin, '/');
+  assert(r.text.includes(PUB) && !r.text.includes('data-opencloudcms-preview'), 'GET / after exit is not the published page without the bar');
+  ok('preview exit -> published page again, no preview bar');
 
   // 5. groups + review workflow: the super admin creates a Contenter and a Reviewer from the seed groups
   const call = async (b, method, path, body) => {

@@ -15,6 +15,8 @@ describe('can', () => {
 describe('routePermission', () => {
   it('maps guarded routes to permissions', () => {
     expect(routePermission('settingsUsers')).toBe('settings.users');
+    expect(routePermission('pages')).toBe('content.read');
+    expect(routePermission('pageEditor')).toBe('content.read');
     expect(routePermission('settingsGroups')).toBe('settings.groups');
     expect(routePermission('settingsContentTypes')).toBe('settings.content-types');
     expect(routePermission('settingsLanguages')).toBe('settings.languages');

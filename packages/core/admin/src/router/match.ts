@@ -1,12 +1,14 @@
-export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'assets' | 'content' | 'settingsUsers' | 'settingsGroups' | 'settingsContentTypes' | 'settingsLanguages' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
+export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'assets' | 'content' | 'pages' | 'pageEditor' | 'settingsUsers' | 'settingsGroups' | 'settingsContentTypes' | 'settingsLanguages' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
 
 export interface RouteMatch {
   id: RouteId;
   params: Record<string, string>;
   guarded: boolean;
+  /** Rendered without the admin sidebar and top bar (the page editor). */
+  fullScreen?: boolean;
 }
 
-const SIMPLE: Record<string, RouteId> = { builder: 'redirectBuilder', users: 'redirectUsers', account: 'account', assets: 'assets' };
+const SIMPLE: Record<string, RouteId> = { builder: 'redirectBuilder', users: 'redirectUsers', account: 'account', assets: 'assets', pages: 'pages' };
 
 const SETTINGS: Record<string, RouteId> = {
   users: 'settingsUsers',
@@ -30,6 +32,9 @@ export function matchRoute(slug: string[] | undefined, opts: { dev?: boolean } =
   }
   if (s.length === 2 && first === 'content' && second) {
     return { id: 'content', params: { apiId: second }, guarded: true };
+  }
+  if (s.length === 2 && first === 'pages' && second) {
+    return { id: 'pageEditor', params: { documentId: second }, guarded: true, fullScreen: true };
   }
   if (s.length === 2 && first === 'settings') {
     const id = Object.hasOwn(SETTINGS, second) ? SETTINGS[second] : undefined;

@@ -48,11 +48,14 @@ describe('runInit', () => {
       fs.readdirSync(d, { withFileTypes: true }).forEach((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : all.push(path.relative(dir, path.join(d, e.name)))));
     walk(dir);
     const expected = [
+      'app/(admin)/admin/AdminWithBlocks.tsx',
       'app/(admin)/admin/[[...slug]]/page.tsx',
       'app/(admin)/layout.tsx',
+      'app/(site)/%5F_opencloudcms/preview/exit/route.ts',
+      'app/(site)/%5F_opencloudcms/preview/route.ts',
+      'app/(site)/[[...path]]/page.tsx',
       'app/(site)/layout.tsx',
       'app/(site)/messages.ts',
-      'app/(site)/page.tsx',
       'app/globals.css',
       '.env',
       '.env.example',
@@ -66,6 +69,8 @@ describe('runInit', () => {
       'package.json',
       'postcss.config.mjs',
       'src/app.module.ts',
+      'src/blocks/example/example.block.tsx',
+      'src/blocks/index.ts',
       'src/content-groups.ts',
       'src/content-types/.gitkeep',
       'src/extensions/index.ts',
@@ -157,10 +162,10 @@ describe('runInit', () => {
     expect(next.compilerOptions.plugins).toEqual([{ name: 'next' }]);
     expect(read(dir, '.gitignore')).toContain('.next/');
     expect(read(dir, 'app/(admin)/layout.tsx')).toContain("from '@opencloudcms/core/admin/layout'");
-    expect(read(dir, 'app/(admin)/admin/[[...slug]]/page.tsx')).toContain("from '@opencloudcms/core/admin'");
+    expect(read(dir, 'app/(admin)/admin/AdminWithBlocks.tsx')).toContain("from '@opencloudcms/core/admin'");
     expect(read(dir, 'app/(site)/layout.tsx')).toContain("title: 'my-shop'");
-    expect(read(dir, 'app/(site)/page.tsx')).toContain('data-opencloudcms-site');
-    expect(read(dir, 'app/(site)/page.tsx')).toContain('>my-shop</h1>');
+    expect(fs.existsSync(path.join(dir, 'app/(site)/page.tsx'))).toBe(false);
+    expect(read(dir, 'app/(site)/[[...path]]/page.tsx')).toContain("siteName: 'my-shop'");
     expect(read(dir, 'app/globals.css')).toContain('@opencloudcms/core/admin/theme.css');
     expect(read(dir, 'postcss.config.mjs')).toContain('@tailwindcss/postcss');
     const cfg = read(dir, 'next.config.ts');
@@ -197,15 +202,84 @@ describe('runInit', () => {
     expect(messages).toContain("import { defineMessages } from '@opencloudcms/core';");
     expect(messages).toContain("'en-US': {");
     expect(messages).toContain("'vi-VN': {");
-    expect(messages).toContain('A website and its OpenCloudCMS admin, served by one Next.js app.');
-    const page = read(dir, 'app/(site)/page.tsx');
-    expect(page).toContain("import { createTranslator } from '@opencloudcms/core';");
-    expect(page).toContain("import locales from '../../src/locales';");
-    expect(page).toContain("import { messages } from './messages';");
-    expect(page).toContain('createTranslator(messages, locales.defaultLocale)');
+    expect(messages).not.toMatch(/tagline|openAdmin/); // the welcome page has its own strings
     expect(read(dir, 'app/(site)/layout.tsx')).toContain('lang={locales.defaultLocale}');
-    for (const f of ['src/locales.ts', 'src/content-groups.ts', 'app/(site)/messages.ts', 'app/(site)/page.tsx', 'opencloudcms.config.ts', 'src/app.module.ts']) {
+    for (const f of ['src/locales.ts', 'src/content-groups.ts', 'app/(site)/messages.ts', 'opencloudcms.config.ts', 'src/app.module.ts']) {
       const out = ts.transpileModule(read(dir, f), { reportDiagnostics: true, compilerOptions: { jsx: ts.JsxEmit.ReactJSX } });
+      expect(out.diagnostics ?? [], f).toEqual([]);
+    }
+  });
+
+  it('wires the page builder: blocks, catch-all renderer, preview routes, admin blocks, server JSX, Tailwind sources', async () => {
+    const dir = path.join(tmp, 'My Shop');
+    await runInit(dir, base);
+
+    const blocks = read(dir, 'src/blocks/index.ts');
+    expect(blocks).toContain("import { coreBlocks, defineBlocks } from '@opencloudcms/core/blocks';");
+    expect(blocks).toContain('export default defineBlocks([...coreBlocks]);');
+    expect(blocks).toContain("// import Example from './example/example.block';");
+    const example = read(dir, 'src/blocks/example/example.block.tsx');
+    expect(example).toContain("import { b, defineBlock } from '@opencloudcms/core/blocks';");
+    expect(example).toContain('export default defineBlock({');
+    expect(example).toContain("name: 'Example',");
+    expect(example).toMatch(/^\/\/ /m);
+    expect(example).not.toMatch(/import ['"][^'"]+\.css['"]/);
+
+    const page = read(dir, 'app/(site)/[[...path]]/page.tsx');
+    expect(page).toContain("import { createCmsPage } from '@opencloudcms/core/blocks/next';");
+    expect(page).toContain("import blocks from '../../../src/blocks';");
+    expect(page).toContain("const cms = createCmsPage({ blocks, siteName: 'my-shop' });");
+    expect(page).toContain("export const dynamic = 'force-dynamic';");
+    expect(page).toContain('export default cms.Page;');
+    expect(page).toContain('export const generateMetadata = cms.generateMetadata;');
+
+    const preview = read(dir, 'app/(site)/%5F_opencloudcms/preview/route.ts');
+    expect(preview).toContain("import { createPreviewRoute } from '@opencloudcms/core/blocks/next';");
+    expect(preview).toContain("export const dynamic = 'force-dynamic';");
+    expect(preview).toContain('export const { GET } = createPreviewRoute();');
+    const exit = read(dir, 'app/(site)/%5F_opencloudcms/preview/exit/route.ts');
+    expect(exit).toContain("import { createPreviewExitRoute } from '@opencloudcms/core/blocks/next';");
+    expect(exit).toContain("export const dynamic = 'force-dynamic';");
+    expect(exit).toContain('export const { GET } = createPreviewExitRoute();');
+
+    const wrapper = read(dir, 'app/(admin)/admin/AdminWithBlocks.tsx');
+    expect(wrapper.split('\n')[0]).toBe("'use client';");
+    expect(wrapper).toContain("import AdminApp from '@opencloudcms/core/admin';");
+    expect(wrapper).toContain("import blocks from '../../../src/blocks';");
+    expect(wrapper).toContain('return <AdminApp blocks={blocks} />;');
+    const adminPage = read(dir, 'app/(admin)/admin/[[...slug]]/page.tsx');
+    expect(adminPage).toContain("export { default } from '../AdminWithBlocks';");
+    expect(adminPage).not.toContain('use client');
+
+    const mod = read(dir, 'src/app.module.ts');
+    expect(mod).toContain("import { blockManifest } from '@opencloudcms/core/blocks';");
+    expect(mod).toContain("import blocks from './blocks';");
+    expect(mod).toContain('pages: { blocks: blockManifest(blocks) },');
+
+    const server = JSON.parse(read(dir, 'tsconfig.server.json'));
+    expect(server.compilerOptions.jsx).toBe('react-jsx');
+    expect(server.include).toEqual(['src', 'opencloudcms.config.ts']);
+
+    const css = read(dir, 'app/globals.css');
+    expect(css).toContain('@source "../node_modules/@opencloudcms/core/dist/admin";');
+    expect(css).toContain('@source "../node_modules/@opencloudcms/core/dist/blocks";');
+    expect(css).toContain('@source "../src/blocks";');
+
+    const readme = read(dir, 'README.md');
+    expect(readme).toContain('src/blocks');
+    expect(readme).toContain('/admin/pages');
+
+    for (const f of [
+      'src/blocks/index.ts',
+      'src/blocks/example/example.block.tsx',
+      'app/(site)/[[...path]]/page.tsx',
+      'app/(site)/%5F_opencloudcms/preview/route.ts',
+      'app/(site)/%5F_opencloudcms/preview/exit/route.ts',
+      'app/(admin)/admin/AdminWithBlocks.tsx',
+      'app/(admin)/admin/[[...slug]]/page.tsx',
+      'src/app.module.ts',
+    ]) {
+      const out = ts.transpileModule(read(dir, f), { fileName: f, reportDiagnostics: true, compilerOptions: { jsx: ts.JsxEmit.ReactJSX } });
       expect(out.diagnostics ?? [], f).toEqual([]);
     }
   });

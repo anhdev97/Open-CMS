@@ -30,6 +30,12 @@ describe('matchRoute', () => {
     expect(matchRoute(['users'])).toEqual({ id: 'redirectUsers', params: {}, guarded: true });
     expect(matchRoute(['builder'])).toEqual({ id: 'redirectBuilder', params: {}, guarded: true });
   });
+  it('matches the pages list and the full-screen editor', () => {
+    expect(matchRoute(['pages'])).toEqual({ id: 'pages', params: {}, guarded: true });
+    expect(matchRoute(['pages', 'abc-123'])).toEqual({ id: 'pageEditor', params: { documentId: 'abc-123' }, guarded: true, fullScreen: true });
+    expect(matchRoute(['pages']).fullScreen).toBeUndefined();
+    expect(matchRoute(['pages', 'a', 'b']).id).toBe('notFound');
+  });
   it('falls back to guarded notFound', () => {
     expect(matchRoute(['nope'])).toEqual({ id: 'notFound', params: {}, guarded: true });
   });
