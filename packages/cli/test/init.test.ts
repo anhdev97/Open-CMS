@@ -202,7 +202,7 @@ describe('runInit', () => {
     expect(messages).toContain("import { defineMessages } from '@opencloudcms/core';");
     expect(messages).toContain("'en-US': {");
     expect(messages).toContain("'vi-VN': {");
-    expect(messages).toContain('A website and its OpenCloudCMS admin, served by one Next.js app.');
+    expect(messages).not.toMatch(/tagline|openAdmin/); // the welcome page has its own strings
     expect(read(dir, 'app/(site)/layout.tsx')).toContain('lang={locales.defaultLocale}');
     for (const f of ['src/locales.ts', 'src/content-groups.ts', 'app/(site)/messages.ts', 'opencloudcms.config.ts', 'src/app.module.ts']) {
       const out = ts.transpileModule(read(dir, f), { reportDiagnostics: true, compilerOptions: { jsx: ts.JsxEmit.ReactJSX } });
