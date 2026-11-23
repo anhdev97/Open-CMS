@@ -1,0 +1,334 @@
+import { describe, expect, it } from 'vitest';
+import type { ComposedBlockSpec } from '@opencloudcms/schema';
+import {
+  ENTRY_PROP_KINDS as CLIENT_KINDS,
+  breakingNotes,
+  buildSpec,
+  changeSummary,
+  emptySpec,
+  fieldUsage,
+  filterValueKind,
+  filterableFields,
+  initialSaveState,
+  newBlockId,
+  saveReducer,
+  showCurrencyFor,
+  sortableFields,
+  sourceOptions,
+  suggestFieldName,
+  suggestName,
+} from '../../admin/src/block-builder/logic';
+import { canvasFieldValues, placeholderEntry, sampleQuery } from '../../admin/src/block-builder/sample-data';
+import { ApiError } from '../../admin/src/lib/api-error';
+import type { ContentTypeDefinition, FieldDefinition } from '../../admin/src/lib/types';
+import { ENTRY_PROP_KINDS as SERVER_KINDS } from '../../src/block-builder/blocks-checks';
+
+const field = (name: string, extra: Partial<FieldDefinition> = {}): FieldDefinition => ({
+  id: `fld_${name}`,
+  name,
+  kind: 'text',
+  required: false,
+  localizable: false,
+  indexed: false,
+  unique: false,
+  options: {},
+  ...extra,
+});
+
+const product: ContentTypeDefinition = {
+  id: 'ct_product',
+  apiId: 'product',
+  displayName: { 'en-US': 'Product' },
+  fields: [
+    field('name', { indexed: true, label: 'Name' }),
+    field('slug', { kind: 'slug', unique: true }),
+    field('email', { kind: 'email' }),
+    field('summary', { kind: 'longText' }),
+    field('body', { kind: 'richText' }),
+    field('price', { kind: 'money', options: { currencyMode: 'fixed', currency: 'EUR' } }),
+    field('marketPrice', { kind: 'money', options: { currencyMode: 'market' } }),
+    field('stock', { kind: 'number', indexed: true }),
+    field('active', { kind: 'boolean', indexed: true }),
+    field('released', { kind: 'date' }),
+    field('cover', { kind: 'asset', options: { multiple: false } }),
+    field('gallery', { kind: 'asset', options: { multiple: true } }),
+    field('site', { kind: 'url' }),
+    field('brand', { kind: 'reference', indexed: true, options: { target: 'brand' } }),
+    field('tags', { kind: 'text', indexed: true, options: { multiple: true } }),
+    field('cats', { kind: 'taxonomy', indexed: true, options: { taxonomy: 'c' } }),
+  ],
+};
+
+const names = (o: { name: string }[]) => o.map((x) => x.name);
+
+describe('sourceOptions (spec §5.4)', () => {
+  const ctx = (over: Partial<Parameters<typeof sourceOptions>[1]> = {}) => ({ type: product, fields: {}, urlPattern: undefined, ...over });
+
+  it('offers only kind-compatible content fields, never multiple or reference fields', () => {
+    expect(names(sourceOptions({ el: 'Heading', prop: 'text' }, ctx()).entry)).toEqual(['name', 'slug', 'email', 'summary']);
+    expect(names(sourceOptions({ el: 'Text', prop: 'html' }, ctx()).entry)).toEqual(['body']);
+    expect(names(sourceOptions({ el: 'Image', prop: 'src' }, ctx()).entry)).toEqual(['cover', 'site']);
+    expect(names(sourceOptions({ el: 'Price', prop: 'value' }, ctx()).entry)).toEqual(['price', 'marketPrice', 'stock']);
+    expect(names(sourceOptions({ el: 'Date', prop: 'value' }, ctx()).entry)).toEqual(['released', 'createdAt', 'updatedAt', 'publishedAt']);
+    expect(names(sourceOptions({ el: 'Button', prop: 'href' }, ctx()).entry)).toEqual(['site']);
+    for (const [el, props] of Object.entries(CLIENT_KINDS)) {
+      for (const prop of Object.keys(props!)) {
+        const offered = names(sourceOptions({ el: el as never, prop }, ctx()).entry);
+        expect(offered).not.toContain('gallery');
+        expect(offered).not.toContain('brand');
+        expect(offered).not.toContain('tags');
+        expect(offered).not.toContain('cats');
+      }
+    }
+  });
+
+  it('no content fields without a binding; entryUrl only for href with a urlPattern; manual fields by kind', () => {
+    const fields = { title: { kind: 'text' as const }, link: { kind: 'link' as const }, pic: { kind: 'image' as const }, n: { kind: 'number' as const } };
+    expect(sourceOptions({ el: 'Heading', prop: 'text' }, ctx({ type: null, fields })).entry).toEqual([]);
+    expect(sourceOptions({ el: 'Heading', prop: 'text' }, ctx({ fields })).manual).toEqual(['title']);
+    expect(sourceOptions({ el: 'Button', prop: 'href' }, ctx({ fields })).manual).toEqual(['link']);
+    expect(sourceOptions({ el: 'Image', prop: 'src' }, ctx({ fields })).manual).toEqual(['pic']);
+    expect(sourceOptions({ el: 'Price', prop: 'value' }, ctx({ fields })).manual).toEqual(['n']);
+    expect(sourceOptions({ el: 'Button', prop: 'href' }, ctx()).entryUrl).toBe(false);
+    expect(sourceOptions({ el: 'Button', prop: 'href' }, ctx({ urlPattern: '/p/{slug}' })).entryUrl).toBe(true);
+    expect(sourceOptions({ el: 'Button', prop: 'label' }, ctx({ urlPattern: '/p/{slug}' })).entryUrl).toBe(false);
+    expect(sourceOptions({ el: 'Button', prop: 'href' }, ctx({ type: null, urlPattern: '/p/{slug}' })).entryUrl).toBe(false);
+  });
+
+  it('mirrors the server kind table', () => {
+    expect(CLIENT_KINDS).toEqual(SERVER_KINDS);
+  });
+});
+
+describe('filterable / sortable fields', () => {
+  it('filters: only indexed/unique single-value fields', () => {
+    expect(names(filterableFields(product))).toEqual(['name', 'slug', 'stock', 'active']);
+  });
+  it('sort: the filterable fields plus the timestamps', () => {
+    expect(sortableFields(product)).toEqual(['name', 'slug', 'stock', 'active', 'createdAt', 'updatedAt', 'publishedAt']);
+  });
+  it('filter value editor by kind', () => {
+    expect(filterValueKind(field('a', { kind: 'boolean' }))).toBe('boolean');
+    expect(filterValueKind(field('a', { kind: 'number' }))).toBe('number');
+    expect(filterValueKind(field('a', { kind: 'money' }))).toBe('number');
+    expect(filterValueKind(field('a', { kind: 'slug' }))).toBe('string');
+  });
+});
+
+describe('names and ids', () => {
+  it('suggests a PascalCase name from the en-US label', () => {
+    expect(suggestName({ 'vi-VN': 'Thẻ sản phẩm', 'en-US': 'Product card' })).toBe('ProductCard');
+    expect(suggestName({ 'en-US': '  café  déjà-vu 2 ' })).toBe('CafeDejaVu2');
+    expect(suggestName({ 'en-US': '3 columns' })).toBe('Block3Columns');
+    expect(suggestName({ 'en-US': '' })).toBe('');
+    expect(suggestName({ 'en-US': 'x'.repeat(80) })).toHaveLength(64);
+  });
+  it('suggests a free camelCase manual field name', () => {
+    expect(suggestFieldName('Button label', {})).toBe('buttonLabel');
+    expect(suggestFieldName('Button label', { buttonLabel: { kind: 'text' } })).toBe('buttonLabel2');
+    expect(suggestFieldName('', {})).toBe('field');
+    expect(suggestFieldName('Entry', {})).toBe('entry2');
+  });
+  it('new ids match the spec pattern', () => {
+    expect(newBlockId()).toMatch(/^blk_[a-z0-9]{6,}$/);
+  });
+  it('emptySpec is a valid starting point', () => {
+    const s = emptySpec('blk_abcdef');
+    expect(s).toMatchObject({ id: 'blk_abcdef', name: '', version: 1, fields: {}, tree: { el: 'Card' } });
+  });
+});
+
+describe('Price currency from the bound money field', () => {
+  it('fixed → true, market → false, other kinds → undefined', () => {
+    expect(showCurrencyFor(product.fields.find((f) => f.name === 'price')!)).toBe(true);
+    expect(showCurrencyFor(product.fields.find((f) => f.name === 'marketPrice')!)).toBe(false);
+    expect(showCurrencyFor(field('m', { kind: 'money' }))).toBe(false);
+    expect(showCurrencyFor(product.fields.find((f) => f.name === 'stock')!)).toBeUndefined();
+  });
+});
+
+describe('save flow', () => {
+  it('409 block_in_use → confirm with the page count; confirm → resend with confirmBreaking', () => {
+    let s = saveReducer(initialSaveState, { type: 'save' });
+    expect(s).toEqual({ status: 'saving', confirmBreaking: false });
+    s = saveReducer(s, { type: 'failed', error: new ApiError(409, 'block_in_use', 'in use', [{ path: ['ProductCard'], message: '3' }]) });
+    expect(s).toEqual({ status: 'confirm', pages: 3 });
+    s = saveReducer(s, { type: 'confirm' });
+    expect(s).toEqual({ status: 'saving', confirmBreaking: true });
+    s = saveReducer(s, { type: 'saved', files: ['a.ts'] });
+    expect(s).toEqual({ status: 'saved', files: ['a.ts'] });
+  });
+  it('cancel from confirm → idle; other errors → error; confirm outside confirm is ignored', () => {
+    const confirm = { status: 'confirm', pages: 1 } as const;
+    expect(saveReducer(confirm, { type: 'cancel' })).toEqual(initialSaveState);
+    const e = new ApiError(422, 'invalid_block', 'bad');
+    expect(saveReducer({ status: 'saving', confirmBreaking: false }, { type: 'failed', error: e })).toEqual({ status: 'error', error: e });
+    expect(saveReducer(initialSaveState, { type: 'confirm' })).toBe(initialSaveState);
+  });
+});
+
+const spec = (over: Partial<ComposedBlockSpec> = {}): ComposedBlockSpec => ({
+  id: 'blk_abcdef',
+  name: 'ProductCard',
+  label: { 'en-US': 'Product card' },
+  category: 'commerce',
+  version: 1,
+  binding: { apiId: 'product', mode: 'single' },
+  fields: { cta: { kind: 'text' }, tone: { kind: 'select', options: ['a', 'b'] } },
+  tree: { el: 'Card' },
+  ...over,
+});
+
+describe('change summary and breaking notes', () => {
+  it('new block → created', () => {
+    expect(changeSummary(null, spec())).toEqual([{ key: 'created' }]);
+  });
+  it('lists label, field, binding and tree changes', () => {
+    const next = spec({
+      label: { 'en-US': 'Card' },
+      fields: { tone: { kind: 'select', options: ['a'] }, extra: { kind: 'number' } },
+      binding: { apiId: 'product', mode: 'collection' },
+      tree: { el: 'Box' },
+    });
+    expect(changeSummary(spec(), next)).toEqual([
+      { key: 'label' },
+      { key: 'fieldAdded', name: 'extra' },
+      { key: 'fieldRemoved', name: 'cta' },
+      { key: 'fieldChanged', name: 'tone' },
+      { key: 'binding' },
+      { key: 'design' },
+    ]);
+    expect(changeSummary(spec(), spec())).toEqual([]);
+  });
+  it('breaking notes name removed/changed fields and binding changes', () => {
+    const next = spec({ fields: { tone: { kind: 'select', options: ['a'] } }, binding: { apiId: 'brand', mode: 'single' } });
+    expect(breakingNotes(spec(), next)).toEqual([
+      { key: 'fieldRemoved', name: 'cta' },
+      { key: 'optionRemoved', name: 'tone' },
+      { key: 'binding' },
+    ]);
+    expect(breakingNotes(null, next)).toEqual([]);
+  });
+});
+
+describe('sample data', () => {
+  it('collection query uses the fixed filter, sort and limit (capped for the canvas)', () => {
+    expect(
+      sampleQuery({ apiId: 'product', mode: 'collection', filter: [{ field: 'active', value: true }, { field: 'stock', value: 3 }], sort: { field: 'createdAt', direction: 'desc' }, limit: 8 }),
+    ).toEqual({ limit: 8, sort: 'createdAt:desc', filter: { active: 'true', stock: '3' } });
+    expect(sampleQuery({ apiId: 'product', mode: 'collection' })).toEqual({ limit: 12, filter: {} });
+    expect(sampleQuery({ apiId: 'product', mode: 'collection', limit: 100 }).limit).toBe(12);
+  });
+  it('single query lists entries to pick from', () => {
+    expect(sampleQuery({ apiId: 'product', mode: 'single' })).toEqual({ limit: 20, filter: {} });
+  });
+  it('placeholder entry has a value per usable field, shaped like the content API', () => {
+    const e = placeholderEntry(product, 'en-US');
+    expect(e.name).toBe('Name');
+    expect(e.price).toEqual({ amount: 1234.5, currency: 'EUR' });
+    expect(e.marketPrice).toEqual({ amount: 1234.5, currency: 'USD' });
+    expect(e.stock).toBe(42);
+    expect(e.active).toBe(true);
+    expect(e.released).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(typeof e.createdAt).toBe('string');
+    expect(e.documentId).toBe('sample');
+    expect(e.cover).toBeNull();
+  });
+  it('manual field values for the canvas: defaults, else a value that shows', () => {
+    expect(
+      canvasFieldValues({
+        a: { kind: 'text', default: 'Buy' },
+        b: { kind: 'text', label: { 'en-US': 'Button label', 'vi-VN': 'Nhãn' } },
+        c: { kind: 'number' },
+        d: { kind: 'select', options: ['x', 'y'] },
+        e: { kind: 'boolean' },
+        f: { kind: 'image' },
+        g: { kind: 'link' },
+      }, 'vi-VN'),
+    ).toEqual({ a: 'Buy', b: 'Nhãn', c: 0, d: 'x', e: true, f: null, g: { href: '#' } });
+  });
+});
+
+describe('buildSpec', () => {
+  it('drops empty labels/icon and every binding key the mode does not use', () => {
+    const s = buildSpec(
+      {
+        id: 'blk_abcdef',
+        name: 'ProductCard',
+        label: { 'en-US': 'Card', 'vi-VN': '', 'fr-FR': 'Carte' },
+        category: 'data',
+        icon: '',
+        version: 2,
+        fields: {},
+        binding: {
+          apiId: 'product',
+          mode: 'single',
+          urlPattern: ' ',
+          filter: [{ field: 'active', value: true }],
+          limit: 4,
+          layout: { kind: 'grid', columns: 3 },
+          options: { editorSort: true },
+        },
+      },
+      { el: 'Card' },
+    );
+    expect(s).toEqual({
+      id: 'blk_abcdef',
+      name: 'ProductCard',
+      label: { 'en-US': 'Card', 'fr-FR': 'Carte' },
+      category: 'data',
+      version: 2,
+      fields: {},
+      binding: { apiId: 'product', mode: 'single' },
+      tree: { el: 'Card' },
+    });
+  });
+  it('collection keeps filter/sort/limit/layout, only true switches and a non-empty empty text', () => {
+    const s = buildSpec(
+      {
+        id: 'blk_abcdef',
+        name: 'List',
+        label: { 'en-US': 'List' },
+        category: 'data',
+        version: 1,
+        fields: {},
+        binding: {
+          apiId: 'product',
+          mode: 'collection',
+          urlPattern: '/p/{slug}',
+          filter: [],
+          sort: { field: 'createdAt', direction: 'desc' },
+          limit: 8,
+          layout: { kind: 'list', columns: 3 },
+          options: { editorSort: true, editorLimit: false, emptyText: { 'en-US': '', 'vi-VN': 'Trống' } },
+        },
+      },
+      { el: 'Card' },
+    );
+    expect(s.binding).toEqual({
+      apiId: 'product',
+      mode: 'collection',
+      urlPattern: '/p/{slug}',
+      sort: { field: 'createdAt', direction: 'desc' },
+      limit: 8,
+      layout: { kind: 'list' },
+      options: { editorSort: true },
+    });
+  });
+});
+
+describe('fieldUsage', () => {
+  it('counts elements that bind or show-if a manual field', () => {
+    const tree = {
+      el: 'Card',
+      showIf: { from: 'field', name: 'cta', is: 'present' },
+      children: [
+        { el: 'Button', bind: { label: { from: 'field', name: 'cta' }, href: { from: 'field', name: 'link' } } },
+        { el: 'Heading', bind: { text: { from: 'entry', path: 'cta' } } },
+      ],
+    } as never;
+    expect(fieldUsage(tree, 'cta')).toBe(2);
+    expect(fieldUsage(tree, 'link')).toBe(1);
+    expect(fieldUsage(tree, 'other')).toBe(0);
+  });
+});
