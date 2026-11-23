@@ -87,6 +87,22 @@ describe('pages API', () => {
       expect((await call(`${PUBLIC}/by-path?path=/about&locale=vi-VN`, {}, '')).status).toBe(404);
     });
 
+    it('two page documents at / in en-US and vi-VN: each locale gets its own document (public and admin)', async () => {
+      const en = (await create({ title: 'Home EN', path: '/' }, 'en-US')).body.data.documentId as string;
+      const vi = (await create({ title: 'Trang chủ', path: '/' }, 'vi-VN')).body.data.documentId as string;
+      expect(en).not.toBe(vi);
+      expect((await publish(en)).status).toBe(200);
+      expect((await publish(vi)).status).toBe(200);
+      for (const [locale, id, title] of [['en-US', en, 'Home EN'], ['vi-VN', vi, 'Trang chủ']]) {
+        const pub = await call(`${PUBLIC}/by-path?path=/&locale=${locale}`, {}, '');
+        expect(pub.status).toBe(200);
+        expect([pub.body.data.documentId, pub.body.data.locale, pub.body.data.title]).toEqual([id, locale, title]);
+        const adm = await call(`${ADMIN}/by-path?path=/&locale=${locale}`);
+        expect(adm.status).toBe(200);
+        expect([adm.body.data.documentId, adm.body.data.locale, adm.body.data.status]).toEqual([id, locale, 'draft']);
+      }
+    });
+
     it('admin by-path: 401 without a session, 403 without content.read', async () => {
       expect((await call(`${ADMIN}/by-path?path=/about`, {}, '')).status).toBe(401);
       const r = await call(`${ADMIN}/by-path?path=/about`, {}, nobodyCookie);
