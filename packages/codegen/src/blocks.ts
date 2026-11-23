@@ -198,6 +198,14 @@ export function isComposedIndexWired(config: ResolvedConfig): boolean {
   return /\bcomposedBlocks\b/.test(fs.readFileSync(file, 'utf8'));
 }
 
+/** Thrown by `writeComposedBlocks` when other composed block files are broken (nothing is written). */
+export class ComposedBlocksLoadError extends Error {
+  constructor(public readonly errors: { file: string; message: string }[]) {
+    super(`Composed block files are invalid: ${errors.map((e) => `${e.file}: ${e.message}`).join('; ')}`);
+    this.name = 'ComposedBlocksLoadError';
+  }
+}
+
 /**
  * Upserts / removes one composed block file and regenerates `composed.ts`. Returns the paths written or removed.
  * Does not snapshot; callers wrap it with captureProjectFiles/restoreProjectFiles if they need rollback.
@@ -207,7 +215,13 @@ export async function writeComposedBlocks(
   change: { upsert?: ComposedBlockSpec; removeName?: string },
 ): Promise<string[]> {
   const touched: string[] = [];
-  const { specs } = await loadComposedBlocks(config);
+  const { specs, errors } = await loadComposedBlocks(config);
+  // A broken file of the block being written or removed may be replaced; any other broken file blocks the write
+  // (it would silently vanish from composed.ts and break pages that use it).
+  const own = new Set<string>();
+  for (const n of [change.upsert?.name, change.removeName]) if (n) own.add(composedBlockFile(config, n));
+  const blocking = errors.filter((e) => !own.has(e.file));
+  if (blocking.length) throw new ComposedBlocksLoadError(blocking);
   const byName = new Map(specs.map((s) => [s.spec.name, s]));
 
   if (change.removeName) {

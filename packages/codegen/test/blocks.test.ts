@@ -6,6 +6,7 @@ import { resolveConfig, type ComposedBlockSpec } from '@opencloudcms/schema';
 import {
   blocksDir,
   captureProjectFiles,
+  ComposedBlocksLoadError,
   composedBlockFile,
   isComposedIndexWired,
   loadComposedBlocks,
@@ -146,6 +147,34 @@ describe('composed block files', () => {
     expect(w2).toContain(path.join(root, 'src/blocks/product-card'));
     expect(fs.readFileSync(path.join(root, 'src/blocks/composed.ts'), 'utf8')).not.toContain('ProductCard');
     expect((await loadComposedBlocks(c)).specs.map((s) => s.spec.name)).toEqual(['Alpha']);
+  });
+
+  it('writeComposedBlocks refuses and writes nothing when another block file is broken', async () => {
+    const root = tmp();
+    const c = cfg(root);
+    await writeComposedBlocks(c, { upsert: spec() });
+    const bad = path.join(root, 'src/blocks/bad/bad.block.ts');
+    project(root, { 'bad/bad.block.ts': printComposedBlockFile(spec({ id: 'blk_bad123', name: 'lower' })) });
+    const before = fs.readFileSync(path.join(root, 'src/blocks/composed.ts'), 'utf8');
+    for (const change of [{ upsert: spec({ id: 'blk_aaa111', name: 'Alpha' }) }, { removeName: 'ProductCard' }]) {
+      const err = await writeComposedBlocks(c, change).catch((e) => e);
+      expect(err).toBeInstanceOf(ComposedBlocksLoadError);
+      expect(err.errors.map((e: any) => e.file)).toEqual([bad]);
+    }
+    expect(fs.existsSync(path.join(root, 'src/blocks/alpha'))).toBe(false);
+    expect(fs.existsSync(path.join(root, 'src/blocks/product-card'))).toBe(true);
+    expect(fs.readFileSync(path.join(root, 'src/blocks/composed.ts'), 'utf8')).toBe(before);
+  });
+
+  it('writeComposedBlocks may replace or remove the block whose own file is broken', async () => {
+    const root = tmp();
+    const c = cfg(root);
+    project(root, { 'alpha/alpha.block.ts': "import { defineComposedBlock } from '@opencloudcms/core/blocks';\nexport default defineComposedBlock({ ;;" });
+    await writeComposedBlocks(c, { upsert: spec({ id: 'blk_aaa111', name: 'Alpha' }) });
+    expect((await loadComposedBlocks(c)).errors).toEqual([]);
+    project(root, { 'alpha/alpha.block.ts': "import { defineComposedBlock } from '@opencloudcms/core/blocks';\nexport default defineComposedBlock({ ;;" });
+    await writeComposedBlocks(c, { removeName: 'Alpha' });
+    expect(fs.existsSync(path.join(root, 'src/blocks/alpha'))).toBe(false);
   });
 
   it('isComposedIndexWired checks src/blocks/index.ts', () => {
