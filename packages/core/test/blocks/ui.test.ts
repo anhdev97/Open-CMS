@@ -95,3 +95,14 @@ describe('ui primitives', () => {
     expect(out).not.toContain('undefined');
   });
 });
+
+describe('ui.layoutClass', () => {
+  it('gives the exact class of each layout primitive (used by the block builder canvas drop zones)', () => {
+    const cls = (el: unknown) => /class="([^"]*)"/.exec(r(el as never))![1];
+    expect(ui.layoutClass.Box({ padding: '12', background: 'muted' })).toBe(cls(h(ui.Box, { padding: '12', background: 'muted' })));
+    expect(ui.layoutClass.Stack({ direction: 'horizontal', gap: '2', align: 'center' })).toBe(cls(h(ui.Stack, { direction: 'horizontal', gap: '2', align: 'center' })));
+    expect(ui.layoutClass.Columns({ count: 3 })).toBe(cls(h(ui.Columns, { count: 3 })));
+    expect(ui.layoutClass.Grid({ columns: 5, gap: '8' })).toBe(cls(h(ui.Grid, { columns: 5, gap: '8' })));
+    expect(ui.layoutClass.Card({ bordered: false })).toBe(cls(h(ui.Card, { bordered: false })));
+  });
+});
