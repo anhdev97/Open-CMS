@@ -106,32 +106,40 @@ export async function resolvePage(
   });
   mapData(data as unknown as Record<string, unknown>, collect);
 
-  // Fetch in batches.
+  // Fetch in batches. Failures never break the page: they warn once per key and resolve to "nothing found".
   const warned = new Set<string>();
+  const safe = async <T>(key: string, what: string, fallback: T, run: () => Promise<T>): Promise<T> => {
+    try {
+      return await run();
+    } catch (err) {
+      if (!warned.has(key)) {
+        warned.add(key);
+        console.warn(`[opencloudcms] ${what} failed, rendering without it: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return fallback;
+    }
+  };
   const [byId, queried, paths] = await Promise.all([
     Promise.all(
       [...ids].map(async ([apiId, set]) => {
-        const rows = await f.byIds(apiId, [...set], o.locale);
+        const rows = await safe(`byIds:${apiId}`, `loading "${apiId}" entries`, [] as Entry[], () => f.byIds(apiId, [...set], o.locale));
         return [apiId, new Map(rows.map((e) => [e.documentId, e] as const))] as const;
       }),
     ).then((x) => new Map(x)),
     Promise.all(
-      [...queries].map(async ([key, q]) => {
-        try {
-          return [key, await f.query(q.apiId, { filter: q.filter, sort: q.sort, limit: q.limit }, o.locale)] as const;
-        } catch (err) {
-          const wk = filterKey(q);
-          if (!warned.has(wk)) {
-            warned.add(wk);
-            console.warn(
-              `[opencloudcms] query on "${q.apiId}" failed, rendering an empty list: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          }
-          return [key, [] as Entry[]] as const;
-        }
-      }),
+      [...queries].map(
+        async ([key, q]) =>
+          [
+            key,
+            await safe(`query:${filterKey(q)}`, `query on "${q.apiId}"`, [] as Entry[], () =>
+              f.query(q.apiId, { filter: q.filter, sort: q.sort, limit: q.limit }, o.locale),
+            ),
+          ] as const,
+      ),
     ).then((x) => new Map(x)),
-    pageIds.size ? f.pagePaths([...pageIds], o.locale, o.defaultLocale) : Promise.resolve({} as Record<string, string | null>),
+    pageIds.size
+      ? safe('pagePaths', 'resolving page links', {} as Record<string, string | null>, () => f.pagePaths([...pageIds], o.locale, o.defaultLocale))
+      : Promise.resolve({} as Record<string, string | null>),
   ]);
 
   // Pass 2: substitute.

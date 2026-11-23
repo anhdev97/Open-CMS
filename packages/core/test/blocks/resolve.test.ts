@@ -125,6 +125,45 @@ describe('resolvePage', () => {
     expect(warn.mock.calls[0][0]).toContain('field not indexed');
   });
 
+  it('a rejected byIds (404 / network) gives null and [] with one warning per apiId', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { f } = fake({ byIds: async () => Promise.reject(Object.assign(new Error('Not Found'), { status: 404 })) });
+    const out = await resolvePage(
+      page([
+        item('Product', { item: { documentId: A } }, 'p1'),
+        item('Product', { item: { documentId: B } }, 'p2'),
+        item('Grid', { items: { mode: 'pick', ids: [A, B] }, items2: { mode: 'pick', ids: [C] } }),
+      ]),
+      reg,
+      f,
+      O,
+    );
+    const [p1, p2, g] = out.content as any[];
+    expect(p1.props.item).toBeNull();
+    expect(p2.props.item).toBeNull();
+    expect(g.props.items).toEqual([]);
+    expect(g.props.items2).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(2); // product, post
+    expect(warn.mock.calls[0][0]).toContain('"product"');
+    expect(warn.mock.calls[0][0]).toContain('Not Found');
+  });
+
+  it('a rejected pagePaths gives href null with one warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { f } = fake({ pagePaths: async () => Promise.reject(new Error('boom')) });
+    const out = await resolvePage(
+      page([item('Links', { link: { kind: 'page', documentId: P1 }, rows: [{ to: { kind: 'page', documentId: P2 } }] })]),
+      reg,
+      f,
+      O,
+    );
+    const l = (out.content[0] as any).props;
+    expect(l.link).toEqual({ href: null });
+    expect(l.rows[0].to).toEqual({ href: null });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('boom');
+  });
+
   it('resolves page links via one pagePaths call; url links pass through', async () => {
     const { f, calls } = fake({
       pagePaths: async (ids) => Object.fromEntries(ids.map((i) => [i, i === P1 ? '/vi' : i === P2 ? '/en' : null])),
