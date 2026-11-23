@@ -13,6 +13,6 @@ export type { BlockManifest, Locale, LocalizedText, StoredPageContent } from '@o
 export { resolvePage, type AssetRef, type ContentFetcher, type Entry } from './resolve';
 export { adminFetcher, publicFetcher, FetchError } from './fetchers';
 export { coreBlocks } from './library';
-export { ComposedBlockError, defineComposedBlock, type ComposedBlockDefinition } from './composed';
+export { ComposedBlockError, composedHelpers, defineComposedBlock, type ComposedBlockDefinition } from './composed';
 export type { ComposedBlockSpec } from '@opencloudcms/schema';
 export * as ui from './ui';

@@ -1,7 +1,8 @@
 /**
  * Block Builder API (dev only): lists the page blocks of the project and saves / deletes composed block files
  * (`src/blocks/<kebab>/<kebab>.block.ts` + the managed `src/blocks/composed.ts`). The live manifest is updated so
- * that pages can use a saved block at once, without a restart.
+ * that pages can use a saved block at once, without a restart. Eject turns a composed block into a hand-written
+ * `.block.tsx` (`defineBlock`), which the builder no longer manages.
  */
 import * as path from 'node:path';
 import { ConflictException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
@@ -12,6 +13,8 @@ import {
   composedBlockFile,
   ComposedBlockInvalidError,
   ComposedBlocksLoadError,
+  ejectComposedBlock,
+  EjectTargetExistsError,
   isComposedIndexWired,
   loadComposedBlocks,
   restoreProjectFiles,
@@ -99,6 +102,9 @@ export class BlocksService {
     if (e instanceof ComposedBlockInvalidError) throw invalid(e.issues);
     if (e instanceof ComposedBlockConflictError) {
       throw new ConflictException({ code: 'block_name_taken', message: e.message });
+    }
+    if (e instanceof EjectTargetExistsError) {
+      throw new ConflictException({ code: 'eject_target_exists', message: `${this.rel(e.file)} already exists; move it away first` });
     }
     if (e instanceof ComposedBlocksLoadError) {
       throw new ConflictException({
@@ -250,6 +256,37 @@ export class BlocksService {
         const files = await writeComposedBlocks(config, { removeName: name });
         this.manifest.remove(name);
         return { files: files.map((f) => this.rel(f)) };
+      } catch (e) {
+        restoreProjectFiles(config, before, extra);
+        this.toHttp(e);
+      }
+    });
+  }
+
+  /**
+   * Ejects a composed block to TSX: writes `<kebab>.block.tsx` next to its file (same name, version, fields and
+   * rendering; `usesLocale: true`), removes the `.block.ts` and regenerates `composed.ts`. `src/blocks/index.ts` is
+   * not edited: the caller adds `importLine` there. The live manifest entry stays as it is (same name and version).
+   */
+  eject(name: string) {
+    this.builder.assertEditable();
+    const config = this.options.config;
+    return this.queue.run(async () => {
+      const { specs, errors } = await loadComposedBlocks(config);
+      const hit = specs.find((s) => s.spec.name === name);
+      if (!hit) {
+        const own = this.ownLoadError(name, errors);
+        if (own) this.toHttp(new ComposedBlocksLoadError([own]));
+        if (this.isOtherBlock(name, new Set())) {
+          throw new ConflictException({ code: 'not_composed', message: `Block "${name}" is not a composed block` });
+        }
+        throw new NotFoundException(`Unknown block "${name}"`);
+      }
+      const extra = [blocksDir(config)];
+      const before = captureProjectFiles(config, extra);
+      try {
+        const r = await ejectComposedBlock(config, hit.spec, hit.file);
+        return { file: this.rel(r.file), importLine: r.importLine, files: r.touched.map((f) => this.rel(f)) };
       } catch (e) {
         restoreProjectFiles(config, before, extra);
         this.toHttp(e);

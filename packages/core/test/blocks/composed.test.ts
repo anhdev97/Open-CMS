@@ -2,7 +2,9 @@ import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   PUCK_FORMAT_VERSION,
+  b,
   coreBlocks,
+  defineBlock,
   defineBlocks,
   adminFetcher,
   defineComposedBlock,
@@ -308,6 +310,19 @@ describe('defineComposedBlock: render', () => {
     expect(html(r({ ctaLabel: 'x', entry: null, puck: { isEditing: false } }))).toBe('');
     expect(html(r({ ctaLabel: 'x', entry: product('a', { price: { amount: 2, currency: 'EUR' } }), _locale: 'fr-FR' }))).toMatch(/2,00\s?€/);
   });
+
+  it('Puck config passes _locale and _editor to usesLocale blocks, not to other hand-written blocks', () => {
+    const seen: Record<string, unknown>[] = [];
+    const mk = (name: string, usesLocale?: true) =>
+      defineBlock({ name, label: name, category: 'x', ...(usesLocale ? { usesLocale } : {}), fields: {}, render: (p) => (seen.push(p as never), null) });
+    const NONE = (() => null) as never;
+    const fields = { link: NONE, image: NONE, entry: NONE, entries: NONE } as CustomFieldRenderers;
+    const config = toPuckConfig(defineBlocks([mk('Own', true), mk('Plain')]), { locale: 'fr-FR', customFields: fields });
+    html((config.components.Own.render as unknown as (p: object) => unknown)({ puck: { isEditing: true } }));
+    html((config.components.Plain.render as unknown as (p: object) => unknown)({ puck: { isEditing: true } }));
+    expect(seen[0]).toMatchObject({ _locale: 'fr-FR', _editor: true });
+    expect(seen[1]).not.toHaveProperty('_locale');
+  });
 });
 
 describe('entry value readers', () => {
@@ -401,6 +416,19 @@ describe('resolvePage with composed blocks', () => {
     expect(h.props._locale).toBeUndefined();
     const stored = writePageContent(out, reg);
     expect((stored.data.content[0] as { props: Record<string, unknown> }).props).not.toHaveProperty('_locale');
+  });
+
+  it('usesLocale (hand-written, e.g. ejected) blocks get _locale too; defineBlocks validates the flag', async () => {
+    const own = defineBlock({ name: 'OwnBlock', label: 'Own', category: 'x', usesLocale: true, fields: { t: b.text() }, render: () => null });
+    const plain = defineBlock({ name: 'PlainBlock', label: 'Plain', category: 'x', fields: { t: b.text() }, render: () => null });
+    const reg = defineBlocks([own, plain]);
+    const { f } = fake();
+    const out = await resolvePage(page([item('OwnBlock', { t: 'a' }), item('PlainBlock', { t: 'b' })]), reg, f, O);
+    const [o, p] = out.content as { props: Record<string, unknown> }[];
+    expect(o.props._locale).toBe('vi-VN');
+    expect(p.props._locale).toBeUndefined();
+    expect((writePageContent(out, reg).data.content[0] as { props: Record<string, unknown> }).props).not.toHaveProperty('_locale');
+    expect(() => defineBlocks([{ ...own, usesLocale: 1 as never }])).toThrow(/usesLocale must be true when set/);
   });
 });
 

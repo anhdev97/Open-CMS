@@ -115,7 +115,7 @@ function toRenderProps(fields: Record<string, BlockField>, props: Record<string,
 }
 
 /**
- * Reserved props of composed blocks: `_locale` stamped by `resolvePage`/the canvas (else the config's locale) and
+ * Reserved props of composed (and `usesLocale`) blocks: `_locale` stamped by `resolvePage`/the canvas (else the config's locale) and
  * `_editor` (canvas flag, or Puck's `isEditing`).
  */
 function composedReserved(props: Record<string, unknown>, locale: Locale): Record<string, unknown> {
@@ -141,7 +141,7 @@ export function toPuckConfig(r: BlockRegistry, opts: ToPuckConfigOptions): PuckC
         createElement(
           Fragment,
           null,
-          d.render((d.composed ? { ...toRenderProps(d.fields, props), ...composedReserved(props, opts.locale) } : toRenderProps(d.fields, props)) as never),
+          d.render((d.composed || d.usesLocale ? { ...toRenderProps(d.fields, props), ...composedReserved(props, opts.locale) } : toRenderProps(d.fields, props)) as never),
         )) as never,
     };
     (categories[d.category] ??= { title: d.category, components: [] }).components.push(d.name);

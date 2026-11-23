@@ -8,3 +8,4 @@ export * from './printer';
 export * from './blocks';
 export * from './loader';
 export * from './pipeline';
+export * from './eject';

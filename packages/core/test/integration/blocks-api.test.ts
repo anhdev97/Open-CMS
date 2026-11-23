@@ -368,6 +368,66 @@ describe('blocks API (editable)', () => {
     // Unused composed block: no force needed.
     expect((await call(`${BLOCKS}/BannerOne`, { method: 'DELETE' })).status).toBe(200);
   });
+  it('POST :name/eject writes .block.tsx, removes .block.ts, regenerates composed.ts; manifest unchanged', async () => {
+    const saved = await put('Promo', { spec: banner('Promo', 'blk_promo1') });
+    expect(saved.status).toBe(200);
+    const id = await page('Zeta', ['Promo']);
+    const r = await call(`${BLOCKS}/Promo/eject`, { method: 'POST' });
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({
+      file: 'src/blocks/promo/promo.block.tsx',
+      importLine: "import Promo from './promo/promo.block';",
+      files: ['src/blocks/promo/promo.block.tsx', 'src/blocks/promo/promo.block.ts', 'src/blocks/composed.ts'],
+    });
+    expect(fs.existsSync(path.join(blocksDir(), 'promo', 'promo.block.ts'))).toBe(false);
+    const tsx = fs.readFileSync(path.join(blocksDir(), 'promo', 'promo.block.tsx'), 'utf8');
+    expect(tsx).toContain('export default defineBlock({');
+    expect(tsx).toContain("const name = 'Promo';");
+    expect(tsx).toContain('version: 1,');
+    expect(fs.readFileSync(path.join(blocksDir(), 'composed.ts'), 'utf8')).not.toContain('Promo');
+    // Same name/version in the live manifest: pages using it still publish.
+    expect((await call(`${PAGES}/${id}/publish`, { method: 'POST' })).status).toBe(200);
+    // No longer managed by the builder.
+    const list = await call(BLOCKS);
+    expect(list.body.data.find((d: any) => d.name === 'Promo')).toMatchObject({ source: 'code', version: 1 });
+    expect((await call(`${BLOCKS}/Promo`)).body.error.code).toBe('not_composed');
+    const again = await call(`${BLOCKS}/Promo/eject`, { method: 'POST' });
+    expect(again.status).toBe(409);
+    expect(again.body.error.code).toBe('not_composed');
+    expect((await call(`${BLOCKS}/Hero/eject`, { method: 'POST' })).body.error.code).toBe('not_composed');
+    expect((await call(`${BLOCKS}/Nope/eject`, { method: 'POST' })).status).toBe(404);
+  });
+
+  it('eject: an existing .block.tsx -> 409, a failing index write -> every file restored', async () => {
+    expect((await put('PromoTwo', { spec: banner('PromoTwo', 'blk_promo2') })).status).toBe(200);
+    const mine = path.join(blocksDir(), 'promo-two', 'promo-two.block.tsx');
+    fs.writeFileSync(mine, '// mine');
+    let before = tree(t.root);
+    const exists = await call(`${BLOCKS}/PromoTwo/eject`, { method: 'POST' });
+    expect(exists.status).toBe(409);
+    expect(exists.body.error.code).toBe('eject_target_exists');
+    expect(tree(t.root)).toEqual(before);
+    fs.rmSync(mine);
+
+    before = tree(t.root);
+    const real = cjsFs.writeFileSync;
+    let thrown = false;
+    const spy = vi.spyOn(cjsFs, 'writeFileSync').mockImplementation(((file: fs.PathOrFileDescriptor, ...rest: unknown[]) => {
+      if (!thrown && typeof file === 'string' && file.endsWith('composed.ts')) {
+        thrown = true;
+        throw new Error('disk full');
+      }
+      return (real as (...a: unknown[]) => void).call(cjsFs, file, ...rest);
+    }) as typeof fs.writeFileSync);
+    try {
+      expect((await call(`${BLOCKS}/PromoTwo/eject`, { method: 'POST' })).status).toBe(500);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(thrown).toBe(true);
+    expect(tree(t.root)).toEqual(before);
+    expect((await call(`${BLOCKS}/PromoTwo`)).status).toBe(200);
+  });
 });
 
 describe('blocks API (not editable)', () => {
@@ -391,6 +451,9 @@ describe('blocks API (not editable)', () => {
     expect(put.body.error.message).toBe('Schema editing is disabled (production mode). Change schema files in git and deploy migrations.');
     const del = await call(`${BLOCKS}/BannerOne`, { method: 'DELETE' });
     expect(del.status).toBe(403);
+    const ej = await call(`${BLOCKS}/BannerOne/eject`, { method: 'POST' });
+    expect(ej.status).toBe(403);
+    expect(ej.body.error.message).toBe('Schema editing is disabled (production mode). Change schema files in git and deploy migrations.');
     expect(fs.existsSync(path.join(t.root, 'src', 'blocks'))).toBe(false);
   });
 });

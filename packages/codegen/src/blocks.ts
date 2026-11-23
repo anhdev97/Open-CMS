@@ -87,6 +87,11 @@ function flatObject(o: Record<string, unknown>, order: ((p: string[]) => string[
   return `{ ${parts.join(', ')} }`;
 }
 
+/** A JS literal for a JSON-like value (single-quoted strings; short flat objects/arrays on one line). */
+export function printLiteral(v: unknown, indent = ''): string {
+  return pp(v, indent);
+}
+
 /** Key order by position in the spec: top level, `binding`, and tree nodes. */
 function orderFor(p: string[]): string[] {
   if (p.length === 0) return SPEC_ORDER;

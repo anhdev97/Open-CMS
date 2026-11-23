@@ -198,6 +198,12 @@ export interface BlockDefinition<F extends Record<string, BlockField> = Record<s
    */
   composed?: true;
   /**
+   * Hand-written blocks (e.g. ejected from the Block Builder) that render like composed blocks: same reserved props
+   * as `composed` (`resolvePage` stamps `_locale`; the Puck config passes `_locale`/`_editor`), without a spec.
+   * Read them with `composedHelpers.locale(props)` / `composedHelpers.editor(props)`.
+   */
+  usesLocale?: true;
+  /**
    * Entry fields (of the block's `entry`/`entries` values) that hold an asset id: `resolvePage` replaces a uuid there
    * by `{ id, url, alt, width, height }` (one `ContentFetcher.assets` call per page). Set by `defineComposedBlock`.
    */
