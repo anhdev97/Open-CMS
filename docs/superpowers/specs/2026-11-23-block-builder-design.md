@@ -1,6 +1,6 @@
 # OpenCloudCMS: Trình dựng block kéo thả, lưu block trong code — Design Spec
 
-**Ngày:** 2026-11-23 · **Trạng thái:** Draft chờ review
+**Ngày:** 2026-11-23 · **Trạng thái:** Approved
 **Nhánh nền:** `main` sau PR #12 (page builder: `@opencloudcms/core/blocks`, `defineBlock` + `b.*`, Puck 0.24.1, `resolvePage`, `/admin/pages`, website renderer + draft preview).
 **Liên quan:** `2026-11-23-page-builder-preview-design.md` (gọi tắt "spec page builder", § ở dạng PB§n).
 
