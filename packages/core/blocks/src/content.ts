@@ -5,16 +5,16 @@ import type { BlockField, BlockRegistry, PuckData } from './types';
 export type PageContentStatus = 'ok' | 'empty' | 'needs-migration';
 export type ReadPageContentResult = { status: PageContentStatus; data: PuckData };
 
-type Item = { type: string; props: Record<string, unknown> } & Record<string, unknown>;
+export type Item = { type: string; props: Record<string, unknown> } & Record<string, unknown>;
 
-const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
-const isItem = (v: unknown): v is Item => isObj(v) && typeof v.type === 'string' && isObj(v.props);
+export const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+export const isItem = (v: unknown): v is Item => isObj(v) && typeof v.type === 'string' && isObj(v.props);
 const emptyData = (): PuckData => ({ root: { props: {} }, content: [], zones: {} });
 
-type ItemFn = (item: unknown) => unknown;
+export type ItemFn = (item: unknown) => unknown;
 
 /** Copy of `props` with `fn` applied to the items of every declared slot (also inside list rows). Keeps other props. */
-function mapSlots(fields: Record<string, BlockField>, props: Record<string, unknown>, fn: ItemFn): Record<string, unknown> {
+export function mapSlots(fields: Record<string, BlockField>, props: Record<string, unknown>, fn: ItemFn): Record<string, unknown> {
   const out = { ...props };
   for (const [k, f] of Object.entries(fields)) {
     const v = props[k];
@@ -73,7 +73,7 @@ function writeItem(r: BlockRegistry): ItemFn {
   return visit;
 }
 
-function mapData(d: Record<string, unknown>, fn: ItemFn): PuckData {
+export function mapData(d: Record<string, unknown>, fn: ItemFn): PuckData {
   const out: Record<string, unknown> = {
     root: isObj(d.root) ? d.root : { props: {} },
     content: Array.isArray(d.content) ? d.content.map(fn) : [],
