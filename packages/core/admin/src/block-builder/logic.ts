@@ -4,6 +4,7 @@ import {
   COMPOSED_GENERATED_FIELD_RE,
   composedFieldNameIssue,
   isBreakingChange,
+  slotsChanged,
   type ComposedBinding,
   type ComposedBlockSpec,
   type ComposedNode,
@@ -303,6 +304,7 @@ export function breakingNotes(prev: ComposedBlockSpec | null, next: ComposedBloc
   const a = prev.binding;
   const b = next.binding;
   if (!a !== !b || (a && b && (a.apiId !== b.apiId || a.mode !== b.mode))) out.push({ key: 'binding' });
+  if (slotsChanged(prev, next)) out.push({ key: 'slots' });
   return out;
 }
 

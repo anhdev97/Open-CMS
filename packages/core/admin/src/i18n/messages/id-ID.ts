@@ -955,6 +955,7 @@ const idID: Messages = {
       fieldChanged: "Ubah field blok {name}",
       fieldKind: "Ubah jenis field blok {name}",
       optionRemoved: "Hapus pilihan field blok {name}",
+      slots: "Hapus atau pindahkan Slot, atau ubah blok yang diizinkan (blok di dalamnya pindah ke slot lain atau dihapus)",
       binding: "Ubah pengaturan konten",
       design: "Ubah desain",
     },

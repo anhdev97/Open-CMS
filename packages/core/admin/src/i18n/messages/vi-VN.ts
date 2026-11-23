@@ -955,6 +955,7 @@ const viVN: Messages = {
       fieldChanged: "Sửa field block {name}",
       fieldKind: "Đổi loại của field block {name}",
       optionRemoved: "Xoá lựa chọn của field block {name}",
+      slots: "Xoá hoặc di chuyển một Slot, hoặc đổi các block được phép của nó (block đã đặt trong đó bị chuyển sang slot khác hoặc bị bỏ)",
       binding: "Đổi cài đặt nội dung",
       design: "Đổi thiết kế",
     },

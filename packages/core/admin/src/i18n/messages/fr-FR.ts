@@ -955,6 +955,7 @@ const frFR: Messages = {
       fieldChanged: "Modifier le champ de bloc {name}",
       fieldKind: "Changer le type du champ de bloc {name}",
       optionRemoved: "Retirer des choix du champ de bloc {name}",
+      slots: "Supprimer ou déplacer un Slot, ou changer ses blocs autorisés (les blocs placés dedans passent dans un autre slot ou sont retirés)",
       binding: "Modifier les réglages de contenu",
       design: "Modifier le design",
     },

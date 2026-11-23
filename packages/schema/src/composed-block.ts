@@ -296,7 +296,36 @@ export function composedManifestEntry(spec: ComposedBlockSpec): { name: string; 
   return richText.length ? { name: spec.name, version: spec.version, richText } : { name: spec.name, version: spec.version };
 }
 
+/**
+ * Identity of each `Slot` of `tree`, in tree order (the order `defineComposedBlock` names them `slot`, `slot2`, …):
+ * its position path (child indices) and its sorted `allow` list (`*` = any block).
+ */
+export function slotSignature(tree: ComposedNode | undefined): string[] {
+  const out: string[] = [];
+  const walk = (n: ComposedNode | undefined, path: number[]) => {
+    if (!n || typeof n !== 'object') return;
+    if (n.el === 'Slot') {
+      const allow = Array.isArray(n.props?.allow) ? [...(n.props!.allow as unknown[])].map(String).sort().join(',') : '*';
+      out.push(`${path.join('.')}|${allow}`);
+    }
+    (Array.isArray(n.children) ? n.children : []).forEach((c, i) => walk(c, [...path, i]));
+  };
+  walk(tree, []);
+  return out;
+}
+
+/**
+ * True when stored content of a slot would land in another slot or be dropped: fewer slots, or any existing slot
+ * moved or given another `allow`. A slot added after the existing ones is not breaking.
+ */
+export function slotsChanged(prev: ComposedBlockSpec, next: ComposedBlockSpec): boolean {
+  const a = slotSignature(prev.tree);
+  const b = slotSignature(next.tree);
+  return b.length < a.length || a.some((s, i) => b[i] !== s);
+}
+
 export function isBreakingChange(prev: ComposedBlockSpec, next: ComposedBlockSpec): boolean {
+  if (slotsChanged(prev, next)) return true;
   for (const [name, f] of Object.entries(prev.fields ?? {})) {
     const n = next.fields?.[name];
     if (!n || n.kind !== f.kind) return true;

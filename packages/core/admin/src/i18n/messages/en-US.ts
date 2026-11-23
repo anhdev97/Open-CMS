@@ -1013,6 +1013,7 @@ export const enUS = {
       fieldChanged: "Change block field {name}",
       fieldKind: "Change the type of block field {name}",
       optionRemoved: "Remove choices of block field {name}",
+      slots: "Remove or move a Slot, or change its allowed blocks (blocks placed in it move to another slot or are dropped)",
       binding: "Change the content settings",
       design: "Change the design",
     },

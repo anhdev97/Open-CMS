@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  composedManifestEntry, isBreakingChange, validateComposedSpec, withAutoVersion, type ComposedBlockSpec,
+  composedManifestEntry, isBreakingChange, slotSignature, validateComposedSpec, withAutoVersion, type ComposedBlockSpec,
 } from '../src/composed-block';
 
 const single = (): ComposedBlockSpec => ({
@@ -147,5 +147,28 @@ describe('collection-only binding settings', () => {
     expect(paths(mut(single(), (s) => (s.binding.sort = { field: 'createdAt', direction: 'asc' })))).toEqual(['binding.sort']);
     expect(paths(mut(single(), (s) => (s.binding.limit = 3)))).toEqual(['binding.limit']);
     expect(paths(mut(single(), (s) => (s.binding.layout = { kind: 'list' })))).toEqual(['binding.layout']);
+  });
+});
+
+describe('slots and breaking changes', () => {
+  const slotted = (): ComposedBlockSpec => ({
+    ...unbound(),
+    tree: { el: 'Stack', children: [{ el: 'Slot', props: { allow: ['Hero'] } }, { el: 'Box', children: [{ el: 'Slot' }] }] },
+  });
+  it('slotSignature lists slots in tree order by position path and allow', () => {
+    expect(slotSignature(slotted().tree)).toEqual(['0|Hero', '1.0|*']);
+    expect(slotSignature(mut(slotted(), (s) => (s.tree.children[0].props.allow = ['B', 'A'])).tree)).toEqual(['0|A,B', '1.0|*']);
+  });
+  it('removing, reordering or changing a slot is breaking; adding one at the end is not', () => {
+    const p = slotted();
+    expect(isBreakingChange(p, mut(p, (s) => s.tree.children.shift()))).toBe(true); // remove first slot
+    expect(isBreakingChange(p, mut(p, (s) => s.tree.children.pop()))).toBe(true); // remove last slot
+    expect(isBreakingChange(p, mut(p, (s) => s.tree.children.reverse()))).toBe(true); // reorder
+    expect(isBreakingChange(p, mut(p, (s) => s.tree.children.unshift({ el: 'Slot' })))).toBe(true); // new first slot shifts the rest
+    expect(isBreakingChange(p, mut(p, (s) => (s.tree.children[0].props.allow = ['Text'])))).toBe(true);
+    expect(isBreakingChange(p, mut(p, (s) => s.tree.children.push({ el: 'Slot' })))).toBe(false);
+    expect(isBreakingChange(p, mut(p, (s) => (s.tree.children[0].props.max = 3)))).toBe(false);
+    expect(isBreakingChange(p, mut(p, (s) => (s.tree.el = 'Box')))).toBe(false);
+    expect(withAutoVersion(p, mut(p, (s) => s.tree.children.shift())).version).toBe(2);
   });
 });

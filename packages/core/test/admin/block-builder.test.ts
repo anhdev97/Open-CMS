@@ -224,6 +224,12 @@ describe('change summary and breaking notes', () => {
     ]);
     expect(breakingNotes(null, next)).toEqual([]);
   });
+  it('removing or moving a Slot is a breaking note', () => {
+    const prev = { ...spec(), tree: { el: 'Stack', children: [{ el: 'Slot' }, { el: 'Slot' }] } } as ComposedBlockSpec;
+    const next = { ...prev, tree: { el: 'Stack', children: [{ el: 'Slot' }] } } as ComposedBlockSpec;
+    expect(breakingNotes(prev, next)).toEqual([{ key: 'slots' }]);
+    expect(breakingNotes(prev, { ...prev, tree: { el: 'Stack', children: [{ el: 'Slot' }, { el: 'Slot' }, { el: 'Slot' }] } } as ComposedBlockSpec)).toEqual([]);
+  });
 });
 
 describe('sample data', () => {
