@@ -68,3 +68,29 @@ export function pageErrorMessageKey(e: unknown): string | null {
   if (e.code === 'unique_violation') return 'pages.errors.pathTaken';
   return null;
 }
+
+/** Draft of the page in `locale` (the server falls back to the default locale: compare `locale` to detect that). */
+export async function getPage(id: string, locale: string): Promise<PageEntry> {
+  return (await api<{ data: PageEntry }>(`${base}/${id}?locale=${encodeURIComponent(locale)}&status=draft`)).data;
+}
+
+/** Saves the draft of `locale`; `ifMatch` (the last seen `updatedAt`) makes a concurrent edit fail with 409 `stale_draft`. */
+export async function savePage(id: string, locale: string, body: Record<string, unknown>, ifMatch: string | undefined): Promise<{ updatedAt: string }> {
+  const init: { method: string; json: unknown; headers?: Record<string, string> } = { method: 'PATCH', json: body };
+  if (ifMatch) init.headers = { 'If-Match': `"${ifMatch}"` };
+  const r = await api<{ data: PageEntry }>(`${base}/${id}?locale=${encodeURIComponent(locale)}`, init);
+  return { updatedAt: r.data.updatedAt };
+}
+
+export async function publishPage(id: string): Promise<void> {
+  await api(`${base}/${id}/publish`, { method: 'POST' });
+}
+
+export async function unpublishPage(id: string): Promise<void> {
+  await api(`${base}/${id}/unpublish`, { method: 'POST' });
+}
+
+/** Website preview of the draft (draft mode, admin session only). */
+export function pagePreviewUrl(id: string, locale: string): string {
+  return `/__opencloudcms/preview?page=${encodeURIComponent(id)}&locale=${encodeURIComponent(locale)}`;
+}

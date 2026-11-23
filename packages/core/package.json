@@ -10,9 +10,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.mkdirSync('dist/admin/styles',{recursive:true});fs.copyFileSync('admin/src/styles/theme.css','dist/admin/styles/theme.css')\" && tsc -p tsconfig.json && tsc -p admin/tsconfig.json && tsc -p blocks/tsconfig.json && tsc -p blocks/tsconfig.cjs.json && node -e \"require('fs').cpSync('admin/src/styles/theme.css','dist/admin/styles/theme.css')\"",
+    "build": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.mkdirSync('dist/admin/styles',{recursive:true});fs.copyFileSync('admin/src/styles/theme.css','dist/admin/styles/theme.css')\" && tsc -p tsconfig.json && tsc -p blocks/tsconfig.json && tsc -p blocks/tsconfig.cjs.json && tsc -p admin/tsconfig.json && node -e \"require('fs').cpSync('admin/src/styles/theme.css','dist/admin/styles/theme.css')\"",
     "dev:admin": "tsc -w -p admin/tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p admin/tsconfig.json --noEmit && tsc -p blocks/tsconfig.json --noEmit && tsc -p blocks/tsconfig.cjs.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p blocks/tsconfig.json --noEmit && tsc -p blocks/tsconfig.cjs.json --noEmit && tsc -p admin/tsconfig.json --noEmit"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

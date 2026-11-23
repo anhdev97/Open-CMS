@@ -4,7 +4,19 @@ import { slugToPath } from '@opencloudcms/schema';
 const api = vi.fn();
 vi.mock('../../admin/src/lib/api', () => ({ api: (...a: unknown[]) => api(...a) }));
 
-import { createPage, deletePage, duplicatePage, listPages, pageErrorMessageKey, pageStatus } from '../../admin/src/lib/pages';
+import {
+  createPage,
+  deletePage,
+  duplicatePage,
+  getPage,
+  listPages,
+  pageErrorMessageKey,
+  pagePreviewUrl,
+  pageStatus,
+  publishPage,
+  savePage,
+  unpublishPage,
+} from '../../admin/src/lib/pages';
 import { ApiError } from '../../admin/src/lib/api-error';
 
 beforeEach(() => api.mockReset());
@@ -85,5 +97,38 @@ describe('pageErrorMessageKey', () => {
     expect(pageErrorMessageKey(e(422, 'path_reserved'))).toBe('pages.errors.pathReserved');
     expect(pageErrorMessageKey(e(500, 'boom'))).toBeNull();
     expect(pageErrorMessageKey(new Error('x'))).toBeNull();
+  });
+});
+
+describe('page editor client', () => {
+  it('getPage reads the draft in the locale', async () => {
+    api.mockResolvedValue({ data: { documentId: 'a', locale: 'vi-VN' } });
+    await expect(getPage('a', 'vi-VN')).resolves.toEqual({ documentId: 'a', locale: 'vi-VN' });
+    expect(api).toHaveBeenCalledWith('/api/admin/content/opencloudcmsPage/a?locale=vi-VN&status=draft');
+  });
+  it('savePage patches the locale with If-Match and returns the new updatedAt', async () => {
+    api.mockResolvedValue({ data: { documentId: 'a', updatedAt: '2026-01-02T00:00:00.000Z' } });
+    const body = { title: 'A', path: '/a', seo: {}, content: { format: 'puck' } };
+    await expect(savePage('a', 'en-US', body, '2026-01-01T00:00:00.000Z')).resolves.toEqual({ updatedAt: '2026-01-02T00:00:00.000Z' });
+    expect(api).toHaveBeenCalledWith('/api/admin/content/opencloudcmsPage/a?locale=en-US', {
+      method: 'PATCH',
+      json: body,
+      headers: { 'If-Match': '"2026-01-01T00:00:00.000Z"' },
+    });
+  });
+  it('savePage without If-Match sends no header', async () => {
+    api.mockResolvedValue({ data: { updatedAt: 'x' } });
+    await savePage('a', 'en-US', {}, undefined);
+    expect(api.mock.calls[0]![1]).not.toHaveProperty('headers');
+  });
+  it('publishPage / unpublishPage post to the document', async () => {
+    api.mockResolvedValue({ data: {} });
+    await publishPage('a');
+    await unpublishPage('a');
+    expect(api).toHaveBeenNthCalledWith(1, '/api/admin/content/opencloudcmsPage/a/publish', { method: 'POST' });
+    expect(api).toHaveBeenNthCalledWith(2, '/api/admin/content/opencloudcmsPage/a/unpublish', { method: 'POST' });
+  });
+  it('pagePreviewUrl points at the website preview route', () => {
+    expect(pagePreviewUrl('a b', 'vi-VN')).toBe('/__opencloudcms/preview?page=a%20b&locale=vi-VN');
   });
 });
