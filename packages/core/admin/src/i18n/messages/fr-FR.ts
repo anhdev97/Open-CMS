@@ -502,6 +502,8 @@ const frFR: Messages = {
         asc: "Croissant",
         desc: "Décroissant",
         limit: "Nombre d’entrées",
+        fixed: "Toujours : {conditions}",
+        lockedLimit: "Affiche au plus {count} entrées.",
         noFilterable: "Ce type de contenu n’a pas de champ indexé ou unique sur lequel filtrer.",
       },
     },

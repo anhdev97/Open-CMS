@@ -502,6 +502,8 @@ const idID: Messages = {
         asc: "Naik",
         desc: "Turun",
         limit: "Jumlah entri",
+        fixed: "Selalu: {conditions}",
+        lockedLimit: "Menampilkan hingga {count} entri.",
         noFilterable: "Tipe konten ini tidak punya bidang indexed atau unique untuk disaring.",
       },
     },

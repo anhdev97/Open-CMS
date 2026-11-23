@@ -553,6 +553,8 @@ export const enUS = {
         asc: "Ascending",
         desc: "Descending",
         limit: "Number of entries",
+        fixed: "Always: {conditions}",
+        lockedLimit: "Shows up to {count} entries.",
         noFilterable: "This content type has no indexed or unique fields to filter on.",
       },
     },

@@ -502,6 +502,8 @@ const viVN: Messages = {
         asc: "Tăng dần",
         desc: "Giảm dần",
         limit: "Số mục",
+        fixed: "Luôn luôn: {conditions}",
+        lockedLimit: "Hiện tối đa {count} mục.",
         noFilterable: "Loại nội dung này không có trường indexed hoặc unique để lọc.",
       },
     },

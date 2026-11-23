@@ -3,6 +3,9 @@ import { b, coreBlocks, defineBlock, defineBlocks, writePageContent, type PuckDa
 import {
   contentTypeOptions,
   dataSignature,
+  editorFilterFields,
+  entriesFieldControls,
+  fixedConditionText,
   indexResolved,
   entriesApiId,
   filterableFields,
@@ -280,5 +283,31 @@ describe('editor stylesheet', () => {
     expect(src).not.toContain('@puckeditor/core/puck.css');
     const css = fs.readFileSync(new URL('../../node_modules/@puckeditor/core/dist/no-external.css', import.meta.url), 'utf8');
     expect(css).not.toMatch(/@import\s+["']?(url\()?["']?https?:/);
+  });
+});
+
+describe('entriesFieldControls', () => {
+  const ef = (o: Record<string, unknown> = {}) => b.entries('product', o as never) as never;
+  it('shows filter/sort/limit only as the field allows', () => {
+    expect(entriesFieldControls(ef({ sortable: true, filterable: true, limit: 12 }))).toEqual({
+      modeSelect: true, addFilter: true, sort: true, limit: true, lockedLimit: null, fixed: [],
+    });
+    expect(entriesFieldControls(ef({ limit: 12 }))).toMatchObject({ addFilter: false, sort: false, limit: true });
+    expect(entriesFieldControls(ef({ filterable: false }))).toMatchObject({ modeSelect: false, addFilter: false });
+  });
+  it('locked limit and fixed filters (composed collections)', () => {
+    const c = entriesFieldControls(ef({ limit: 8, lockLimit: true, filterable: false, sortable: false, baseFilter: { featured: 'true', stock: '3' } }));
+    expect(c).toEqual({
+      modeSelect: false, addFilter: false, sort: false, limit: false, lockedLimit: 8,
+      fixed: [{ field: 'featured', value: 'true' }, { field: 'stock', value: '3' }],
+    });
+  });
+  it('fixed-filter fields are not offered as editor filters', () => {
+    const fields = [field('name', { indexed: true }), field('featured', { kind: 'boolean', indexed: true })];
+    expect(editorFilterFields(fields as never, ef({ filterable: true, baseFilter: { featured: 'true' } })).map((f: { name: string }) => f.name)).toEqual(['name']);
+  });
+  it('labels a fixed condition with the field label and a readable value', () => {
+    expect(fixedConditionText({ field: 'featured', value: 'true' }, field('featured', { kind: 'boolean', label: 'Featured' }), (k: string) => (k.endsWith('yes') ? 'Yes' : 'No'))).toBe('Featured = Yes');
+    expect(fixedConditionText({ field: 'stock', value: '3' }, undefined, () => '')).toBe('stock = 3');
   });
 });
