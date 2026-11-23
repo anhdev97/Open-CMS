@@ -3,6 +3,8 @@ import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ui } from '../../blocks/src';
 import { GRID_N } from '../../blocks/src/ui/tokens';
+import { safeHref } from '../../blocks/src/ui/href';
+import { LinkButton } from '../../blocks/src/library/ui';
 
 const r = (el: any) => renderToString(el);
 
@@ -55,6 +57,27 @@ describe('ui primitives', () => {
       );
     }
     expect(r(h(ui.DateText, { value: 'nope', locale: 'en-US', format: 'short' }))).toBe('');
+  });
+  it('DateText timeZone: datetime in the given zone (default UTC); date-only strings always UTC', () => {
+    const at = '2026-11-23T02:00:00+07:00';
+    expect(r(h(ui.DateText, { value: at, locale: 'en-US', format: 'long', timeZone: 'Asia/Ho_Chi_Minh' }))).toContain('November 23, 2026');
+    expect(r(h(ui.DateText, { value: at, locale: 'en-US', format: 'long' }))).toContain('November 22, 2026');
+    expect(r(h(ui.DateText, { value: '2026-11-23', locale: 'en-US', format: 'long', timeZone: 'America/Los_Angeles' }))).toContain('November 23, 2026');
+  });
+  it('safeHref allows http(s), mailto, tel, /path, #hash, ?query only', () => {
+    for (const ok of ['https://a.example/x', 'http://a', 'mailto:a@b.c', 'tel:+84123', '/products/a', '#top', '?q=1', ' /trim ']) {
+      expect(safeHref(ok)).toBe(ok.trim());
+    }
+    for (const bad of ['javascript:alert(1)', 'JaVaScRiPt:alert(1)', ' javascript:alert(1)', 'java\tscript:x', '//evil.com', '/\\evil.com', 'data:text/html,x', 'vbscript:x', 'relative/path', '', '  ', null, undefined, 42, {}]) {
+      expect(safeHref(bad)).toBeNull();
+    }
+  });
+  it('Button and LinkButton render unsafe hrefs as a span', () => {
+    for (const href of ['javascript:alert(1)', 'JaVaScRiPt:alert(1)', '//evil.com']) {
+      expect(r(h(ui.Button, { label: 'Go', href }))).toMatch(/^<span/);
+      expect(r(h(LinkButton, { label: 'Go', href }))).toMatch(/^<span/);
+    }
+    expect(r(h(LinkButton, { label: 'Go', href: 'https://a.example' }))).toContain('href="https://a.example"');
   });
   it('unknown tokens fall back to defaults, never "undefined"', () => {
     const out = [

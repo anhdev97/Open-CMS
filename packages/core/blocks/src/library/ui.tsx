@@ -7,19 +7,21 @@ import {
   ALIGN, BADGE_VARIANT, BG, BUTTON_BASE, BUTTON_SIZE, BUTTON_VARIANT, COLS, GAP, GRID_COLS, H, JUSTIFY, MY, PY, cn,
   type BadgeVariant, type ButtonSize, type ButtonVariant,
 } from '../ui/tokens';
+import { safeHref } from '../ui/href';
 
 export const L = (en: string, vi: string, fr: string, id: string) => ({ 'en-US': en, 'vi-VN': vi, 'fr-FR': fr, 'id-ID': id });
 
 export { ALIGN, BG, COLS, GAP, GRID_COLS, H, JUSTIFY, MY, PY, cn };
 export type { BadgeVariant, ButtonSize, ButtonVariant };
 
-/** A link-styled button: an anchor when `href` resolved, otherwise an inert span (never a dead `<a>`). */
+/** A link-styled button: an anchor when `href` resolved to a safe target (`safeHref`), otherwise an inert span (never a dead `<a>`). */
 export function LinkButton({
   label, href, variant = 'default', size = 'default', className,
 }: { label: string; href: string | null | undefined; variant?: ButtonVariant; size?: ButtonSize; className?: string }) {
   const cls = cn(BUTTON_BASE, BUTTON_VARIANT[variant], BUTTON_SIZE[size], className);
-  return href ? (
-    <a data-slot="button" href={href} className={cls}>{label}</a>
+  const safe = safeHref(href);
+  return safe ? (
+    <a data-slot="button" href={safe} className={cls}>{label}</a>
   ) : (
     <span data-slot="button" className={cls}>{label}</span>
   );

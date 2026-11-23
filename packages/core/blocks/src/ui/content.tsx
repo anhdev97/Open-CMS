@@ -1,5 +1,6 @@
 // Isomorphic content primitives. Rich text only through RichTextHtml (sanitized); numbers/dates via Intl.
-import { createElement } from 'react';
+import { createElement, isValidElement } from 'react';
+import { safeHref } from './href';
 import type { ColorToken, SpacingToken } from '../types';
 import { RichTextHtml } from '../richtext-render';
 import {
@@ -14,6 +15,8 @@ export function Heading({ level, text, align }: { level: 1 | 2 | 3 | 4; text: st
 
 export function Text({ text, html, size, color }: { text?: string; html?: unknown; size?: 'sm' | 'base' | 'lg'; color?: ColorToken }) {
   const cls = cn(TEXT_SIZE[size as 'sm'] ?? TEXT_SIZE.base, color ? TEXT_COLOR[color] : undefined);
+  // A rich text prop already transformed by Puck's `Render` (richTextFieldTransforms) arrives as an element.
+  if (isValidElement(html)) return <div className={cls}>{html}</div>;
   if (html !== undefined && html !== null && html !== '') return <div className={cls}><RichTextHtml html={html} /></div>;
   return <p className={cls}>{text}</p>;
 }
@@ -25,7 +28,8 @@ export function Image({ src, alt, ratio, rounded }: { src: string | null | undef
 
 export function Button({ label, href, variant, size }: { label: string; href: string | null | undefined; variant?: ButtonVariant; size?: ButtonSize }) {
   const cls = cn(BUTTON_BASE, BUTTON_VARIANT[variant as ButtonVariant] ?? BUTTON_VARIANT.default, BUTTON_SIZE[size as ButtonSize] ?? BUTTON_SIZE.default);
-  return href ? <a data-slot="button" href={href} className={cls}>{label}</a> : <span data-slot="button" className={cls}>{label}</span>;
+  const safe = safeHref(href);
+  return safe ? <a data-slot="button" href={safe} className={cls}>{label}</a> : <span data-slot="button" className={cls}>{label}</span>;
 }
 
 export function Badge({ text, variant }: { text: string; variant?: BadgeVariant }) {
@@ -49,12 +53,21 @@ export function Price({ value, locale, currency }: { value: number | string | nu
   }
 }
 
-export function DateText({ value, locale, format }: { value: string | number | Date | null | undefined; locale: string; format: 'short' | 'long' }) {
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * `timeZone` (IANA, default `'UTC'`) applies to datetimes; a date-only `YYYY-MM-DD` value is a calendar day and is
+ * always formatted in UTC so it never shifts by a day.
+ */
+export function DateText({
+  value, locale, format, timeZone,
+}: { value: string | number | Date | null | undefined; locale: string; format: 'short' | 'long'; timeZone?: string }) {
   if (value === null || value === undefined || value === '') return null;
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return null;
+  const zone = typeof value === 'string' && DATE_ONLY_RE.test(value) ? 'UTC' : timeZone || 'UTC';
   try {
-    return <time dateTime={d.toISOString()}>{new Intl.DateTimeFormat(locale, { dateStyle: format === 'long' ? 'long' : 'short', timeZone: 'UTC' }).format(d)}</time>;
+    return <time dateTime={d.toISOString()}>{new Intl.DateTimeFormat(locale, { dateStyle: format === 'long' ? 'long' : 'short', timeZone: zone }).format(d)}</time>;
   } catch {
     return <time>{d.toISOString().slice(0, 10)}</time>;
   }
