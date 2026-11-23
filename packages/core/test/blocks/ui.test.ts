@@ -72,6 +72,14 @@ describe('ui primitives', () => {
       expect(safeHref(bad)).toBeNull();
     }
   });
+  it('safeHref ignores tab/CR/LF like browsers do (no //host smuggling)', () => {
+    for (const bad of ['/\t/evil.com', '/\n/evil.com', '/\r/evil.com', '/\t\\evil.com', '\t//evil.com', 'java\nscript:x', '/\n\t/evil.com']) {
+      expect(safeHref(bad), JSON.stringify(bad)).toBeNull();
+    }
+    expect(safeHref('/pro\nducts')).toBe('/products');
+    expect(safeHref('ht\ttps://a.example')).toBe('https://a.example');
+    expect(r(h(LinkButton, { label: 'Go', href: '/\t/evil.com' }))).toMatch(/^<span/);
+  });
   it('Button and LinkButton render unsafe hrefs as a span', () => {
     for (const href of ['javascript:alert(1)', 'JaVaScRiPt:alert(1)', '//evil.com']) {
       expect(r(h(ui.Button, { label: 'Go', href }))).toMatch(/^<span/);
