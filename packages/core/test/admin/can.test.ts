@@ -33,16 +33,17 @@ describe('routePermission', () => {
 });
 
 describe('visibleSettingsItems', () => {
-  it('orders Users, Groups, Content types, Languages', () => {
+  it('orders Users, Groups, Content types, Blocks, Languages', () => {
     expect(settingsItems.map((i) => i.to)).toEqual([
       '/settings/users',
       '/settings/groups',
       '/settings/content-types',
+      '/settings/blocks',
       '/settings/languages',
     ]);
   });
   it('shows all items for all permissions', () => {
-    expect(visibleSettingsItems(settingsItems, PERMISSIONS)).toHaveLength(4);
+    expect(visibleSettingsItems(settingsItems, PERMISSIONS)).toHaveLength(5);
   });
   it('hides items without the permission', () => {
     const items = visibleSettingsItems(settingsItems, ['settings.groups', 'content.read']);

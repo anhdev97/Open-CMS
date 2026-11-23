@@ -1,10 +1,10 @@
-export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'assets' | 'content' | 'pages' | 'pageEditor' | 'settingsUsers' | 'settingsGroups' | 'settingsContentTypes' | 'settingsLanguages' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
+export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'assets' | 'content' | 'pages' | 'pageEditor' | 'settingsUsers' | 'settingsGroups' | 'settingsContentTypes' | 'settingsLanguages' | 'settingsBlocks' | 'blockEditor' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
 
 export interface RouteMatch {
   id: RouteId;
   params: Record<string, string>;
   guarded: boolean;
-  /** Rendered without the admin sidebar and top bar (the page editor). */
+  /** Rendered without the admin sidebar and top bar (the page and block editors). */
   fullScreen?: boolean;
 }
 
@@ -15,6 +15,7 @@ const SETTINGS: Record<string, RouteId> = {
   groups: 'settingsGroups',
   'content-types': 'settingsContentTypes',
   languages: 'settingsLanguages',
+  blocks: 'settingsBlocks',
 };
 
 /** Pure matcher for the `[[...slug]]` catch-all (spec §5.2). `setup`, `login` and `_ui` sit outside AuthGate. */
@@ -39,6 +40,9 @@ export function matchRoute(slug: string[] | undefined, opts: { dev?: boolean } =
   if (s.length === 2 && first === 'settings') {
     const id = Object.hasOwn(SETTINGS, second) ? SETTINGS[second] : undefined;
     if (id) return { id, params: {}, guarded: true };
+  }
+  if (s.length === 3 && first === 'settings' && second === 'blocks' && s[2]) {
+    return { id: 'blockEditor', params: { name: s[2] }, guarded: true, fullScreen: true };
   }
   return { id: 'notFound', params: {}, guarded: true };
 }

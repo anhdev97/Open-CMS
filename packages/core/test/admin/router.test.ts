@@ -26,6 +26,13 @@ describe('matchRoute', () => {
     expect(matchRoute(['settings']).id).toBe('notFound');
     expect(matchRoute(['settings', 'nope']).id).toBe('notFound');
   });
+  it('matches the block routes', () => {
+    expect(matchRoute(['settings', 'blocks'])).toEqual({ id: 'settingsBlocks', params: {}, guarded: true });
+    expect(matchRoute(['settings', 'blocks', 'ProductCard'])).toEqual({ id: 'blockEditor', params: { name: 'ProductCard' }, guarded: true, fullScreen: true });
+    expect(matchRoute(['settings', 'blocks', 'new'])).toEqual({ id: 'blockEditor', params: { name: 'new' }, guarded: true, fullScreen: true });
+    expect(matchRoute(['settings', 'blocks', 'a', 'b']).id).toBe('notFound');
+    expect(matchRoute(['settings', 'users', 'x']).id).toBe('notFound');
+  });
   it('redirects the old users and builder routes', () => {
     expect(matchRoute(['users'])).toEqual({ id: 'redirectUsers', params: {}, guarded: true });
     expect(matchRoute(['builder'])).toEqual({ id: 'redirectBuilder', params: {}, guarded: true });
