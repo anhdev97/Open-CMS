@@ -113,7 +113,7 @@ export function defineComposedBlock(spec: ComposedBlockSpec): ComposedBlockDefin
     });
   });
 
-  const clash = Object.keys(spec.fields).filter((k) => k in generated);
+  const clash = Object.keys(spec.fields).filter((k) => Object.prototype.hasOwnProperty.call(generated, k));
   if (clash.length) {
     throw new ComposedBlockError(
       name,

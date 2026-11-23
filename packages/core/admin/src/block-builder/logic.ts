@@ -1,6 +1,8 @@
 // Pure logic of the block builder: which sources a property may use (spec §5.4), filter/sort fields, names,
 // the save flow and change summaries. Relative imports only (root vitest).
 import {
+  COMPOSED_GENERATED_FIELD_RE,
+  composedFieldNameIssue,
   isBreakingChange,
   type ComposedBinding,
   type ComposedBlockSpec,
@@ -144,14 +146,17 @@ export function suggestName(label: LocalizedText | Partial<LocalizedText>): stri
 }
 
 /** Field names `defineComposedBlock` generates (manual fields must not use them). */
-export const GENERATED_FIELD_NAMES = /^(entry|entries|layout|slot\d*)$/;
+export const GENERATED_FIELD_NAMES = COMPOSED_GENERATED_FIELD_RE;
 
 /** A free camelCase manual field name from a label (`Button label` → `buttonLabel`, then `buttonLabel2`, …). */
 export function suggestFieldName(label: string, fields: Record<string, unknown>): string {
   const w = words(label);
   let stem = w.length ? w.map((x, i) => (i === 0 ? x[0]!.toLowerCase() + x.slice(1) : x[0]!.toUpperCase() + x.slice(1))).join('') : 'field';
   if (/^[0-9]/.test(stem)) stem = `field${stem}`;
-  const taken = (n: string) => n in fields || GENERATED_FIELD_NAMES.test(n);
+  // `slot`, `slot2`, … stay generated whatever number follows: name it `slotField`, `slot2Field` instead.
+  if (/^slot\d*$/.test(stem)) stem = `${stem}Field`;
+  // Generated (`entry`, `slot2`, …), reserved (`id`, `puck`, `editMode`, …) and Object.prototype names are suffixed.
+  const taken = (n: string) => Object.prototype.hasOwnProperty.call(fields, n) || composedFieldNameIssue(n) !== null;
   if (!taken(stem)) return stem;
   for (let i = 2; ; i++) if (!taken(`${stem}${i}`)) return `${stem}${i}`;
 }

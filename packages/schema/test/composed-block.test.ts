@@ -95,3 +95,57 @@ describe('isBreakingChange / withAutoVersion', () => {
     expect(withAutoVersion(b, mut(b, (s) => (s.label = { 'en-US': 'Z' }))).version).toBe(1);
   });
 });
+
+describe('field names and defaults (mirror defineBlocks)', () => {
+  const withField = (name: string, f: unknown = { kind: 'text' }) => mut(unbound(), (s) => (s.fields = { [name]: f }));
+  it('rejects reserved, generated, prototype and non-identifier names', () => {
+    for (const n of ['entry', 'entries', 'layout', 'slot', 'slot2', 'slot10', 'id', '_v', 'puck', 'editMode', '_locale', '_editor', '__proto__', 'constructor', 'toString', 'hasOwnProperty', '1a', 'a-b', 'a b', '', 'a.b']) {
+      const s = unbound();
+      // JSON.parse keeps `__proto__` as an own key (as a request body would).
+      (s as any).fields = JSON.parse(`{${JSON.stringify(n)}:{"kind":"text"}}`);
+      expect(paths(s), n).toEqual([`fields.${n}`]);
+    }
+    expect(validateComposedSpec(withField('slotTitle'))).toEqual([]);
+    expect(validateComposedSpec(withField('entryTitle'))).toEqual([]);
+    expect(validateComposedSpec(withField('identifier'))).toEqual([]);
+  });
+  it('rejects defaults that do not fit the kind', () => {
+    const bad: [string, unknown][] = [
+      ['text', 1], ['longText', false], ['richText', {}], ['number', 'abc'], ['boolean', 'yes'], ['boolean', 0],
+      ['image', 'https://x/y.png'], ['link', 'javascript:x'], ['link', ['a']], ['image', 3],
+    ];
+    for (const [kind, d] of bad) expect(paths(withField('f', { kind, default: d })), `${kind} ${JSON.stringify(d)}`).toEqual(['fields.f.default']);
+    const good: [string, unknown][] = [
+      ['text', 'a'], ['longText', ''], ['richText', '<p>x</p>'], ['number', 2.5], ['boolean', false], ['image', null], ['link', { kind: 'url', href: '/a' }],
+    ];
+    for (const [kind, d] of good) expect(validateComposedSpec(withField('f', { kind, default: d })), kind).toEqual([]);
+  });
+  it('validates labels like defineBlocks', () => {
+    expect(paths(withField('f', { kind: 'text', label: 3 }))).toEqual(['fields.f.label']);
+    expect(paths(withField('f', { kind: 'text', label: { 'en-US': 'A', xx: 'B' } }))).toEqual(['fields.f.label']);
+    expect(validateComposedSpec(withField('f', { kind: 'text', label: 'Plain' }))).toEqual([]);
+    expect(paths(mut(unbound(), (s) => (s.label = { 'en-US': 'A', 'de-DE': 'B' })))).toEqual(['label']);
+    expect(paths(mut(unbound(), (s) => (s.label = { 'en-US': 'A', 'vi-VN': 1 })))).toEqual(['label']);
+  });
+  it('validates Slot allow and max', () => {
+    expect(paths(mut(unbound(), (s) => (s.tree.children[1].props = { allow: [1] })))).toEqual(['tree.children.1.props.allow']);
+    expect(paths(mut(unbound(), (s) => (s.tree.children[1].props = { allow: 'Hero' })))).toEqual(['tree.children.1.props.allow']);
+    expect(paths(mut(unbound(), (s) => (s.tree.children[1].props = { max: 0 })))).toEqual(['tree.children.1.props.max']);
+    expect(paths(mut(unbound(), (s) => (s.tree.children[1].props = { max: 1.5 })))).toEqual(['tree.children.1.props.max']);
+    expect(validateComposedSpec(mut(unbound(), (s) => (s.tree.children[1].props = { allow: ['Hero'], max: 2 })))).toEqual([]);
+  });
+  it('validates the sort field and filter values', () => {
+    expect(paths(mut(collection(), (s) => (s.binding.sort = { field: 'a:b', direction: 'asc' })))).toEqual(['binding.sort.field']);
+    expect(paths(mut(collection(), (s) => (s.binding.filter = [{ field: 'a', value: { x: 1 } }])))).toEqual(['binding.filter.0.value']);
+    expect(validateComposedSpec(mut(collection(), (s) => (s.binding.filter = [{ field: 'a', value: 1 }, { field: 'b', value: true }, { field: 'c', value: 'x' }])))).toEqual([]);
+  });
+});
+
+describe('collection-only binding settings', () => {
+  it('rejects filter, sort, limit and layout in single mode', () => {
+    expect(paths(mut(single(), (s) => (s.binding.filter = [{ field: 'a', value: 'x' }])))).toEqual(['binding.filter']);
+    expect(paths(mut(single(), (s) => (s.binding.sort = { field: 'createdAt', direction: 'asc' })))).toEqual(['binding.sort']);
+    expect(paths(mut(single(), (s) => (s.binding.limit = 3)))).toEqual(['binding.limit']);
+    expect(paths(mut(single(), (s) => (s.binding.layout = { kind: 'list' })))).toEqual(['binding.layout']);
+  });
+});

@@ -1,3 +1,4 @@
+import { composedFieldNameIssue } from '@opencloudcms/schema';
 import { describe, expect, it } from 'vitest';
 import type { ComposedBlockSpec } from '@opencloudcms/schema';
 import {
@@ -129,6 +130,19 @@ describe('names and ids', () => {
     expect(suggestFieldName('Button label', { buttonLabel: { kind: 'text' } })).toBe('buttonLabel2');
     expect(suggestFieldName('', {})).toBe('field');
     expect(suggestFieldName('Entry', {})).toBe('entry2');
+  });
+  it('never suggests a reserved or generated field name', () => {
+    expect(suggestFieldName('Id', {})).toBe('id2');
+    expect(suggestFieldName('Edit mode', {})).toBe('editMode2');
+    expect(suggestFieldName('Puck', {})).toBe('puck2');
+    expect(suggestFieldName('Layout', {})).toBe('layout2');
+    expect(suggestFieldName('Constructor', {})).toBe('constructor2');
+    expect(suggestFieldName('Slot', {})).toBe('slotField');
+    expect(suggestFieldName('Slot', { slotField: { kind: 'text' } })).toBe('slotField2');
+    for (const label of ['ID', 'Id', 'Edit mode', 'Puck', 'Slot', 'Slot 2', 'Entries', 'V', '_v', 'To string', '__proto__']) {
+      const name = suggestFieldName(label, {});
+      expect(composedFieldNameIssue(name), `${label} → ${name}`).toBeNull();
+    }
   });
   it('new ids match the spec pattern', () => {
     expect(newBlockId()).toMatch(/^blk_[a-z0-9]{6,}$/);

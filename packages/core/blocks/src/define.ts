@@ -1,11 +1,11 @@
-import { validateComposedSpec, validateLocalizedText, type BlockManifest } from '@opencloudcms/schema';
+import { BLOCK_FIELD_KEY_RE, RESERVED_BLOCK_PROPS, validateComposedSpec, validateLocalizedText, type BlockManifest } from '@opencloudcms/schema';
 import { optionValue } from './fields';
 import { COLOR_TOKENS, SPACING_TOKENS, type BlockDefinition, type BlockField, type BlockRegistry } from './types';
 
 export const BLOCK_NAME_RE = /^[A-Z][A-Za-z0-9]{0,63}$/;
-const FIELD_KEY_RE = /^[A-Za-z][A-Za-z0-9]*$/;
-/** Prop names used by core or Puck on every item. */
-const RESERVED_PROPS = ['id', '_v', 'puck', 'editMode'];
+const FIELD_KEY_RE = BLOCK_FIELD_KEY_RE;
+/** Prop names used by core or Puck on every item (shared with `validateComposedSpec`). */
+const RESERVED_PROPS = RESERVED_BLOCK_PROPS;
 
 /** Typing helper: returns the definition unchanged. Validation happens in `defineBlocks`. */
 export function defineBlock<F extends Record<string, BlockField>>(d: BlockDefinition<F>): BlockDefinition<F> {

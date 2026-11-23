@@ -17,6 +17,7 @@ import {
   type CustomFieldRenderers,
   type Entry,
 } from '../../blocks/src';
+import { validateComposedSpec } from '@opencloudcms/schema';
 import { readEntryImage, readEntryMoney } from '../../blocks/src/composed/values';
 import { GRID_N } from '../../blocks/src/ui/tokens';
 
@@ -134,11 +135,11 @@ describe('defineComposedBlock: fields', () => {
     expect(() => defineComposedBlock(spec)).toThrow(/fields\.entry/);
   });
 
-  it('defineBlocks names the composed block on duplicate names and on a bad manual default', () => {
+  it('defineBlocks names the composed block on duplicate names; a bad manual default fails the spec check', () => {
     const a = defineComposedBlock(productCard('Hero'));
     expect(() => defineBlocks([...coreBlocks, a])).toThrow(/Block "Hero": duplicate name/);
     const spec = base({ name: 'BadDefault', fields: { n: { kind: 'number', default: 'x' } } });
-    expect(() => defineBlocks([defineComposedBlock(spec)])).toThrow(/BadDefault[\s\S]*default "x" is not a number/);
+    expect(() => defineComposedBlock(spec)).toThrow(/BadDefault[\s\S]*fields\.n\.default: default must be a number/);
   });
 });
 
@@ -526,6 +527,68 @@ describe('asset fields of entries', () => {
       expect(new URL(calls[2]).pathname).toBe('/api/admin/assets');
     } finally {
       vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('validateComposedSpec / defineBlocks parity', () => {
+  const valid = productCard('Parity');
+  const at = (f: (s: any) => void) => {
+    const s = structuredClone(valid) as any;
+    f(s);
+    return s as ComposedBlockSpec;
+  };
+  const fieldNamed = (n: string, f: Record<string, unknown> = { kind: 'text' }) =>
+    at((s) => (s.fields = JSON.parse(`{${JSON.stringify(n)}:${JSON.stringify(f)}}`)));
+  const hostile: [string, ComposedBlockSpec][] = [
+    ...['entry', 'entries', 'layout', 'slot', 'slot2', 'id', '_v', 'puck', 'editMode', '_locale', '_editor', '__proto__', 'constructor', 'toString', '9lives', 'a-b'].map(
+      (n): [string, ComposedBlockSpec] => [`field ${n}`, fieldNamed(n)],
+    ),
+    ['number default', fieldNamed('n', { kind: 'number', default: 'abc' })],
+    ['boolean default', fieldNamed('n', { kind: 'boolean', default: 'yes' })],
+    ['text default', fieldNamed('n', { kind: 'text', default: 3 })],
+    ['richText default', fieldNamed('n', { kind: 'richText', default: false })],
+    ['link default', fieldNamed('n', { kind: 'link', default: 'javascript:x' })],
+    ['image default', fieldNamed('n', { kind: 'image', default: 'x.png' })],
+    ['field label', fieldNamed('n', { kind: 'text', label: { 'en-US': 'A', xx: 'B' } })],
+    ['field label type', fieldNamed('n', { kind: 'text', label: 7 })],
+    ['block label locale', at((s) => (s.label = { 'en-US': 'A', 'xx-YY': 'B' }))],
+    ['slot allow', base({ name: 'SlotAllow', tree: { el: 'Box', children: [{ el: 'Slot', props: { allow: [1] } }] } })],
+    ['slot max', base({ name: 'SlotMax', tree: { el: 'Box', children: [{ el: 'Slot', props: { max: 0 } }] } })],
+    ['sort field colon', productGrid({ sort: { field: 'a:b', direction: 'asc' } }, 'SortColon')],
+    ['single with limit', at((s) => (s.binding.limit = 3))],
+  ];
+  const fine: [string, ComposedBlockSpec][] = [
+    ['product card', valid],
+    ['product grid', productGrid({ options: { editorLayout: true, editorSort: true, editorLimit: true, editorFilter: true } }, 'Grid2')],
+    ['every kind with defaults', base({
+      name: 'Kinds',
+      fields: {
+        t: { kind: 'text', default: 'a', label: 'T' },
+        l: { kind: 'longText', default: '' },
+        r: { kind: 'richText', default: '<p>x</p>' },
+        n: { kind: 'number', default: 2 },
+        bo: { kind: 'boolean', default: true },
+        s: { kind: 'select', options: ['a', 1], default: 1 },
+        i: { kind: 'image', default: null },
+        k: { kind: 'link', default: { kind: 'url', href: '/a' } },
+        slotTitle: { kind: 'text' },
+      },
+      tree: { el: 'Stack', children: [{ el: 'Slot', props: { allow: ['Heading'], max: 2 } }, { el: 'Slot' }] },
+    })],
+  ];
+
+  it.each(hostile)('hostile spec fails validation: %s', (_n, spec) => {
+    expect(validateComposedSpec(spec).length).toBeGreaterThan(0);
+  });
+  it.each([...hostile, ...fine])('passes validateComposedSpec ⇒ passes defineBlocks: %s', (_n, spec) => {
+    if (validateComposedSpec(spec).length) return;
+    expect(() => defineBlocks([defineComposedBlock(spec)])).not.toThrow();
+  });
+  it('the valid specs do pass both', () => {
+    for (const [, spec] of fine) {
+      expect(validateComposedSpec(spec)).toEqual([]);
+      expect(() => defineBlocks([...coreBlocks, defineComposedBlock(spec)])).not.toThrow();
     }
   });
 });

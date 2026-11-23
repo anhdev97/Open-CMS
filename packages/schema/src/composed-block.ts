@@ -1,5 +1,6 @@
 // Pure spec types, validation and versioning for composed (builder-made) page blocks.
 // Must not import from `node:*` (bundled for the browser and shared with Nest and the blocks package).
+import { validateLocalizedText } from './groups';
 import type { LocalizedText } from './i18n';
 
 export type ComposedElement =
@@ -80,6 +81,41 @@ export interface ComposedBlockSpec {
 export type ComposedIssue = { path: (string | number)[]; message: string };
 
 const ID_RE = /^blk_[a-z0-9]{6,}$/;
+/** Block field names `defineBlocks` accepts. */
+export const BLOCK_FIELD_KEY_RE = /^[A-Za-z][A-Za-z0-9]*$/;
+/** Prop names used by core or Puck on every block item (`defineBlocks` rejects them as field names). */
+export const RESERVED_BLOCK_PROPS: readonly string[] = ['id', '_v', 'puck', 'editMode'];
+/** Reserved props stamped on composed (and `usesLocale`) block items. */
+export const COMPOSED_RESERVED_PROPS: readonly string[] = ['_locale', '_editor'];
+/**
+ * Field names `defineComposedBlock` may generate (`entry`, `entries`, `layout`, `slot`, `slot2`, …). Manual fields
+ * never use them, whatever the binding and tree, so a later binding or Slot cannot clash with stored content.
+ */
+export const COMPOSED_GENERATED_FIELD_RE = /^(entry|entries|layout|slot\d*)$/;
+
+/** Why `name` cannot be a manual field of a composed block (null when it can). */
+export function composedFieldNameIssue(name: string): string | null {
+  if (!BLOCK_FIELD_KEY_RE.test(name)) return 'field name must start with a letter and use letters and digits only';
+  if (RESERVED_BLOCK_PROPS.includes(name) || COMPOSED_RESERVED_PROPS.includes(name)) return `"${name}" is reserved`;
+  if (COMPOSED_GENERATED_FIELD_RE.test(name)) return `"${name}" is reserved for a generated field`;
+  if (name in Object.prototype) return `"${name}" is reserved`;
+  return null;
+}
+
+const DEFAULT_CHECKS: Record<ComposedFieldKind, ((d: unknown) => boolean) | null> = {
+  text: (d) => typeof d === 'string',
+  longText: (d) => typeof d === 'string',
+  richText: (d) => typeof d === 'string',
+  number: (d) => typeof d === 'number' && Number.isFinite(d),
+  boolean: (d) => typeof d === 'boolean',
+  select: null, // checked against the options
+  image: (d) => d === null || (!!d && typeof d === 'object' && !Array.isArray(d)),
+  link: (d) => d === null || (!!d && typeof d === 'object' && !Array.isArray(d)),
+};
+const DEFAULT_EXPECTED: Record<ComposedFieldKind, string> = {
+  text: 'a string', longText: 'a string', richText: 'a string', number: 'a number', boolean: 'a boolean',
+  select: 'one of the options', image: 'an object or null', link: 'an object or null',
+};
 const NAME_RE = /^[A-Z][A-Za-z0-9]{0,63}$/;
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
@@ -92,7 +128,7 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
   if (typeof spec.name !== 'string' || !NAME_RE.test(spec.name)) add(['name'], 'name must be PascalCase (^[A-Z][A-Za-z0-9]{0,63}$)');
   if (!isObj(spec.label) || typeof spec.label['en-US'] !== 'string' || !spec.label['en-US'].trim()) {
     add(['label', 'en-US'], 'label requires a non-empty en-US text');
-  }
+  } else for (const m of validateLocalizedText(spec.label, 'label')) add(['label'], m);
   if (typeof spec.category !== 'string' || !spec.category.trim()) add(['category'], 'category is required');
   if (spec.icon !== undefined && typeof spec.icon !== 'string') add(['icon'], 'icon must be a string');
   if (!Number.isInteger(spec.version) || (spec.version as number) < 1) add(['version'], 'version must be an integer >= 1');
@@ -106,15 +142,22 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
       const b = binding;
       if (typeof b.apiId !== 'string' || !b.apiId) add(['binding', 'apiId'], 'apiId is required');
       if (b.mode !== 'single' && b.mode !== 'collection') add(['binding', 'mode'], "mode must be 'single' or 'collection'");
+      if (b.mode === 'single') {
+        for (const k of ['filter', 'sort', 'limit', 'layout']) if (b[k] !== undefined) add(['binding', k], `${k} is only allowed in collection mode`);
+      }
       if (b.filter !== undefined) {
         if (!Array.isArray(b.filter)) add(['binding', 'filter'], 'filter must be an array');
         else b.filter.forEach((f, i) => {
           if (!isObj(f) || typeof f.field !== 'string' || !f.field) add(['binding', 'filter', i, 'field'], 'filter field is required');
           else if (!('value' in f)) add(['binding', 'filter', i, 'value'], 'filter value is required');
+          else if (!['string', 'number', 'boolean'].includes(typeof f.value) || (typeof f.value === 'number' && !Number.isFinite(f.value))) {
+            add(['binding', 'filter', i, 'value'], 'filter value must be a string, number or boolean');
+          }
         });
       }
       if (b.sort !== undefined) {
         if (!isObj(b.sort) || typeof b.sort.field !== 'string' || !b.sort.field) add(['binding', 'sort', 'field'], 'sort field is required');
+        else if (b.sort.field.includes(':')) add(['binding', 'sort', 'field'], 'sort field must not contain ":"');
         else if (b.sort.direction !== 'asc' && b.sort.direction !== 'desc') add(['binding', 'sort', 'direction'], "direction must be 'asc' or 'desc'");
       }
       if (b.limit !== undefined && (!Number.isInteger(b.limit) || (b.limit as number) < 1 || (b.limit as number) > 100)) {
@@ -150,10 +193,19 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
   else {
     for (const [name, f] of Object.entries(spec.fields)) {
       fieldNames.add(name);
+      const nameIssue = composedFieldNameIssue(name);
+      if (nameIssue) add(['fields', name], nameIssue);
       if (!isObj(f) || !(COMPOSED_FIELD_KINDS as readonly string[]).includes(f.kind as string)) {
         add(['fields', name, 'kind'], `kind must be one of ${COMPOSED_FIELD_KINDS.join(', ')}`);
         continue;
       }
+      if (f.label !== undefined && typeof f.label !== 'string') {
+        const m = validateLocalizedText(f.label, 'label');
+        if (m.length) add(['fields', name, 'label'], m.join('; '));
+      }
+      const kind = f.kind as ComposedFieldKind;
+      const check = DEFAULT_CHECKS[kind];
+      if (check && f.default !== undefined && !check(f.default)) add(['fields', name, 'default'], `default must be ${DEFAULT_EXPECTED[kind]}`);
       if (f.kind === 'select') {
         const o = f.options;
         const ok = Array.isArray(o) && o.length > 0 && o.every((x) => typeof x === 'string' || typeof x === 'number') && new Set(o).size === o.length;
@@ -198,6 +250,13 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
       add([...path, 'el'], 'Slot is not allowed inside a collection item template');
     }
     if (n.props !== undefined && !isObj(n.props)) add([...path, 'props'], 'props must be an object');
+    else if (el === 'Slot' && isObj(n.props)) {
+      const { allow, max } = n.props;
+      if (allow !== undefined && !(Array.isArray(allow) && allow.every((x) => typeof x === 'string' && x))) {
+        add([...path, 'props', 'allow'], 'allow must be an array of block names');
+      }
+      if (max !== undefined && !(Number.isInteger(max) && (max as number) > 0)) add([...path, 'props', 'max'], 'max must be a positive integer');
+    }
     if (n.bind !== undefined) {
       if (!isObj(n.bind)) add([...path, 'bind'], 'bind must be an object');
       else for (const [k, s] of Object.entries(n.bind)) {
