@@ -9,7 +9,7 @@ const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
 function lit(value: unknown, indent: string): string {
   if (value === null) return 'null';
-  if (typeof value === 'string') return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n')}'`;
+  if (typeof value === 'string') return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')}'`;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (Array.isArray(value)) return `[${value.map((v) => lit(v, indent)).join(', ')}]`;
   if (typeof value === 'object') {

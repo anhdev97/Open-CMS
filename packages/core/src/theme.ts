@@ -42,8 +42,12 @@ export class ThemeService {
         fs.writeFileSync(file, printThemeFile(body as ThemeDefinition));
         return await this.get();
       } catch (e) {
-        if (before) fs.writeFileSync(file, before);
-        else fs.rmSync(file, { force: true });
+        try {
+          if (before) fs.writeFileSync(file, before);
+          else fs.rmSync(file, { force: true });
+        } catch {
+          // keep the original error
+        }
         throw e;
       }
     });

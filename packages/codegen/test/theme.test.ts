@@ -29,6 +29,16 @@ describe('theme file', () => {
     expect(await loadTheme(config)).toEqual(theme);
   });
 
+  it('round-trips a label with quotes, backslashes, comment closers and line breaks', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ocms-theme-'));
+    const config = resolveConfig({ database: { url: 'postgres://x' } } as any, root);
+    fs.mkdirSync(path.join(root, 'src'));
+    const nasty = "a*/b\\c'd\ne\rf\u2028g\u2029h\"i";
+    const t: ThemeDefinition = { colors: { primary: { label: nasty } }, palettes: { p: { label: nasty, values: { primary: '#fff' } } }, activePalette: 'p' };
+    fs.writeFileSync(themeFile(config), printThemeFile(t));
+    expect(await loadTheme(config)).toEqual(t);
+  });
+
   it('throws with the issue list for an invalid file', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ocms-theme-'));
     const config = resolveConfig({ database: { url: 'postgres://x' } } as any, root);
