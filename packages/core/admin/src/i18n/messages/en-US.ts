@@ -66,6 +66,7 @@ export const enUS = {
   nav: {
     groups: "Groups",
     contentTypesSettings: "Content types",
+    pageBuilder: "Page builder",
     blocks: "Blocks",
     languages: "Languages",
     settings: "Settings",

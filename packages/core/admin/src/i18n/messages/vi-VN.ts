@@ -65,6 +65,7 @@ const viVN: Messages = {
   nav: {
     groups: 'Nhóm quyền',
     contentTypesSettings: 'Loại nội dung',
+    pageBuilder: "Dựng trang",
     blocks: 'Khối',
     languages: 'Ngôn ngữ',
     settings: 'Cài đặt',

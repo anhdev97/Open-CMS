@@ -37,13 +37,14 @@ import { Link, useAdminPathname } from '../lib/nav';
 import { api } from '../lib/api';
 import { useLocale } from '../i18n/hooks';
 import { buildSidebarTree, UNGROUPED_KEY, type SidebarTypeInput } from '../lib/sidebar-tree';
-import { primaryItems, settingsItems } from '../navigation';
+import { pageBuilderItems, settingsItems } from '../navigation';
 import { useAuth } from '../auth/AuthContext';
 import { can, visibleSettingsItems } from '../lib/can';
 import { cn } from '../lib/utils';
 
 const NAV_STORAGE_KEY = 'opencloudcms-nav';
 const SETTINGS_KEY = '__settings';
+const PAGE_BUILDER_KEY = '__page-builder';
 
 function readOpen(): Record<string, boolean> {
   try {
@@ -144,6 +145,7 @@ function AppSidebar() {
   const { user } = useAuth();
   const canRead = can(user.permissions, 'content.read');
   const visibleSettings = useMemo(() => visibleSettingsItems(settingsItems, user.permissions), [user.permissions]);
+  const visiblePageBuilder = useMemo(() => visibleSettingsItems(pageBuilderItems, user.permissions), [user.permissions]);
   const { types, groups, failed } = useContentTypes(canRead);
   const { isMobile, setOpenMobile } = useSidebar();
   const [stored, setStored] = useState<Record<string, boolean>>({});
@@ -159,6 +161,7 @@ function AppSidebar() {
     [types, groups, locale],
   );
   const settingsActive = visibleSettings.some((i) => isActive(i.to));
+  const pageBuilderActive = visiblePageBuilder.some((i) => isActive(i.to));
   // A group is open when stored open (default open) or when it holds the current page.
   const isOpen = (key: string, holdsCurrent: boolean) => holdsCurrent || (stored[key] ?? true);
   const toggle = (key: string, holdsCurrent: boolean) => {
@@ -194,11 +197,20 @@ function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {link('/', t('nav.home'), <HomeIcon aria-hidden="true" />)}
-              {visibleSettingsItems(primaryItems, user.permissions).map(({ to, label, icon: Icon }) => link(to, t(label), <Icon aria-hidden="true" />))}
               {canRead && link('/assets', t('nav.assets'), <ImageIcon aria-hidden="true" />)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {visiblePageBuilder.length > 0 && (
+          <NavGroup
+            id="page-builder"
+            title={t('nav.pageBuilder')}
+            open={isOpen(PAGE_BUILDER_KEY, pageBuilderActive)}
+            onToggle={() => toggle(PAGE_BUILDER_KEY, pageBuilderActive)}
+          >
+            {visiblePageBuilder.map(({ to, label, icon: Icon }) => link(to, t(label), <Icon aria-hidden="true" />))}
+          </NavGroup>
+        )}
         {canRead && types === null && !failed && (
           <SidebarGroup>
             <SidebarMenu>

@@ -65,6 +65,7 @@ const idID: Messages = {
   nav: {
     groups: 'Grup',
     contentTypesSettings: 'Tipe konten',
+    pageBuilder: "Pembuat halaman",
     blocks: 'Blok',
     languages: 'Bahasa',
     settings: 'Pengaturan',

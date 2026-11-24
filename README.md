@@ -270,7 +270,7 @@ below; three sample products first when the catalogue is empty) and `/about`.
 
 ### Block Builder
 
-Blocks can also be built without code in **Settings > Blocks** (`/admin/settings/blocks`, dev only, like the Content
+Blocks can also be built without code in **Page builder > Blocks** (`/admin/settings/blocks`, dev only, like the Content
 Type Builder): drop elements (`Box`, `Stack`, `Columns`, `Grid`, `Card`, `Slot`, `Heading`, `Text`, `Image`,
 `Button`, `Badge`, `Price`, `Date`, `Divider`, `Spacer`) on a canvas, bind them to one entry or to a list of entries
 of a content type, and save. The builder writes `src/blocks/<name>/<name>.block.ts`

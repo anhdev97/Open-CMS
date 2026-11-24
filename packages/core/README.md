@@ -160,7 +160,7 @@ and is imported by Nest for `blockManifest`):
 
 ### Composed blocks (Block Builder)
 
-**Settings > Blocks** (`/admin/settings/blocks`, permission `settings.content-types`) builds blocks without code:
+**Page builder > Blocks** (`/admin/settings/blocks`, permission `settings.content-types`) builds blocks without code:
 drag elements onto a canvas, bind them to a content type, save. Like the Content Type Builder it writes files, so
 saving works only where the schema is editable (dev); in production the screens are read-only and a new or changed
 block needs a rebuild and deploy. Each block is one file that you commit and may edit by hand:

@@ -110,7 +110,8 @@
 
 ### Added
 
-- **Block Builder** (Settings > Blocks, `/admin/settings/blocks`, permission `settings.content-types`): build page
+- **Admin sidebar:** Pages and Blocks now sit together in a top-level **Page builder** group (Blocks moved out of Settings; URLs unchanged).
+- **Block Builder** (Page builder > Blocks, `/admin/settings/blocks`, permission `settings.content-types`): build page
   blocks with drag and drop from design-system elements (`Box`, `Stack`, `Columns`, `Grid`, `Card`, `Slot`, `Heading`,
   `Text`, `Image`, `Button`, `Badge`, `Price`, `Date`, `Divider`, `Spacer`), bound to nothing, to one entry or to a
   list of entries of a content type, with manual fields, a live canvas with sample entries, and four admin languages.

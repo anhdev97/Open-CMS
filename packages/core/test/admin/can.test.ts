@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PERMISSIONS } from '@opencloudcms/schema';
 import { can, landingState, routePermission, visibleSettingsItems } from '../../admin/src/lib/can';
-import { settingsItems } from '../../admin/src/navigation';
+import { pageBuilderItems, settingsItems } from '../../admin/src/navigation';
 import { matchRoute } from '../../admin/src/router/match';
 
 describe('can', () => {
@@ -33,17 +33,16 @@ describe('routePermission', () => {
 });
 
 describe('visibleSettingsItems', () => {
-  it('orders Users, Groups, Content types, Blocks, Languages', () => {
+  it('orders Users, Groups, Content types, Languages', () => {
     expect(settingsItems.map((i) => i.to)).toEqual([
       '/settings/users',
       '/settings/groups',
       '/settings/content-types',
-      '/settings/blocks',
       '/settings/languages',
     ]);
   });
   it('shows all items for all permissions', () => {
-    expect(visibleSettingsItems(settingsItems, PERMISSIONS)).toHaveLength(5);
+    expect(visibleSettingsItems(settingsItems, PERMISSIONS)).toHaveLength(4);
   });
   it('hides items without the permission', () => {
     const items = visibleSettingsItems(settingsItems, ['settings.groups', 'content.read']);
@@ -51,6 +50,20 @@ describe('visibleSettingsItems', () => {
   });
   it('is empty when nothing is allowed (caller hides the Settings group)', () => {
     expect(visibleSettingsItems(settingsItems, ['content.read'])).toEqual([]);
+  });
+});
+
+describe('pageBuilderItems', () => {
+  it('groups Pages and Blocks under Page builder', () => {
+    expect(pageBuilderItems.map((i) => [i.to, i.label])).toEqual([
+      ['/pages', 'nav.pages'],
+      ['/settings/blocks', 'nav.blocks'],
+    ]);
+  });
+  it('shows each item by its own permission', () => {
+    expect(visibleSettingsItems(pageBuilderItems, ['content.read']).map((i) => i.to)).toEqual(['/pages']);
+    expect(visibleSettingsItems(pageBuilderItems, ['settings.content-types']).map((i) => i.to)).toEqual(['/settings/blocks']);
+    expect(visibleSettingsItems(pageBuilderItems, [])).toEqual([]);
   });
 });
 

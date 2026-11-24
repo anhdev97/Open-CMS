@@ -65,6 +65,7 @@ const frFR: Messages = {
   nav: {
     groups: 'Groupes',
     contentTypesSettings: 'Types de contenu',
+    pageBuilder: "Constructeur de pages",
     blocks: 'Blocs',
     languages: 'Langues',
     settings: 'Paramètres',
