@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeColors, defineTheme, validateTheme } from '../src/theme';
+import { activeColors, defineTheme, validateTheme, type ThemeDefinition } from '../src/theme';
 
 const theme = () => defineTheme({
   colors: { accent: { label: 'Accent' }, line: {} },
@@ -30,5 +30,17 @@ describe('theme', () => {
   });
   it('activeColors returns the active palette values', () => {
     expect(activeColors(theme())).toEqual({ accent: '#aa5533', line: '#ddccbb' });
+  });
+});
+
+describe('theme inherited keys', () => {
+  it('does not treat inherited keys as present', () => {
+    expect(validateTheme({ ...theme(), activePalette: 'constructor' }).map((i) => i.path)).toContainEqual(['activePalette']);
+    const t = defineTheme({
+      colors: { constructor: {} } as ThemeDefinition['colors'],
+      palettes: { clay: { values: {} } },
+      activePalette: 'clay',
+    });
+    expect(validateTheme(t).map((i) => i.path)).toContainEqual(['palettes', 'clay', 'values', 'constructor']);
   });
 });

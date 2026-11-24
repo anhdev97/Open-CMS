@@ -107,7 +107,7 @@ export function setAt<T>(v: Responsive<T> | undefined, bp: Breakpoint, next: T |
 type Path = (string | number)[];
 
 /** Check a Responsive<T>: a plain value (or a non-breakpoint object, e.g. Sides) is checked as is, a breakpoint object once per breakpoint. */
-export function checkResponsive(v: unknown, path: Path, leaf: (v: unknown, path: Path) => void, add: (p: Path, m: string) => void): void {
+export function checkResponsive(v: unknown, path: Path, leaf: (v: unknown, path: Path) => void): void {
   if (isResponsiveObject(v)) {
     for (const [k, x] of Object.entries(v)) leaf(x, [...path, k]);
   } else leaf(v, path);
@@ -142,10 +142,10 @@ export function validateNodeStyle(style: unknown, path: Path): ComposedIssue[] {
     if (v === undefined) continue;
     const p = [...path, k];
     switch (k) {
-      case 'padding': checkResponsive(v, p, sidesLeaf(add, {}), add); break;
-      case 'margin': checkResponsive(v, p, sidesLeaf(add, { negative: true, auto: true }), add); break;
-      case 'width': case 'height': checkResponsive(v, p, lengthLeaf(add, { auto: true }), add); break;
-      case 'maxWidth': case 'minHeight': checkResponsive(v, p, lengthLeaf(add, {}), add); break;
+      case 'padding': checkResponsive(v, p, sidesLeaf(add, {})); break;
+      case 'margin': checkResponsive(v, p, sidesLeaf(add, { negative: true, auto: true })); break;
+      case 'width': case 'height': checkResponsive(v, p, lengthLeaf(add, { auto: true })); break;
+      case 'maxWidth': case 'minHeight': checkResponsive(v, p, lengthLeaf(add, {})); break;
       case 'background': case 'color': case 'borderColor': color(v, p); break;
       case 'borderWidth':
         if (!(has(BORDER_WIDTH_TOKENS, v) || (typeof v === 'string' && /px$/.test(v) && isCustomLength(v, false)))) {
@@ -171,7 +171,7 @@ export function validateNodeStyle(style: unknown, path: Path): ComposedIssue[] {
       case 'span':
         checkResponsive(v, p, (x, q) => {
           if (!(x === 'full' || (Number.isInteger(x) && (x as number) >= 1 && (x as number) <= 12))) add(q, "span must be an integer 1-12 or 'full'");
-        }, add);
+        });
         break;
       default: add(p, `unknown style property "${k}"`);
     }

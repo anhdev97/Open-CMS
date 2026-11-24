@@ -84,4 +84,7 @@ describe('validateNodeStyle', () => {
     expect(validateNodeStyle('x', ['s'])).not.toEqual([]);
     expect(validateNodeStyle(undefined, ['s'])).toEqual([]);
   });
+  it('flags a mixed-key responsive object', () => {
+    expect(validateNodeStyle({ width: { base: '4', foo: 'x' } }, ['s']).map((i) => i.path)).toContainEqual(['s', 'width']);
+  });
 });

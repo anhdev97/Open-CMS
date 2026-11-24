@@ -136,20 +136,20 @@ function checkLayoutProps(
         if (!Array.isArray(v)) return add(p, 'tracks must be an array');
         if (v.length < 1 || v.length > MAX_TRACKS) add(p, `tracks must have 1 to ${MAX_TRACKS} entries`);
         v.forEach((t, i) => { if (!isTrack(t)) add([...p, i], 'track must be <n>fr (1-12), auto or a length'); });
-      }, add);
+      });
     }
     if (props.alignY !== undefined) enumLeaf(['start', 'center', 'end', 'stretch'], add)(props.alignY, at('alignY'));
     for (const k of ['gapX', 'gapY']) {
       if (props[k] !== undefined && !isLength(props[k])) add(at(k), 'must be a spacing token or a length like 12px');
     }
   } else if (el === 'Stack') {
-    if (props.direction !== undefined) checkResponsive(props.direction, at('direction'), enumLeaf(['vertical', 'horizontal'], add), add);
-    if (props.align !== undefined) checkResponsive(props.align, at('align'), enumLeaf(['start', 'center', 'end', 'stretch'], add), add);
+    if (props.direction !== undefined) checkResponsive(props.direction, at('direction'), enumLeaf(['vertical', 'horizontal'], add));
+    if (props.align !== undefined) checkResponsive(props.align, at('align'), enumLeaf(['start', 'center', 'end', 'stretch'], add));
     if (props.justify !== undefined) enumLeaf(['start', 'center', 'end', 'between'], add)(props.justify, at('justify'));
     if (props.wrap !== undefined && typeof props.wrap !== 'boolean') add(at('wrap'), 'wrap must be a boolean');
   } else if (el === 'Image') {
     if (props.fit !== undefined) enumLeaf(['cover', 'contain'], add)(props.fit, at('fit'));
-    if (props.aspect !== undefined) checkResponsive(props.aspect, at('aspect'), enumLeaf(['auto', 'square', 'video', '3/2', '4/3', 'wide'], add), add);
+    if (props.aspect !== undefined) checkResponsive(props.aspect, at('aspect'), enumLeaf(['auto', 'square', 'video', '3/2', '4/3', 'wide'], add));
   }
 }
 

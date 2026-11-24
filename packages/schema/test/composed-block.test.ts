@@ -193,4 +193,9 @@ describe('node style and column props', () => {
     expect(paths({ el: 'Image', props: { fit: 'cover', aspect: { base: 'square', lg: 'wide' } } })).toEqual([]);
     expect(paths({ el: 'Image', props: { fit: 'x', aspect: '5/1' } })).toEqual(expect.arrayContaining(['tree.props.fit', 'tree.props.aspect']));
   });
+  it('validates Columns gapX, gapY and alignY', () => {
+    expect(paths({ el: 'Columns', props: { gapX: '8', gapY: '24px', alignY: 'center' } })).toEqual([]);
+    expect(paths({ el: 'Columns', props: { gapX: 'auto', gapY: '4px;x', alignY: 'middle' } }))
+      .toEqual(expect.arrayContaining(['tree.props.gapX', 'tree.props.gapY', 'tree.props.alignY']));
+  });
 });

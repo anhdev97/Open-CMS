@@ -9,6 +9,7 @@ export interface ThemeDefinition {
 
 const NAME_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+const own = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 export function defineTheme(t: ThemeDefinition): ThemeDefinition {
@@ -34,14 +35,14 @@ export function validateTheme(t: unknown): ComposedIssue[] {
     if (p.label !== undefined && typeof p.label !== 'string') add(['palettes', id, 'label'], 'label must be a string');
     const values = p.values;
     for (const name of Object.keys(colors ?? {})) {
-      if (!(name in values)) add(['palettes', id, 'values', name], `missing a value for color "${name}"`);
+      if (!own(values, name)) add(['palettes', id, 'values', name], `missing a value for color "${name}"`);
     }
     for (const [name, v] of Object.entries(values)) {
-      if (colors && !(name in colors)) add(['palettes', id, 'values', name], `unknown color "${name}"`);
+      if (colors && !own(colors, name)) add(['palettes', id, 'values', name], `unknown color "${name}"`);
       else if (typeof v !== 'string' || !HEX_RE.test(v)) add(['palettes', id, 'values', name], 'must be a hex color (#rgb, #rrggbb or #rrggbbaa)');
     }
   }
-  if (typeof t.activePalette !== 'string' || !palettes || !(t.activePalette in palettes)) {
+  if (typeof t.activePalette !== 'string' || !palettes || !own(palettes, t.activePalette)) {
     add(['activePalette'], 'activePalette must name an existing palette');
   }
   return issues;
