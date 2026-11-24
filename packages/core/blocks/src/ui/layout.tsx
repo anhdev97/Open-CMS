@@ -31,12 +31,20 @@ type ColumnsProps = Styled & {
 type GridProps = Styled & { columns: 2 | 3 | 4 | 5 | 6; gap?: SpacingToken };
 type CardProps = Styled & { padding?: SpacingToken; background?: ColorToken; bordered?: boolean };
 
+/** Explicit `wrap` classes: base only for a plain direction, every breakpoint for a responsive one (its md/lg rows add `flex-wrap`). */
+function wrapClasses(wrap: boolean | undefined, responsive: boolean): string[] {
+  if (wrap === undefined) return [];
+  const w = FLEX_WRAP[wrap ? 'true' : 'false'];
+  return responsive ? [w.base, w.md, w.lg] : [w.base];
+}
+
 /** Classes and variables of each layout primitive's element. */
 const layout = {
   Box: ({ padding, background, style }: BoxProps): StyleResult => {
     const sp = styleProps(style, 'block');
     return {
       className: cn(
+        // Any style padding (at any breakpoint, any side) drops the legacy padding token at every breakpoint.
         setsPadding(sp) ? undefined : PY[padding as SpacingToken] ?? PY['8'],
         background && !setsBackground(sp) ? BG[background] : undefined,
         sp.className,
@@ -53,7 +61,7 @@ const layout = {
         GAP[gap as SpacingToken] ?? GAP['4'],
         typeof align === 'string' || align === undefined ? STACK_ALIGN[align as Align] ?? STACK_ALIGN.stretch : bpClasses<Align>(align, STACK_ALIGN_BP, 'stretch'),
         justify ? STACK_JUSTIFY[justify] : undefined,
-        wrap === true ? FLEX_WRAP.true : wrap === false ? FLEX_WRAP.false : undefined,
+        wrapClasses(wrap, typeof direction === 'object'),
         sp.className,
       ),
       style: sp.style,
@@ -93,6 +101,7 @@ const layout = {
         'flex flex-col gap-4 overflow-hidden rounded-xl text-card-foreground shadow-xs',
         bordered ? 'border' : undefined,
         bg,
+        // Any style padding (at any breakpoint, any side) drops the legacy padding token at every breakpoint.
         setsPadding(sp) ? undefined : P[padding as SpacingToken] ?? P['6'],
         sp.className,
       ),

@@ -260,6 +260,13 @@ describe('style-aware primitives', () => {
       'flex flex-col md:flex-row md:flex-wrap gap-4 items-start lg:items-center',
     );
   });
+  it('an explicit wrap wins at every breakpoint over a responsive horizontal direction', () => {
+    const c = cls(r(h(ui.Stack, { direction: { md: 'horizontal' }, wrap: false }, 'c')))!;
+    expect(c).toBe('flex flex-col md:flex-row gap-4 items-stretch flex-nowrap md:flex-nowrap lg:flex-nowrap');
+    expect(c).not.toContain('md:flex-wrap');
+    expect(cls(r(h(ui.Stack, { direction: { base: 'horizontal', md: 'vertical' }, wrap: true }, 'c')))).toContain('flex-wrap md:flex-wrap lg:flex-wrap');
+    expect(cls(r(h(ui.Stack, { direction: 'horizontal' }, 'c')))).toBe('flex flex-row flex-wrap gap-4 items-stretch');
+  });
   it('Image fit, aspect and height 100%', () => {
     const out = r(h(ui.Image, { src: '/a.png', fit: 'contain', aspect: { base: 'square', md: '3/2', lg: '4/3' } }));
     expect(cls(out)).toBe('w-full object-contain aspect-square md:aspect-[3/2] lg:aspect-[4/3]');

@@ -154,7 +154,11 @@ export const STACK_ALIGN_BP: { [K in 'base' | 'md' | 'lg']: Record<'start' | 'ce
 export const STACK_JUSTIFY: Record<'start' | 'center' | 'end' | 'between', string> = {
   start: 'justify-start', center: 'justify-center', end: 'justify-end', between: 'justify-between',
 };
-export const FLEX_WRAP: Record<'true' | 'false', string> = { true: 'flex-wrap', false: 'flex-nowrap' };
+/** Explicit Stack `wrap`, per breakpoint, so it also beats the `md:flex-wrap` of a responsive horizontal direction. */
+export const FLEX_WRAP: Record<'true' | 'false', { base: string; md: string; lg: string }> = {
+  true: { base: 'flex-wrap', md: 'md:flex-wrap', lg: 'lg:flex-wrap' },
+  false: { base: 'flex-nowrap', md: 'md:flex-nowrap', lg: 'lg:flex-nowrap' },
+};
 
 export type ImageAspect = 'auto' | 'square' | 'video' | '3/2' | '4/3' | 'wide';
 export const IMAGE_ASPECT: { [K in 'base' | 'md' | 'lg']: Record<ImageAspect, string> } = {
