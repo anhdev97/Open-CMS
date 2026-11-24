@@ -98,3 +98,68 @@ export const HEADING: Record<1 | 2 | 3 | 4, string> = {
   1: 'text-4xl font-bold tracking-tight', 2: 'text-3xl font-semibold tracking-tight',
   3: 'text-2xl font-semibold', 4: 'text-xl font-semibold',
 };
+
+// ---- Style system (`NodeStyle`): one literal class per property per breakpoint; values travel in `--ocms-*` variables.
+type BpClass = { base: string; md: string; lg: string };
+
+export const STYLE_CLASS = {
+  pt: { base: 'pt-(--ocms-pt)', md: 'md:pt-(--ocms-pt-md)', lg: 'lg:pt-(--ocms-pt-lg)' },
+  pr: { base: 'pr-(--ocms-pr)', md: 'md:pr-(--ocms-pr-md)', lg: 'lg:pr-(--ocms-pr-lg)' },
+  pb: { base: 'pb-(--ocms-pb)', md: 'md:pb-(--ocms-pb-md)', lg: 'lg:pb-(--ocms-pb-lg)' },
+  pl: { base: 'pl-(--ocms-pl)', md: 'md:pl-(--ocms-pl-md)', lg: 'lg:pl-(--ocms-pl-lg)' },
+  mt: { base: 'mt-(--ocms-mt)', md: 'md:mt-(--ocms-mt-md)', lg: 'lg:mt-(--ocms-mt-lg)' },
+  mr: { base: 'mr-(--ocms-mr)', md: 'md:mr-(--ocms-mr-md)', lg: 'lg:mr-(--ocms-mr-lg)' },
+  mb: { base: 'mb-(--ocms-mb)', md: 'md:mb-(--ocms-mb-md)', lg: 'lg:mb-(--ocms-mb-lg)' },
+  ml: { base: 'ml-(--ocms-ml)', md: 'md:ml-(--ocms-ml-md)', lg: 'lg:ml-(--ocms-ml-lg)' },
+  w: { base: 'w-(--ocms-w)', md: 'md:w-(--ocms-w-md)', lg: 'lg:w-(--ocms-w-lg)' },
+  maxw: { base: 'max-w-(--ocms-maxw)', md: 'md:max-w-(--ocms-maxw-md)', lg: 'lg:max-w-(--ocms-maxw-lg)' },
+  h: { base: 'h-(--ocms-h)', md: 'md:h-(--ocms-h-md)', lg: 'lg:h-(--ocms-h-lg)' },
+  minh: { base: 'min-h-(--ocms-minh)', md: 'md:min-h-(--ocms-minh-md)', lg: 'lg:min-h-(--ocms-minh-lg)' },
+  cols: { base: 'grid-cols-(--ocms-cols)', md: 'md:grid-cols-(--ocms-cols-md)', lg: 'lg:grid-cols-(--ocms-cols-lg)' },
+  span: { base: 'col-span-(--ocms-span)', md: 'md:col-span-(--ocms-span-md)', lg: 'lg:col-span-(--ocms-span-lg)' },
+  spanFull: { base: 'col-span-full', md: 'md:col-span-full', lg: 'lg:col-span-full' },
+} satisfies Record<string, BpClass>;
+export type StyleVar = Exclude<keyof typeof STYLE_CLASS, 'spanFull'>;
+
+/** Single (non-responsive) style classes. */
+export const STYLE_SINGLE = {
+  bg: 'bg-(--ocms-bg)', fg: 'text-(--ocms-fg)', bc: 'border-(--ocms-bc)', r: 'rounded-(--ocms-r)',
+  gx: 'gap-x-(--ocms-gx)', gy: 'gap-y-(--ocms-gy)',
+};
+export const BORDER_SIDE: Record<'t' | 'r' | 'b' | 'l', string> = {
+  t: 'border-t-(length:--ocms-bw)', r: 'border-r-(length:--ocms-bw)', b: 'border-b-(length:--ocms-bw)', l: 'border-l-(length:--ocms-bw)',
+};
+
+export type Display = 'block' | 'flex' | 'grid' | 'inline-flex' | 'inline';
+export const HIDE: BpClass = { base: 'hidden', md: 'md:hidden', lg: 'lg:hidden' };
+export const SHOW: Record<Display, BpClass> = {
+  block: { base: 'block', md: 'md:block', lg: 'lg:block' },
+  flex: { base: 'flex', md: 'md:flex', lg: 'lg:flex' },
+  grid: { base: 'grid', md: 'md:grid', lg: 'lg:grid' },
+  'inline-flex': { base: 'inline-flex', md: 'md:inline-flex', lg: 'lg:inline-flex' },
+  inline: { base: 'inline', md: 'md:inline', lg: 'lg:inline' },
+};
+
+/** Responsive Stack direction; `base` matches the classes of the plain value. */
+export const STACK_DIRECTION: { [K in 'base' | 'md' | 'lg']: Record<'vertical' | 'horizontal', string> } = {
+  base: { vertical: 'flex-col', horizontal: 'flex-row flex-wrap' },
+  md: { vertical: 'md:flex-col', horizontal: 'md:flex-row md:flex-wrap' },
+  lg: { vertical: 'lg:flex-col', horizontal: 'lg:flex-row lg:flex-wrap' },
+};
+export const STACK_ALIGN_BP: { [K in 'base' | 'md' | 'lg']: Record<'start' | 'center' | 'end' | 'stretch', string> } = {
+  base: { start: 'items-start', center: 'items-center', end: 'items-end', stretch: 'items-stretch' },
+  md: { start: 'md:items-start', center: 'md:items-center', end: 'md:items-end', stretch: 'md:items-stretch' },
+  lg: { start: 'lg:items-start', center: 'lg:items-center', end: 'lg:items-end', stretch: 'lg:items-stretch' },
+};
+export const STACK_JUSTIFY: Record<'start' | 'center' | 'end' | 'between', string> = {
+  start: 'justify-start', center: 'justify-center', end: 'justify-end', between: 'justify-between',
+};
+export const FLEX_WRAP: Record<'true' | 'false', string> = { true: 'flex-wrap', false: 'flex-nowrap' };
+
+export type ImageAspect = 'auto' | 'square' | 'video' | '3/2' | '4/3' | 'wide';
+export const IMAGE_ASPECT: { [K in 'base' | 'md' | 'lg']: Record<ImageAspect, string> } = {
+  base: { auto: 'aspect-auto', square: 'aspect-square', video: 'aspect-video', '3/2': 'aspect-[3/2]', '4/3': 'aspect-[4/3]', wide: 'aspect-[21/9]' },
+  md: { auto: 'md:aspect-auto', square: 'md:aspect-square', video: 'md:aspect-video', '3/2': 'md:aspect-[3/2]', '4/3': 'md:aspect-[4/3]', wide: 'md:aspect-[21/9]' },
+  lg: { auto: 'lg:aspect-auto', square: 'lg:aspect-square', video: 'lg:aspect-video', '3/2': 'lg:aspect-[3/2]', '4/3': 'lg:aspect-[4/3]', wide: 'lg:aspect-[21/9]' },
+};
+export const OBJECT_FIT: Record<'cover' | 'contain', string> = { cover: 'object-cover', contain: 'object-contain' };

@@ -1,7 +1,7 @@
 // Generic renderer of a composed block spec: walks `tree`, reads `bind` sources and renders the public `ui`
 // primitives. Isomorphic (server components, editor canvas, CJS): no hooks, no browser or Node globals.
 import { Fragment, type ReactNode } from 'react';
-import type { BindSource, ComposedBlockSpec, ComposedNode } from '@opencloudcms/schema';
+import type { BindSource, ComposedBlockSpec, ComposedNode, Responsive, Track } from '@opencloudcms/schema';
 import type { ColorToken, SpacingToken } from '../types';
 import { Badge, Button, DateText, Divider, Heading, Image, Price, Spacer, Text } from '../ui/content';
 import { Box, Card, Columns, Grid, Stack } from '../ui/layout';
@@ -11,6 +11,7 @@ type Props = Record<string, unknown>;
 type Entry = Record<string, unknown>;
 
 const h = composedHelpers;
+const isObj = (v: unknown): v is object => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 
 interface Ctx {
@@ -53,23 +54,45 @@ const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v 
 function renderNode(ctx: Ctx, n: ComposedNode, key?: number): ReactNode {
   if (!visible(ctx, n)) return null;
   const p = n.props ?? {};
+  const st = n.style;
   const kids = (n.children ?? []).map((c, i) => renderNode(ctx, c, i));
   switch (n.el) {
     case 'Box':
-      return <Box key={key} padding={tok<SpacingToken>(p.padding)} background={tok<ColorToken>(p.background)}>{kids}</Box>;
+      return <Box key={key} padding={tok<SpacingToken>(p.padding)} background={tok<ColorToken>(p.background)} style={st}>{kids}</Box>;
     case 'Stack':
       return (
-        <Stack key={key} direction={p.direction === 'horizontal' ? 'horizontal' : 'vertical'} gap={tok<SpacingToken>(p.gap)} align={tok<'start'>(p.align)}>
+        <Stack
+          key={key}
+          direction={isObj(p.direction) ? tok<Responsive<'vertical'>>(p.direction) : p.direction === 'horizontal' ? 'horizontal' : 'vertical'}
+          gap={tok<SpacingToken>(p.gap)}
+          align={tok<'start'>(p.align)}
+          justify={tok<'start'>(p.justify)}
+          wrap={typeof p.wrap === 'boolean' ? p.wrap : undefined}
+          style={st}
+        >
           {kids}
         </Stack>
       );
     case 'Columns':
-      return <Columns key={key} count={tok<2>(p.count)} gap={tok<SpacingToken>(p.gap)}>{kids}</Columns>;
+      return (
+        <Columns
+          key={key}
+          count={tok<2>(p.count)}
+          gap={tok<SpacingToken>(p.gap)}
+          tracks={tok<Responsive<Track[]>>(p.tracks)}
+          alignY={tok<'start'>(p.alignY)}
+          gapX={str(p.gapX)}
+          gapY={str(p.gapY)}
+          style={st}
+        >
+          {kids}
+        </Columns>
+      );
     case 'Grid':
-      return <Grid key={key} columns={tok<3>(p.columns)} gap={tok<SpacingToken>(p.gap)}>{kids}</Grid>;
+      return <Grid key={key} columns={tok<3>(p.columns)} gap={tok<SpacingToken>(p.gap)} style={st}>{kids}</Grid>;
     case 'Card':
       return (
-        <Card key={key} padding={tok<SpacingToken>(p.padding)} background={tok<ColorToken>(p.background)} bordered={p.bordered !== false}>
+        <Card key={key} padding={tok<SpacingToken>(p.padding)} background={tok<ColorToken>(p.background)} bordered={p.bordered !== false} style={st}>
           {kids}
         </Card>
       );
@@ -78,35 +101,35 @@ function renderNode(ctx: Ctx, n: ComposedNode, key?: number): ReactNode {
       return <Fragment key={key}>{name ? (ctx.props[name] as ReactNode) ?? null : null}</Fragment>;
     }
     case 'Heading':
-      return <Heading key={key} level={tok<2>(p.level ?? 2)} text={h.text(val(ctx, n, 'text'))} align={tok<'left'>(p.align)} />;
+      return <Heading key={key} level={tok<2>(p.level ?? 2)} text={h.text(val(ctx, n, 'text'))} align={tok<'left'>(p.align)} style={st} />;
     case 'Text': {
       const html = val(ctx, n, 'html');
-      return <Text key={key} text={h.text(val(ctx, n, 'text'))} html={html ?? undefined} size={tok<'base'>(p.size)} color={tok<ColorToken>(p.color)} />;
+      return <Text key={key} text={h.text(val(ctx, n, 'text'))} html={html ?? undefined} size={tok<'base'>(p.size)} color={tok<ColorToken>(p.color)} style={st} />;
     }
     case 'Image': {
       // Explicit alt (bound or fixed) first, then the asset's own alt, then empty.
       const img = h.image(val(ctx, n, 'src'), val(ctx, n, 'alt'));
       if (!img) return null;
-      return <Image key={key} src={img.src} alt={img.alt} ratio={tok<'auto'>(p.ratio)} rounded={p.rounded === true} />;
+      return <Image key={key} src={img.src} alt={img.alt} ratio={tok<'auto'>(p.ratio)} rounded={p.rounded === true} fit={tok<'cover'>(p.fit)} aspect={tok<'auto'>(p.aspect)} style={st} />;
     }
     case 'Button':
-      return <Button key={key} label={h.text(val(ctx, n, 'label'))} href={h.href(val(ctx, n, 'href'))} variant={tok<'default'>(p.variant)} size={tok<'default'>(p.size)} />;
+      return <Button key={key} label={h.text(val(ctx, n, 'label'))} href={h.href(val(ctx, n, 'href'))} variant={tok<'default'>(p.variant)} size={tok<'default'>(p.size)} style={st} />;
     case 'Badge':
-      return <Badge key={key} text={h.text(val(ctx, n, 'text'))} variant={tok<'default'>(p.variant)} />;
+      return <Badge key={key} text={h.text(val(ctx, n, 'text'))} variant={tok<'default'>(p.variant)} style={st} />;
     case 'Price': {
       const m = h.money(val(ctx, n, 'value'));
       if (!m) return null;
       // `showCurrency: false` (set by the builder for `currencyMode: 'market'` money fields) → plain number.
-      return <Price key={key} value={m.value} locale={ctx.locale} currency={p.showCurrency === false ? undefined : m.currency} />;
+      return <Price key={key} value={m.value} locale={ctx.locale} currency={p.showCurrency === false ? undefined : m.currency} style={st} />;
     }
     case 'Date':
       return (
-        <DateText key={key} value={h.date(val(ctx, n, 'value'))} locale={ctx.locale} format={p.format === 'long' ? 'long' : 'short'} timeZone={str(p.timeZone)} />
+        <DateText key={key} value={h.date(val(ctx, n, 'value'))} locale={ctx.locale} format={p.format === 'long' ? 'long' : 'short'} timeZone={str(p.timeZone)} style={st} />
       );
     case 'Divider':
-      return <Divider key={key} />;
+      return <Divider key={key} style={st} />;
     case 'Spacer':
-      return <Spacer key={key} size={tok<SpacingToken>(p.size ?? '8')} />;
+      return <Spacer key={key} size={tok<SpacingToken>(p.size ?? '8')} style={st} />;
     default:
       return null;
   }

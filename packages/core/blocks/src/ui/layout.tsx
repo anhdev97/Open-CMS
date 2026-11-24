@@ -1,54 +1,151 @@
 // Isomorphic layout primitives (no hooks, no browser globals). Unknown token values fall back to the default class.
 import type { ReactNode } from 'react';
+import { isLength, type NodeStyle, type Responsive, type Track } from '@opencloudcms/schema';
 import type { ColorToken, SpacingToken } from '../types';
-import { BG, COLS, GAP, GRID_N, P, PY, STACK_ALIGN, cn } from './tokens';
+import {
+  BG, COLS, FLEX_WRAP, GAP, GRID_N, P, PY, STACK_ALIGN, STACK_ALIGN_BP, STACK_DIRECTION, STACK_JUSTIFY, STYLE_CLASS, STYLE_SINGLE, cn,
+} from './tokens';
+import { bpClasses, cssLength, resolveTracks, setsBackground, setsPadding, styleAttr, styleProps, type StyleResult } from './style';
 
 type Children = { children?: ReactNode };
+type Styled = { style?: NodeStyle };
+type Align = 'start' | 'center' | 'end' | 'stretch';
+type Direction = 'vertical' | 'horizontal';
 
-type BoxProps = { padding?: SpacingToken; background?: ColorToken };
-type StackProps = { direction: 'vertical' | 'horizontal'; gap?: SpacingToken; align?: 'start' | 'center' | 'end' | 'stretch' };
-type ColumnsProps = { count: 2 | 3 | 4; gap?: SpacingToken };
-type GridProps = { columns: 2 | 3 | 4 | 5 | 6; gap?: SpacingToken };
-type CardProps = { padding?: SpacingToken; background?: ColorToken; bordered?: boolean };
+type BoxProps = Styled & { padding?: SpacingToken; background?: ColorToken };
+type StackProps = Styled & {
+  direction: Responsive<Direction>;
+  gap?: SpacingToken;
+  align?: Responsive<Align>;
+  justify?: 'start' | 'center' | 'end' | 'between';
+  wrap?: boolean;
+};
+type ColumnsProps = Styled & {
+  count: 2 | 3 | 4;
+  gap?: SpacingToken;
+  tracks?: Responsive<Track[]>;
+  alignY?: Align;
+  gapX?: string;
+  gapY?: string;
+};
+type GridProps = Styled & { columns: 2 | 3 | 4 | 5 | 6; gap?: SpacingToken };
+type CardProps = Styled & { padding?: SpacingToken; background?: ColorToken; bordered?: boolean };
+
+/** Classes and variables of each layout primitive's element. */
+const layout = {
+  Box: ({ padding, background, style }: BoxProps): StyleResult => {
+    const sp = styleProps(style, 'block');
+    return {
+      className: cn(
+        setsPadding(sp) ? undefined : PY[padding as SpacingToken] ?? PY['8'],
+        background && !setsBackground(sp) ? BG[background] : undefined,
+        sp.className,
+      ),
+      style: sp.style,
+    };
+  },
+  Stack: ({ direction, gap, align, justify, wrap, style }: StackProps): StyleResult => {
+    const sp = styleProps(style, 'flex');
+    return {
+      className: cn(
+        'flex',
+        bpClasses<Direction>(direction, STACK_DIRECTION, 'vertical'),
+        GAP[gap as SpacingToken] ?? GAP['4'],
+        typeof align === 'string' || align === undefined ? STACK_ALIGN[align as Align] ?? STACK_ALIGN.stretch : bpClasses<Align>(align, STACK_ALIGN_BP, 'stretch'),
+        justify ? STACK_JUSTIFY[justify] : undefined,
+        wrap === true ? FLEX_WRAP.true : wrap === false ? FLEX_WRAP.false : undefined,
+        sp.className,
+      ),
+      style: sp.style,
+    };
+  },
+  Columns: ({ count, gap, tracks, alignY, gapX, gapY, style }: ColumnsProps): StyleResult => {
+    const sp = styleProps(style, 'grid');
+    const t = resolveTracks(tracks);
+    const vars: Record<string, string> = {};
+    if (t) Object.assign(vars, { '--ocms-cols': t.base, '--ocms-cols-md': t.md, '--ocms-cols-lg': t.lg });
+    const gx = isLength(gapX) ? gapX! : undefined;
+    const gy = isLength(gapY) ? gapY! : undefined;
+    if (gx) vars['--ocms-gx'] = cssLength(gx);
+    if (gy) vars['--ocms-gy'] = cssLength(gy);
+    return {
+      className: cn(
+        'grid',
+        t ? [STYLE_CLASS.cols.base, STYLE_CLASS.cols.md, STYLE_CLASS.cols.lg] : COLS[count] ?? COLS[2],
+        GAP[gap as SpacingToken] ?? GAP['6'],
+        alignY ? STACK_ALIGN[alignY] : undefined,
+        gx ? STYLE_SINGLE.gx : undefined,
+        gy ? STYLE_SINGLE.gy : undefined,
+        sp.className,
+      ),
+      style: { ...vars, ...sp.style },
+    };
+  },
+  Grid: ({ columns, gap, style }: GridProps): StyleResult => {
+    const sp = styleProps(style, 'grid');
+    return { className: cn('grid', GRID_N[columns] ?? GRID_N[3], GAP[gap as SpacingToken] ?? GAP['6'], sp.className), style: sp.style };
+  },
+  Card: ({ padding, background, bordered = true, style }: CardProps): StyleResult => {
+    const sp = styleProps(style, 'flex');
+    const bg = setsBackground(sp) ? undefined : background ? BG[background] ?? 'bg-card' : 'bg-card';
+    return {
+      className: cn(
+        'flex flex-col gap-4 overflow-hidden rounded-xl text-card-foreground shadow-xs',
+        bordered ? 'border' : undefined,
+        bg,
+        setsPadding(sp) ? undefined : P[padding as SpacingToken] ?? P['6'],
+        sp.className,
+      ),
+      style: sp.style,
+    };
+  },
+};
 
 /**
  * Class of each layout primitive's element, for tools that must draw the same box around their own element (the
- * block builder canvas puts the layout classes on its drop zones).
+ * block builder canvas puts the layout classes on its drop zones). `layoutStyle` gives the matching variables.
  */
 export const layoutClass = {
-  Box: ({ padding, background }: BoxProps) => cn(PY[padding as SpacingToken] ?? PY['8'], background ? BG[background] : undefined),
-  Stack: ({ direction, gap, align }: StackProps) =>
-    cn('flex', direction === 'horizontal' ? 'flex-row flex-wrap' : 'flex-col', GAP[gap as SpacingToken] ?? GAP['4'], STACK_ALIGN[align as 'start'] ?? STACK_ALIGN.stretch),
-  Columns: ({ count, gap }: ColumnsProps) => cn('grid', COLS[count] ?? COLS[2], GAP[gap as SpacingToken] ?? GAP['6']),
-  Grid: ({ columns, gap }: GridProps) => cn('grid', GRID_N[columns] ?? GRID_N[3], GAP[gap as SpacingToken] ?? GAP['6']),
-  Card: ({ padding, background, bordered = true }: CardProps) =>
-    cn(
-      'flex flex-col gap-4 overflow-hidden rounded-xl text-card-foreground shadow-xs',
-      bordered ? 'border' : undefined,
-      background ? BG[background] ?? 'bg-card' : 'bg-card',
-      P[padding as SpacingToken] ?? P['6'],
-    ),
+  Box: (p: BoxProps) => layout.Box(p).className,
+  Stack: (p: StackProps) => layout.Stack(p).className,
+  Columns: (p: ColumnsProps) => layout.Columns(p).className,
+  Grid: (p: GridProps) => layout.Grid(p).className,
+  Card: (p: CardProps) => layout.Card(p).className,
+};
+
+/** `style` attribute (the `--ocms-*` variables) of each layout primitive's element; `undefined` when none. */
+export const layoutStyle = {
+  Box: (p: BoxProps) => styleAttr(layout.Box(p)),
+  Stack: (p: StackProps) => styleAttr(layout.Stack(p)),
+  Columns: (p: ColumnsProps) => styleAttr(layout.Columns(p)),
+  Grid: (p: GridProps) => styleAttr(layout.Grid(p)),
+  Card: (p: CardProps) => styleAttr(layout.Card(p)),
 };
 
 export function Box({ children, ...p }: BoxProps & Children) {
-  return <div className={layoutClass.Box(p)}>{children}</div>;
+  const l = layout.Box(p);
+  return <div className={l.className} style={styleAttr(l)}>{children}</div>;
 }
 
 export function Stack({ children, ...p }: StackProps & Children) {
-  return <div className={layoutClass.Stack(p)}>{children}</div>;
+  const l = layout.Stack(p);
+  return <div className={l.className} style={styleAttr(l)}>{children}</div>;
 }
 
 export function Columns({ children, ...p }: ColumnsProps & Children) {
-  return <div className={layoutClass.Columns(p)}>{children}</div>;
+  const l = layout.Columns(p);
+  return <div className={l.className} style={styleAttr(l)}>{children}</div>;
 }
 
 export function Grid({ children, ...p }: GridProps & Children) {
-  return <div className={layoutClass.Grid(p)}>{children}</div>;
+  const l = layout.Grid(p);
+  return <div className={l.className} style={styleAttr(l)}>{children}</div>;
 }
 
 export function Card({ children, ...p }: CardProps & Children) {
+  const l = layout.Card(p);
   return (
-    <div data-slot="card" className={layoutClass.Card(p)}>
+    <div data-slot="card" className={l.className} style={styleAttr(l)}>
       {children}
     </div>
   );

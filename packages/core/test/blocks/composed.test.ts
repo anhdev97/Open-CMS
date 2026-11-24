@@ -611,3 +611,43 @@ describe('validateComposedSpec / defineBlocks parity', () => {
     }
   });
 });
+
+describe('defineComposedBlock: style', () => {
+  it('renders node style and Columns tracks through the ui primitives', () => {
+    const def = defineComposedBlock(
+      base({
+        name: 'Styled',
+        tree: {
+          el: 'Box',
+          props: { padding: '8' },
+          style: { padding: { base: { t: '37px' }, md: { t: '8' } }, background: 'brand:surface', hidden: { lg: true } },
+          children: [
+            {
+              el: 'Columns',
+              props: { count: 2, tracks: { base: ['1fr'], md: ['auto', '1fr', 'auto'] }, alignY: 'center' },
+              children: [
+                { el: 'Heading', props: { level: 2, text: 'Hi' }, style: { span: { base: 'full', md: 1 }, color: '#123456' } },
+                { el: 'Image', props: { fit: 'contain', src: '/a.png' }, style: { height: '100%' } },
+              ],
+            },
+            { el: 'Stack', props: { direction: { base: 'vertical', md: 'horizontal' }, justify: 'between' } },
+          ],
+        },
+      }),
+    );
+    const out = render(def, {});
+    expect(out).toContain('class="pt-(--ocms-pt) md:pt-(--ocms-pt-md) bg-(--ocms-bg) block md:block lg:hidden"');
+    expect(out).toContain('--ocms-pt:37px;--ocms-pt-md:calc(var(--spacing) * 8);--ocms-bg:var(--ocms-color-surface)');
+    expect(out).toContain('grid grid-cols-(--ocms-cols) md:grid-cols-(--ocms-cols-md) lg:grid-cols-(--ocms-cols-lg) gap-6 items-center');
+    expect(out).toContain('--ocms-cols:1fr;--ocms-cols-md:auto 1fr auto;--ocms-cols-lg:auto 1fr auto');
+    expect(out).toContain('text-(--ocms-fg) col-span-full md:col-span-(--ocms-span-md)');
+    expect(out).toContain('--ocms-fg:#123456;--ocms-span-md:1');
+    expect(out).toContain('object-contain');
+    expect(out).toContain('h-(--ocms-h)');
+    expect(out).toContain('flex flex-col md:flex-row md:flex-wrap gap-4 items-stretch justify-between');
+  });
+  it('a spec without style renders the same classes as before', () => {
+    const def = defineComposedBlock(base({ name: 'Plain', tree: { el: 'Box', props: { padding: '8', background: 'muted' }, children: [{ el: 'Columns', props: { count: 3 } }] } }));
+    expect(render(def, {})).toBe('<div class="py-8 bg-muted text-foreground"><div class="grid grid-cols-1 md:grid-cols-3 gap-6"></div></div>');
+  });
+});
