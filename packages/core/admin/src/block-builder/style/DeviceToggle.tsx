@@ -3,8 +3,8 @@
 // The builders' device toggle (Mobile 375 / Tablet 768 / Desktop 1280): it sets Puck's canvas viewport, and the
 // breakpoint of that viewport is the one the style panel edits (`ViewportBreakpoint`, Puck `overrides.puck`).
 import { MonitorIcon, SmartphoneIcon, TabletIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
-import { createUsePuck, useGetPuck, type Viewport } from '@puckeditor/core';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
+import { createUsePuck, useGetPuck, type UiState, type Viewport } from '@puckeditor/core';
 import type { Breakpoint } from '@opencloudcms/schema';
 import { Button } from '../../components/ui/button';
 import { t } from '../../i18n';
@@ -19,12 +19,33 @@ export function deviceViewports(): Viewport[] {
   return DEVICE_VIEWPORTS.map((v) => ({ width: v.width, height: 'auto', label: bpLabel(v.bp), icon: v.icon }));
 }
 
+/** The device closest to the window width (what Puck picks on its own when it is given no viewport). */
+function closestDeviceWidth(windowWidth: number): number {
+  return DEVICE_VIEWPORTS.reduce((best, v) => (Math.abs(v.width - windowWidth) < Math.abs(best - windowWidth) ? v.width : best), DEVICE_VIEWPORTS[DEVICE_VIEWPORTS.length - 1]!.width);
+}
+
+/**
+ * Puck `ui` of a builder mount: the canvas starts on `remembered` (the width chosen before a remount), else the
+ * device closest to the window; Puck's own viewport controls are hidden (the header toggle replaces them).
+ */
+export function deviceUi(remembered: number | undefined): Partial<UiState> {
+  const width = remembered ?? closestDeviceWidth(typeof window === 'undefined' ? 1280 : window.innerWidth);
+  return { viewports: { current: { width, height: 'auto' }, controlsVisible: false, options: [] } };
+}
+
+/** Where `ViewportBreakpoint` keeps the current canvas width, so a remounted Puck starts on it (an editor ref). */
+export const DeviceMemory = createContext<{ current?: number } | null>(null);
+
 /** Breakpoint of a Puck viewport width (`100%` counts as Desktop). */
 const bpOf = (width: number | '100%'): Breakpoint => (typeof width === 'number' ? breakpointForWidth(width) : 'lg');
 
 /** Provides the breakpoint of Puck's current viewport to everything inside Puck (panel fields and canvas). */
 export function ViewportBreakpoint({ children }: { children?: ReactNode }) {
   const width = usePuck((s) => s.appState.ui.viewports.current.width);
+  const memory = useContext(DeviceMemory);
+  useEffect(() => {
+    if (memory && typeof width === 'number') memory.current = width;
+  }, [memory, width]);
   return <BreakpointContext.Provider value={bpOf(width)}>{children}</BreakpointContext.Provider>;
 }
 

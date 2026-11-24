@@ -16,7 +16,7 @@ import {
   type PuckData,
 } from '@opencloudcms/core/blocks';
 import type { Locale, ThemeDefinition } from '@opencloudcms/schema';
-import { ViewportBreakpoint, deviceViewports } from '../block-builder/style/DeviceToggle';
+import { DeviceMemory, ViewportBreakpoint, deviceUi, deviceViewports } from '../block-builder/style/DeviceToggle';
 import { CanvasFrame, ThemeProvider, loadTheme } from '../block-builder/style/theme-context';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ErrorAlert } from '../components/ErrorAlert';
@@ -219,6 +219,9 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme }: Ed
   const overrides = useMemo(() => ({ header: () => createElement(EditorHeader), puck: ViewportBreakpoint, iframe: CanvasFrame, fieldTypes }), []);
   const dictionary = useMemo(() => puckDictionary(), [adminLocale]); // eslint-disable-line react-hooks/exhaustive-deps
   const viewports = useMemo(() => deviceViewports(), [adminLocale]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The device chosen last, so a remount ("copy from default") keeps the canvas width.
+  const device = useRef<{ current?: number }>({}).current;
+  const ui = useMemo(() => deviceUi(device.current), [puckKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Leaving saves first; if edits are still not saved (error, conflict) the user must confirm losing them.
   const [leaveTo, setLeaveTo] = useState<string | null>(null);
@@ -351,25 +354,28 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme }: Ed
       />
       <div className="min-h-0 flex-1">
         <ThemeProvider theme={theme}>
-          <EditorInfoContext.Provider value={info}>
-            <ResolvedContext.Provider value={resolved}>
-              <HeaderContext.Provider value={header}>
-                <Puck
-                  key={puckKey}
-                  config={config}
-                  data={initial}
-                  onChange={onChange}
-                  onAction={onAction as never}
-                  overrides={overrides as never}
-                  permissions={readOnly ? READ_ONLY : undefined}
-                  iframe={{ enabled: true, syncHostStyles: true, waitForStyles: true }}
-                  viewports={viewports}
-                  dictionary={dictionary}
-                  height="100%"
-                />
-              </HeaderContext.Provider>
-            </ResolvedContext.Provider>
-          </EditorInfoContext.Provider>
+          <DeviceMemory.Provider value={device}>
+            <EditorInfoContext.Provider value={info}>
+              <ResolvedContext.Provider value={resolved}>
+                <HeaderContext.Provider value={header}>
+                  <Puck
+                    key={puckKey}
+                    config={config}
+                    data={initial}
+                    onChange={onChange}
+                    onAction={onAction as never}
+                    overrides={overrides as never}
+                    permissions={readOnly ? READ_ONLY : undefined}
+                    iframe={{ enabled: true, syncHostStyles: true, waitForStyles: true }}
+                    viewports={viewports}
+                    ui={ui}
+                    dictionary={dictionary}
+                    height="100%"
+                  />
+                </HeaderContext.Provider>
+              </ResolvedContext.Provider>
+            </EditorInfoContext.Provider>
+          </DeviceMemory.Provider>
         </ThemeProvider>
       </div>
     </div>

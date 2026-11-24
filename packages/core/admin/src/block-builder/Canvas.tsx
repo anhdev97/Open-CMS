@@ -73,10 +73,12 @@ function shown(c: CanvasModel, n: ComposedNode): boolean {
   return composedHelpers.present(v) === (s.is === 'present');
 }
 
-function Dim({ hidden, title, children }: { hidden: boolean; title?: string; children: ReactNode }) {
-  if (!hidden) return <>{children}</>;
+/** Dimmed element (kept editable) with every reason it is hidden; `fill` keeps a relative height's `h-full` chain. */
+function Dim({ reasons, fill, children }: { reasons: (string | false)[]; fill: boolean; children: ReactNode }) {
+  const why = reasons.filter((r): r is string => !!r);
+  if (!why.length) return <>{children}</>;
   return (
-    <div className="opacity-40" title={title ?? t('blockBuilder.canvas.hiddenBySample')}>
+    <div className={fill ? 'h-full opacity-40' : 'opacity-40'} title={why.join('; ')}>
       {children}
     </div>
   );
@@ -131,9 +133,10 @@ function LeafPreview({ el, props }: { el: ComposedElement; props: Props }) {
   if (d instanceof Error) out = <Hint tone="warning">{t('blockBuilder.canvas.invalid', { element: elementLabel(el) })}</Hint>;
   else out = renderWith(c, d, c.entry);
   if (out === null || out === undefined || out === false) out = <Hint>{t('blockBuilder.canvas.empty', { element: elementLabel(el) })}</Hint>;
+  const bySample = !shown(c, { ...bare, ...(showIf ? { showIf } : {}) });
   return (
-    <Dim hidden={cs.hidden} title={hiddenTitle(bp)}>
-      <Dim hidden={!shown(c, { ...bare, ...(showIf ? { showIf } : {}) })}>{out}</Dim>
+    <Dim reasons={[cs.hidden && hiddenTitle(bp), bySample && t('blockBuilder.canvas.hiddenBySample')]} fill={relativeHeight(style)}>
+      {out}
     </Dim>
   );
 }
@@ -161,8 +164,8 @@ function ContainerPreview({ el, props }: { el: LayoutEl; props: Props }) {
   const node = nodeOf(el, props);
   const zone = Slot ? createElement(Slot, { className: cls, style, minEmptyHeight: 64 } as never) : <div className={cls} style={style} />;
   return (
-    <Dim hidden={cs.hidden} title={hiddenTitle(bp)}>
-      <Dim hidden={!shown(c, node)}>{zone}</Dim>
+    <Dim reasons={[cs.hidden && hiddenTitle(bp), !shown(c, node) && t('blockBuilder.canvas.hiddenBySample')]} fill={relativeHeight(props.style as NodeStyle | undefined)}>
+      {zone}
     </Dim>
   );
 }

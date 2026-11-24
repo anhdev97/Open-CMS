@@ -32,7 +32,7 @@ import { buildBuilderConfig } from '../block-builder/element-config';
 import { AllowField, ShowIfField, SourcesField } from '../block-builder/ElementPanel';
 import { StyleField } from '../block-builder/style/StylePanel';
 import { LengthPuckField, ResponsiveSelectPuckField, TracksPuckField } from '../block-builder/style/puck-fields';
-import { ViewportBreakpoint, deviceViewports } from '../block-builder/style/DeviceToggle';
+import { DeviceMemory, ViewportBreakpoint, deviceUi, deviceViewports } from '../block-builder/style/DeviceToggle';
 import { CanvasFrame, ThemeProvider, loadTheme } from '../block-builder/style/theme-context';
 import {
   bindingResetNotes,
@@ -213,11 +213,14 @@ function Builder({ meta, types: allTypes, detail, theme }: BuilderProps) {
   );
   const dictionary = useMemo(() => puckDictionary(), [adminLocale]); // eslint-disable-line react-hooks/exhaustive-deps
   const viewports = useMemo(() => deviceViewports(), [adminLocale]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The device chosen last, so a remount (below) keeps the canvas width.
+  const device = useRef<{ current?: number }>({}).current;
   // Puck reads the config's drawer and slot rules once: switching single ⇄ list remounts it with the current data
   // (undo history starts again).
   const latest = useRef<BuilderPuckData>(initialData);
   const [mount, setMount] = useState({ key: 0, data: initialData, collection });
   if (mount.collection !== collection) setMount({ key: mount.key + 1, data: latest.current, collection });
+  const ui = useMemo(() => deviceUi(device.current), [mount.key]); // eslint-disable-line react-hooks/exhaustive-deps
   const onChange = useCallback((data: Data) => {
     latest.current = data as unknown as BuilderPuckData;
     setTree(puckToTree(latest.current));
@@ -474,24 +477,27 @@ function Builder({ meta, types: allTypes, detail, theme }: BuilderProps) {
 
       <div className="min-h-0 flex-1">
         <ThemeProvider theme={theme}>
-          <BuilderContext.Provider value={model}>
-            <CanvasContext.Provider value={canvas}>
-              <BuilderHeaderContext.Provider value={header}>
-                <Puck
-                  key={mount.key}
-                  config={config}
-                  data={mount.data as unknown as Data}
-                  onChange={onChange}
-                  overrides={overrides as never}
-                  permissions={readOnly ? READ_ONLY : undefined}
-                  iframe={{ enabled: true, syncHostStyles: true, waitForStyles: true }}
-                  viewports={viewports}
-                  dictionary={dictionary}
-                  height="100%"
-                />
-              </BuilderHeaderContext.Provider>
-            </CanvasContext.Provider>
-          </BuilderContext.Provider>
+          <DeviceMemory.Provider value={device}>
+            <BuilderContext.Provider value={model}>
+              <CanvasContext.Provider value={canvas}>
+                <BuilderHeaderContext.Provider value={header}>
+                  <Puck
+                    key={mount.key}
+                    config={config}
+                    data={mount.data as unknown as Data}
+                    onChange={onChange}
+                    overrides={overrides as never}
+                    permissions={readOnly ? READ_ONLY : undefined}
+                    iframe={{ enabled: true, syncHostStyles: true, waitForStyles: true }}
+                    viewports={viewports}
+                    ui={ui}
+                    dictionary={dictionary}
+                    height="100%"
+                  />
+                </BuilderHeaderContext.Provider>
+              </CanvasContext.Provider>
+            </BuilderContext.Provider>
+          </DeviceMemory.Provider>
         </ThemeProvider>
       </div>
     </div>

@@ -15,7 +15,7 @@ vi.mock('@puckeditor/core', async (orig) => ({
 }));
 
 import { BreakpointContext } from '../../admin/src/block-builder/style/breakpoint';
-import { DeviceToggle, ViewportBreakpoint } from '../../admin/src/block-builder/style/DeviceToggle';
+import { DeviceMemory, DeviceToggle, ViewportBreakpoint, deviceUi } from '../../admin/src/block-builder/style/DeviceToggle';
 import { CanvasFrame, PaletteSelect, ThemeContext, ThemeProvider } from '../../admin/src/block-builder/style/theme-context';
 import { elementRender } from '../../admin/src/block-builder/Canvas';
 
@@ -65,6 +65,25 @@ describe('device toggle', () => {
     puck.state.appState.ui.viewports.current = { width: 375, height: 'auto' };
     render(createElement(ViewportBreakpoint, null, createElement(Probe)));
     expect(container.querySelector('[data-bp]')?.getAttribute('data-bp')).toBe('base');
+  });
+});
+
+describe('device across Puck remounts', () => {
+  it('Puck starts on the remembered width (else the device closest to the window), its own controls hidden', () => {
+    expect(deviceUi(768)).toEqual({ viewports: { current: { width: 768, height: 'auto' }, controlsVisible: false, options: [] } });
+    window.innerWidth = 1400;
+    expect(deviceUi(undefined).viewports!.current.width).toBe(1280);
+    window.innerWidth = 800;
+    expect(deviceUi(undefined).viewports!.current.width).toBe(768);
+    window.innerWidth = 390;
+    expect(deviceUi(undefined).viewports!.current.width).toBe(375);
+  });
+
+  it('ViewportBreakpoint remembers the current width for the next mount', () => {
+    const memory: { current?: number } = {};
+    puck.state.appState.ui.viewports.current = { width: 375, height: 'auto' };
+    render(createElement(DeviceMemory.Provider, { value: memory }, createElement(ViewportBreakpoint, null, 'x')));
+    expect(memory.current).toBe(375);
   });
 });
 
@@ -121,5 +140,17 @@ describe('canvas item frame', () => {
     expect(container.querySelector('.opacity-40')).not.toBeNull();
     draw({ hidden: { md: true } }, 'base');
     expect(container.querySelector('.opacity-40')).toBeNull();
+  });
+
+  it('one dim wrapper for both reasons, filling the frame for a relative height', () => {
+    render(
+      createElement(BreakpointContext.Provider, { value: 'md' as const },
+        createElement(Divider, { id: 'Divider-1', style: { hidden: { md: true }, height: '100%' }, showIf: { from: 'field', name: 'x', is: 'present' }, puck: {} })),
+    );
+    const dims = container.querySelectorAll('.opacity-40');
+    expect(dims.length).toBe(1);
+    expect(dims[0]!.getAttribute('title')).toContain('Tablet');
+    expect(dims[0]!.getAttribute('title')).toContain('show condition');
+    expect(dims[0]!.className).toContain('h-full');
   });
 });
