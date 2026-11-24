@@ -27,21 +27,29 @@ export default defineComposedBlock({
     },
   },
   tree: {
-    el: 'Stack',
-    props: { direction: 'horizontal', gap: '4', align: 'end', justify: 'between', wrap: true },
+    el: 'Box',
     children: [
-      { el: 'Heading', props: { level: 2 }, bind: { text: { from: 'field', name: 'heading' } } },
       {
-        el: 'Button',
-        props: { variant: 'link', size: 'sm' },
-        bind: { label: { from: 'field', name: 'linkLabel' }, href: { from: 'field', name: 'link' } },
-        style: { padding: { l: '0', r: '0' }, color: 'brand:ink' },
+        el: 'Stack',
+        props: { direction: 'horizontal', gap: '4', align: 'end', justify: 'between', wrap: true },
+        children: [
+          { el: 'Heading', props: { level: 2 }, bind: { text: { from: 'field', name: 'heading' } } },
+          {
+            el: 'Button',
+            props: { variant: 'link', size: 'sm' },
+            bind: { label: { from: 'field', name: 'linkLabel' }, href: { from: 'field', name: 'link' } },
+            style: { padding: { l: '0', r: '0' }, color: 'brand:ink' },
+          },
+        ],
+        style: { margin: { b: '24px' } },
       },
+      { el: 'Slot', props: { allow: ['FeaturedProducts', 'ActiveProducts', 'ProductCard'] } },
     ],
     style: {
-      padding: { base: { t: '30px', r: '16px', l: '16px' }, md: { t: '72px', r: '24px', l: '24px' } },
-      margin: { r: 'auto', l: 'auto' },
-      maxWidth: '64rem',
+      padding: {
+        base: { t: '30px', r: '5%', b: '30px', l: '5%' },
+        md: { t: '72px', r: '5%', b: '72px', l: '5%' },
+      },
     },
   },
 });

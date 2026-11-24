@@ -151,7 +151,7 @@ Hiện `library/ui.tsx` chỉ có `LinkButton`, `BadgePill`, `CardBox` và các 
 | `{ from: 'field', name }` | field nhập tay của block | luôn |
 | `{ from: 'const', value }` | giá trị cố định (cũng có thể đặt trực tiếp trong `props`) | luôn |
 
-- Kiểu phải khớp: builder chỉ cho chọn field content type có kind phù hợp với thuộc tính (text ← text/longText/slug/email; html ← richText; src ← asset/url; value ← number/money cho Price, date/datetime cho Date; href ← url). Field `multiple`/reference không chọn được (không populate).
+- Kiểu phải khớp: builder chỉ cho chọn field content type có kind phù hợp với thuộc tính (text ← text/longText/slug/email; html ← richText; src ← asset/url; value ← number/money cho Price, date/datetime cho Date; href ← url). Field `multiple`/reference không chọn được (không populate); ngoại lệ: Image src/alt nhận field asset `multiple` và hiện ảnh đầu tiên.
 - Field nhập tay hỗ trợ kind: `text`, `longText`, `richText`, `number`, `boolean`, `select`, `image`, `link` — dịch thẳng sang `b.*` tương ứng.
 
 ## 6. Renderer: `defineComposedBlock(spec) → BlockDefinition`

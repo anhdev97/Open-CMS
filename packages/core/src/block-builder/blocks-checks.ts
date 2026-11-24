@@ -13,7 +13,7 @@ const TEXT: readonly Kind[] = ['text', 'longText', 'slug', 'email'];
 export const ENTRY_PROP_KINDS: Partial<Record<ComposedElement, Record<string, readonly Kind[]>>> = {
   Heading: { text: TEXT },
   Text: { text: TEXT, html: ['richText'] },
-  // `alt` may also read the asset's own alt text (resolved by resolvePage).
+  // `alt` may also read the asset's own alt text (resolved by resolvePage). A multiple asset field shows its first asset.
   Image: { src: ['asset', 'url'], alt: [...TEXT, 'asset'] },
   Button: { label: TEXT, href: ['url'] },
   Badge: { text: TEXT },
@@ -62,11 +62,14 @@ export function checkSpecAgainstTypes(spec: ComposedBlockSpec, types: readonly C
   if (!def) return [{ path: ['binding', 'apiId'], message: `unknown content type "${b.apiId}"` }];
   const fields = fieldsOf(def);
 
-  /** The field, or undefined after reporting why it cannot be used. */
-  const usable = (name: string, path: (string | number)[]): FieldInfo | undefined => {
+  /**
+   * The field, or undefined after reporting why it cannot be used. `firstAsset`: a multiple asset field is fine
+   * (Image src/alt show its first asset).
+   */
+  const usable = (name: string, path: (string | number)[], firstAsset = false): FieldInfo | undefined => {
     const fi = fields.get(name);
     if (!fi) return void add(path, `field "${name}" does not exist on "${def.apiId}"`);
-    if (fi.listy) return void add(path, `field "${name}" is a reference or multiple field and cannot be used`);
+    if (fi.listy && !(firstAsset && fi.kind === 'asset')) return void add(path, `field "${name}" is a reference or multiple field and cannot be used`);
     return fi;
   };
 
@@ -97,7 +100,7 @@ export function checkSpecAgainstTypes(spec: ComposedBlockSpec, types: readonly C
     for (const [prop, src] of Object.entries(n.bind ?? {})) {
       if (src.from !== 'entry') continue;
       const p = [...path, 'bind', prop, 'path'];
-      const fi = usable(src.path, p);
+      const fi = usable(src.path, p, n.el === 'Image');
       const allowed = ENTRY_PROP_KINDS[n.el]?.[prop];
       if (fi && allowed && !allowed.includes(fi.kind)) {
         add(p, `${n.el}.${prop} cannot show field "${fi.name}" (${fi.kind}); allowed kinds: ${allowed.join(', ')}`);

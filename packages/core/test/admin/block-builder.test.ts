@@ -71,17 +71,18 @@ const names = (o: { name: string }[]) => o.map((x) => x.name);
 describe('sourceOptions (spec §5.4)', () => {
   const ctx = (over: Partial<Parameters<typeof sourceOptions>[1]> = {}) => ({ type: product, fields: {}, urlPattern: undefined, ...over });
 
-  it('offers only kind-compatible content fields, never multiple or reference fields', () => {
+  it('offers only kind-compatible content fields, never multiple or reference fields (but Image may show a multiple asset)', () => {
     expect(names(sourceOptions({ el: 'Heading', prop: 'text' }, ctx()).entry)).toEqual(['name', 'slug', 'email', 'summary']);
     expect(names(sourceOptions({ el: 'Text', prop: 'html' }, ctx()).entry)).toEqual(['body']);
-    expect(names(sourceOptions({ el: 'Image', prop: 'src' }, ctx()).entry)).toEqual(['cover', 'site']);
+    expect(names(sourceOptions({ el: 'Image', prop: 'src' }, ctx()).entry)).toEqual(['cover', 'gallery', 'site']);
+    expect(names(sourceOptions({ el: 'Image', prop: 'alt' }, ctx()).entry)).toEqual(['name', 'slug', 'email', 'summary', 'cover', 'gallery']);
     expect(names(sourceOptions({ el: 'Price', prop: 'value' }, ctx()).entry)).toEqual(['price', 'marketPrice', 'stock']);
     expect(names(sourceOptions({ el: 'Date', prop: 'value' }, ctx()).entry)).toEqual(['released', 'createdAt', 'updatedAt', 'publishedAt']);
     expect(names(sourceOptions({ el: 'Button', prop: 'href' }, ctx()).entry)).toEqual(['site']);
     for (const [el, props] of Object.entries(CLIENT_KINDS)) {
       for (const prop of Object.keys(props!)) {
         const offered = names(sourceOptions({ el: el as never, prop }, ctx()).entry);
-        expect(offered).not.toContain('gallery');
+        if (el !== 'Image') expect(offered).not.toContain('gallery');
         expect(offered).not.toContain('brand');
         expect(offered).not.toContain('tags');
         expect(offered).not.toContain('cats');

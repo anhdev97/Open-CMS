@@ -265,8 +265,8 @@ conflict check per page document, not per locale: two people editing different l
 conflict.
 Until a page is published at `/`, the home shows a welcome page. Field kinds, preview, API and limits:
 [`packages/core/README.md`](packages/core/README.md#page-builder). `examples/my-store` has a `ProductGrid` block
-and `pnpm --filter my-store seed:pages` publishes `/` (the storefront below + the newest products, English with a
-vi-VN translation), `/shop` (the two composed blocks below; three sample products first when the catalogue is empty)
+and `pnpm --filter my-store seed:pages` publishes `/` (the storefront below, its featured products with photos uploaded
+to the media library, English with a vi-VN translation), `/shop` (the two composed blocks below; three sample products first when the catalogue is empty)
 and `/about`. Existing pages are skipped; `pnpm --filter my-store seed:pages -- --force` replaces their content.
 
 ### Block Builder

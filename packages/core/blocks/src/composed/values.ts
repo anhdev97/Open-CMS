@@ -6,6 +6,7 @@
 // - asset    → the asset id (uuid string) for a single asset. `resolvePage` replaces ids at the block's
 //              `entryAssetPaths` by `{ id, url, alt, width, height }` (ContentFetcher.assets); an unresolved id renders
 //              nothing. URL strings (`url` fields) and resolved `b.image` values (`{ src, alt }`) render too.
+//              A multiple asset field (array of ids) renders its first asset: `resolvePage` replaces it by that asset.
 import { safeHref } from '../ui/href';
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -18,6 +19,7 @@ function imageSrc(v: unknown): string | null {
 
 /** `{ src, alt }` from a URL string or an object with `url`/`src` (and `alt`); a bare asset id or anything else → null. */
 export function readEntryImage(v: unknown): { src: string; alt: string } | null {
+  if (Array.isArray(v)) return v.length ? readEntryImage(v[0]) : null; // multiple asset field: its first asset
   if (typeof v === 'string') {
     const src = imageSrc(v);
     return src ? { src, alt: '' } : null;

@@ -338,6 +338,9 @@ describe('entry value readers', () => {
     expect(readEntryImage('11111111-1111-4111-8111-111111111111')).toBeNull();
     expect(readEntryImage('javascript:alert(1)')).toBeNull();
     expect(readEntryImage(null)).toBeNull();
+    expect(readEntryImage([{ url: '/first.png', alt: 'F' }, '/second.png'])).toEqual({ src: '/first.png', alt: 'F' });
+    expect(readEntryImage(['/only.png'])).toEqual({ src: '/only.png', alt: '' });
+    expect(readEntryImage([])).toBeNull();
   });
   it('money: {amount, currency} | number | numeric string', () => {
     expect(readEntryMoney({ amount: 19.5, currency: 'USD' })).toEqual({ value: 19.5, currency: 'USD' });
@@ -514,6 +517,31 @@ describe('asset fields of entries', () => {
     expect(entries.e1.image).toBe(U1); // fetched entries are not mutated
   });
 
+  it('a multiple asset field (array of ids) shows its first asset; only first ids are fetched', async () => {
+    const reg = defineBlocks([card(), grid()]);
+    const assetCalls: string[][] = [];
+    const multi: Record<string, Entry> = { m1: { documentId: 'm1', image: [U2, U3] }, m2: { documentId: 'm2', image: [U3] }, m3: { documentId: 'm3', image: [] } };
+    const f: ContentFetcher = {
+      byIds: async (_a, ids) => ids.map((i) => multi[i]),
+      query: async () => [multi.m2, multi.m3],
+      pagePaths: async () => ({}),
+      assets: async (ids) => {
+        assetCalls.push([...ids].sort());
+        return ids.map((id) => ({ id, url: `https://cdn.example/${id.slice(-1)}.png`, alt: `alt ${id.slice(-1)}` }));
+      },
+    };
+    const out = await resolvePage(page([item('AssetCard', { entry: { documentId: 'm1' } }), item('AssetGrid', { entries: { mode: 'query' } })]), reg, f, O);
+    expect(assetCalls).toEqual([[U2, U3]]);
+    const [c, g] = out.content as { type: string; props: Record<string, unknown> }[];
+    const cardHtml = render(reg.get('AssetCard')!, c.props);
+    expect(cardHtml).toContain('src="https://cdn.example/2.png"');
+    expect(cardHtml).toContain('alt="alt 2"');
+    const gridHtml = render(reg.get('AssetGrid')!, g.props);
+    expect(gridHtml).toContain('src="https://cdn.example/3.png"');
+    expect(gridHtml.match(/<img/g)).toHaveLength(1); // empty list → renders nothing
+    expect(multi.m1.image).toEqual([U2, U3]); // fetched entries are not mutated
+  });
+
   it('no asset paths or no uuids → no assets() call; failure → one warn, images render nothing', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const reg = defineBlocks([card()]);
@@ -660,6 +688,7 @@ describe('defineComposedBlock: style', () => {
 describe('examples/my-store storefront', () => {
   const root = path.resolve(__dirname, '../../../../examples/my-store');
   const STORE = ['StoreHeader', 'StoreHero', 'SectionHead', 'StoryBand', 'StoreFooter'];
+  const ALL = [...STORE, 'FeaturedProducts'];
   const load = async () => {
     const config = await loadConfig(root);
     return { config, ...(await loadComposedBlocks(config)) };
@@ -676,7 +705,7 @@ describe('examples/my-store storefront', () => {
   it('every composed spec validates, prints byte-identically (a builder save without changes) and renders', async () => {
     const { specs, errors } = await load();
     expect(errors).toEqual([]);
-    expect(specs.map((s) => s.spec.name)).toEqual(expect.arrayContaining(STORE));
+    expect(specs.map((s) => s.spec.name)).toEqual(expect.arrayContaining(ALL));
     for (const { spec, file } of specs) {
       expect(validateComposedSpec(spec), spec.name).toEqual([]);
       expect(printComposedBlockFile(spec), spec.name).toBe(fs.readFileSync(file, 'utf8'));
@@ -712,6 +741,28 @@ describe('examples/my-store storefront', () => {
     expect(hero).toContain('src="/files/store-editorial.webp"');
     expect(hero).toContain('object-cover');
     expect(hero).toContain('--ocms-minh:calc(var(--spacing) * 0);--ocms-minh-md:450px');
+  });
+
+  it('SectionHead + FeaturedProducts: 5% side padding like the other sections, 4:3 photos, no card border', async () => {
+    const head = await renderStore('SectionHead');
+    expect(head).toContain('--ocms-pl:5%');
+    expect(head).toContain('--ocms-pr:5%');
+    expect(head).not.toContain('max-width');
+    const { specs } = await load();
+    const spec = specs.find((s) => s.spec.name === 'FeaturedProducts')!.spec;
+    const product = (n: number, name: string) => ({
+      documentId: `p${n}`, name, price: { amount: 390000, currency: 'VND' }, images: { id: `a${n}`, url: `/media/p${n}.webp`, alt: '' },
+    });
+    const out = render(defineComposedBlock(spec), { entries: [product(1, 'Linen shirt'), product(2, 'Canvas tote')] });
+    expect(out).toContain('lg:grid-cols-3');
+    expect(out.match(/<img/g)).toHaveLength(2);
+    expect(out).toContain('src="/media/p1.webp"');
+    expect(out).toContain('aspect-[4/3]');
+    expect(out).toContain('object-cover');
+    expect(out).toContain('--ocms-mb:6px');
+    expect(out).toContain('<h3');
+    expect(out).toContain('Linen shirt');
+    expect(out).not.toContain('data-slot="card"');
   });
 
   it('src/theme.ts: the three palettes of the mockup, valid, printed exactly as the Theme screen writes it', async () => {

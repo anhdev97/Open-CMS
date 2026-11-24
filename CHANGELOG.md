@@ -115,10 +115,12 @@
   `bg-(--ocms-color-surface) text-(--ocms-color-ink)`. **Existing projects:** add `src/theme.ts` (or save once in
   Page builder > Theme) and the `ThemeStyle` line to use `brand:<name>` colors on the website.
 - **examples/my-store storefront:** the editorial store mockup rebuilt with Block Builder files only
-  (`StoreHeader`, `StoreHero`, `SectionHead`, `StoryBand`, `StoreFooter`) and `src/theme.ts` (palettes `olive`, `clay`,
+  (`StoreHeader`, `StoreHero`, `SectionHead` with a slot, `FeaturedProducts`, `StoryBand`, `StoreFooter`) and `src/theme.ts` (palettes `olive`, `clay`,
   `night` of `surface`, `feature`, `ink`, `accent`, `accent-ink`, `line`); serif display type in `app/globals.css`,
   scoped to the website with `.ocms-site`. `seed:pages` publishes it at `/` (en-US + vi-VN) and takes `--force` to
-  replace the content of pages that already exist.
+  replace the content of pages that already exist. The sample products get photos uploaded to the media library
+  (also added to existing sample products with `--force`).
+- **Block Builder:** an `Image` may show a `multiple` asset field of the bound entry (its first asset).
 - **Admin sidebar:** Pages and Blocks now sit together in a top-level **Page builder** group (Blocks moved out of Settings; URLs unchanged).
 - **Block Builder** (Page builder > Blocks, `/admin/settings/blocks`, permission `settings.content-types`): build page
   blocks with drag and drop from design-system elements (`Box`, `Stack`, `Columns`, `Grid`, `Card`, `Slot`, `Heading`,

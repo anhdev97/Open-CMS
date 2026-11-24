@@ -73,7 +73,10 @@ export interface SourceOptions {
   entryUrl: boolean;
 }
 
-/** Sources a bindable prop may use: kind-compatible content fields (no multiple/reference), manual fields, entry URL. */
+/**
+ * Sources a bindable prop may use: kind-compatible content fields (no multiple/reference, except a multiple asset for
+ * Image), manual fields, entry URL.
+ */
 export function sourceOptions(
   target: { el: ComposedElement; prop: string },
   ctx: { type: ContentTypeDefinition | null; fields: Record<string, ComposedField>; urlPattern?: string },
@@ -82,7 +85,9 @@ export function sourceOptions(
   const entry: EntryFieldOption[] = [];
   if (ctx.type) {
     for (const f of ctx.type.fields) {
-      if (!isListy(f) && kinds.includes(f.kind)) entry.push({ name: f.name, kind: f.kind, label: f.label || f.name });
+      // Image src/alt may also read a multiple asset field (it shows the first asset).
+      const firstAsset = target.el === 'Image' && f.kind === 'asset';
+      if ((!isListy(f) || firstAsset) && kinds.includes(f.kind)) entry.push({ name: f.name, kind: f.kind, label: f.label || f.name });
     }
     if (kinds.includes('datetime')) for (const m of META_TIMESTAMPS) entry.push({ name: m, kind: 'datetime', label: m, meta: true });
   }

@@ -100,13 +100,26 @@ describe('checkSpecAgainstTypes', () => {
   it('rejects multiple and reference fields everywhere', () => {
     const s = spec({}, { urlPattern: '/p/{brand}' });
     s.tree.children = [
-      { el: 'Image', bind: { src: { from: 'entry', path: 'gallery' } } },
+      { el: 'Badge', bind: { text: { from: 'entry', path: 'gallery' } } },
       { el: 'Badge', showIf: { from: 'entry', path: 'brand', is: 'present' } },
+      { el: 'Image', bind: { src: { from: 'entry', path: 'brand' } } },
     ];
     expect(msgs(checkSpecAgainstTypes(s, types))).toEqual([
       'binding.urlPattern: field "brand" is a reference or multiple field and cannot be used',
-      'tree.children.0.bind.src.path: field "gallery" is a reference or multiple field and cannot be used',
+      'tree.children.0.bind.text.path: field "gallery" is a reference or multiple field and cannot be used',
       'tree.children.1.showIf.path: field "brand" is a reference or multiple field and cannot be used',
+      'tree.children.2.bind.src.path: field "brand" is a reference or multiple field and cannot be used',
+    ]);
+  });
+
+  it('lets Image src/alt read a multiple asset field (its first asset), nowhere else', () => {
+    const s = spec();
+    s.tree.children = [
+      { el: 'Image', bind: { src: { from: 'entry', path: 'gallery' }, alt: { from: 'entry', path: 'gallery' } } },
+      { el: 'Image', showIf: { from: 'entry', path: 'gallery', is: 'present' } },
+    ];
+    expect(msgs(checkSpecAgainstTypes(s, types))).toEqual([
+      'tree.children.1.showIf.path: field "gallery" is a reference or multiple field and cannot be used',
     ]);
   });
 

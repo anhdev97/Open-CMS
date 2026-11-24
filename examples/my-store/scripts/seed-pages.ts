@@ -1,8 +1,10 @@
 // Dev seed for the page builder: publishes `/` (the storefront of docs/superpowers/specs/assets/2026-11-24-store-preview.html,
-// built from the Block Builder blocks StoreHeader, StoreHero, SectionHead, StoryBand, StoreFooter + ProductGrid of the newest
-// products; English, plus its vi-VN translation), `/shop` (the Block Builder examples: ProductCard for one product,
-// ActiveProducts for the products with active = true) and `/about`.
-// Without any product yet it first publishes three sample products (two on sale, one not).
+// built from the Block Builder blocks StoreHeader, StoreHero, SectionHead (holding FeaturedProducts: the three oldest
+// products), StoryBand, StoreFooter; English, plus its vi-VN translation), `/shop` (the Block Builder examples: ProductCard
+// for one product, ActiveProducts for the products with active = true) and `/about`.
+// Without any product yet it first publishes three sample products (two on sale, one not), each with a photo uploaded to
+// the media library (scripts/seed-assets/*.webp, crops of public/files/store-editorial.webp). With --force, sample
+// products (by slug) that have no image yet get theirs too.
 // Run after `opencloudcms migrate:up`:  pnpm seed:pages
 // A page that already exists at one of these paths (in the default locale) is left untouched, unless --force
 // (`pnpm seed:pages -- --force`): then its content, title and SEO are replaced and it is published again.
@@ -21,6 +23,7 @@ if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
 async function main() {
   // Imported after .env is loaded: opencloudcms.config.ts reads DATABASE_URL.
   const { EntriesService, OpenCloudCmsModule } = await import('@opencloudcms/core');
+  const { AssetsService } = await import('@opencloudcms/assets');
   const { blockManifest, writePageContent } = await import('@opencloudcms/core/blocks');
   const { PAGE_API_ID } = await import('@opencloudcms/schema');
   const { default: config } = await import('../opencloudcms.config');
@@ -36,6 +39,8 @@ async function main() {
         web: { enabled: false },
         schemaEditable: false,
         pages: { blocks: blockManifest(blocks) },
+        // Same media storage as src/app.module.ts, so seeded photos are served at /media.
+        assets: { provider: 'local', local: { root: path.join(root, 'assets'), publicBaseUrl: '/media' } },
       }),
     ],
   })
@@ -62,18 +67,41 @@ async function main() {
 
     const admin = { id: undefined as unknown as string, permissions: ['content.update', 'content.publish'] as never[] };
 
+    // Product photos: uploaded once to the media library (found again by filename on later runs).
+    const assets = app.get(AssetsService);
+    const photo = async (file: string, alt: string): Promise<string> => {
+      const known = (await assets.list(500)).data.find((a) => a.filename === file);
+      if (known) return known.id;
+      const buffer = fs.readFileSync(path.join(root, 'scripts/seed-assets', file));
+      const { data } = await assets.upload({ buffer, originalname: file, mimetype: 'image/webp', size: buffer.length }, { alt });
+      console.log(`uploaded ${file} (${data.id})`);
+      return data.id;
+    };
+
     // Sample products, only into an empty catalogue. New products are on sale (active: true) unless said otherwise.
+    const samples = [
+      { name: 'Linen shirt', slug: 'linen-shirt', price: { amount: 390000, currency: 'VND' }, active: true, featured: true,
+        photo: ['store-shirt.webp', 'Olive linen shirt on a hanger'] },
+      { name: 'Canvas tote', slug: 'canvas-tote', price: { amount: 150000, currency: 'VND' }, active: true,
+        photo: ['store-tote.webp', 'Natural canvas tote bag on a wooden bench'] },
+      { name: 'Wool scarf (last season)', slug: 'wool-scarf', price: { amount: 250000, currency: 'VND' }, active: false,
+        photo: ['store-scarf.webp', 'Brick-red scarf folded on a wooden bench'] },
+    ];
     const anyProduct = await entries.list('product', { status: 'draft', limit: 1 });
     if (anyProduct.data.length === 0) {
-      const samples = [
-        { name: 'Linen shirt', slug: 'linen-shirt', price: { amount: 390000, currency: 'VND' }, active: true, featured: true },
-        { name: 'Canvas tote', slug: 'canvas-tote', price: { amount: 150000, currency: 'VND' }, active: true },
-        { name: 'Wool scarf (last season)', slug: 'wool-scarf', price: { amount: 250000, currency: 'VND' }, active: false },
-      ];
-      for (const p of samples) {
-        const { data: created } = await entries.create('product', p, locale);
+      for (const { photo: [file, alt], ...p } of samples) {
+        const { data: created } = await entries.create('product', { ...p, images: [await photo(file, alt)] }, locale);
         await entries.publish('product', created.documentId, admin);
         console.log(`published product ${p.slug} (${created.documentId}, active: ${p.active})`);
+      }
+    } else if (force) {
+      // Sample products of an earlier seed (by slug) without a photo get theirs.
+      for (const { slug, photo: [file, alt] } of samples) {
+        const found = (await entries.list('product', { status: 'draft', locale, filter: { slug }, limit: 1 })).data[0];
+        if (!found || (Array.isArray(found.images) && found.images.length)) continue;
+        await entries.update('product', found.documentId as string, { images: [await photo(file, alt)] }, locale);
+        await entries.publish('product', found.documentId as string, admin);
+        console.log(`added photo to product ${slug} (${found.documentId})`);
       }
     }
     const onSale = await entries.list('product', { status: 'published', locale, filter: { active: 'true' }, sort: 'createdAt:asc', limit: 1 });
@@ -88,8 +116,7 @@ async function main() {
         content: content(
           item('StoreHeader'),
           item('StoreHero'),
-          item('SectionHead'),
-          item('ProductGrid', { heading: '', columns: 3, products: { mode: 'query', sort: 'createdAt:desc', limit: 3 } }),
+          item('SectionHead', { slot: [item('FeaturedProducts')] }),
           item('StoryBand'),
           item('StoreFooter'),
         ),
@@ -105,8 +132,7 @@ async function main() {
                 ctaLabel: 'Xem bộ sưu tập →',
                 image: { src: '/files/store-editorial.webp', alt: 'Áo linen ô liu, túi canvas và khăn màu đất trên ghế gỗ' },
               }),
-              item('SectionHead', { heading: 'Sản phẩm nổi bật', linkLabel: 'Xem tất cả →' }),
-              item('ProductGrid', { heading: '', columns: 3, products: { mode: 'query', sort: 'createdAt:desc', limit: 3 } }),
+              item('SectionHead', { heading: 'Sản phẩm nổi bật', linkLabel: 'Xem tất cả →', slot: [item('FeaturedProducts')] }),
               item('StoryBand', {
                 heading: 'Về my-store',
                 body: 'Chúng mình chọn những chất liệu dễ chăm sóc và kiểu dáng dễ phối để mỗi món bạn mua đều có chỗ trong tủ đồ.',

@@ -237,8 +237,16 @@ export async function resolvePage(
   };
   const assetIds = new Set<string>();
   const isAssetId = (v: unknown): v is string => typeof v === 'string' && UUID_RE.test(v);
+  // A multiple asset field (array of ids) renders its first asset: only that one is fetched.
+  const idAt = (e: Entry, p: string): string | undefined => {
+    const v = Array.isArray(e[p]) ? (e[p] as unknown[])[0] : e[p];
+    return isAssetId(v) ? v : undefined;
+  };
   mapData(resolved as unknown as Record<string, unknown>, onEntries((e, paths) => {
-    for (const p of paths) if (isAssetId(e[p])) assetIds.add(e[p] as string);
+    for (const p of paths) {
+      const id = idAt(e, p);
+      if (id) assetIds.add(id);
+    }
     return e;
   }));
   if (!assetIds.size || !f.assets) return resolved;
@@ -248,7 +256,8 @@ export async function resolvePage(
   return mapData(resolved as unknown as Record<string, unknown>, onEntries((e, paths) => {
     let out = e;
     for (const p of paths) {
-      const a = isAssetId(e[p]) ? byAsset.get(e[p] as string) : undefined;
+      const id = idAt(e, p);
+      const a = id ? byAsset.get(id) : undefined;
       if (a) out = { ...out, [p]: { ...a } }; // copy: fetched entries may be shared between blocks
     }
     return out;

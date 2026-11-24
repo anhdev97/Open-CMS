@@ -11,7 +11,7 @@ describe('examples/my-store composed blocks', () => {
     const config = await loadConfig(root);
     const { specs, errors } = await loadComposedBlocks(config);
     expect(errors).toEqual([]);
-    expect(specs.map((s) => s.spec.name).sort()).toEqual(['ActiveProducts', 'ProductCard', 'SectionHead', 'StoreFooter', 'StoreHeader', 'StoreHero', 'StoryBand']);
+    expect(specs.map((s) => s.spec.name).sort()).toEqual(['ActiveProducts', 'FeaturedProducts', 'ProductCard', 'SectionHead', 'StoreFooter', 'StoreHeader', 'StoreHero', 'StoryBand']);
     expect(isComposedIndexWired(config)).toBe(true);
 
     const types = (await loadDefinitions(config)).map((d) => d.def);
@@ -22,5 +22,9 @@ describe('examples/my-store composed blocks', () => {
     const list = specs.find((s) => s.spec.name === 'ActiveProducts')!.spec;
     expect(list.binding).toMatchObject({ apiId: 'product', mode: 'collection', filter: [{ field: 'active', value: true }], layout: { kind: 'grid', columns: 4 } });
     expect(specs.find((s) => s.spec.name === 'ProductCard')!.spec.binding).toMatchObject({ apiId: 'product', mode: 'single' });
+    // The storefront's featured products: the three oldest products (shirt, tote, scarf), photo = first of `images`.
+    expect(specs.find((s) => s.spec.name === 'FeaturedProducts')!.spec.binding).toEqual({
+      apiId: 'product', mode: 'collection', sort: { field: 'createdAt', direction: 'asc' }, limit: 3, layout: { kind: 'grid', columns: 3 },
+    });
   });
 });
