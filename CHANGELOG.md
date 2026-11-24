@@ -121,6 +121,40 @@
   `<ThemeStyle theme={theme} />` in the `<head>` of `app/(site)/layout.tsx`, whose body uses
   `bg-(--ocms-color-surface) text-(--ocms-color-ink)`. **Existing projects:** add `src/theme.ts` (or save once in
   Page builder > Theme) and the `ThemeStyle` line to use `brand:<name>` colors on the website.
+- **Style system for composed blocks.** Every `ComposedNode` takes an optional `style` (`NodeStyle`, validated with
+  the block: 422 `invalid_block` with the path of a bad value): `padding` / `margin` (per side `t`/`r`/`b`/`l`),
+  `width`, `maxWidth`, `height`, `minHeight`, `background`, `color`, `borderWidth`, `borderSides`, `borderColor`,
+  `radius`, `hidden` and, inside `Columns`/`Grid`, `span` (1–12 or `'full'`).
+  - **Breakpoints** `base` (mobile) / `md` (≥ 768px) / `lg` (≥ 1024px), mobile-first: a value is plain (`'4'`) or
+    per breakpoint (`{ base: '4', md: '12' }`), and a missing breakpoint inherits the smaller one. `hidden` is
+    `{ base?, md?, lg?: true }`.
+  - **Values:** lengths are a spacing token (`0`–`24`), a number with `px`, `rem`, `em`, `%`, `vw` or `vh` (at most
+    10000; negative only for margin) or `auto` (width, height, margin); colors are a semantic token (`primary`, `muted`,
+    …), `brand:<name>` (a color of `src/theme.ts`, through `var(--ocms-color-<name>)`) or hex; `radius` is
+    `none`/`sm`/`md`/`lg`/`xl`/`full` or px; `borderWidth` `0`/`1`/`2`/`4` or px. Values reach the page as `--ocms-*`
+    CSS variables on literal classes (no class interpolation, no free CSS); a style value replaces the element's
+    token class for the same property.
+  - **New element props:** `Columns` `tracks` (per breakpoint, `<n>fr` / `auto` / length, rendered as
+    `minmax(0,<n>fr)` so content cannot widen a column), `alignY`, `gapX`, `gapY`; `Stack` `justify`, `wrap` and
+    per-breakpoint `direction` and `align`; `Image` `fit` (`cover`/`contain`) and per-breakpoint `aspect`.
+  - **Legacy props migrate on the first edit** in the Block Builder: Box/Card `padding` becomes `style.padding` and
+    Columns `count` becomes `tracks` (same rendering); files change only when saved, and blocks never edited keep
+    rendering byte-identical classes.
+  - **For ejected and hand-written TSX blocks:** `ui.styleProps(style, display?)` (`{ className, style }`),
+    `ui.cssLength`, `ui.cssColor`, `ui.cssTracks`, `ui.resolveTracks` and `ui.layoutStyle`; every `ui` primitive takes
+    `style`.
+  - **Library `Columns`:** a `tracks` field (column-width presets per breakpoint, up to 6) and slots 5–6; stored
+    `columns` still renders as before.
+- **Brand themes.** `src/theme.ts` exports `defineTheme({ colors, palettes, activePalette })` (from
+  `@opencloudcms/schema`): named colors and switchable palettes of hex values. `<ThemeStyle theme={theme} palette? />`
+  (from `@opencloudcms/core/blocks`, server-safe) writes the active palette as `--ocms-color-<name>` variables.
+  `GET /api/admin/theme` (permission `content.read`; `{ theme, editable }`) and `PUT /api/admin/theme` (permission
+  `settings.content-types`, dev only like the schema; 422 with `issues` for an invalid theme) read and rewrite the
+  file; the admin edits it in **Page builder > Theme** (`/admin/settings/theme`).
+- **Builder canvas:** a device toggle (Mobile 375 / Tablet 768 / Desktop 1280) in the Block Builder and page editor
+  headers resizes the canvas and sets the breakpoint the style panel edits (inherited values shown muted, with a
+  reset); a palette select previews the theme's palettes without saving. The style panel shows the sections of each
+  element (Spacing box model, Size, Colors & border, Visibility, column span).
 - **examples/my-store storefront:** the editorial store mockup rebuilt with Block Builder files only
   (`StoreHeader`, `StoreHero`, `SectionHead` with a slot, `FeaturedProducts`, `StoryBand`, `StoreFooter`) and `src/theme.ts` (palettes `olive`, `clay`,
   `night` of `surface`, `feature`, `ink`, `accent`, `accent-ink`, `line`); serif display type in `app/globals.css`,

@@ -287,7 +287,10 @@ export default defineBlocks([...coreBlocks, ...composedBlocks]);
 A list block can carry a **fixed filter** (equality on an indexed or unique field, e.g. `active = true`): it is
 applied when the page is resolved and wins over whatever filter a page editor stored. "Export as TSX" turns a
 composed block into an ordinary TSX block built on the exported `ui` primitives. Limits: equality filters only,
-and production needs a rebuild to see a new or changed block. `examples/my-store` ships `ProductCard` (one product,
+and production needs a rebuild to see a new or changed block. Each element has a **style** panel (per-breakpoint
+spacing, size, column tracks, colors and borders, hide on mobile/tablet/desktop) edited with a device toggle;
+`brand:<name>` colors come from `src/theme.ts` (palettes edited in **Page builder > Theme** and previewed in the
+builders). `examples/my-store` ships `ProductCard` (one product,
 picked per page) and `ActiveProducts` (products with `active = true`, 4-column grid), and a storefront made only with
 the builders (`StoreHeader`, `StoreHero`, `SectionHead`, `StoryBand`, `StoreFooter`: per-breakpoint columns such as
 `2fr 3fr`, per-side spacing, borders, brand colors) themed by `src/theme.ts` (palettes `olive`, `clay`, `night`; the

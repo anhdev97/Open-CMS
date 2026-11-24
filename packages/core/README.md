@@ -230,6 +230,66 @@ export default defineBlocks([...coreBlocks, ...composedBlocks, ProductGrid]);
   `composedHelpers`; both are exported from `@opencloudcms/core/blocks` for hand-written blocks too. The block leaves
   `composed.ts`: add the printed import and list entry to `src/blocks/index.ts`.
 
+### Style
+
+Each composed node may carry a `style` (`NodeStyle` from `@opencloudcms/schema`), edited in the Block Builder's style
+panel and validated on save (422 `invalid_block` with the path of a bad value):
+
+```ts
+{ el: 'Columns', props: { tracks: { base: ['1fr'], md: ['2fr', '3fr'] }, alignY: 'center', gapX: '24px' },
+  style: { padding: { base: { t: '8', b: '8' }, md: { t: '24', b: '24' } }, background: 'brand:surface',
+           borderWidth: '1', borderSides: ['b'], borderColor: 'brand:line', hidden: { base: true, md: false } },
+  children: [ /* … */ ] }
+```
+
+- **Breakpoints:** `base` (mobile, all widths), `md` (≥ 768px), `lg` (≥ 1024px). A value is plain or
+  `{ base?, md?, lg? }`; a missing breakpoint inherits the smaller one. `hidden` is `{ base?, md?, lg?: true }` (the
+  element's own display is restored where it is not hidden). Responsive: `padding`, `margin` (`{ t?, r?, b?, l? }`),
+  `width`, `maxWidth`, `height`, `minHeight`, `span` (1–12 or `'full'`, inside `Columns`/`Grid`). Single values:
+  `background`, `color`, `borderWidth`, `borderSides`, `borderColor`, `radius`.
+- **Value grammar:** a length is a spacing token `0` `2` `4` `6` `8` `12` `16` `24` (Tailwind's spacing scale), a
+  custom `<number><px|rem|em|%|vw|vh>` (at most 10000; negative only in `margin`) or `auto` (width, height, margin).
+  A track (Columns `tracks`, 1–12 per breakpoint) is `<n>fr` (1–12, rendered `minmax(0,<n>fr)`), `auto` or a length.
+  A color is a semantic token (`primary`, `secondary`, `muted`, `accent`, `background`, `foreground`, `destructive`),
+  `brand:<name>` or hex (`#rgb`, `#rrggbb`, `#rrggbbaa`). `radius`: `none` `sm` `md` `lg` `xl` `full` or px;
+  `borderWidth`: `0` `1` `2` `4` or px. Anything else is rejected, and skipped again by the renderer.
+- **Tokens vs custom:** tokens follow the admin/website theme (`globals.css`); custom values are exact. Either way the
+  value travels in a `--ocms-*` CSS variable on a literal class (`pt-(--ocms-pt)`, `md:grid-cols-(--ocms-cols-md)`), so
+  Tailwind's `@source` scan of `dist/blocks` sees every class and no user text becomes CSS. A style property replaces
+  the element's token class for the same property (e.g. style padding drops a Box's `padding` token).
+- **Brand colors:** `brand:<name>` reads `var(--ocms-color-<name>)`, a color of `src/theme.ts`:
+
+  ```ts
+  import { defineTheme } from '@opencloudcms/schema';
+  export default defineTheme({
+    colors: { surface: { label: 'Surface' }, ink: { label: 'Ink' }, accent: { label: 'Accent' } },
+    palettes: {
+      light: { label: 'Light', values: { surface: '#fbf8ef', ink: '#28291e', accent: '#3d462c' } },
+      night: { values: { surface: '#19322b', ink: '#f3f5f3', accent: '#bfcfc6' } },
+    },
+    activePalette: 'light',
+  });
+  ```
+
+  Names match `^[a-z][a-z0-9-]{0,31}$`; every palette gives every color a hex value. **Page builder > Theme**
+  (`/admin/settings/theme`) edits the file through `GET`/`PUT /api/admin/theme` (read: `content.read`; write:
+  `settings.content-types`, dev only); the builders' palette select previews a palette without saving.
+- **`ThemeStyle`:** render `<ThemeStyle theme={theme} />` (from `@opencloudcms/core/blocks`, server-safe) in the
+  website `<head>`; it writes `:root{--ocms-color-<name>:<hex>;…}` for `activePalette`, or for `palette="night"`. An
+  invalid theme renders nothing (one console warning).
+- **Hand-written and ejected TSX blocks:** every `ui` primitive takes `style`. For your own elements,
+  `ui.styleProps(style, display?)` returns `{ className, style }`; put your token classes first and its classes last
+  through tailwind-merge (`cn`/`twMerge`), since Tailwind emits `h-(--ocms-h)` before `h-9` and a plain string join
+  lets the token class win:
+
+  ```tsx
+  const sp = ui.styleProps(props.style, 'flex');   // display restored where not hidden
+  return <div className={twMerge('flex h-9 rounded-md', sp.className)} style={sp.style}>…</div>;
+  ```
+
+  `ui.cssLength`, `ui.cssColor`, `ui.cssTracks`, `ui.resolveTracks` and `ui.layoutClass` / `ui.layoutStyle` expose the
+  same conversions.
+
 ### Wiring (written by `opencloudcms init`)
 
 | File | |
