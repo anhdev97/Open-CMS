@@ -182,8 +182,10 @@ change to a composed block. Ejected (code) blocks call `styleProps` the same way
    data or block fields. In Puck it is one custom field `style` per element. *(call)*
 2. **Old token props:** Box/Card `padding` and `background` and Columns `count` keep rendering exactly as today.
    When the builder edits a node that has an old prop, it converts it into `style` (`padding: '8'` → `style.padding
-   {t:'8', b:'8'}` for Box, all sides for Card; `background` → `style.background`; `count: 3` → `tracks: ['1fr']` at
-   base and 3×`1fr` at md) and drops the old prop, so a node never has both. Files are only rewritten when saved. *(call)*
+   {t:'8', b:'8'}` for Box, all sides for Card; `count: 3` → `tracks: ['1fr']` at
+   base and 3×`1fr` at md) and drops the old prop, so a node never has both. The semantic `background` prop is kept (it carries its paired
+   foreground); a style background, when set, replaces it. Stack `direction` becomes responsive. Files are only
+   rewritten when saved. *(call)*
 3. **Canvas breakpoints:** both builders already render in Puck's iframe, so `md:`/`lg:` respond to the iframe
    width. The device toggle uses Puck `viewports` (375 / 768 / 1280) and also sets the breakpoint the panel edits. *(call)*
 4. **Grid:** keeps its current `sm`/`lg` classes and gets no `tracks`; Grid children's `span` uses base/md/lg. *(call)*
