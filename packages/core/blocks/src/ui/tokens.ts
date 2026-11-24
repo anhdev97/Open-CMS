@@ -4,6 +4,12 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import type { ColorToken, SpacingToken } from '../types';
 
+/**
+ * Class join with tailwind-merge. The style system relies on it: Tailwind emits same-property utilities sorted by name
+ * (`h-(--ocms-h)` before `h-9`), so every primitive passes its style classes last through `cn`, which drops the earlier
+ * token class of the same property (`h-9`, `rounded-md`, `text-primary`, `inline-flex` under `hidden`, `flex-wrap` under
+ * `flex-nowrap`, ...). test/blocks/style-css-order.test.ts compiles every primitive × style property to check it.
+ */
 export const cn = (...inputs: ClassValue[]) => twMerge(clsx(inputs));
 
 export const BG: Record<ColorToken, string> = {

@@ -38,7 +38,7 @@ type ImageProps = Styled & {
   aspect?: Responsive<ImageAspect>;
 };
 
-/** A style `height` (e.g. `100%`, to fill a column) replaces the ratio's `h-auto`; `fit` sets object-fit. */
+/** A style `height` (e.g. `100%`, to fill a column) or `width` replaces `h-auto` / `w-full` (`cn` drops them); `fit` sets object-fit. */
 export function Image({ src, alt, ratio, rounded, fit, aspect, style }: ImageProps) {
   if (!src) return null;
   const sp = styleProps(style, 'block');
