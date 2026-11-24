@@ -43,6 +43,8 @@ storefront). Rebuilt in `examples/my-store` with the builders only, no hand-writ
   and Text already have, dark-mode variants of brand colors. (Candidates for a later phase.)
 - Header/Footer regions and Menus (phases 2 and 3).
 - Free CSS text or class names typed by the user.
+- Known limit: the my-store wordmark serif relies on structural CSS selectors in its `globals.css` (no font control
+  yet).
 
 ## Anti-goals
 
@@ -140,14 +142,20 @@ export default defineTheme({
 literal classes from new lookup tables (one class per property per breakpoint, emitted only when set). `hidden`
 uses `hidden` / `md:block` style display classes per breakpoint (the element's own display is restored, e.g. `flex`
 or `grid`). All `ui` layout primitives and the composed renderer accept an optional `style` prop and merge it after
-their token classes, so custom values win. The isomorphic rule (no hooks/browser globals) still holds.
+their token classes through `cn` (tailwind-merge), which drops the token class of the same property, so custom values
+win (Tailwind sorts `h-(--ocms-h)` before `h-9`; `test/blocks/style-css-order.test.ts` compiles every primitive × style
+property to check the `--ocms` rule wins). fr tracks render as `minmax(0,<n>fr)`, like `grid-cols-N`. A Box/Card
+without padding seeds its default padding (`py-8` / `p-6`) into `style.padding` on the first padding edit, and shows
+it as placeholders. The isomorphic rule (no hooks/browser globals) still holds.
 
 Which style sections each element gets:
 
 | Element | Spacing (pad/margin) | Size | Colors & border | Hide |
 |---|---|---|---|---|
 | Box, Stack, Columns, Grid, Card | ✓ | ✓ | ✓ | ✓ |
-| Image, Button, Badge | margin only | width/height | — | ✓ |
+| Image | margin only | width/height | — | ✓ |
+| Button | margin only | width/height | ✓ (background, text color, border, radius) | ✓ |
+| Badge | margin only | width/height | text color | ✓ |
 | Heading, Text, Price, Date | margin only | max-width | text color | ✓ |
 | Divider, Spacer, Slot | margin only | — | — | ✓ |
 

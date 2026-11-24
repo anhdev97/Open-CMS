@@ -162,6 +162,36 @@ describe('StylePanel', () => {
     expect(q('[data-section="span"]')).toBeTruthy();
   });
 
+  it('Box/Card without padding show their default padding and seed it on the first padding edit', () => {
+    const onChange = vi.fn();
+    render(createElement(StylePanel, { el: 'Box', value: undefined, onChange, theme: null }), 'base');
+    const pad = (side: string) => container.querySelectorAll<HTMLInputElement>(`input[data-side="${side}"]`)[1]!;
+    expect([pad('t').placeholder, pad('r').placeholder, pad('b').placeholder, pad('l').placeholder]).toEqual(['8', '–', '8', '–']);
+    type(pad('l'), '4');
+    expect(onChange).toHaveBeenLastCalledWith({ padding: { t: '8', b: '8', l: '4' } });
+
+    render(createElement(StylePanel, { el: 'Card', value: undefined, onChange, theme: null }), 'md');
+    expect(pad('r').placeholder).toBe('6');
+    type(pad('r'), '12');
+    expect(onChange).toHaveBeenLastCalledWith({ padding: { base: { t: '6', r: '6', b: '6', l: '6' }, md: { r: '12' } } });
+
+    // A node with a style padding (or a legacy prop, shown migrated) keeps its own values; other elements have no defaults.
+    render(createElement(StylePanel, { el: 'Box', value: { padding: { t: '2' } }, onChange, theme: null }), 'base');
+    expect(pad('b').placeholder).toBe('–');
+    type(pad('b'), '4');
+    expect(onChange).toHaveBeenLastCalledWith({ padding: { t: '2', b: '4' } });
+    render(createElement(StylePanel, { el: 'Stack', value: undefined, onChange, theme: null }), 'base');
+    expect(pad('t').placeholder).toBe('–');
+  });
+
+  it('Button has the colors section (text color and radius); Badge has text color', () => {
+    const onChange = vi.fn();
+    render(createElement(StylePanel, { el: 'Button', value: { color: 'brand:ink' }, onChange, theme: null }));
+    expect([...container.querySelectorAll('[data-section]')].map((s) => s.getAttribute('data-section'))).toEqual(['margin', 'size', 'colors', 'visibility']);
+    render(createElement(StylePanel, { el: 'Badge', value: undefined, onChange, theme: null }));
+    expect([...container.querySelectorAll('[data-section]')].map((s) => s.getAttribute('data-section'))).toEqual(['margin', 'size', 'textColor', 'visibility']);
+  });
+
   it('hide toggles write the breakpoint flag', () => {
     const onChange = vi.fn();
     render(createElement(StylePanel, { el: 'Divider', value: { margin: { t: '4' } }, onChange, theme: null }));

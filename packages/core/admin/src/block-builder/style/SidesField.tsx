@@ -46,9 +46,14 @@ export interface SidesFieldProps {
   /** Drawn in the middle of the ring (the padding ring inside the margin ring). */
   inner?: ReactNode;
   readOnly?: boolean;
+  /**
+   * What the element renders while `value` is unset (Box/Card default padding): shown as the placeholders, and written
+   * as the base value with the first edit, so setting one side does not drop the others to 0.
+   */
+  defaults?: Sides;
 }
 
-export function SidesField({ label, value, onChange, negative, auto, inner, readOnly }: SidesFieldProps) {
+export function SidesField({ label, value, onChange, negative, auto, inner, readOnly, defaults }: SidesFieldProps) {
   const bp = useBreakpoint();
   const [linked, setLinked] = useState(false);
   const [drafts, setDrafts] = useState<Partial<Record<Side, string>>>({});
@@ -65,7 +70,8 @@ export function SidesField({ label, value, onChange, negative, auto, inner, read
     if (!isLength(s, { negative, auto })) return setBad(side);
     setBad(null);
     if (linked) setDrafts({});
-    onChange(setSides(value, bp, Object.fromEntries(targets.map((x) => [x, s]))));
+    const from = value === undefined && defaults ? { base: { ...defaults } } : value;
+    onChange(setSides(from, bp, Object.fromEntries(targets.map((x) => [x, s]))));
   };
 
   return (
@@ -73,7 +79,8 @@ export function SidesField({ label, value, onChange, negative, auto, inner, read
       <div className="grid grid-cols-[3.5rem_1fr_3.5rem] grid-rows-[auto_minmax(2.25rem,auto)_auto] items-center gap-1 rounded-md border border-dashed border-border p-1">
         <span className="col-start-1 row-start-1 self-start text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
         {BORDER_SIDES.map((side) => {
-          const at = sideAt(value, bp, side);
+          const set = sideAt(value, bp, side);
+          const at = value === undefined && defaults?.[side] !== undefined ? { value: defaults[side], own: false } : set;
           const shown = drafts[side] ?? (at.own ? at.value : '');
           return (
             <input

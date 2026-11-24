@@ -8,7 +8,7 @@ import { useId, type ReactNode } from 'react';
 import { createUsePuck, useGetPuck, type CustomFieldRender } from '@puckeditor/core';
 import {
   BORDER_SIDES, BORDER_WIDTH_TOKENS, BREAKPOINTS, RADIUS_TOKENS, STYLE_COLOR_TOKENS,
-  type ComposedElement, type NodeStyle, type Responsive, type ThemeDefinition,
+  type ComposedElement, type NodeStyle, type Responsive, type Sides, type ThemeDefinition,
 } from '@opencloudcms/schema';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { useBuilder } from '../context';
@@ -20,6 +20,12 @@ import { useTheme } from './theme-context';
 
 const PX_RE = /^\d+(?:\.\d+)?px$/;
 const pxOr = (tokens: readonly string[]) => (v: string) => tokens.includes(v) || (PX_RE.test(v) && Number.parseFloat(v) <= 10000);
+/** Padding a Box/Card renders without a padding prop or style padding (`PY['8']` / `P['6']` in blocks/src/ui/tokens.ts). */
+export const PADDING_DEFAULTS: Partial<Record<ComposedElement, Sides>> = {
+  Box: { t: '8', b: '8' },
+  Card: { t: '6', r: '6', b: '6', l: '6' },
+};
+
 const spanOptions = () => [
   ...Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) })),
   { value: 'full', label: styleText('fullWidth') },
@@ -103,7 +109,7 @@ export function StylePanel({ el, value, onChange, theme, parent, readOnly, legac
 
   const margin = (inner?: ReactNode) => <SidesField label={f('margin')} value={s.margin} onChange={on('margin')} negative auto inner={inner} {...common} />;
   const sections: Partial<Record<StyleSection, () => ReactNode>> = {
-    spacing: () => margin(<SidesField label={f('padding')} value={s.padding} onChange={on('padding')} {...common} />),
+    spacing: () => margin(<SidesField label={f('padding')} value={s.padding} onChange={on('padding')} defaults={PADDING_DEFAULTS[el]} {...common} />),
     margin: () => margin(),
     size: () => (
       <>

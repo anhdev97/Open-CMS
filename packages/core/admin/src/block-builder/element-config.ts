@@ -81,7 +81,9 @@ const PLAIN: StyleSection[] = ['margin', 'visibility', 'span'];
 export const STYLE_SECTIONS: Record<ComposedElement, readonly StyleSection[]> = {
   Box: BOX, Card: BOX,
   Stack: ['layout', ...BOX], Columns: ['layout', ...BOX], Grid: ['layout', ...BOX],
-  Image: MEDIA, Button: MEDIA, Badge: MEDIA,
+  Image: MEDIA,
+  Button: ['margin', 'size', 'colors', 'visibility', 'span'],
+  Badge: ['margin', 'size', 'textColor', 'visibility', 'span'],
   Heading: TEXT, Text: TEXT, Price: TEXT, Date: TEXT,
   Divider: PLAIN, Spacer: PLAIN, Slot: PLAIN,
 };
