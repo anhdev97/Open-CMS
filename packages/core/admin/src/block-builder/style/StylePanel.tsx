@@ -16,6 +16,7 @@ import { STYLE_SECTIONS, type StyleSection } from '../element-config';
 import { ColorField, LengthField, ResponsiveSelect, SidesField, Swatch } from './fields';
 import { hasLegacyProps, migrateLegacyProps } from './migrate';
 import { FieldRow, bpLabel, styleText, useStyleValue } from './shared';
+import { useTheme } from './theme-context';
 
 const PX_RE = /^\d+(?:\.\d+)?px$/;
 const pxOr = (tokens: readonly string[]) => (v: string) => tokens.includes(v) || (PX_RE.test(v) && Number.parseFloat(v) <= 10000);
@@ -205,6 +206,7 @@ const usePuck = createUsePuck();
 export const StyleField: CustomFieldRender<unknown> = ({ field, value, onChange, readOnly }) => {
   const el = (field.metadata as { el: ComposedElement }).el;
   const m = useBuilder();
+  const { theme } = useTheme();
   const getPuck = useGetPuck();
   const item = usePuck((s) => s.selectedItem);
   const parent = usePuck((s) => (s.selectedItem ? s.getParentById(String(s.selectedItem.props.id))?.type : undefined));
@@ -229,7 +231,7 @@ export const StyleField: CustomFieldRender<unknown> = ({ field, value, onChange,
         el={el}
         value={shown}
         onChange={(v) => onChange(v)}
-        theme={m.theme}
+        theme={theme}
         parent={parent}
         readOnly={readOnly || m.readOnly}
         legacyBackground={el === 'Box' || el === 'Card' ? { value: props.background as string | undefined, onChange: (v) => writeProp('background', v) } : undefined}

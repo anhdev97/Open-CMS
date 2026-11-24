@@ -5,6 +5,8 @@ import { Button } from '../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { t } from '../i18n';
 import { isShadowedPath } from '../lib/pages';
+import { DeviceToggle } from '../block-builder/style/DeviceToggle';
+import { PaletteSelect } from '../block-builder/style/theme-context';
 import type { AutosaveState } from './autosave';
 
 const usePuck = createUsePuck();
@@ -40,7 +42,7 @@ const STATE_TONE: Record<AutosaveState, string> = {
   error: 'text-destructive',
 };
 
-/** Editor top bar (Puck `overrides.header`): back, title + path, locale, undo/redo, website preview, save state, Save, Publish. */
+/** Editor top bar (Puck `overrides.header`): back, title + path, locale, device, palette preview, undo/redo, website preview, save state, Save, Publish. */
 export function EditorHeader() {
   const m = useContext(HeaderContext)!;
   const getPuck = useGetPuck();
@@ -81,6 +83,8 @@ export function EditorHeader() {
           ))}
         </SelectContent>
       </Select>
+      <DeviceToggle />
+      <PaletteSelect />
       {!m.readOnly && (
         <div className="flex items-center">
           <Button variant="ghost" size="icon-sm" disabled={!hasPast} onClick={back} aria-label={t('pageEditor.undo')}>

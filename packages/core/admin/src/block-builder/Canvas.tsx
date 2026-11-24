@@ -1,14 +1,18 @@
 // Canvas renders of the block builder. Every element is drawn by `defineComposedBlock` (the renderer of pages and
 // the website) with the sample entry and `_locale`/`_editor` stamped, so the canvas looks like the page builder.
 // Containers draw their Puck slot with the same layout classes and variables (`ui.layoutClass` / `ui.layoutStyle`).
-// Components are `inline`: each render draws the item frame itself (Puck's drag ref), so a grid child's `span`
-// and a percentage height (an Image filling its column) apply to the box the grid lays out.
+// Components are `inline`: each render draws the item frame itself (Puck's drag ref). The frame is the box the parent
+// lays out, so it carries what the element's own box carries on the site toward its parent: `span`, margin (a
+// `margin-left: auto` pushing a nav to the right of a Stack) and width/max-width (percentages of the parent); the
+// element keeps its other style and fills the frame. Elements hidden at the edited breakpoint stay drawn, dimmed.
 import { createElement, useContext, useMemo, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import type { SlotComponent } from '@puckeditor/core';
 import { composedHelpers, defineComposedBlock, ui, type ComposedBlockDefinition } from '@opencloudcms/core/blocks';
-import { resolveResponsive, type ComposedBinding, type ComposedElement, type ComposedNode, type NodeStyle } from '@opencloudcms/schema';
+import { resolveResponsive, type Breakpoint, type ComposedBinding, type ComposedElement, type ComposedNode, type NodeStyle } from '@opencloudcms/schema';
 import { t } from '../i18n';
 import { CanvasContext, type CanvasModel } from './context';
+import { useBreakpoint } from './style/breakpoint';
+import { bpLabel } from './style/shared';
 import { elementLabel } from './element-config';
 import { itemToNode, type PuckItem } from './tree-puck';
 
@@ -69,14 +73,45 @@ function shown(c: CanvasModel, n: ComposedNode): boolean {
   return composedHelpers.present(v) === (s.is === 'present');
 }
 
-function Dim({ hidden, children }: { hidden: boolean; children: ReactNode }) {
+function Dim({ hidden, title, children }: { hidden: boolean; title?: string; children: ReactNode }) {
   if (!hidden) return <>{children}</>;
   return (
-    <div className="opacity-40" title={t('blockBuilder.canvas.hiddenBySample')}>
+    <div className="opacity-40" title={title ?? t('blockBuilder.canvas.hiddenBySample')}>
       {children}
     </div>
   );
 }
+
+const isObj = (v: unknown): v is Props => !!v && typeof v === 'object' && !Array.isArray(v);
+/** Style keys drawn on the item frame (the box the parent lays out). */
+const FRAME_KEYS = ['margin', 'width', 'maxWidth', 'span'] as const;
+
+/** A width moved to the frame: the element fills it (`100%`), or keeps `auto` where it is `auto`. */
+function fill(width: unknown): unknown {
+  const one = (w: unknown) => (w === 'auto' ? 'auto' : '100%');
+  return isObj(width) ? Object.fromEntries(Object.entries(width).map(([bp, w]) => [bp, one(w)])) : one(width);
+}
+
+/**
+ * Canvas split of a node's style: `frame` (margin, width, max-width, span) for the item frame, `inner` (the rest,
+ * without `hidden`, and a filling width) for the element, and whether `hidden` hides it at breakpoint `bp`.
+ */
+export function canvasStyle(style: NodeStyle | undefined, bp: Breakpoint): { frame: NodeStyle | undefined; inner: NodeStyle | undefined; hidden: boolean } {
+  if (!isObj(style)) return { frame: undefined, inner: undefined, hidden: false };
+  const frame: Props = {};
+  const inner: Props = {};
+  for (const [k, v] of Object.entries(style)) {
+    if (v === undefined || k === 'hidden') continue;
+    if ((FRAME_KEYS as readonly string[]).includes(k)) frame[k] = v;
+    else inner[k] = v;
+  }
+  if (frame.width !== undefined) inner.width = fill(frame.width);
+  const hidden = isObj(style.hidden) && style.hidden[bp] === true;
+  const some = (o: Props) => (Object.keys(o).length ? (o as NodeStyle) : undefined);
+  return { frame: some(frame), inner: some(inner), hidden };
+}
+
+const hiddenTitle = (bp: Breakpoint) => t('blockBuilder.canvas.hiddenAt', { bp: bpLabel(bp) });
 
 function nodeOf(el: ComposedElement, props: Props): ComposedNode {
   const clean: Props = { id: '' };
@@ -86,14 +121,21 @@ function nodeOf(el: ComposedElement, props: Props): ComposedNode {
 
 function LeafPreview({ el, props }: { el: ComposedElement; props: Props }) {
   const c = useContext(CanvasContext);
+  const bp = useBreakpoint();
   const node = nodeOf(el, props);
-  const { showIf, ...bare } = node;
+  const { showIf, style, ...rest } = node;
+  const cs = canvasStyle(style, bp);
+  const bare: ComposedNode = cs.inner ? { ...rest, style: cs.inner } : rest;
   const d = definition(c, bare);
   let out: ReactNode = null;
   if (d instanceof Error) out = <Hint tone="warning">{t('blockBuilder.canvas.invalid', { element: elementLabel(el) })}</Hint>;
   else out = renderWith(c, d, c.entry);
   if (out === null || out === undefined || out === false) out = <Hint>{t('blockBuilder.canvas.empty', { element: elementLabel(el) })}</Hint>;
-  return <Dim hidden={!shown(c, { ...bare, ...(showIf ? { showIf } : {}) })}>{out}</Dim>;
+  return (
+    <Dim hidden={cs.hidden} title={hiddenTitle(bp)}>
+      <Dim hidden={!shown(c, { ...bare, ...(showIf ? { showIf } : {}) })}>{out}</Dim>
+    </Dim>
+  );
 }
 
 function SlotPreview({ props }: { props: Props }) {
@@ -110,13 +152,19 @@ type LayoutEl = 'Box' | 'Stack' | 'Columns' | 'Grid' | 'Card';
 
 function ContainerPreview({ el, props }: { el: LayoutEl; props: Props }) {
   const c = useContext(CanvasContext);
+  const bp = useBreakpoint();
   const Slot = props.children as SlotComponent | undefined;
-  const p = { ...props, direction: props.direction ?? 'vertical' };
+  const cs = canvasStyle(props.style as NodeStyle | undefined, bp);
+  const p = { ...props, direction: props.direction ?? 'vertical', style: cs.inner };
   const cls = (ui.layoutClass[el] as (p: Props) => string)(p);
   const style = (ui.layoutStyle[el] as (p: Props) => CSSProperties | undefined)(p);
   const node = nodeOf(el, props);
   const zone = Slot ? createElement(Slot, { className: cls, style, minEmptyHeight: 64 } as never) : <div className={cls} style={style} />;
-  return <Dim hidden={!shown(c, node)}>{zone}</Dim>;
+  return (
+    <Dim hidden={cs.hidden} title={hiddenTitle(bp)}>
+      <Dim hidden={!shown(c, node)}>{zone}</Dim>
+    </Dim>
+  );
 }
 
 /** Whether a style height is relative at some breakpoint (the frame must then fill its cell: `h-full`). */
@@ -124,13 +172,17 @@ function relativeHeight(style: NodeStyle | undefined): boolean {
   return Object.values(resolveResponsive(style?.height)).some((h) => typeof h === 'string' && h.endsWith('%'));
 }
 
-/** The item frame Puck drags: carries the element's column span and, for a relative height, `h-full`. */
+/**
+ * The item frame Puck drags: carries the element's column span, margin, width and max-width (see `canvasStyle`)
+ * and, for a relative height, `h-full`.
+ */
 export function frameAttrs(style: NodeStyle | undefined): { className?: string; style?: CSSProperties } {
-  const span = style?.span !== undefined ? ui.styleProps({ span: style.span }) : null;
-  const className = [span?.className, relativeHeight(style) ? 'h-full' : ''].filter(Boolean).join(' ');
+  const own = canvasStyle(style, 'base').frame;
+  const sp = own ? ui.styleProps(own) : null;
+  const className = [sp?.className, relativeHeight(style) ? 'h-full' : ''].filter(Boolean).join(' ');
   return {
     ...(className ? { className } : {}),
-    ...(span && Object.keys(span.style).length ? { style: span.style } : {}),
+    ...(sp && Object.keys(sp.style).length ? { style: sp.style } : {}),
   };
 }
 

@@ -32,6 +32,8 @@ import { buildBuilderConfig } from '../block-builder/element-config';
 import { AllowField, ShowIfField, SourcesField } from '../block-builder/ElementPanel';
 import { StyleField } from '../block-builder/style/StylePanel';
 import { LengthPuckField, ResponsiveSelectPuckField, TracksPuckField } from '../block-builder/style/puck-fields';
+import { ViewportBreakpoint, deviceViewports } from '../block-builder/style/DeviceToggle';
+import { CanvasFrame, ThemeProvider, loadTheme } from '../block-builder/style/theme-context';
 import {
   bindingResetNotes,
   breakingNotes,
@@ -167,7 +169,6 @@ function Builder({ meta, types: allTypes, detail, theme }: BuilderProps) {
     pageBlocks,
     addField,
     fieldUsage: (name) => fieldUsage(tree, name),
-    theme,
   };
 
   // ---- Puck ----
@@ -203,12 +204,15 @@ function Builder({ meta, types: allTypes, detail, theme }: BuilderProps) {
   const overrides = useMemo(
     () => ({
       header: () => createElement(BuilderHeader),
+      puck: ViewportBreakpoint,
+      iframe: CanvasFrame,
       fieldTypes,
       fields: ({ children, itemSelector }: { children: ReactNode; itemSelector?: unknown }) => (itemSelector ? children : createElement(BlockPanel)),
     }),
     [],
   );
   const dictionary = useMemo(() => puckDictionary(), [adminLocale]); // eslint-disable-line react-hooks/exhaustive-deps
+  const viewports = useMemo(() => deviceViewports(), [adminLocale]); // eslint-disable-line react-hooks/exhaustive-deps
   // Puck reads the config's drawer and slot rules once: switching single ⇄ list remounts it with the current data
   // (undo history starts again).
   const latest = useRef<BuilderPuckData>(initialData);
@@ -469,23 +473,26 @@ function Builder({ meta, types: allTypes, detail, theme }: BuilderProps) {
       />
 
       <div className="min-h-0 flex-1">
-        <BuilderContext.Provider value={model}>
-          <CanvasContext.Provider value={canvas}>
-            <BuilderHeaderContext.Provider value={header}>
-              <Puck
-                key={mount.key}
-                config={config}
-                data={mount.data as unknown as Data}
-                onChange={onChange}
-                overrides={overrides as never}
-                permissions={readOnly ? READ_ONLY : undefined}
-                iframe={{ enabled: true, syncHostStyles: true, waitForStyles: true }}
-                dictionary={dictionary}
-                height="100%"
-              />
-            </BuilderHeaderContext.Provider>
-          </CanvasContext.Provider>
-        </BuilderContext.Provider>
+        <ThemeProvider theme={theme}>
+          <BuilderContext.Provider value={model}>
+            <CanvasContext.Provider value={canvas}>
+              <BuilderHeaderContext.Provider value={header}>
+                <Puck
+                  key={mount.key}
+                  config={config}
+                  data={mount.data as unknown as Data}
+                  onChange={onChange}
+                  overrides={overrides as never}
+                  permissions={readOnly ? READ_ONLY : undefined}
+                  iframe={{ enabled: true, syncHostStyles: true, waitForStyles: true }}
+                  viewports={viewports}
+                  dictionary={dictionary}
+                  height="100%"
+                />
+              </BuilderHeaderContext.Provider>
+            </CanvasContext.Provider>
+          </BuilderContext.Provider>
+        </ThemeProvider>
       </div>
     </div>
   );
@@ -501,8 +508,8 @@ function BuilderLoader({ name }: { name: string }) {
   useEffect(() => {
     let live = true;
     invalidate('types');
-    // The theme only adds brand swatches: the builder opens without it.
-    const theme = api<{ theme: ThemeDefinition | null }>('/api/admin/theme').then((r) => r.theme ?? null, () => null);
+    // The theme only adds brand swatches and canvas colours: the builder opens without it.
+    const theme = loadTheme();
     Promise.all([api<Meta>('/api/admin/meta'), loadContentTypes(), name === 'new' ? Promise.resolve(null) : getBlock(name), theme])
       .then(([meta, types, detail, theme]) => live && setLoaded({ meta, types, detail, theme }))
       .catch((e) => live && setError(e));

@@ -1,5 +1,5 @@
 // Top bar of the block builder (Puck `overrides.header`): back, label + name, content type and mode, sample entry,
-// content locale, undo/redo, Save.
+// content locale, device, palette preview, undo/redo, Save.
 import { ArrowLeftIcon, Redo2Icon, Undo2Icon } from 'lucide-react';
 import { createContext, useContext, useEffect } from 'react';
 import { createUsePuck, useGetPuck } from '@puckeditor/core';
@@ -9,6 +9,8 @@ import { Button } from '../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { getActiveLocale, t } from '../i18n';
 import type { ContentTypeDefinition } from '../lib/types';
+import { DeviceToggle } from './style/DeviceToggle';
+import { PaletteSelect } from './style/theme-context';
 
 const usePuck = createUsePuck();
 
@@ -114,6 +116,8 @@ export function BuilderHeader() {
           ))}
         </SelectContent>
       </Select>
+      <DeviceToggle />
+      <PaletteSelect />
       {!m.readOnly && (
         <div className="flex items-center">
           <Button variant="ghost" size="icon-sm" disabled={!hasPast} onClick={back} aria-label={t('pageEditor.undo')}>

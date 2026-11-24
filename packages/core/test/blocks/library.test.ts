@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { CORE_BLOCK_NAMES, blockManifest, defineBlocks, resolvePage, toPuckConfig, writePageContent, type CustomFieldRenderers } from '../../blocks/src';
-import { ThemeStyle } from '../../blocks/src/next/theme-style';
+import { ThemeStyle } from '../../blocks/src/theme-style';
 import { coreBlocks } from '../../blocks/src/library';
 
 const NAMES = [

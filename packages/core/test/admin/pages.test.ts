@@ -158,3 +158,22 @@ describe('shadowed paths', () => {
     expect(isShadowedPath(undefined, ['/'])).toBe(false);
   });
 });
+
+describe('page builder style fields', () => {
+  it('the library Columns block edits its tracks with the TrackField (max 6); null in and out', async () => {
+    const { PAGE_CUSTOM_FIELDS, PageTracksPuckField, pageTracks } = await import('../../admin/src/page-editor/custom-fields');
+    const { buildEditorConfig } = await import('../../admin/src/page-editor/editor-config');
+    const { coreBlocks, defineBlocks } = await import('@opencloudcms/core/blocks');
+    const stub = () => null as never;
+    const config = buildEditorConfig(
+      defineBlocks(coreBlocks),
+      { locale: 'en-US', customFields: PAGE_CUSTOM_FIELDS, token: stub, contentType: stub, unknown: stub, wrapRender: (_n, r) => r },
+      [],
+    );
+    expect(config.components.Columns!.fields!.tracks).toMatchObject({ type: 'custom', render: PageTracksPuckField, metadata: { blockField: { kind: 'tracks', max: 6 } } });
+    expect(pageTracks.in(null)).toBeUndefined();
+    expect(pageTracks.in({ base: ['1fr'] })).toEqual({ base: ['1fr'] });
+    expect(pageTracks.out(undefined)).toBeNull();
+    expect(pageTracks.out(['2fr', '1fr'])).toEqual(['2fr', '1fr']);
+  });
+});

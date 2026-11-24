@@ -16,3 +16,4 @@ export { coreBlocks } from './library';
 export { ComposedBlockError, composedHelpers, defineComposedBlock, type ComposedBlockDefinition } from './composed';
 export type { ComposedBlockSpec } from '@opencloudcms/schema';
 export * as ui from './ui';
+export { ThemeStyle } from './theme-style';

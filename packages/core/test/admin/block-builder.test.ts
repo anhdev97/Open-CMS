@@ -23,6 +23,9 @@ import {
 import { canvasFieldValues, placeholderEntry, sampleQuery } from '../../admin/src/block-builder/sample-data';
 import { STYLE_SECTIONS, buildBuilderConfig } from '../../admin/src/block-builder/element-config';
 import { migrateLegacyProps } from '../../admin/src/block-builder/style/migrate';
+import { DEVICE_VIEWPORTS, breakpointForWidth } from '../../admin/src/block-builder/style/breakpoint';
+import { shownTracks } from '../../admin/src/block-builder/style/puck-fields';
+import { canvasStyle, frameAttrs } from '../../admin/src/block-builder/Canvas';
 import { ApiError } from '../../admin/src/lib/api-error';
 import type { ContentTypeDefinition, FieldDefinition } from '../../admin/src/lib/types';
 import { ENTRY_PROP_KINDS as SERVER_KINDS } from '../../src/block-builder/blocks-checks';
@@ -484,5 +487,41 @@ describe('builder Puck config and the style system', () => {
     expect(out).toEqual({ id: 'b', padding: undefined, background: 'muted', style: { padding: { t: '8', b: '8' } } });
     const cols = comp('Columns').resolveData({ props: { id: 'c', count: 2 } }, { lastData: null, trigger: 'replace' }).props;
     expect(cols).toEqual({ id: 'c', count: undefined, tracks: { base: ['1fr'], md: ['1fr', '1fr'] } });
+  });
+});
+
+describe('device breakpoints and canvas fidelity', () => {
+  it('breakpointForWidth: < 768 is Mobile, < 1024 Tablet, else Desktop', () => {
+    expect(breakpointForWidth(375)).toBe('base');
+    expect(breakpointForWidth(767)).toBe('base');
+    expect(breakpointForWidth(768)).toBe('md');
+    expect(breakpointForWidth(1023)).toBe('md');
+    expect(breakpointForWidth(1024)).toBe('lg');
+    expect(breakpointForWidth(1280)).toBe('lg');
+    expect(DEVICE_VIEWPORTS.map((v) => v.width)).toEqual([375, 768, 1280]);
+  });
+
+  it('canvasStyle puts margin, width and maxWidth on the item frame; the element fills it', () => {
+    const out = canvasStyle({ margin: { l: 'auto' }, width: { base: '50%', md: 'auto' }, maxWidth: '600px', padding: { t: '4' }, span: 2 }, 'base');
+    expect(out.frame).toEqual({ margin: { l: 'auto' }, width: { base: '50%', md: 'auto' }, maxWidth: '600px', span: 2 });
+    expect(out.inner).toEqual({ padding: { t: '4' }, width: { base: '100%', md: 'auto' } });
+    expect(out.hidden).toBe(false);
+    const attrs = frameAttrs(out.frame);
+    expect(attrs.className).toContain('ml-(--ocms-ml)');
+    expect(attrs.style).toMatchObject({ '--ocms-ml': 'auto', '--ocms-w': '50%', '--ocms-maxw': '600px' });
+    expect(canvasStyle(undefined, 'base')).toEqual({ frame: undefined, inner: undefined, hidden: false });
+  });
+
+  it('an element hidden at the edited breakpoint is kept (dimmed), never display:none, in the canvas', () => {
+    const style = { hidden: { md: true }, padding: { t: '4' } };
+    expect(canvasStyle(style, 'md')).toEqual({ frame: undefined, inner: { padding: { t: '4' } }, hidden: true });
+    expect(canvasStyle(style, 'base').hidden).toBe(false);
+    expect(canvasStyle(style, 'lg').hidden).toBe(false);
+  });
+
+  it('a legacy Columns count shows as tracks until it is migrated', () => {
+    expect(shownTracks(undefined, 3)).toEqual({ base: ['1fr'], md: ['1fr', '1fr', '1fr'] });
+    expect(shownTracks(null, undefined)).toBeUndefined();
+    expect(shownTracks({ base: ['2fr'] }, 3)).toEqual({ base: ['2fr'] });
   });
 });
