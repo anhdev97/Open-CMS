@@ -35,6 +35,22 @@ describe('ui primitives', () => {
   it('Image renders img', () => {
     expect(r(h(ui.Image, { src: '/a.png', alt: 'A', ratio: 'video' }))).toContain('aspect-video');
   });
+  it('Button with a style background drops the variant background and hover background, hovers with opacity', () => {
+    for (const variant of ['default', 'secondary', 'outline', 'ghost', 'link'] as const) {
+      const out = r(h(ui.Button, { label: 'Go', href: '/x', variant, style: { background: 'brand:accent', color: 'brand:accent-ink' } }));
+      const cls = /class="([^"]*)"/.exec(out)![1].split(' ');
+      expect(cls.filter((c) => /^(hover:)?bg-/.test(c) && c !== 'bg-(--ocms-bg)'), variant).toEqual([]);
+      expect(cls, variant).toContain('hover:opacity-90');
+      expect(cls, variant).toContain('bg-(--ocms-bg)');
+    }
+  });
+  it('Button without a style background keeps the variant classes byte-identical', () => {
+    expect(r(h(ui.Button, { label: 'Go', href: '/x' }))).toBe(
+      '<a data-slot="button" href="/x" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2">Go</a>',
+    );
+    expect(r(h(ui.Button, { label: 'Go', href: '/x', style: { color: 'brand:ink' } }))).toContain('hover:bg-primary/90');
+    expect(r(h(ui.Button, { label: 'Go', href: '/x' }))).not.toContain('hover:opacity-90');
+  });
   it('Button href null renders span, else anchor', () => {
     expect(r(h(ui.Button, { label: 'Go', href: null }))).toMatch(/^<span/);
     expect(r(h(ui.Button, { label: 'Go', href: '/x' }))).toMatch(/^<a/);

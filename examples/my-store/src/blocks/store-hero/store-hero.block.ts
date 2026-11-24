@@ -34,7 +34,7 @@ export default defineComposedBlock({
       kind: 'image',
       label: { 'en-US': 'Image', 'vi-VN': 'Hình ảnh' },
       default: {
-        src: '/files/store-editorial.png',
+        src: '/files/store-editorial.webp',
         alt: 'Olive linen shirt, canvas tote and clay scarf on a wooden bench',
       },
     },

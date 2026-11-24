@@ -5,10 +5,10 @@ import { safeHref } from './href';
 import type { ColorToken, SpacingToken } from '../types';
 import { RichTextHtml } from '../richtext-render';
 import {
-  ALIGN, BADGE_VARIANT, BUTTON_BASE, BUTTON_SIZE, BUTTON_VARIANT, H, HEADING, IMAGE_ASPECT, OBJECT_FIT, RATIO, TEXT_COLOR, TEXT_SIZE, cn,
+  ALIGN, BADGE_VARIANT, BUTTON_BASE, BUTTON_SIZE, BUTTON_VARIANT, BUTTON_VARIANT_STYLED_BG, H, HEADING, IMAGE_ASPECT, OBJECT_FIT, RATIO, TEXT_COLOR, TEXT_SIZE, cn,
   type BadgeVariant, type ButtonSize, type ButtonVariant, type ImageAspect,
 } from './tokens';
-import { bpClasses, styleAttr, styleProps } from './style';
+import { bpClasses, setsBackground, styleAttr, styleProps } from './style';
 
 type Styled = { style?: NodeStyle };
 
@@ -49,7 +49,8 @@ export function Image({ src, alt, ratio, rounded, fit, aspect, style }: ImagePro
 
 export function Button({ label, href, variant, size, style }: Styled & { label: string; href: string | null | undefined; variant?: ButtonVariant; size?: ButtonSize }) {
   const sp = styleProps(style, 'inline-flex');
-  const cls = cn(BUTTON_BASE, BUTTON_VARIANT[variant as ButtonVariant] ?? BUTTON_VARIANT.default, BUTTON_SIZE[size as ButtonSize] ?? BUTTON_SIZE.default, sp.className);
+  const variants = setsBackground(sp) ? BUTTON_VARIANT_STYLED_BG : BUTTON_VARIANT;
+  const cls = cn(BUTTON_BASE, variants[variant as ButtonVariant] ?? variants.default, BUTTON_SIZE[size as ButtonSize] ?? BUTTON_SIZE.default, sp.className);
   const st = styleAttr(sp);
   const safe = safeHref(href);
   return safe ? <a data-slot="button" href={safe} className={cls} style={st}>{label}</a> : <span data-slot="button" className={cls} style={st}>{label}</span>;

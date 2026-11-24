@@ -103,7 +103,7 @@ async function main() {
                 heading: 'Mặc đẹp mỗi ngày',
                 intro: 'Áo linen thoáng nhẹ, túi canvas chắc tay và những món đồ đơn giản để dùng lâu.',
                 ctaLabel: 'Xem bộ sưu tập →',
-                image: { src: '/files/store-editorial.png', alt: 'Áo linen ô liu, túi canvas và khăn màu đất trên ghế gỗ' },
+                image: { src: '/files/store-editorial.webp', alt: 'Áo linen ô liu, túi canvas và khăn màu đất trên ghế gỗ' },
               }),
               item('SectionHead', { heading: 'Sản phẩm nổi bật', linkLabel: 'Xem tất cả →' }),
               item('ProductGrid', { heading: '', columns: 3, products: { mode: 'query', sort: 'createdAt:desc', limit: 3 } }),

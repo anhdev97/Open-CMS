@@ -709,7 +709,7 @@ describe('examples/my-store storefront', () => {
     expect(hero).toContain('--ocms-cols:1fr;--ocms-cols-md:2fr 3fr');
     expect(hero).toContain('<h1');
     expect(hero).toContain('Wear well every day');
-    expect(hero).toContain('src="/files/store-editorial.png"');
+    expect(hero).toContain('src="/files/store-editorial.webp"');
     expect(hero).toContain('object-cover');
     expect(hero).toContain('--ocms-minh:calc(var(--spacing) * 0);--ocms-minh-md:450px');
   });

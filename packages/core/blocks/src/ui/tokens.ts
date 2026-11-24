@@ -59,6 +59,17 @@ export const BUTTON_VARIANT: Record<ButtonVariant, string> = {
   ghost: 'hover:bg-accent hover:text-accent-foreground',
   link: 'text-primary underline-offset-4 hover:underline',
 };
+/**
+ * Variant classes when the node's style sets a background (`--ocms-bg`): the variant's own background and hover
+ * background are left out (they would win on hover over the brand color) and hover dims instead.
+ */
+export const BUTTON_VARIANT_STYLED_BG: Record<ButtonVariant, string> = {
+  default: 'text-primary-foreground hover:opacity-90',
+  secondary: 'text-secondary-foreground hover:opacity-90',
+  outline: 'border text-foreground shadow-xs hover:text-accent-foreground hover:opacity-90',
+  ghost: 'hover:text-accent-foreground hover:opacity-90',
+  link: 'text-primary underline-offset-4 hover:underline hover:opacity-90',
+};
 export const BUTTON_SIZE: Record<ButtonSize, string> = {
   sm: 'h-8 gap-1.5 px-3',
   default: 'h-9 px-4 py-2',
