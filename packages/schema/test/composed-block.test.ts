@@ -172,3 +172,25 @@ describe('slots and breaking changes', () => {
     expect(withAutoVersion(p, mut(p, (s) => s.tree.children.shift())).version).toBe(2);
   });
 });
+
+describe('node style and column props', () => {
+  const withTree = (tree: unknown) => ({ ...single(), tree }) as unknown;
+  const paths = (t: unknown) => validateComposedSpec(withTree(t)).map((i) => i.path.join('.'));
+  it('accepts a valid style', () => {
+    expect(paths({ el: 'Box', style: { background: 'brand:accent' } })).toEqual([]);
+  });
+  it('reports an invalid style value with its path', () => {
+    expect(paths({ el: 'Box', style: { color: 'red;x' } })).toContain('tree.style.color');
+  });
+  it('validates Columns tracks', () => {
+    expect(paths({ el: 'Columns', props: { tracks: { base: ['1fr'], md: ['2fr', '3fr'] } } })).toEqual([]);
+    expect(paths({ el: 'Columns', props: { tracks: ['99fr'] } })).toContain('tree.props.tracks.0');
+    expect(paths({ el: 'Columns', props: { tracks: Array(13).fill('1fr') } })).toContain('tree.props.tracks');
+  });
+  it('validates Stack and Image props', () => {
+    expect(paths({ el: 'Stack', props: { direction: { base: 'vertical', md: 'horizontal' }, align: 'center', justify: 'between', wrap: true } })).toEqual([]);
+    expect(paths({ el: 'Stack', props: { justify: 'x', wrap: 'y' } })).toEqual(expect.arrayContaining(['tree.props.justify', 'tree.props.wrap']));
+    expect(paths({ el: 'Image', props: { fit: 'cover', aspect: { base: 'square', lg: 'wide' } } })).toEqual([]);
+    expect(paths({ el: 'Image', props: { fit: 'x', aspect: '5/1' } })).toEqual(expect.arrayContaining(['tree.props.fit', 'tree.props.aspect']));
+  });
+});

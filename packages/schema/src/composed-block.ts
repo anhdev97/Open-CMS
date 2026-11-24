@@ -2,6 +2,7 @@
 // Must not import from `node:*` (bundled for the browser and shared with Nest and the blocks package).
 import { validateLocalizedText } from './groups';
 import type { LocalizedText } from './i18n';
+import { checkResponsive, isLength, isTrack, MAX_TRACKS, validateNodeStyle, type NodeStyle } from './style';
 
 export type ComposedElement =
   | 'Box' | 'Stack' | 'Columns' | 'Grid' | 'Card' | 'Slot' | 'Heading' | 'Text'
@@ -39,6 +40,7 @@ export interface ComposedNode {
   bind?: Record<string, BindSource>;
   showIf?: { from: 'entry' | 'field'; path?: string; name?: string; is: 'present' | 'absent' };
   children?: ComposedNode[];
+  style?: NodeStyle;
 }
 
 export interface ComposedField {
@@ -118,6 +120,38 @@ const DEFAULT_EXPECTED: Record<ComposedFieldKind, string> = {
 };
 const NAME_RE = /^[A-Z][A-Za-z0-9]{0,63}$/;
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+const enumLeaf = (allowed: readonly string[], add: (p: (string | number)[], m: string) => void) => (v: unknown, p: (string | number)[]) => {
+  if (typeof v !== 'string' || !allowed.includes(v)) add(p, `must be one of ${allowed.join(', ')}`);
+};
+
+/** Checks the layout props Columns, Stack and Image accept; other props stay unchecked. */
+function checkLayoutProps(
+  el: unknown, props: Record<string, unknown>, path: (string | number)[], add: (p: (string | number)[], m: string) => void,
+): void {
+  const at = (k: string) => [...path, k];
+  if (el === 'Columns') {
+    if (props.tracks !== undefined) {
+      checkResponsive(props.tracks, at('tracks'), (v, p) => {
+        if (!Array.isArray(v)) return add(p, 'tracks must be an array');
+        if (v.length < 1 || v.length > MAX_TRACKS) add(p, `tracks must have 1 to ${MAX_TRACKS} entries`);
+        v.forEach((t, i) => { if (!isTrack(t)) add([...p, i], 'track must be <n>fr (1-12), auto or a length'); });
+      }, add);
+    }
+    if (props.alignY !== undefined) enumLeaf(['start', 'center', 'end', 'stretch'], add)(props.alignY, at('alignY'));
+    for (const k of ['gapX', 'gapY']) {
+      if (props[k] !== undefined && !isLength(props[k])) add(at(k), 'must be a spacing token or a length like 12px');
+    }
+  } else if (el === 'Stack') {
+    if (props.direction !== undefined) checkResponsive(props.direction, at('direction'), enumLeaf(['vertical', 'horizontal'], add), add);
+    if (props.align !== undefined) checkResponsive(props.align, at('align'), enumLeaf(['start', 'center', 'end', 'stretch'], add), add);
+    if (props.justify !== undefined) enumLeaf(['start', 'center', 'end', 'between'], add)(props.justify, at('justify'));
+    if (props.wrap !== undefined && typeof props.wrap !== 'boolean') add(at('wrap'), 'wrap must be a boolean');
+  } else if (el === 'Image') {
+    if (props.fit !== undefined) enumLeaf(['cover', 'contain'], add)(props.fit, at('fit'));
+    if (props.aspect !== undefined) checkResponsive(props.aspect, at('aspect'), enumLeaf(['auto', 'square', 'video', '3/2', '4/3', 'wide'], add), add);
+  }
+}
 
 export function validateComposedSpec(spec: unknown): ComposedIssue[] {
   const issues: ComposedIssue[] = [];
@@ -257,6 +291,8 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
       }
       if (max !== undefined && !(Number.isInteger(max) && (max as number) > 0)) add([...path, 'props', 'max'], 'max must be a positive integer');
     }
+    for (const i of validateNodeStyle(n.style, [...path, 'style'])) add(i.path, i.message);
+    if (isObj(n.props)) checkLayoutProps(el, n.props, [...path, 'props'], add);
     if (n.bind !== undefined) {
       if (!isObj(n.bind)) add([...path, 'bind'], 'bind must be an object');
       else for (const [k, s] of Object.entries(n.bind)) {

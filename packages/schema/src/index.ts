@@ -10,3 +10,5 @@ export * from './groups';
 export * from './permissions';
 export * from './pages';
 export * from './composed-block';
+export * from './style';
+export * from './theme';
