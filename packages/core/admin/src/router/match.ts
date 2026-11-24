@@ -1,4 +1,4 @@
-export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'assets' | 'content' | 'pages' | 'pageEditor' | 'settingsUsers' | 'settingsGroups' | 'settingsContentTypes' | 'settingsLanguages' | 'settingsBlocks' | 'blockEditor' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
+export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'assets' | 'content' | 'pages' | 'pageEditor' | 'settingsUsers' | 'settingsGroups' | 'settingsContentTypes' | 'settingsLanguages' | 'settingsBlocks' | 'settingsTheme' | 'blockEditor' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
 
 export interface RouteMatch {
   id: RouteId;
@@ -16,6 +16,7 @@ const SETTINGS: Record<string, RouteId> = {
   'content-types': 'settingsContentTypes',
   languages: 'settingsLanguages',
   blocks: 'settingsBlocks',
+  theme: 'settingsTheme',
 };
 
 /** Pure matcher for the `[[...slug]]` catch-all (spec §5.2). `setup`, `login` and `_ui` sit outside AuthGate. */

@@ -20,6 +20,7 @@ const ROUTE_PERMISSIONS: Partial<Record<RouteId, Permission>> = {
   settingsContentTypes: 'settings.content-types',
   settingsLanguages: 'settings.languages',
   settingsBlocks: 'settings.content-types',
+  settingsTheme: 'settings.content-types',
   blockEditor: 'settings.content-types',
   content: 'content.read',
   assets: 'content.read',

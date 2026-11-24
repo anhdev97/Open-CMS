@@ -1,4 +1,4 @@
-import { BlocksIcon, FileTextIcon, LanguagesIcon, ShieldCheckIcon, UsersIcon, WrenchIcon, type LucideIcon } from 'lucide-react';
+import { BlocksIcon, FileTextIcon, LanguagesIcon, PaletteIcon, ShieldCheckIcon, UsersIcon, WrenchIcon, type LucideIcon } from 'lucide-react';
 import type { Permission } from '@opencloudcms/schema';
 
 export interface SettingsItem {
@@ -21,4 +21,5 @@ export const settingsItems: SettingsItem[] = [
 export const pageBuilderItems: SettingsItem[] = [
   { to: '/pages', label: 'nav.pages', icon: FileTextIcon, permission: 'content.read' },
   { to: '/settings/blocks', label: 'nav.blocks', icon: BlocksIcon, permission: 'settings.content-types' },
+  { to: '/settings/theme', label: 'nav.theme', icon: PaletteIcon, permission: 'settings.content-types' },
 ];

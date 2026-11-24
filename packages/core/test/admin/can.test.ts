@@ -54,15 +54,16 @@ describe('visibleSettingsItems', () => {
 });
 
 describe('pageBuilderItems', () => {
-  it('groups Pages and Blocks under Page builder', () => {
+  it('groups Pages, Blocks and Theme under Page builder', () => {
     expect(pageBuilderItems.map((i) => [i.to, i.label])).toEqual([
       ['/pages', 'nav.pages'],
       ['/settings/blocks', 'nav.blocks'],
+      ['/settings/theme', 'nav.theme'],
     ]);
   });
   it('shows each item by its own permission', () => {
     expect(visibleSettingsItems(pageBuilderItems, ['content.read']).map((i) => i.to)).toEqual(['/pages']);
-    expect(visibleSettingsItems(pageBuilderItems, ['settings.content-types']).map((i) => i.to)).toEqual(['/settings/blocks']);
+    expect(visibleSettingsItems(pageBuilderItems, ['settings.content-types']).map((i) => i.to)).toEqual(['/settings/blocks', '/settings/theme']);
     expect(visibleSettingsItems(pageBuilderItems, [])).toEqual([]);
   });
 });
