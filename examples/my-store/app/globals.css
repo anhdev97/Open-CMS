@@ -4,3 +4,38 @@
 /* Page builder: classes of the core blocks (and the preview bar), and of this project's blocks. */
 @source "../node_modules/@opencloudcms/core/dist/blocks";
 @source "../src/blocks";
+
+/* Storefront typography (the my-store mockup): website only, the admin has no .ocms-site. Unlayered, so it wins over
+   the Tailwind size classes of the Heading/Text blocks. */
+.ocms-site {
+  font: 15px/1.55 system-ui, sans-serif;
+}
+.ocms-site h1,
+.ocms-site h2 {
+  font-family: Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.04em;
+}
+.ocms-site h1 {
+  font-size: clamp(2.8rem, 6vw, 6.25rem);
+  line-height: 0.96;
+}
+.ocms-site h2 {
+  font-size: clamp(2.1rem, 4vw, 3.7rem);
+  line-height: 1.04;
+}
+.ocms-site h3 {
+  font-size: 1rem;
+  font-weight: 650;
+}
+.ocms-site p {
+  max-width: 53ch;
+}
+/* Wordmark: the first text of the StoreHeader and StoreFooter blocks (their `brand` field). */
+.ocms-site [data-opencloudcms-site] > div:first-child > p:first-child,
+.ocms-site [data-opencloudcms-site] > div:last-child > div > div:first-child > p:first-child {
+  font-family: Georgia, serif;
+  font-size: 2rem;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+}

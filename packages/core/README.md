@@ -242,6 +242,8 @@ export default defineBlocks([...coreBlocks, ...composedBlocks, ProductGrid]);
 | `app/(site)/[[...path]]/page.tsx` | `createCmsPage({ blocks })` from `@opencloudcms/core/blocks/next`: `default` = `Page`, `generateMetadata`, `dynamic = 'force-dynamic'` |
 | `app/(site)/%5F_opencloudcms/preview/route.ts`, `…/preview/exit/route.ts` | `createPreviewRoute()`, `createPreviewExitRoute()`. Next treats folders starting with `_` as private; `%5F` keeps the URL `/__opencloudcms/preview` |
 | `app/globals.css` | `@source "../node_modules/@opencloudcms/core/dist/blocks"; @source "../src/blocks";` |
+| `src/theme.ts` | `defineTheme({ colors, palettes, activePalette })`, one palette (managed by Page builder > Theme, printed by `printThemeFile`) |
+| `app/(site)/layout.tsx` | `<head><ThemeStyle theme={theme} /></head>` (from `@opencloudcms/core/blocks`: `:root{--ocms-color-<name>:…}` of the active palette); body `bg-(--ocms-color-surface) text-(--ocms-color-ink)` |
 
 `createCmsPage` and `createPreviewRoute` call the API at `baseUrl` (default `http://127.0.0.1:${PORT ?? 4000}`). In
 draft mode (and in the preview route) they forward the visitor's cookies, including the admin session, to `baseUrl`:

@@ -8,6 +8,7 @@ import {
   printContentGroupsFile,
   printComposedIndex,
   printLocalesFile,
+  printThemeFile,
   writeGeneratedFiles,
   writeSnapshot,
 } from '@opencloudcms/codegen';
@@ -164,6 +165,7 @@ export async function runInit(dir: string, opts: InitOptions): Promise<InitResul
     ['src/app.module.ts', t.appModuleTs()],
     ['src/locales.ts', printLocalesFile({ defaultLocale: 'en-US', locales: ['en-US'] })],
     ['src/content-groups.ts', printContentGroupsFile([])],
+    ['src/theme.ts', printThemeFile(t.defaultTheme())],
     ['src/content-types/.gitkeep', ''],
     ['src/extensions/index.ts', t.extensionsTs()],
     ['.env', t.envFile({ dbUrl, port, secret: randomBytes(32).toString('base64url') })],

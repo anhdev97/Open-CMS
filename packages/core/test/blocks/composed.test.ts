@@ -1,3 +1,5 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -17,7 +19,8 @@ import {
   type CustomFieldRenderers,
   type Entry,
 } from '../../blocks/src';
-import { validateComposedSpec } from '@opencloudcms/schema';
+import { validateComposedSpec, validateTheme } from '@opencloudcms/schema';
+import { loadComposedBlocks, loadConfig, loadTheme, printComposedBlockFile, printThemeFile } from '@opencloudcms/codegen';
 import { readEntryImage, readEntryMoney } from '../../blocks/src/composed/values';
 import { GRID_N } from '../../blocks/src/ui/tokens';
 
@@ -649,5 +652,78 @@ describe('defineComposedBlock: style', () => {
   it('a spec without style renders the same classes as before', () => {
     const def = defineComposedBlock(base({ name: 'Plain', tree: { el: 'Box', props: { padding: '8', background: 'muted' }, children: [{ el: 'Columns', props: { count: 3 } }] } }));
     expect(render(def, {})).toBe('<div class="py-8 bg-muted text-foreground"><div class="grid grid-cols-1 md:grid-cols-3 gap-6"></div></div>');
+  });
+});
+
+// Task 8: the my-store storefront (docs/superpowers/specs/assets/2026-11-24-store-preview.html) rebuilt with
+// Block Builder files and a theme. Every file must validate, render, and survive a builder/Theme save unchanged.
+describe('examples/my-store storefront', () => {
+  const root = path.resolve(__dirname, '../../../../examples/my-store');
+  const STORE = ['StoreHeader', 'StoreHero', 'SectionHead', 'StoryBand', 'StoreFooter'];
+  const load = async () => {
+    const config = await loadConfig(root);
+    return { config, ...(await loadComposedBlocks(config)) };
+  };
+  /** Props of a block with every field at its default (what a freshly dropped block renders). */
+  const defaults = (spec: ComposedBlockSpec) =>
+    Object.fromEntries(Object.entries(spec.fields).map(([k, f]) => [k, (f as { default?: unknown }).default]));
+  const renderStore = async (name: string) => {
+    const { specs } = await load();
+    const spec = specs.find((s) => s.spec.name === name)!.spec;
+    return render(defineComposedBlock(spec), defaults(spec));
+  };
+
+  it('every composed spec validates, prints byte-identically (a builder save without changes) and renders', async () => {
+    const { specs, errors } = await load();
+    expect(errors).toEqual([]);
+    expect(specs.map((s) => s.spec.name)).toEqual(expect.arrayContaining(STORE));
+    for (const { spec, file } of specs) {
+      expect(validateComposedSpec(spec), spec.name).toEqual([]);
+      expect(printComposedBlockFile(spec), spec.name).toBe(fs.readFileSync(file, 'utf8'));
+    }
+    expect(() => defineBlocks([...coreBlocks, ...specs.map((s) => defineComposedBlock(s.spec))])).not.toThrow();
+    for (const name of STORE) expect((await renderStore(name)).length, name).toBeGreaterThan(0);
+  });
+
+  it('StoreFooter: 2 columns on mobile with the intro spanning both, 2fr 1fr 1fr from md', async () => {
+    const out = await renderStore('StoreFooter');
+    expect(out).toContain('--ocms-cols:1fr 1fr');
+    expect(out).toContain('--ocms-cols-md:2fr 1fr 1fr');
+    expect(out).toContain('col-span-full md:col-span-(--ocms-span-md)');
+    expect(out).toContain('--ocms-bg:var(--ocms-color-accent)');
+    expect(out).toContain('--ocms-fg:var(--ocms-color-accent-ink)');
+    expect(out).toContain('href="mailto:hello@example.com"');
+  });
+
+  it('StoreHeader and StoreHero: base (mobile) and md layouts', async () => {
+    const header = await renderStore('StoreHeader');
+    expect(header).toContain('flex-col md:flex-row');
+    expect(header).toContain('justify-between');
+    expect(header).toContain('--ocms-minh:76px');
+    expect(header).toContain('--ocms-pl:5%');
+    expect(header).toContain('--ocms-bc:var(--ocms-color-line)');
+    expect(header).toContain('>my-store<');
+    expect(header).toContain('href="/shop"');
+
+    const hero = await renderStore('StoreHero');
+    expect(hero).toContain('--ocms-cols:1fr;--ocms-cols-md:2fr 3fr');
+    expect(hero).toContain('<h1');
+    expect(hero).toContain('Wear well every day');
+    expect(hero).toContain('src="/files/store-editorial.png"');
+    expect(hero).toContain('object-cover');
+    expect(hero).toContain('--ocms-minh:calc(var(--spacing) * 0);--ocms-minh-md:450px');
+  });
+
+  it('src/theme.ts: the three palettes of the mockup, valid, printed exactly as the Theme screen writes it', async () => {
+    const { config } = await load();
+    const theme = (await loadTheme(config))!;
+    expect(validateTheme(theme)).toEqual([]);
+    expect(Object.keys(theme.colors)).toEqual(['surface', 'feature', 'ink', 'accent', 'accent-ink', 'line']);
+    expect(Object.keys(theme.palettes)).toEqual(['olive', 'clay', 'night']);
+    expect(theme.activePalette).toBe('olive');
+    expect(theme.palettes.olive.values).toEqual({ surface: '#fbf8ef', feature: '#ece9d7', ink: '#28291e', accent: '#3d462c', 'accent-ink': '#fffdf4', line: '#cfcab9' });
+    expect(theme.palettes.clay.values.accent).toBe('#8b432f');
+    expect(theme.palettes.night.values.accent).toBe('#20483c');
+    expect(printThemeFile(theme)).toBe(fs.readFileSync(path.join(root, 'src/theme.ts'), 'utf8'));
   });
 });

@@ -3,7 +3,8 @@
 // src/app.module.ts), so every block must be isomorphic: no server-only APIs, no data fetching in render
 // (data comes in through b.entry / b.entries / b.link / b.image props), no CSS imports (Tailwind classes only).
 //
-// Blocks made in the admin Block Builder (Settings > Blocks: ProductCard, ActiveProducts) live in
+// Blocks made in the admin Block Builder (Page builder > Blocks: ProductCard, ActiveProducts and the storefront
+// StoreHeader, StoreHero, SectionHead, StoryBand, StoreFooter) live in
 // src/blocks/<name>/<name>.block.ts and are listed in ./composed.ts, which the builder rewrites.
 import { coreBlocks, defineBlocks } from '@opencloudcms/core/blocks';
 import { composedBlocks } from './composed';

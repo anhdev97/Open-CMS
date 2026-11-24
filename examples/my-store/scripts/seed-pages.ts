@@ -1,8 +1,11 @@
-// Dev seed for the page builder: publishes `/` (Hero + ProductGrid of the newest products), `/shop` (the Block
-// Builder examples: ProductCard for one product, ActiveProducts for the products with active = true) and `/about`.
+// Dev seed for the page builder: publishes `/` (the storefront of docs/superpowers/specs/assets/2026-11-24-store-preview.html,
+// built from the Block Builder blocks StoreHeader, StoreHero, SectionHead, StoryBand, StoreFooter + ProductGrid of the newest
+// products; English, plus its vi-VN translation), `/shop` (the Block Builder examples: ProductCard for one product,
+// ActiveProducts for the products with active = true) and `/about`.
 // Without any product yet it first publishes three sample products (two on sale, one not).
 // Run after `opencloudcms migrate:up`:  pnpm seed:pages
-// A page that already exists at one of these paths (in the default locale) is left untouched.
+// A page that already exists at one of these paths (in the default locale) is left untouched, unless --force
+// (`pnpm seed:pages -- --force`): then its content, title and SEO are replaced and it is published again.
 import 'reflect-metadata';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -11,6 +14,7 @@ import { NestFactory } from '@nestjs/core';
 import type { BlockDefinition } from '@opencloudcms/core/blocks';
 
 const root = path.resolve(__dirname, '..');
+const force = process.argv.includes('--force');
 const envFile = path.join(root, '.env');
 if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
 
@@ -79,22 +83,45 @@ async function main() {
       {
         title: 'Home',
         path: '/',
-        seo: { title: 'my-store', description: 'An example store built with OpenCloudCMS.' },
+        seo: { title: 'my-store', description: 'Clothing and accessories for every day.' },
+        // Copy = the blocks' field defaults (English); the vi-VN translation below uses the mockup's Vietnamese copy.
         content: content(
-          item('Hero', {
-            badge: 'New season',
-            heading: 'Welcome to my-store',
-            subheading: 'Pages are built in the admin with drag and drop; products come straight from the catalogue.',
-            primaryLabel: 'About us',
-            primaryLink: { kind: 'url', href: '/about' },
-            align: 'center',
-          }),
-          item('ProductGrid', {
-            heading: 'New arrivals',
-            columns: 3,
-            products: { mode: 'query', sort: 'createdAt:desc', limit: 6 },
-          }),
+          item('StoreHeader'),
+          item('StoreHero'),
+          item('SectionHead'),
+          item('ProductGrid', { heading: '', columns: 3, products: { mode: 'query', sort: 'createdAt:desc', limit: 3 } }),
+          item('StoryBand'),
+          item('StoreFooter'),
         ),
+        translations: {
+          'vi-VN': {
+            title: 'Trang chủ',
+            seo: { title: 'my-store', description: 'Quần áo và phụ kiện cho mỗi ngày.' },
+            content: content(
+              item('StoreHeader', { nav1Label: 'Trang chủ', nav2Label: 'Cửa hàng', nav3Label: 'Giới thiệu' }),
+              item('StoreHero', {
+                heading: 'Mặc đẹp mỗi ngày',
+                intro: 'Áo linen thoáng nhẹ, túi canvas chắc tay và những món đồ đơn giản để dùng lâu.',
+                ctaLabel: 'Xem bộ sưu tập →',
+                image: { src: '/files/store-editorial.png', alt: 'Áo linen ô liu, túi canvas và khăn màu đất trên ghế gỗ' },
+              }),
+              item('SectionHead', { heading: 'Sản phẩm nổi bật', linkLabel: 'Xem tất cả →' }),
+              item('ProductGrid', { heading: '', columns: 3, products: { mode: 'query', sort: 'createdAt:desc', limit: 3 } }),
+              item('StoryBand', {
+                heading: 'Về my-store',
+                body: 'Chúng mình chọn những chất liệu dễ chăm sóc và kiểu dáng dễ phối để mỗi món bạn mua đều có chỗ trong tủ đồ.',
+                linkLabel: 'Đọc câu chuyện của cửa hàng →',
+              }),
+              item('StoreFooter', {
+                tagline: 'Quần áo và phụ kiện cho mỗi ngày.',
+                exploreTitle: 'Khám phá',
+                link1Label: 'Cửa hàng',
+                link2Label: 'Giới thiệu',
+                contactTitle: 'Liên hệ',
+              }),
+            ),
+          },
+        },
       },
       {
         title: 'Shop',
@@ -119,15 +146,31 @@ async function main() {
       },
     ];
 
-    for (const p of pages) {
+    const locales: string[] = config.locales ?? [locale];
+    for (const { translations, ...p } of pages as (Omit<(typeof pages)[number], 'translations'> & {
+      translations?: Record<string, { title: string; seo: Record<string, string>; content: unknown }>;
+    })[]) {
       const existing = await entries.list(PAGE_API_ID, { status: 'draft', locale, filter: { path: p.path }, limit: 1 });
-      if (existing.data.some((d) => d.locale === locale)) {
-        console.log(`skip ${p.path}: a page already exists there`);
+      const found = existing.data.find((d) => d.locale === locale);
+      let documentId: string;
+      if (!found) {
+        documentId = (await entries.create(PAGE_API_ID, p, locale)).data.documentId as string;
+      } else if (force) {
+        documentId = found.documentId as string;
+        await entries.update(PAGE_API_ID, documentId, p, locale);
+      } else {
+        console.log(`skip ${p.path}: a page already exists there (--force replaces it)`);
         continue;
       }
-      const { data: created } = await entries.create(PAGE_API_ID, p, locale);
-      await entries.publish(PAGE_API_ID, created.documentId, admin);
-      console.log(`published ${p.path} (${created.documentId})`);
+      // Translations of the same page (same documentId), only for locales the project enables.
+      const done: string[] = [];
+      for (const [loc, t] of Object.entries(translations ?? {})) {
+        if (!locales.includes(loc)) continue;
+        await entries.update(PAGE_API_ID, documentId, { ...t, path: p.path }, loc);
+        done.push(loc);
+      }
+      await entries.publish(PAGE_API_ID, documentId, admin);
+      console.log(`${found ? 'replaced' : 'published'} ${p.path} (${documentId}${done.length ? `, + ${done.join(', ')}` : ''})`);
     }
   } finally {
     await app.close();

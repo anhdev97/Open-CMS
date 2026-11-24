@@ -1,3 +1,5 @@
+import type { ThemeDefinition } from '@opencloudcms/schema';
+
 export type PackageManager = 'pnpm' | 'npm' | 'yarn';
 
 export function packageJson(name: string, deps: Record<string, string>, devDeps: Record<string, string>): string {
@@ -166,20 +168,41 @@ export default function AdminWithBlocks() {
 export const siteLayoutTsx = (name: string): string => `import '../globals.css';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { ThemeStyle } from '@opencloudcms/core/blocks';
 import locales from '../../src/locales';
+import theme from '../../src/theme';
 
 export const metadata: Metadata = {
   title: '${name}',
 };
 
+// ThemeStyle writes the brand colors of src/theme.ts (active palette) as --ocms-color-* variables; blocks use them
+// as \`brand:<name>\` colors.
 export default function SiteLayout({ children }: { children: ReactNode }) {
   return (
     <html lang={locales.defaultLocale}>
-      <body className="bg-background text-foreground antialiased">{children}</body>
+      <head>
+        <ThemeStyle theme={theme} />
+      </head>
+      <body className="bg-(--ocms-color-surface) text-(--ocms-color-ink) antialiased">{children}</body>
     </html>
   );
 }
 `;
+
+/** `src/theme.ts` of a new project: the brand colors the site layout uses, one palette (printed with printThemeFile). */
+export const defaultTheme = (): ThemeDefinition => ({
+  colors: {
+    surface: { label: 'Surface' },
+    ink: { label: 'Ink' },
+    accent: { label: 'Accent' },
+    'accent-ink': { label: 'Text on accent' },
+  },
+  palettes: {
+    default: { label: 'Default', values: { surface: '#ffffff', ink: '#171717', accent: '#171717', 'accent-ink': '#fafafa' } },
+  },
+  activePalette: 'default',
+});
 
 /** Website strings: en-US is required, other locales may be partial (missing keys fall back to en-US). */
 export const siteMessagesTs = (): string => `// Strings of the website. Server components import the helpers from '@opencloudcms/core';
@@ -407,6 +430,7 @@ src/                  NestJS: main.ts, app.module.ts, content types, hooks, gene
   blocks/             page-builder blocks (index.ts registers them; example/ is a commented sample;
                       composed.ts lists the blocks made in the admin Block Builder)
   locales.ts          website languages (managed from Settings > Languages)
+  theme.ts            brand colors and palettes (managed from Page builder > Theme)
   content-groups.ts   sidebar groups of content types (managed from Settings > Content types)
 app/                  Next.js App Router: one app for the admin and the website
   (admin)/            root layout + page of the admin (AdminWithBlocks.tsx passes src/blocks to the editor)
@@ -465,6 +489,9 @@ Limitation: Next keeps its cache in \`.next/cache\` on disk, so caching is only 
   which \`src/blocks/index.ts\` spreads. Commit these files; "Export as TSX" turns a block into ordinary code.
 - Adding or changing a block is a code change (also from the Block Builder): production needs a rebuild to see it;
   building and publishing pages works in production too.
+- Brand colors live in \`src/theme.ts\` (\`defineTheme\`: named colors, several palettes, one \`activePalette\`). Blocks use
+  them as \`brand:<name>\`; \`<ThemeStyle theme={theme} />\` in \`app/(site)/layout.tsx\` writes them as \`--ocms-color-<name>\`
+  variables. In dev the admin page Page builder > Theme rewrites the file.
 - "View on website" in the editor opens a draft preview (signed-in admins only; over https in production).
 
 ## Languages

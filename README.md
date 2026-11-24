@@ -265,8 +265,9 @@ conflict check per page document, not per locale: two people editing different l
 conflict.
 Until a page is published at `/`, the home shows a welcome page. Field kinds, preview, API and limits:
 [`packages/core/README.md`](packages/core/README.md#page-builder). `examples/my-store` has a `ProductGrid` block
-and `pnpm --filter my-store seed:pages` publishes `/` (Hero + the newest products), `/shop` (the two composed blocks
-below; three sample products first when the catalogue is empty) and `/about`.
+and `pnpm --filter my-store seed:pages` publishes `/` (the storefront below + the newest products, English with a
+vi-VN translation), `/shop` (the two composed blocks below; three sample products first when the catalogue is empty)
+and `/about`. Existing pages are skipped; `pnpm --filter my-store seed:pages -- --force` replaces their content.
 
 ### Block Builder
 
@@ -287,7 +288,10 @@ A list block can carry a **fixed filter** (equality on an indexed or unique fiel
 applied when the page is resolved and wins over whatever filter a page editor stored. "Export as TSX" turns a
 composed block into an ordinary TSX block built on the exported `ui` primitives. Limits: equality filters only,
 and production needs a rebuild to see a new or changed block. `examples/my-store` ships `ProductCard` (one product,
-picked per page) and `ActiveProducts` (products with `active = true`, 4-column grid). Details:
+picked per page) and `ActiveProducts` (products with `active = true`, 4-column grid), and a storefront made only with
+the builders (`StoreHeader`, `StoreHero`, `SectionHead`, `StoryBand`, `StoreFooter`: per-breakpoint columns such as
+`2fr 3fr`, per-side spacing, borders, brand colors) themed by `src/theme.ts` (palettes `olive`, `clay`, `night`; the
+site layout renders `<ThemeStyle theme={theme} />`). Details:
 [`packages/core/README.md`](packages/core/README.md#composed-blocks-block-builder).
 
 ## Users, groups and review

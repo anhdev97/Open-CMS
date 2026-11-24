@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { isComposedIndexWired, loadComposedBlocks, loadConfig, loadDefinitions } from '@opencloudcms/codegen';
 import { checkSpecAgainstTypes } from '../../src/block-builder/blocks-checks';
 
-// The my-store example ships two Block Builder blocks; they must load and fit its content types.
+// The my-store example ships Block Builder blocks (two product blocks + the storefront); they must load and fit its content types.
 const root = path.resolve(__dirname, '../../../../examples/my-store');
 
 describe('examples/my-store composed blocks', () => {
@@ -11,7 +11,7 @@ describe('examples/my-store composed blocks', () => {
     const config = await loadConfig(root);
     const { specs, errors } = await loadComposedBlocks(config);
     expect(errors).toEqual([]);
-    expect(specs.map((s) => s.spec.name).sort()).toEqual(['ActiveProducts', 'ProductCard']);
+    expect(specs.map((s) => s.spec.name).sort()).toEqual(['ActiveProducts', 'ProductCard', 'SectionHead', 'StoreFooter', 'StoreHeader', 'StoreHero', 'StoryBand']);
     expect(isComposedIndexWired(config)).toBe(true);
 
     const types = (await loadDefinitions(config)).map((d) => d.def);

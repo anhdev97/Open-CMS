@@ -3,10 +3,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import ts from 'typescript';
-import { isComposedIndexWired, printComposedIndex } from '@opencloudcms/codegen';
-import { resolveConfig } from '@opencloudcms/schema';
+import { isComposedIndexWired, printComposedIndex, printThemeFile } from '@opencloudcms/codegen';
+import { resolveConfig, validateTheme } from '@opencloudcms/schema';
 import { runInit } from '../src/init';
 import { dbNameFor, packageNameFor } from '../src/init/names';
+import { defaultTheme } from '../src/init/templates';
 
 let tmp: string;
 beforeEach(() => {
@@ -85,6 +86,7 @@ describe('runInit', () => {
       'src/locales.ts',
       'src/main.ts',
       'src/root.ts',
+      'src/theme.ts',
       'tsconfig.json',
       'tsconfig.server.json',
     ];
@@ -207,7 +209,18 @@ describe('runInit', () => {
     expect(messages).toContain("'vi-VN': {");
     expect(messages).not.toMatch(/tagline|openAdmin/); // the welcome page has its own strings
     expect(read(dir, 'app/(site)/layout.tsx')).toContain('lang={locales.defaultLocale}');
-    for (const f of ['src/locales.ts', 'src/content-groups.ts', 'app/(site)/messages.ts', 'opencloudcms.config.ts', 'src/app.module.ts']) {
+    // Brand theme: one palette, printed exactly as the admin Page builder > Theme writes it; ThemeStyle in the site layout.
+    const theme = read(dir, 'src/theme.ts');
+    expect(theme).toBe(printThemeFile(defaultTheme()));
+    expect(validateTheme(defaultTheme())).toEqual([]);
+    expect(Object.keys(defaultTheme().palettes)).toHaveLength(1);
+    const layout = read(dir, 'app/(site)/layout.tsx');
+    expect(layout).toContain("import { ThemeStyle } from '@opencloudcms/core/blocks';");
+    expect(layout).toContain("import theme from '../../src/theme';");
+    expect(layout).toMatch(/<head>\s*<ThemeStyle theme=\{theme\} \/>\s*<\/head>/);
+    expect(layout).toContain('bg-(--ocms-color-surface) text-(--ocms-color-ink)');
+    expect(read(dir, 'README.md')).toContain('src/theme.ts');
+    for (const f of ['src/locales.ts', 'src/theme.ts', 'app/(site)/layout.tsx', 'src/content-groups.ts', 'app/(site)/messages.ts', 'opencloudcms.config.ts', 'src/app.module.ts']) {
       const out = ts.transpileModule(read(dir, f), { reportDiagnostics: true, compilerOptions: { jsx: ts.JsxEmit.ReactJSX } });
       expect(out.diagnostics ?? [], f).toEqual([]);
     }
