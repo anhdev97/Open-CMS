@@ -7,3 +7,4 @@ export { PreviewBar, type PreviewBarVariant } from './PreviewBar';
 export { Welcome } from './Welcome';
 export { SITE_MESSAGES, type SiteMessages } from './messages';
 export { PREVIEW_EXIT_PATH, PREVIEW_LOCALE_COOKIE, PREVIEW_PATH } from './shared';
+export { ThemeStyle } from './theme-style';

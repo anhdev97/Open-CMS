@@ -18,6 +18,7 @@ import type {
   SlotBlockField,
   SpacingBlockField,
   TextBlockField,
+  TracksBlockField,
 } from './types';
 
 type Opts<F> = Omit<F, 'kind'>;
@@ -43,6 +44,7 @@ export const b = {
   image: (o: Opts<ImageBlockField> = {}): ImageBlockField => ({ ...o, kind: 'image' }),
   color: (o: Opts<ColorBlockField> = {}): ColorBlockField => ({ ...o, kind: 'color' }),
   spacing: (o: Opts<SpacingBlockField> = {}): SpacingBlockField => ({ ...o, kind: 'spacing' }),
+  tracks: (o: Opts<TracksBlockField> = {}): TracksBlockField => ({ ...o, kind: 'tracks' }),
   entry: (apiId: string, o: Omit<Opts<EntryBlockField>, 'apiId'> = {}): EntryBlockField => ({ ...o, kind: 'entry', apiId }),
   entries: (apiId: string, o: Omit<Opts<EntriesBlockField>, 'apiId'> = {}): EntriesBlockField => ({
     ...o,
@@ -77,6 +79,7 @@ export function fieldDefault(f: BlockField): unknown {
       return f.default;
     case 'link':
     case 'image':
+    case 'tracks':
       return f.default ?? null;
     case 'entry':
       return null;

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Config, CustomField, CustomFieldRender, Data } from '@puckeditor/core';
-import type { LocalizedText } from '@opencloudcms/schema';
+import type { LocalizedText, Responsive, Track } from '@opencloudcms/schema';
 
 /** Design-system colour tokens offered by `b.color` (stored as the token name). */
 export const COLOR_TOKENS = ['primary', 'secondary', 'muted', 'accent', 'background', 'foreground', 'destructive'] as const;
@@ -70,6 +70,12 @@ export interface SpacingBlockField extends FieldBase {
   kind: 'spacing';
   default?: SpacingToken;
 }
+export interface TracksBlockField extends FieldBase {
+  kind: 'tracks';
+  /** Most tracks per breakpoint (and most column slots). */
+  max?: number;
+  default?: Responsive<Track[]> | null;
+}
 export interface EntryBlockField extends FieldBase {
   kind: 'entry';
   apiId: string;
@@ -122,6 +128,7 @@ export type BlockField =
   | ImageBlockField
   | ColorBlockField
   | SpacingBlockField
+  | TracksBlockField
   | EntryBlockField
   | EntriesBlockField
   | ListBlockField<any>
@@ -156,7 +163,9 @@ export type ResolvedValue<F> = F extends { kind: 'text' | 'longText' }
           ? T
           : F extends { kind: 'color' }
             ? ColorToken
-            : F extends { kind: 'spacing' }
+            : F extends { kind: 'tracks' }
+              ? Responsive<Track[]> | null
+              : F extends { kind: 'spacing' }
               ? SpacingToken
               : F extends { kind: 'link' }
                 ? ResolvedLink
@@ -241,4 +250,7 @@ export type BlockCustomField<K extends CustomFieldKind = CustomFieldKind> = Cust
 };
 
 /** One Puck custom-field renderer per data field kind (supplied by the admin editor). */
-export type CustomFieldRenderers = { [K in CustomFieldKind]: CustomFieldRender<StoredFieldValue<K>> };
+export type CustomFieldRenderers = { [K in CustomFieldKind]: CustomFieldRender<StoredFieldValue<K>> } & {
+  /** Optional: without it `b.tracks` falls back to a select of presets. */
+  tracks?: CustomFieldRender<Responsive<Track[]> | null>;
+};

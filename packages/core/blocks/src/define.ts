@@ -1,5 +1,6 @@
 import { BLOCK_FIELD_KEY_RE, RESERVED_BLOCK_PROPS, validateComposedSpec, validateLocalizedText, type BlockManifest } from '@opencloudcms/schema';
 import { optionValue } from './fields';
+import { MAX_TRACKS, tracksValid } from './tracks';
 import { COLOR_TOKENS, SPACING_TOKENS, type BlockDefinition, type BlockField, type BlockRegistry } from './types';
 
 export const BLOCK_NAME_RE = /^[A-Z][A-Za-z0-9]{0,63}$/;
@@ -68,6 +69,12 @@ function validateField(f: unknown, block: string, path: string, siblings: Record
       break;
     case 'spacing':
       if (d !== undefined && !(SPACING_TOKENS as readonly unknown[]).includes(d)) bad(`a spacing token (${SPACING_TOKENS.join(', ')})`);
+      break;
+    case 'tracks':
+      if (f.max !== undefined && !(Number.isInteger(f.max) && (f.max as number) >= 1 && (f.max as number) <= MAX_TRACKS)) {
+        issues.push(`${where}: max must be an integer from 1 to ${MAX_TRACKS}`);
+      }
+      if (d !== undefined && d !== null && !tracksValid(d, typeof f.max === 'number' ? f.max : MAX_TRACKS)) bad('valid tracks or null');
       break;
     case 'link':
     case 'image':

@@ -1,6 +1,7 @@
 import { createElement, Fragment, type ComponentType, type ReactElement } from 'react';
 import type { ComponentConfig, Field } from '@puckeditor/core';
 import { localizedText, type Locale } from '@opencloudcms/schema';
+import { MAX_TRACKS } from './tracks';
 import { fieldsDefaults, optionValue } from './fields';
 import {
   COLOR_TOKENS,
@@ -37,6 +38,11 @@ function toOptions(options: readonly SelectOption<OptionValue>[], locale: Locale
   });
 }
 
+/** Presets of the plain `b.tracks` fallback select: [label, ...fr per column]; stored as `{ base: ['1fr'], md: [...] }`. */
+const TRACK_PRESETS: readonly [string, ...number[]][] = [
+  ['1:1', 1, 1], ['1:2', 1, 2], ['2:1', 2, 1], ['1:1:1', 1, 1, 1], ['1:2:1', 1, 2, 1], ['1:1:1:1', 1, 1, 1, 1],
+];
+
 const tokens = (list: readonly string[]) => list.map((t) => ({ label: t, value: t }));
 
 function toPuckField(f: BlockField, opts: ToPuckConfigOptions): Field {
@@ -71,6 +77,19 @@ function toPuckField(f: BlockField, opts: ToPuckConfigOptions): Field {
       return { ...base, type: 'select', options: tokens(COLOR_TOKENS) };
     case 'spacing':
       return { ...base, type: 'select', options: tokens(SPACING_TOKENS) };
+    case 'tracks':
+      if (customFields.tracks) return { ...base, type: 'custom', render: customFields.tracks as never, metadata: { blockField: f } };
+      return {
+        ...base,
+        type: 'select',
+        options: [
+          { label: 'Default', value: null },
+          ...TRACK_PRESETS.map(([label, ...fr]) => ({
+            label,
+            value: { base: ['1fr'], md: fr.map((n) => `${n}fr`) },
+          })),
+        ].filter((o) => o.value === null || (o.value.md.length <= (f.max ?? MAX_TRACKS))) as never,
+      };
     case 'link':
     case 'image':
     case 'entry':

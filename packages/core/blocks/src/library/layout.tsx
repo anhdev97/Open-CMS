@@ -1,5 +1,7 @@
 import { defineBlock } from '../define';
 import { b } from '../fields';
+import { readTracks } from '../tracks';
+import { Columns as UiColumns } from '../ui/layout';
 import { BG, COLS, GAP, GRID_COLS, H, L, MY, PY } from './ui';
 
 export const background = () =>
@@ -28,19 +30,29 @@ export const Columns = defineBlock({
   category: 'layout',
   fields: {
     columns: b.select({ label: L('Columns', 'Số cột', 'Colonnes', 'Jumlah kolom'), options: [2, 3, 4], default: 2 }),
+    tracks: b.tracks({ label: L('Column widths', 'Độ rộng cột', 'Largeur des colonnes', 'Lebar kolom'), max: 6 }),
     gap: gap(),
     column1: b.slot({ label: L('Column 1', 'Cột 1', 'Colonne 1', 'Kolom 1') }),
     column2: b.slot({ label: L('Column 2', 'Cột 2', 'Colonne 2', 'Kolom 2') }),
     column3: b.slot({ label: L('Column 3', 'Cột 3', 'Colonne 3', 'Kolom 3') }),
     column4: b.slot({ label: L('Column 4', 'Cột 4', 'Colonne 4', 'Kolom 4') }),
+    column5: b.slot({ label: L('Column 5', 'Cột 5', 'Colonne 5', 'Kolom 5') }),
+    column6: b.slot({ label: L('Column 6', 'Cột 6', 'Colonne 6', 'Kolom 6') }),
   },
-  render: ({ columns, gap, column1, column2, column3, column4 }) => (
-    <div className={`grid ${COLS[columns]} ${GAP[gap]}`}>
-      {[column1, column2, column3, column4].slice(0, columns).map((c, i) => (
-        <div key={i} className="min-w-0">{c}</div>
-      ))}
-    </div>
-  ),
+  render: ({ columns, tracks, gap, column1, column2, column3, column4, column5, column6 }) => {
+    const slots = [column1, column2, column3, column4, column5, column6];
+    // Stored tracks win when valid (invalid ones count as absent); `columns` is the fallback with today's classes.
+    const t = readTracks(tracks, 6);
+    const items = (n: number) => slots.slice(0, n).map((c, i) => <div key={i} className="min-w-0">{c}</div>);
+    if (t) {
+      return (
+        <UiColumns count={2} gap={gap} tracks={t.value}>
+          {items(t.count)}
+        </UiColumns>
+      );
+    }
+    return <div className={`grid ${COLS[columns]} ${GAP[gap]}`}>{items(columns)}</div>;
+  },
 });
 
 export const Grid = defineBlock({
