@@ -21,6 +21,8 @@ import {
   suggestName,
 } from '../../admin/src/block-builder/logic';
 import { canvasFieldValues, placeholderEntry, sampleQuery } from '../../admin/src/block-builder/sample-data';
+import { STYLE_SECTIONS, buildBuilderConfig } from '../../admin/src/block-builder/element-config';
+import { migrateLegacyProps } from '../../admin/src/block-builder/style/migrate';
 import { ApiError } from '../../admin/src/lib/api-error';
 import type { ContentTypeDefinition, FieldDefinition } from '../../admin/src/lib/types';
 import { ENTRY_PROP_KINDS as SERVER_KINDS } from '../../src/block-builder/blocks-checks';
@@ -395,5 +397,92 @@ describe('bindingResetNotes', () => {
   });
   it('empty filter list, false switches and empty texts are not losses', () => {
     expect(bindingResetNotes({ apiId: 'p', mode: 'single', filter: [], urlPattern: ' ', options: { editorSort: false, emptyText: { 'en-US': '' } } }, { el: 'Box' })).toEqual([]);
+  });
+});
+
+describe('legacy props → style (spec decision 2)', () => {
+  it('Box padding → top/bottom, Card padding → all sides; background stays a prop', () => {
+    expect(migrateLegacyProps('Box', { padding: '8' }, undefined)).toEqual({ props: {}, style: { padding: { t: '8', b: '8' } } });
+    expect(migrateLegacyProps('Card', { padding: '4', background: 'muted', bordered: false }, undefined)).toEqual({
+      props: { background: 'muted', bordered: false },
+      style: { padding: { t: '4', r: '4', b: '4', l: '4' } },
+    });
+    expect(migrateLegacyProps('Box', { background: 'primary' }, undefined)).toEqual({ props: { background: 'primary' }, style: undefined });
+  });
+
+  it('an existing style padding wins; the old prop is still dropped', () => {
+    const style = { padding: { md: { t: '37px' } }, radius: 'md' };
+    expect(migrateLegacyProps('Box', { padding: '8' }, style)).toEqual({ props: {}, style });
+  });
+
+  it('Columns count → tracks (1 column on mobile; count 4 is 2 then 4, like COLS[4])', () => {
+    expect(migrateLegacyProps('Columns', { count: 3, gap: '4' }, undefined)).toEqual({
+      props: { gap: '4', tracks: { base: ['1fr'], md: ['1fr', '1fr', '1fr'] } },
+      style: undefined,
+    });
+    expect(migrateLegacyProps('Columns', { count: 2 }, undefined).props).toEqual({ tracks: { base: ['1fr'], md: ['1fr', '1fr'] } });
+    expect(migrateLegacyProps('Columns', { count: 4 }, undefined).props).toEqual({
+      tracks: { base: ['1fr'], md: ['1fr', '1fr'], lg: ['1fr', '1fr', '1fr', '1fr'] },
+    });
+    const tracks = { base: ['2fr', '1fr'] };
+    expect(migrateLegacyProps('Columns', { count: 3, tracks }, undefined).props).toEqual({ tracks });
+  });
+
+  it('leaves other elements and migrated nodes as they are', () => {
+    expect(migrateLegacyProps('Stack', { direction: 'vertical', gap: '4' }, undefined)).toEqual({ props: { direction: 'vertical', gap: '4' }, style: undefined });
+    expect(migrateLegacyProps('Text', { padding: '8' }, undefined).props).toEqual({ padding: '8' });
+  });
+});
+
+describe('style sections per element (spec table)', () => {
+  it('containers get spacing, size and colors; text gets margin, max width and text color', () => {
+    expect(STYLE_SECTIONS.Box).toEqual(expect.arrayContaining(['spacing', 'size', 'colors', 'visibility', 'span']));
+    expect(STYLE_SECTIONS.Columns).toContain('layout');
+    expect(STYLE_SECTIONS.Heading).not.toContain('spacing');
+    expect(STYLE_SECTIONS.Heading).toEqual(expect.arrayContaining(['margin', 'maxWidth', 'textColor', 'visibility']));
+    expect(STYLE_SECTIONS.Image).toEqual(expect.arrayContaining(['margin', 'size']));
+    expect(STYLE_SECTIONS.Image).not.toContain('colors');
+    expect(STYLE_SECTIONS.Divider).not.toContain('size');
+    for (const sections of Object.values(STYLE_SECTIONS)) expect(sections).toContain('span');
+  });
+});
+
+describe('builder Puck config and the style system', () => {
+  const stub = (() => null) as never;
+  const config = buildBuilderConfig({
+    collection: false, token: stub, sources: stub, showIf: stub, allow: stub, tracks: stub, style: stub, responsiveSelect: stub, length: stub,
+    render: () => stub, root: stub,
+  });
+  type Comp = {
+    fields: Record<string, unknown>;
+    defaultProps: Record<string, unknown>;
+    resolveData: (d: { props: Record<string, unknown> }, p: { lastData: null; trigger: string }) => { props: Record<string, unknown> };
+    resolveFields: (d: { props: Record<string, unknown> }, p: { fields: Record<string, unknown> }) => Record<string, unknown>;
+  };
+  const comp = (el: string) => config.components[el] as unknown as Comp;
+
+  it('one style field per element; new layout fields; Box/Card padding and background move into the style panel', () => {
+    for (const el of Object.keys(config.components)) expect(comp(el).fields).toHaveProperty('style');
+    expect(Object.keys(comp('Columns').fields)).toEqual(expect.arrayContaining(['tracks', 'alignY', 'gapX', 'gapY']));
+    expect(Object.keys(comp('Stack').fields)).toEqual(expect.arrayContaining(['justify', 'wrap']));
+    expect(Object.keys(comp('Image').fields)).toEqual(expect.arrayContaining(['fit', 'aspect']));
+    expect(comp('Box').fields).not.toHaveProperty('padding');
+    expect(comp('Box').fields).not.toHaveProperty('background');
+    expect(comp('Columns').defaultProps).toEqual({ tracks: { base: ['1fr'], md: ['1fr', '1fr'] } });
+  });
+
+  it('count is shown only while a node still has it', () => {
+    const c = comp('Columns');
+    expect(c.resolveFields({ props: { count: 3 } }, { fields: c.fields })).toHaveProperty('count');
+    expect(c.resolveFields({ props: {} }, { fields: c.fields })).not.toHaveProperty('count');
+  });
+
+  it('the first change of an item migrates its old props; loading does not', () => {
+    const box = comp('Box');
+    expect(box.resolveData({ props: { id: 'b', padding: '8' } }, { lastData: null, trigger: 'load' }).props).toEqual({ id: 'b', padding: '8' });
+    const out = box.resolveData({ props: { id: 'b', padding: '8', background: 'muted' } }, { lastData: null, trigger: 'replace' }).props;
+    expect(out).toEqual({ id: 'b', padding: undefined, background: 'muted', style: { padding: { t: '8', b: '8' } } });
+    const cols = comp('Columns').resolveData({ props: { id: 'c', count: 2 } }, { lastData: null, trigger: 'replace' }).props;
+    expect(cols).toEqual({ id: 'c', count: undefined, tracks: { base: ['1fr'], md: ['1fr', '1fr'] } });
   });
 });

@@ -1,10 +1,12 @@
 // Canvas renders of the block builder. Every element is drawn by `defineComposedBlock` (the renderer of pages and
 // the website) with the sample entry and `_locale`/`_editor` stamped, so the canvas looks like the page builder.
-// Containers draw their Puck slot with the same layout classes (`ui.layoutClass`).
-import { createElement, useContext, useMemo, type ReactElement, type ReactNode } from 'react';
+// Containers draw their Puck slot with the same layout classes and variables (`ui.layoutClass` / `ui.layoutStyle`).
+// Components are `inline`: each render draws the item frame itself (Puck's drag ref), so a grid child's `span`
+// and a percentage height (an Image filling its column) apply to the box the grid lays out.
+import { createElement, useContext, useMemo, type CSSProperties, type ReactElement, type ReactNode } from 'react';
 import type { SlotComponent } from '@puckeditor/core';
 import { composedHelpers, defineComposedBlock, ui, type ComposedBlockDefinition } from '@opencloudcms/core/blocks';
-import type { ComposedBinding, ComposedElement, ComposedNode } from '@opencloudcms/schema';
+import { resolveResponsive, type ComposedBinding, type ComposedElement, type ComposedNode, type NodeStyle } from '@opencloudcms/schema';
 import { t } from '../i18n';
 import { CanvasContext, type CanvasModel } from './context';
 import { elementLabel } from './element-config';
@@ -109,17 +111,47 @@ type LayoutEl = 'Box' | 'Stack' | 'Columns' | 'Grid' | 'Card';
 function ContainerPreview({ el, props }: { el: LayoutEl; props: Props }) {
   const c = useContext(CanvasContext);
   const Slot = props.children as SlotComponent | undefined;
-  const cls = (ui.layoutClass[el] as (p: Props) => string)({ ...props, direction: props.direction ?? 'vertical' });
+  const p = { ...props, direction: props.direction ?? 'vertical' };
+  const cls = (ui.layoutClass[el] as (p: Props) => string)(p);
+  const style = (ui.layoutStyle[el] as (p: Props) => CSSProperties | undefined)(p);
   const node = nodeOf(el, props);
-  const zone = Slot ? createElement(Slot, { className: cls, minEmptyHeight: 64 } as never) : <div className={cls} />;
+  const zone = Slot ? createElement(Slot, { className: cls, style, minEmptyHeight: 64 } as never) : <div className={cls} style={style} />;
   return <Dim hidden={!shown(c, node)}>{zone}</Dim>;
+}
+
+/** Whether a style height is relative at some breakpoint (the frame must then fill its cell: `h-full`). */
+function relativeHeight(style: NodeStyle | undefined): boolean {
+  return Object.values(resolveResponsive(style?.height)).some((h) => typeof h === 'string' && h.endsWith('%'));
+}
+
+/** The item frame Puck drags: carries the element's column span and, for a relative height, `h-full`. */
+export function frameAttrs(style: NodeStyle | undefined): { className?: string; style?: CSSProperties } {
+  const span = style?.span !== undefined ? ui.styleProps({ span: style.span }) : null;
+  const className = [span?.className, relativeHeight(style) ? 'h-full' : ''].filter(Boolean).join(' ');
+  return {
+    ...(className ? { className } : {}),
+    ...(span && Object.keys(span.style).length ? { style: span.style } : {}),
+  };
+}
+
+function Frame({ props, children }: { props: Props; children: ReactNode }) {
+  const dragRef = (props.puck as { dragRef?: ((e: Element | null) => void) | null } | undefined)?.dragRef ?? undefined;
+  return (
+    <div ref={dragRef} {...frameAttrs(props.style as NodeStyle | undefined)}>
+      {children}
+    </div>
+  );
 }
 
 /** Puck render of element `el`. */
 export function elementRender(el: ComposedElement): (props: Props) => ReactElement {
-  if (el === 'Slot') return (props) => <SlotPreview props={props} />;
-  if (['Box', 'Stack', 'Columns', 'Grid', 'Card'].includes(el)) return (props) => <ContainerPreview el={el as LayoutEl} props={props} />;
-  return (props) => <LeafPreview el={el} props={props} />;
+  const inner: (props: Props) => ReactElement =
+    el === 'Slot'
+      ? (props) => <SlotPreview props={props} />
+      : ['Box', 'Stack', 'Columns', 'Grid', 'Card'].includes(el)
+        ? (props) => <ContainerPreview el={el as LayoutEl} props={props} />
+        : (props) => <LeafPreview el={el} props={props} />;
+  return (props) => <Frame props={props}>{inner(props)}</Frame>;
 }
 
 /** A further sample of a collection: the whole template drawn read-only. */

@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext } from 'react';
-import type { ComposedBinding, ComposedField, ComposedNode } from '@opencloudcms/schema';
+import type { ComposedBinding, ComposedField, ComposedNode, ThemeDefinition } from '@opencloudcms/schema';
 import type { Entry } from '@opencloudcms/core/blocks';
 import type { ContentTypeDefinition } from '../lib/types';
 import type { BlockDraft } from './logic';
@@ -25,6 +25,8 @@ export interface BuilderModel {
   addField: (name: string, field: ComposedField) => void;
   /** Elements of the canvas that read manual field `name` (bind or show-if). */
   fieldUsage: (name: string) => number;
+  /** The project theme (brand colours of the style panel); null when the project has none. */
+  theme: ThemeDefinition | null;
 }
 
 export const BuilderContext = createContext<BuilderModel | null>(null);

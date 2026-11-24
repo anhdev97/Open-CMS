@@ -5,7 +5,7 @@ import { createElement, useCallback, useContext, useEffect, useMemo, useReducer,
 import { toast } from 'sonner';
 import { Puck, type Data, type Dictionary, type useGetPuck } from '@puckeditor/core';
 import { adminFetcher, coreBlocks, defineBlocks, type Entry } from '@opencloudcms/core/blocks';
-import { isCoreApiId, validateComposedSpec, type ComposedBlockSpec, type ComposedElement, type ComposedField, type ComposedNode } from '@opencloudcms/schema';
+import { isCoreApiId, validateComposedSpec, type ComposedBlockSpec, type ComposedElement, type ComposedField, type ComposedNode, type ThemeDefinition } from '@opencloudcms/schema';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
@@ -30,6 +30,8 @@ import { elementRender, RootPreview } from '../block-builder/Canvas';
 import { BuilderContext, CanvasContext, type BuilderModel, type CanvasModel } from '../block-builder/context';
 import { buildBuilderConfig } from '../block-builder/element-config';
 import { AllowField, ShowIfField, SourcesField } from '../block-builder/ElementPanel';
+import { StyleField } from '../block-builder/style/StylePanel';
+import { LengthPuckField, ResponsiveSelectPuckField, TracksPuckField } from '../block-builder/style/puck-fields';
 import {
   bindingResetNotes,
   breakingNotes,
@@ -91,9 +93,10 @@ interface BuilderProps {
   meta: Meta;
   types: ContentTypeDefinition[];
   detail: BlockDetail | null;
+  theme: ThemeDefinition | null;
 }
 
-function Builder({ meta, types: allTypes, detail }: BuilderProps) {
+function Builder({ meta, types: allTypes, detail, theme }: BuilderProps) {
   const navigate = useAdminNavigate();
   const adminLocale = useLocale();
   const registry = useContext(BlocksContext);
@@ -164,6 +167,7 @@ function Builder({ meta, types: allTypes, detail }: BuilderProps) {
     pageBlocks,
     addField,
     fieldUsage: (name) => fieldUsage(tree, name),
+    theme,
   };
 
   // ---- Puck ----
@@ -176,6 +180,10 @@ function Builder({ meta, types: allTypes, detail }: BuilderProps) {
         sources: SourcesField,
         showIf: ShowIfField,
         allow: AllowField,
+        tracks: TracksPuckField,
+        style: StyleField,
+        responsiveSelect: ResponsiveSelectPuckField,
+        length: LengthPuckField,
         render: elementRender,
         root: RootPreview,
         onPropsChange: (el: ComposedElement, next, prev, trigger) => {
@@ -483,7 +491,7 @@ function Builder({ meta, types: allTypes, detail }: BuilderProps) {
   );
 }
 
-type Loaded = { meta: Meta; types: ContentTypeDefinition[]; detail: BlockDetail | null };
+type Loaded = { meta: Meta; types: ContentTypeDefinition[]; detail: BlockDetail | null; theme: ThemeDefinition | null };
 
 function BuilderLoader({ name }: { name: string }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -493,8 +501,10 @@ function BuilderLoader({ name }: { name: string }) {
   useEffect(() => {
     let live = true;
     invalidate('types');
-    Promise.all([api<Meta>('/api/admin/meta'), loadContentTypes(), name === 'new' ? Promise.resolve(null) : getBlock(name)])
-      .then(([meta, types, detail]) => live && setLoaded({ meta, types, detail }))
+    // The theme only adds brand swatches: the builder opens without it.
+    const theme = api<{ theme: ThemeDefinition | null }>('/api/admin/theme').then((r) => r.theme ?? null, () => null);
+    Promise.all([api<Meta>('/api/admin/meta'), loadContentTypes(), name === 'new' ? Promise.resolve(null) : getBlock(name), theme])
+      .then(([meta, types, detail, theme]) => live && setLoaded({ meta, types, detail, theme }))
       .catch((e) => live && setError(e));
     return () => {
       live = false;
@@ -520,7 +530,7 @@ function BuilderLoader({ name }: { name: string }) {
       </div>
     );
   }
-  return <Builder meta={loaded.meta} types={loaded.types} detail={loaded.detail} />;
+  return <Builder meta={loaded.meta} types={loaded.types} detail={loaded.detail} theme={loaded.theme} />;
 }
 
 /** `/settings/blocks/:name` (or `new`): the full-screen drag-and-drop block builder. */

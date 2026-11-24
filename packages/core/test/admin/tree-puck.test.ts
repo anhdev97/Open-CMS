@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ComposedBlockSpec } from '@opencloudcms/schema';
-import { CONTAINER_ELEMENTS, puckToTree, treeToPuck } from '../../admin/src/block-builder/tree-puck';
+import { CONTAINER_ELEMENTS, RESERVED_ITEM_KEYS, puckToTree, treeToPuck } from '../../admin/src/block-builder/tree-puck';
 
 const base = (over: Partial<ComposedBlockSpec>): ComposedBlockSpec => ({
   id: 'blk_test01',
@@ -123,5 +123,20 @@ describe('tree ⇄ Puck', () => {
 
   it('drops an empty bind object and a missing showIf', () => {
     expect(puckToTree({ root: {}, content: [{ type: 'Text', props: { id: 'x', bind: {}, showIf: null } }] } as never)).toEqual({ el: 'Text' });
+  });
+
+  it('keeps `style` as a reserved item key, copied both ways and dropped when empty', () => {
+    expect(RESERVED_ITEM_KEYS).toContain('style');
+    const tree = {
+      el: 'Columns' as const,
+      props: { tracks: { base: ['1fr'], md: ['2fr', '1fr'] }, alignY: 'center' as const, gapX: '24px' },
+      style: { padding: { base: { t: '4', b: '4' }, md: { t: '37px' } }, background: 'brand:sky', hidden: { lg: true } },
+      children: [{ el: 'Heading' as const, props: { level: 2 }, style: { margin: { b: '-8px' }, span: { md: 2 } } }],
+    };
+    const { data } = treeToPuck({ tree });
+    expect(data.content[0]!.props.style).toEqual(tree.style);
+    expect(data.content[0]!.props).not.toHaveProperty('props');
+    expect(puckToTree(data)).toEqual(tree);
+    expect(puckToTree({ root: {}, content: [{ type: 'Box', props: { id: 'x', style: {} } }] } as never)).toEqual({ el: 'Box' });
   });
 });
