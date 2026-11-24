@@ -20,6 +20,7 @@ import { PagesService } from './pages/pages.service';
 import { EntriesService } from './entries.service';
 import { EntryRepository } from './entry.repository';
 import { LocalesController, LocalesService } from './locales';
+import { ThemeController, ThemeService } from './theme';
 import { ContentGroupsController, ContentGroupsService } from './content-groups';
 import { CORE_READY_CORE, OPENCLOUDCMS_DB, OPENCLOUDCMS_OPTIONS, type OpenCloudCmsModuleOptions, type ResolvedOpenCloudCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
@@ -92,7 +93,7 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, BeforeAppli
         }),
         AssetsModule.forRoot({ dbToken: OPENCLOUDCMS_DB, assets: input.assets ?? null }),
       ],
-      controllers: [PublicPagesController, PublicAssetsController, AdminPagesController, PagesController, ContentController, AdminContentController, SchemaController, BlocksController, ContentGroupsController, LocalesController, SystemController, WorkflowController],
+      controllers: [PublicPagesController, PublicAssetsController, AdminPagesController, PagesController, ContentController, AdminContentController, SchemaController, BlocksController, ContentGroupsController, LocalesController, ThemeController, SystemController, WorkflowController],
       providers: [
         { provide: OPENCLOUDCMS_OPTIONS, useValue: options },
         { provide: OPENCLOUDCMS_DB, useFactory: () => createDb(options.config.database.url) },
@@ -107,6 +108,7 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, BeforeAppli
         BlocksService,
         ContentGroupsService,
         LocalesService,
+        ThemeService,
         { provide: CORE_READY_CORE, useValue: new DeferredCoreReady() },
       ],
       exports: [OPENCLOUDCMS_DB, CORE_READY_CORE, ContentRegistry, EntriesService, PageBlocksManifest],

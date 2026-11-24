@@ -9,6 +9,7 @@ export * from './schema-write-queue';
 export * from './content-groups';
 export * from './system.controller';
 export * from './locales';
+export * from './theme';
 export * from './i18n';
 export * from './workflow';
 export * from './workflow.service';
