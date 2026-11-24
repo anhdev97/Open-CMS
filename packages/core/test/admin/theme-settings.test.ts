@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ThemeDefinition } from '@opencloudcms/schema';
 import { ThemeSettings } from '../../admin/src/pages/ThemeSettings';
-import { addColor, addPalette, removeColor, removePalette, renameColor, renamePalette } from '../../admin/src/lib/theme-settings';
+import { setColorLabel, setPaletteLabel, addColor, addPalette, removeColor, removePalette, renameColor, renamePalette } from '../../admin/src/lib/theme-settings';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -109,7 +109,55 @@ describe('Theme screen', () => {
   });
 });
 
+describe('Theme screen editing', () => {
+  const blur = (el: HTMLInputElement) => act(() => { el.focus(); el.blur(); });
+
+  it('shows a hint and keeps the old name on a taken or invalid rename', async () => {
+    mockApi({ theme: THEME, editable: true });
+    await render(createElement(ThemeSettings));
+    const name = input('Palette name: Clay');
+    type(name, 'olive');
+    expect(name.getAttribute('aria-invalid')).toBe('true');
+    expect(container.textContent).toContain('already in use');
+    blur(name);
+    expect(input('Palette name: Clay')).toBeTruthy();
+    type(input('Palette name: Clay'), 'Bad Name');
+    expect(container.textContent).toContain('lowercase letters');
+    type(input('Palette name: Clay'), 'clay');
+    expect(container.textContent).not.toContain('already in use');
+  });
+
+  it('edits labels; an empty label is dropped from the saved theme', async () => {
+    mockApi({ theme: THEME, editable: true }, (b) => json(200, { theme: b, editable: true }));
+    await render(createElement(ThemeSettings));
+    type(input('Palette label: clay'), '');
+    type(input('Color label: ink'), 'Ink text');
+    await act(async () => button('Save')!.click());
+    await flush();
+    const body = calls.find((c) => c.method === 'PUT')!.body as ThemeDefinition;
+    expect(body.palettes.clay).toEqual({ values: THEME.palettes.clay!.values });
+    expect(body.colors.ink).toEqual({ label: 'Ink text' });
+  });
+
+  it('removing the active palette activates the first remaining one', async () => {
+    mockApi({ theme: THEME, editable: true }, (b) => json(200, { theme: b, editable: true }));
+    await render(createElement(ThemeSettings));
+    act(() => button('Remove palette Olive')!.click());
+    expect(container.querySelector<HTMLInputElement>('input[type=radio][aria-label="Make Clay the active palette"]')!.checked).toBe(true);
+    await act(async () => button('Save')!.click());
+    await flush();
+    const body = calls.find((c) => c.method === 'PUT')!.body as ThemeDefinition;
+    expect(body.activePalette).toBe('clay');
+    expect(Object.keys(body.palettes)).toEqual(['clay', 'night']);
+  });
+});
+
 describe('theme edit helpers', () => {
+  it('sets and clears labels', () => {
+    expect(setColorLabel(THEME, 'ink', 'Ink').colors.ink).toEqual({ label: 'Ink' });
+    expect(setColorLabel(THEME, 'surface', '').colors.surface).toEqual({});
+    expect(setPaletteLabel(THEME, 'olive', ' ').palettes.olive).toEqual({ values: THEME.palettes.olive!.values });
+  });
   it('renames a color keeping values', () => {
     const t = renameColor(THEME, 'ink', 'text');
     expect(t.colors.text).toEqual({});

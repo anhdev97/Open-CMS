@@ -160,6 +160,11 @@ const frFR: Messages = {
     confirmAction: 'Désactiver et enregistrer',
   },
   themeSettings: {
+    paletteLabel: "Libellé de la palette : {name}",
+    colorLabel: "Libellé de la couleur : {name}",
+    labelPlaceholder: "Libellé (facultatif)",
+    hintInvalid: "Utilisez des minuscules, des chiffres et des tirets, en commençant par une lettre (32 caractères maximum).",
+    hintTaken: "Ce nom est déjà utilisé.",
     title: "Thème",
     description: "Couleurs de marque et palettes utilisées par les blocs et le constructeur de pages.",
     save: "Enregistrer",

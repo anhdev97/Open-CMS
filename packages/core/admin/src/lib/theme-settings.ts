@@ -80,3 +80,20 @@ export const isThemeName = (v: string) => /^[a-z][a-z0-9-]{0,31}$/.test(v);
 export function uniqueName(base: string, taken: readonly string[]): string {
   for (let n = 2; ; n++) if (!taken.includes(`${base}-${n}`)) return `${base}-${n}`;
 }
+
+const withLabel = <V extends { label?: string }>(o: V, label: string): V => {
+  const { label: _l, ...rest } = o;
+  return (label.trim() ? { ...rest, label } : rest) as V;
+};
+
+/** Sets a color's label; an empty label removes it. */
+export function setColorLabel(t: ThemeDefinition, name: string, label: string): ThemeDefinition {
+  const c = t.colors[name];
+  return c ? { ...t, colors: { ...t.colors, [name]: withLabel(c, label) } } : t;
+}
+
+/** Sets a palette's label; an empty label removes it. */
+export function setPaletteLabel(t: ThemeDefinition, id: string, label: string): ThemeDefinition {
+  const p = t.palettes[id];
+  return p ? { ...t, palettes: { ...t.palettes, [id]: withLabel(p, label) } } : t;
+}

@@ -25,6 +25,8 @@ import {
   renameColor,
   renamePalette,
   saveTheme,
+  setColorLabel,
+  setPaletteLabel,
   setValue,
   uniqueName,
   type ThemeResponse,
@@ -38,24 +40,51 @@ interface Issue {
 const title = (id: string, label?: string) => label || id.charAt(0).toUpperCase() + id.slice(1);
 const pathKey = (p: readonly (string | number)[]) => p.join('.');
 
-/** Name input that commits (rename) on blur / Enter; reverts when the new name is invalid or taken. */
+function nameProblem(text: string, value: string, taken: readonly string[]): 'invalid' | 'taken' | null {
+  if (text === value) return null;
+  if (!isThemeName(text)) return 'invalid';
+  return taken.includes(text) ? 'taken' : null;
+}
+
+const hintText = (p: 'invalid' | 'taken') => t(p === 'invalid' ? 'themeSettings.hintInvalid' : 'themeSettings.hintTaken');
+
+/** Name input that commits (rename) on blur / Enter; an invalid or taken name stays in the box with a hint and is not applied. */
 function NameInput({ value, taken, disabled, label, onCommit }: { value: string; taken: readonly string[]; disabled: boolean; label: string; onCommit: (v: string) => void }) {
   const [text, setText] = useState(value);
   useEffect(() => setText(value), [value]);
+  const problem = nameProblem(text, value, taken);
   const commit = () => {
-    if (text !== value && isThemeName(text) && !taken.includes(text)) onCommit(text);
-    else setText(value);
+    if (text !== value && !problem) onCommit(text);
   };
   return (
+    <div className="space-y-1">
+      <Input
+        className="h-8 font-mono"
+        value={text}
+        disabled={disabled}
+        aria-label={label}
+        aria-invalid={problem ? true : undefined}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+          if (e.key === 'Escape') setText(value);
+        }}
+      />
+      {problem && <p className="text-xs text-destructive">{hintText(problem)}</p>}
+    </div>
+  );
+}
+
+function LabelInput({ value, disabled, label, onChange }: { value: string; disabled: boolean; label: string; onChange: (v: string) => void }) {
+  return (
     <Input
-      className="h-8 font-mono"
-      value={text}
+      className="h-7 text-xs"
+      value={value}
       disabled={disabled}
+      placeholder={t('themeSettings.labelPlaceholder')}
       aria-label={label}
-      aria-invalid={!isThemeName(text) || undefined}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      onChange={(e) => onChange(e.target.value)}
     />
   );
 }
@@ -160,6 +189,7 @@ export function ThemeSettings() {
 
   const colorNames = Object.keys(draft.colors);
   const paletteIds = Object.keys(draft.palettes);
+  const newColorProblem = nameProblem(newColor, '', colorNames);
 
   return (
     <div className="space-y-6">
@@ -194,13 +224,21 @@ export function ThemeSettings() {
                       onChange={() => update((d) => ({ ...d, activePalette: id }))}
                       aria-label={t('themeSettings.makeActive', { name: title(id, draft.palettes[id]?.label) })}
                     />
-                    <NameInput
-                      value={id}
-                      taken={paletteIds}
-                      disabled={!editable}
-                      label={t('themeSettings.paletteName', { name: title(id, draft.palettes[id]?.label) })}
-                      onCommit={(to) => update((d) => renamePalette(d, id, to))}
-                    />
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <LabelInput
+                        value={draft.palettes[id]?.label ?? ''}
+                        disabled={!editable}
+                        label={t('themeSettings.paletteLabel', { name: id })}
+                        onChange={(v) => update((d) => setPaletteLabel(d, id, v))}
+                      />
+                      <NameInput
+                        value={id}
+                        taken={paletteIds}
+                        disabled={!editable}
+                        label={t('themeSettings.paletteName', { name: title(id, draft.palettes[id]?.label) })}
+                        onCommit={(to) => update((d) => renamePalette(d, id, to))}
+                      />
+                    </div>
                     {editable && (
                       <Button
                         variant="ghost"
@@ -234,13 +272,21 @@ export function ThemeSettings() {
             {colorNames.map((c) => (
               <TableRow key={c}>
                 <TableCell>
-                  <NameInput
-                    value={c}
-                    taken={colorNames}
-                    disabled={!editable}
-                    label={t('themeSettings.colorName', { name: title(c, draft.colors[c]?.label) })}
-                    onCommit={(to) => update((d) => renameColor(d, c, to))}
-                  />
+                  <div className="space-y-1">
+                    <LabelInput
+                      value={draft.colors[c]?.label ?? ''}
+                      disabled={!editable}
+                      label={t('themeSettings.colorLabel', { name: c })}
+                      onChange={(v) => update((d) => setColorLabel(d, c, v))}
+                    />
+                    <NameInput
+                      value={c}
+                      taken={colorNames}
+                      disabled={!editable}
+                      label={t('themeSettings.colorName', { name: title(c, draft.colors[c]?.label) })}
+                      onCommit={(to) => update((d) => renameColor(d, c, to))}
+                    />
+                  </div>
                 </TableCell>
                 {paletteIds.map((id) => {
                   const v = draft.palettes[id]?.values[c] ?? '';
@@ -285,7 +331,7 @@ export function ThemeSettings() {
       </Card>
       {editable && (
         <form
-          className="flex max-w-sm items-center gap-2"
+          className="flex max-w-sm flex-wrap items-start gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             if (isThemeName(newColor) && !colorNames.includes(newColor)) {
@@ -299,12 +345,14 @@ export function ThemeSettings() {
             value={newColor}
             placeholder={t('themeSettings.newColorPlaceholder')}
             aria-label={t('themeSettings.newColor')}
+            aria-invalid={newColor && newColorProblem ? true : undefined}
             onChange={(e) => setNewColor(e.target.value)}
           />
           <Button type="submit" size="sm" variant="outline" disabled={!isThemeName(newColor) || colorNames.includes(newColor)}>
             <PlusIcon aria-hidden="true" />
             {t('themeSettings.addColor')}
           </Button>
+          {newColor && newColorProblem && <p className="basis-full text-xs text-destructive">{hintText(newColorProblem)}</p>}
         </form>
       )}
     </div>

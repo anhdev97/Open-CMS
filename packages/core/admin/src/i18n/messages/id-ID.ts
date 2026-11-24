@@ -160,6 +160,11 @@ const idID: Messages = {
     confirmAction: 'Nonaktifkan dan simpan',
   },
   themeSettings: {
+    paletteLabel: "Label palet: {name}",
+    colorLabel: "Label warna: {name}",
+    labelPlaceholder: "Label (opsional)",
+    hintInvalid: "Gunakan huruf kecil, angka, dan tanda hubung, diawali huruf (maksimal 32 karakter).",
+    hintTaken: "Nama ini sudah digunakan.",
     title: "Tema",
     description: "Warna merek dan palet yang dipakai oleh blok dan pembuat halaman.",
     save: "Simpan",

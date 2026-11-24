@@ -160,6 +160,11 @@ const viVN: Messages = {
     confirmAction: 'Tắt và lưu',
   },
   themeSettings: {
+    paletteLabel: "Nhãn bảng màu: {name}",
+    colorLabel: "Nhãn màu: {name}",
+    labelPlaceholder: "Nhãn (không bắt buộc)",
+    hintInvalid: "Dùng chữ thường, chữ số và dấu gạch ngang, bắt đầu bằng chữ cái (tối đa 32 ký tự).",
+    hintTaken: "Tên này đã được sử dụng.",
     title: "Giao diện",
     description: "Màu thương hiệu và bảng màu được các khối và trình dựng trang sử dụng.",
     save: "Lưu",

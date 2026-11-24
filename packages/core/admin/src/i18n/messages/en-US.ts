@@ -168,6 +168,11 @@ export const enUS = {
     confirmAction: "Disable and save",
   },
   themeSettings: {
+    paletteLabel: "Palette label: {name}",
+    colorLabel: "Color label: {name}",
+    labelPlaceholder: "Label (optional)",
+    hintInvalid: "Use lowercase letters, digits and hyphens, starting with a letter (up to 32 characters).",
+    hintTaken: "This name is already in use.",
     title: "Theme",
     description: "Brand colors and palettes used by blocks and the page builder.",
     save: "Save",
