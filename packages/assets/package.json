@@ -20,7 +20,7 @@
     "@opencloudcms/oauth2": "workspace:*",
     "@opencloudcms/schema": "workspace:*",
     "kysely": "^0.28.0",
-    "sharp": "^0.34.0"
+    "sharp": "^0.35.5"
   },
   "peerDependencies": {
     "@nestjs/common": "^11.0.0",

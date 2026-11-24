@@ -44,7 +44,7 @@ const RANGES = {
   'reflect-metadata': '^0.2.2',
   rxjs: '^7.8.0',
   kysely: '^0.28.0',
-  next: '^16.4.2',
+  next: '^16.4.6',
   react: '^19.3.1',
   'react-dom': '^19.3.1',
 } as const;

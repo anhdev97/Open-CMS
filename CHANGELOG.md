@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Security
+
+- Next.js raised to `^16.4.6` (core, my-store and the `opencloudcms init` scaffold) for the 16.4.4 and earlier advisories (cache leaks across root params, image-optimizer SVG bypass).
+- `sharp` raised to `^0.35.5` (libvips, libheif and librsvg CVEs); vitest raised to `^4.1.12` (tinypool prototype-pollution RCE in the test runner).
+- pnpm overrides pin patched transitive versions: `body-parser ^2.4.0`, `multer ^2.5.0`, `qs ^6.16.1`, `fast-xml-parser ^5.12.0`, `uuid ^11.1.1`.
+- Known remaining: `zod` 3.x (GHSA-mrhx-c7xc-m3w5, memory exhaustion on oversized constrained collections) has no 3.x fix; it needs the zod 4 migration.
+
 ### Fixed
 
 - **Publishing no longer changes the draft's `updatedAt`.** Only its `publishedAt` moves (`hasUnpublishedChanges`

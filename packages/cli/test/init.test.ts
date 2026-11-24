@@ -136,7 +136,7 @@ describe('runInit', () => {
     expect(pkg.devDependencies['@opencloudcms/cli']).toBe('^1.2.3');
     expect(pkg.devDependencies['@types/node']).toBe('^22.0.0');
     expect(read(dir, 'README.md')).toContain('Install with dev dependencies');
-    expect(pkg.dependencies).toMatchObject({ next: '^16.4.2', react: '^19.3.1', 'react-dom': '^19.3.1', 'cross-env': '^10.1.0' });
+    expect(pkg.dependencies).toMatchObject({ next: '^16.4.6', react: '^19.3.1', 'react-dom': '^19.3.1', 'cross-env': '^10.1.0' });
     expect(pkg.devDependencies).toMatchObject({
       tailwindcss: '^4.3.3',
       '@tailwindcss/postcss': '^4.3.3',
