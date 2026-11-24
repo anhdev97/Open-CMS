@@ -191,3 +191,17 @@ describe('style classes win over token classes in the compiled CSS', () => {
     }
   });
 });
+
+describe('Columns tracks match the legacy grid-cols classes', () => {
+  const expand = (v: string) => v.replace(/repeat\((\d+),\s*([^)]*\))\)/g, (_, n, t) => Array(Number(n)).fill(t.replace(/\s+/g, '')).join(' '));
+  const ruleValue = (cls: string) => /grid-template-columns:\s*([^;]+);/.exec(tw.build([cls]).split(`.${cls.replace(/:/g, '\\:')}`)[1] ?? '')?.[1];
+  it('the migrated count:3 tracks give the same columns as grid-cols-1 md:grid-cols-3', async () => {
+    const { migrateLegacyProps } = await import('../../admin/src/block-builder/style/migrate');
+    const { tracks } = migrateLegacyProps('Columns', { count: 3 }, undefined).props as { tracks: unknown };
+    const out = renderToString(h(ui.Columns, { count: 3, tracks } as any, 'x'));
+    const vars = Object.fromEntries([...out.matchAll(/(--ocms-cols(?:-md|-lg)?):([^;"]+)/g)].map((m) => [m[1], m[2]]));
+    expect(vars['--ocms-cols']).toBe(expand(ruleValue('grid-cols-1')!));
+    expect(vars['--ocms-cols-md']).toBe(expand(ruleValue('md:grid-cols-3')!));
+    expect(vars['--ocms-cols-lg']).toBe(expand(ruleValue('md:grid-cols-3')!));
+  });
+});

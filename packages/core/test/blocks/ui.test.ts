@@ -202,9 +202,11 @@ describe('styleProps', () => {
     expect(sp.style).toEqual({ '--ocms-span-md': '1' });
   });
   it('cssTracks', () => {
-    expect(cssTracks(['2fr', '3fr'])).toBe('2fr 3fr');
-    expect(cssTracks(['auto', '1fr', 'auto'])).toBe('auto 1fr auto');
-    expect(cssTracks(['240px', '4', '1fr'])).toBe('240px calc(var(--spacing) * 4) 1fr');
+    // fr tracks may shrink below their content (as Tailwind's `grid-cols-N`: `repeat(N, minmax(0, 1fr))`).
+    expect(cssTracks(['2fr', '3fr'])).toBe('minmax(0,2fr) minmax(0,3fr)');
+    expect(cssTracks(['auto', '1fr', 'auto'])).toBe('auto minmax(0,1fr) auto');
+    expect(cssTracks(['240px', '4', '1fr'])).toBe('240px calc(var(--spacing) * 4) minmax(0,1fr)');
+    expect(cssTracks(['12fr'])).toBe('minmax(0,12fr)');
   });
 });
 
@@ -259,8 +261,8 @@ describe('style-aware primitives', () => {
   it('Columns with tracks fills missing breakpoints and uses the variables', () => {
     const out = r(h(ui.Columns, { count: 2, tracks: { base: ['1fr'], md: ['2fr', '3fr'] } }, 'c'));
     expect(cls(out)).toBe('grid grid-cols-(--ocms-cols) md:grid-cols-(--ocms-cols-md) lg:grid-cols-(--ocms-cols-lg) gap-6');
-    expect(out).toContain('--ocms-cols:1fr;--ocms-cols-md:2fr 3fr;--ocms-cols-lg:2fr 3fr');
-    expect(r(h(ui.Columns, { count: 2, tracks: ['auto', '1fr', 'auto'] }, 'c'))).toContain('--ocms-cols:auto 1fr auto;--ocms-cols-md:auto 1fr auto;--ocms-cols-lg:auto 1fr auto');
+    expect(out).toContain('--ocms-cols:minmax(0,1fr);--ocms-cols-md:minmax(0,2fr) minmax(0,3fr);--ocms-cols-lg:minmax(0,2fr) minmax(0,3fr)');
+    expect(r(h(ui.Columns, { count: 2, tracks: ['auto', '1fr', 'auto'] }, 'c'))).toContain('--ocms-cols:auto minmax(0,1fr) auto;--ocms-cols-md:auto minmax(0,1fr) auto;--ocms-cols-lg:auto minmax(0,1fr) auto');
   });
   it('Columns with invalid tracks falls back to count', () => {
     expect(cls(r(h(ui.Columns, { count: 3, tracks: { base: ['1fr;x'] } as any }, 'c')))).toBe('grid grid-cols-1 md:grid-cols-3 gap-6');

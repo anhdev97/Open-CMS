@@ -29,9 +29,16 @@ export function cssColor(v: string): string {
   return v;
 }
 
-/** Track list → `grid-template-columns` value (`2fr 3fr`, `auto 1fr auto`), lengths through `cssLength`. */
+const FR_RE = /^\d{1,2}fr$/;
+/** One track: `<n>fr` → `minmax(0,<n>fr)` (shrinks below its content, like Tailwind's `grid-cols-N`), others as `cssLength`. */
+const cssTrack = (t: string): string => (FR_RE.test(t) ? `minmax(0,${t})` : cssLength(t));
+
+/**
+ * Track list → `grid-template-columns` value (`minmax(0,2fr) minmax(0,3fr)`, `auto minmax(0,1fr) auto`). fr tracks get
+ * a 0 minimum so wide content (a nowrap button, a long word) cannot widen its column, as with `grid-cols-N`.
+ */
 export function cssTracks(t: Track[]): string {
-  return t.map(cssLength).join(' ');
+  return t.map(cssTrack).join(' ');
 }
 
 /** Valid `tracks` per breakpoint, missing ones filled from the smaller breakpoint; `null` when none is valid. */
@@ -44,7 +51,7 @@ export function resolveTracks(tracks: Responsive<Track[]> | undefined): Record<B
   for (const bp of BREAKPOINTS) {
     const t = r[bp];
     if (ok(t)) { prev = cssTracks(t); any = true; }
-    out[bp] = prev ?? '1fr';
+    out[bp] = prev ?? 'minmax(0,1fr)';
   }
   return any ? (out as Record<Breakpoint, string>) : null;
 }

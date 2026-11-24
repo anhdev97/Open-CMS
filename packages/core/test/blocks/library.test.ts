@@ -67,7 +67,7 @@ describe('coreBlocks', () => {
   it('Columns renders tracks (count from the widest breakpoint) and falls back to columns', () => {
     const slots = { column1: 'A', column2: 'B', column3: 'C', column4: 'D', column5: 'E', column6: 'F' };
     const out = html('Columns', { ...slots, tracks: { base: ['1fr'], md: ['2fr', '1fr', '1fr'] } });
-    expect(out).toContain('--ocms-cols-md:2fr 1fr 1fr');
+    expect(out).toContain('--ocms-cols-md:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)');
     expect(out).toContain('md:grid-cols-(--ocms-cols-md)');
     expect(out.match(/class="min-w-0"/g)).toHaveLength(3);
     const old = html('Columns', { ...slots, columns: 3, tracks: null });

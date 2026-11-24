@@ -670,7 +670,7 @@ describe('defineComposedBlock: style', () => {
     expect(out).toContain('class="pt-(--ocms-pt) md:pt-(--ocms-pt-md) bg-(--ocms-bg) block md:block lg:hidden"');
     expect(out).toContain('--ocms-pt:37px;--ocms-pt-md:calc(var(--spacing) * 8);--ocms-bg:var(--ocms-color-surface)');
     expect(out).toContain('grid grid-cols-(--ocms-cols) md:grid-cols-(--ocms-cols-md) lg:grid-cols-(--ocms-cols-lg) gap-6 items-center');
-    expect(out).toContain('--ocms-cols:1fr;--ocms-cols-md:auto 1fr auto;--ocms-cols-lg:auto 1fr auto');
+    expect(out).toContain('--ocms-cols:minmax(0,1fr);--ocms-cols-md:auto minmax(0,1fr) auto;--ocms-cols-lg:auto minmax(0,1fr) auto');
     expect(out).toContain('text-(--ocms-fg) col-span-full md:col-span-(--ocms-span-md)');
     expect(out).toContain('--ocms-fg:#123456;--ocms-span-md:1');
     expect(out).toContain('object-contain');
@@ -716,8 +716,8 @@ describe('examples/my-store storefront', () => {
 
   it('StoreFooter: 2 columns on mobile with the intro spanning both, 2fr 1fr 1fr from md', async () => {
     const out = await renderStore('StoreFooter');
-    expect(out).toContain('--ocms-cols:1fr 1fr');
-    expect(out).toContain('--ocms-cols-md:2fr 1fr 1fr');
+    expect(out).toContain('--ocms-cols:minmax(0,1fr) minmax(0,1fr)');
+    expect(out).toContain('--ocms-cols-md:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)');
     expect(out).toContain('col-span-full md:col-span-(--ocms-span-md)');
     expect(out).toContain('--ocms-bg:var(--ocms-color-accent)');
     expect(out).toContain('--ocms-fg:var(--ocms-color-accent-ink)');
@@ -735,7 +735,7 @@ describe('examples/my-store storefront', () => {
     expect(header).toContain('href="/shop"');
 
     const hero = await renderStore('StoreHero');
-    expect(hero).toContain('--ocms-cols:1fr;--ocms-cols-md:2fr 3fr');
+    expect(hero).toContain('--ocms-cols:minmax(0,1fr);--ocms-cols-md:minmax(0,2fr) minmax(0,3fr)');
     expect(hero).toContain('<h1');
     expect(hero).toContain('Wear well every day');
     expect(hero).toContain('src="/files/store-editorial.webp"');
