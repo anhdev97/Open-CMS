@@ -63,13 +63,17 @@ describe('theme API (editable)', () => {
     expect((await (await call('/api/admin/theme')).json()).theme).toEqual(theme);
   });
 
-  it('two concurrent PUTs both succeed and the file ends equal to the second', async () => {
+  it('two concurrent PUTs both succeed and the file ends equal to one of the bodies', async () => {
     const mk = (v: string) => ({ ...theme, palettes: { olive: { values: { surface: v, ink: '#222' } } } });
-    const [a, b] = await Promise.all([put(mk('#111111')), put(mk('#222222'))]);
-    expect(a.status).toBe(200);
-    expect(b.status).toBe(200);
-    expect((await (await call('/api/admin/theme')).json()).theme).toEqual(mk('#222222'));
-    await put(theme);
+    try {
+      const [a, b] = await Promise.all([put(mk('#111111')), put(mk('#222222'))]);
+      expect(a.status).toBe(200);
+      expect(b.status).toBe(200);
+      const final = (await (await call('/api/admin/theme')).json()).theme;
+      expect([mk('#111111'), mk('#222222')]).toContainEqual(final);
+    } finally {
+      await put(theme);
+    }
   });
 
   it('GET returns 500 with the issues when the file is hand-broken', async () => {

@@ -45,8 +45,9 @@ export class ThemeService {
         try {
           if (before) fs.writeFileSync(file, before);
           else fs.rmSync(file, { force: true });
-        } catch {
-          // keep the original error
+        } catch (restoreError) {
+          // keep the original error; record why the restore failed
+          if (e instanceof Error && e.cause === undefined) e.cause = restoreError;
         }
         throw e;
       }

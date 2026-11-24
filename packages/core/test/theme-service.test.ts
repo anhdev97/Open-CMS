@@ -42,17 +42,36 @@ describe('ThemeService', () => {
     expect(fs.readFileSync(file).equals(before)).toBe(true);
   });
 
-  it('keeps the original error when the restore also fails', async () => {
+  it('keeps the original error, with the restore failure as cause, when restoring an existing file fails', async () => {
     const { svc } = service();
     await svc.replace(mk('#111111'));
-    vi.spyOn(fs, 'writeFileSync').mockImplementation((() => {
-      throw new Error('first');
+    vi.spyOn(fs, 'writeFileSync').mockImplementation(((_f: any, d: any) => {
+      throw new Error(typeof d === 'string' ? 'first' : 'restore failed');
     }) as any);
     syncBuiltinESMExports();
+    const err = await svc.replace(mk('#222222')).catch((e) => e);
+    expect(err.message).toBe('first');
+    expect(err.cause.message).toBe('restore failed');
+  });
+
+  it('removes the new file on failure when none existed before, and survives a failing rmSync', async () => {
+    const a = service();
+    const real = fs.writeFileSync;
+    vi.spyOn(fs, 'writeFileSync').mockImplementation(((f: any, d: any, o?: any) => {
+      real(f, 'garbage {', o);
+      throw new Error('disk full');
+    }) as any);
+    syncBuiltinESMExports();
+    await expect(a.svc.replace(mk('#222222'))).rejects.toThrow('disk full');
+    expect(fs.existsSync(a.file)).toBe(false);
+
+    const b = service();
     vi.spyOn(fs, 'rmSync').mockImplementation(() => {
       throw new Error('rm failed');
     });
     syncBuiltinESMExports();
-    await expect(svc.replace(mk('#222222'))).rejects.toThrow('first');
+    const err = await b.svc.replace(mk('#222222')).catch((e) => e);
+    expect(err.message).toBe('disk full');
+    expect(err.cause.message).toBe('rm failed');
   });
 });
