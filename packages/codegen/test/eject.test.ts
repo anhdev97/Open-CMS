@@ -361,6 +361,91 @@ describe('printEjectedBlockTsx: my-store composed blocks', () => {
   }
 });
 
+const layoutSpec: ComposedBlockSpec = {
+  id: 'blk_layout01',
+  name: 'SiteFrame',
+  label: L('Site frame'),
+  category: 'Layout',
+  version: 1,
+  fields: { tagline: { kind: 'text', default: 'Hi' } },
+  tree: {
+    el: 'Stack',
+    props: { gap: '0' },
+    children: [
+      { el: 'Region', props: { name: 'header', label: L('Header', 'Đầu trang'), allow: ['StoreHeader'] } },
+      { el: 'Box', props: { anchorId: 'main' }, children: [{ el: 'PageContent' }, { el: 'Slot' }] },
+      { el: 'Text', bind: { text: { from: 'field', name: 'tagline' } } },
+      { el: 'Region', props: { name: 'footer-bar' } },
+    ],
+  },
+};
+
+const overlaySpec = (props: Record<string, unknown>): ComposedBlockSpec => ({
+  id: 'blk_overlay01',
+  name: 'LienHe',
+  label: L('Contact'),
+  category: 'Overlay',
+  version: 1,
+  fields: { title: { kind: 'text', default: 'Contact us' } },
+  tree: {
+    el: 'Overlay',
+    props,
+    style: { padding: { t: '8' }, background: 'brand:surface', radius: 'none' },
+    children: [
+      { el: 'Stack', children: [{ el: 'Heading', props: { level: 3 }, bind: { text: { from: 'field', name: 'title' } } }] },
+      { el: 'Heading', props: { text: 'Second', anchorId: 'second' } },
+      { el: 'Button', props: { label: 'Done', action: { type: 'overlay', op: 'close' }, variant: 'outline' }, style: { background: 'brand:accent' } },
+      { el: 'Button', props: { label: 'Open', href: '/ignored', action: { type: 'overlay', op: 'open', target: 'menu' } } },
+      { el: 'Button', props: { label: 'Link', href: '/x' } },
+    ],
+  },
+});
+
+describe('printEjectedBlockTsx: layout and overlay blocks', () => {
+  it('layout: same fields and kind; slots and regions render from props', () => {
+    const { source, composed, ejected } = same(layoutSpec, [
+      { tagline: 'Yo', region__header: '[H]', pageContent: '[P]', 'region__footer-bar': '[F]', slot: '[S]', _locale: 'en-US' },
+      { tagline: '', region__header: null, pageContent: null, 'region__footer-bar': null, slot: null },
+    ]);
+    expect(ejected.kind).toBe('layout');
+    expect(ejected.fields).toEqual(composed.fields);
+    expect(Object.keys(ejected.fields)).toEqual(Object.keys(composed.fields));
+    expect(() => blocks.defineBlocks([ejected])).not.toThrow();
+    expect(source).toContain("props['region__footer-bar'] ?? null");
+    expect(source).toContain('props.pageContent ?? null');
+    expect(source).toContain('<ui.Box id="main">');
+    expect(source).toContain("kind: 'layout',");
+    expect(source).not.toContain('blocks/client');
+  });
+
+  it('overlay: same fields and kind; renders the same dialog for each variant', () => {
+    const variants = [
+      {},
+      { variant: 'drawer', side: 'left', size: 'full', closeOnBackdrop: false, showClose: false, labelledBy: 'first-heading' },
+      { variant: 'drawer', side: 'bottom', size: 'sm' },
+      { variant: 'modal', size: 'xl', showClose: true },
+    ];
+    for (const p of variants) {
+      const { source, composed, ejected } = same(overlaySpec(p), [
+        { name: 'lien-he', title: 'Contact us', _locale: 'en-US' },
+        { name: 'menu-mobile', title: 'Liên hệ', _locale: 'vi-VN' },
+        { name: 'Not Valid', title: 'x', _locale: 'fr-FR', _editor: true },
+        { title: 'x' },
+      ]);
+      expect(ejected.kind).toBe('overlay');
+      expect(ejected.fields).toEqual(composed.fields);
+      expect(Object.keys(ejected.fields)).toEqual(['name', 'title']);
+      expect(source).toContain('<ui.Overlay');
+      expect(source).toContain("const overlay = h.overlayName(props.name, 'lien-he');");
+      expect(source).toContain("action={{ type: 'overlay', op: 'open', target: 'menu' }}");
+    }
+    const out = html(loadEjected(printEjectedBlockTsx(overlaySpec({}))), { name: 'lien-he', title: 'T' });
+    expect(out).toContain('aria-labelledby="lien-he-title"');
+    expect(out).toContain('<h3 id="lien-he-title"');
+    expect(out).toContain('<h2 id="second"');
+  });
+});
+
 describe('ejectComposedBlock', () => {
   const cfg = (root: string) => resolveConfig({ database: { url: 'x' } } as any, root);
 

@@ -8,7 +8,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { validateNodeStyle, type BindSource, type ComposedBlockSpec, type ComposedField, type ComposedNode, type LocalizedText, type ResolvedConfig } from '@opencloudcms/schema';
+import { composedKind, overlayDefaultName, validateNodeStyle, type BindSource, type ComposedBlockSpec, type ComposedField, type ComposedNode, type LocalizedText, type ResolvedConfig } from '@opencloudcms/schema';
 import { blocksDir, printLiteral, writeComposedBlocks } from './blocks';
 
 const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -20,10 +20,37 @@ const has = (o: object | undefined, k: string) => !!o && Object.prototype.hasOwn
 /** Same as `layoutValue` of the composed renderer. */
 const layoutValue = (l: NonNullable<ComposedBlockSpec['binding']>['layout']) => (l?.kind === 'list' ? 'list' : `grid-${l?.columns ?? 3}`);
 
-function slotNodes(n: ComposedNode, out: ComposedNode[] = []): ComposedNode[] {
-  if (n.el === 'Slot') out.push(n);
-  for (const c of n.children ?? []) slotNodes(c, out);
+/** Nodes of the elements `els`, in tree order (depth first). */
+function nodesOf(n: ComposedNode, els: readonly string[], out: ComposedNode[] = []): ComposedNode[] {
+  if (els.includes(n.el)) out.push(n);
+  for (const c of n.children ?? []) nodesOf(c, els, out);
   return out;
+}
+const slotNodes = (n: ComposedNode) => nodesOf(n, ['Slot']);
+
+/** Field name of each `Slot` (`slot`, `slot2`, …), `Region` (`region__<name>`) and `PageContent` (`pageContent`) node. */
+function slotNames(tree: ComposedNode): Map<ComposedNode, string> {
+  const slots = new Map<ComposedNode, string>();
+  slotNodes(tree).forEach((n, i) => slots.set(n, i === 0 ? 'slot' : `slot${i + 1}`));
+  for (const n of nodesOf(tree, ['Region', 'PageContent'])) slots.set(n, n.el === 'PageContent' ? 'pageContent' : `region__${String(n.props?.name)}`);
+  return slots;
+}
+
+/** Same as `regionLabel` of `defineComposedBlock`. */
+function regionLabel(p: Record<string, unknown>): unknown {
+  if (typeof p.label === 'string' && p.label) return p.label;
+  if (p.label && typeof p.label === 'object' && !Array.isArray(p.label)) return p.label;
+  return p.name;
+}
+
+/** First `Heading` of `n` (depth first), as the composed renderer's `firstHeading`. */
+function firstHeading(n: ComposedNode): ComposedNode | undefined {
+  if (n.el === 'Heading') return n;
+  for (const c of n.children ?? []) {
+    const h = firstHeading(c);
+    if (h) return h;
+  }
+  return undefined;
 }
 
 function imageEntryPaths(n: ComposedNode, out = new Set<string>()): Set<string> {
@@ -50,7 +77,12 @@ function manualField(f: ComposedField, indent: string): string {
 
 /** `fields` entries (`key: b.…(…)`), in the order `defineComposedBlock` produces them. */
 function printFields(spec: ComposedBlockSpec, indent: string): string[] {
-  const out: [string, string][] = Object.entries(spec.fields).map(([k, f]) => [k, manualField(f, indent)]);
+  const out: [string, string][] = [];
+  if (composedKind(spec) === 'overlay') {
+    const o = { label: L('Overlay name', 'Tên lớp phủ', 'Nom de la superposition', 'Nama overlay'), default: overlayDefaultName(spec.name) };
+    out.push(['name', call('b.text', [printLiteral(o, indent)])]);
+  }
+  out.push(...Object.entries(spec.fields).map(([k, f]): [string, string] => [k, manualField(f, indent)]));
   const binding = spec.binding;
   if (binding?.mode === 'single') {
     out.push(['entry', call('b.entry', [q(binding.apiId), printLiteral({ label: L('Entry', 'Mục nội dung', 'Entrée', 'Entri') }, indent)])]);
@@ -91,6 +123,15 @@ function printFields(spec: ComposedBlockSpec, indent: string): string[] {
     };
     out.push([i === 0 ? 'slot' : `slot${i + 1}`, call('b.slot', [printLiteral(o, indent)])]);
   });
+  for (const n of nodesOf(spec.tree, ['Region', 'PageContent'])) {
+    const p = n.props ?? {};
+    if (n.el === 'PageContent') {
+      out.push(['pageContent', call('b.slot', [printLiteral({ label: L('Page content', 'Nội dung trang', 'Contenu de la page', 'Konten halaman') }, indent)])]);
+      continue;
+    }
+    const o = { label: regionLabel(p), ...(Array.isArray(p.allow) ? { allow: p.allow } : {}) };
+    out.push([`region__${String(p.name)}`, call('b.slot', [printLiteral(o, indent)])]);
+  }
   return out.map(([k, v]) => `${IDENT.test(k) ? k : q(k)}: ${v},`);
 }
 
@@ -104,6 +145,8 @@ interface Gen {
   urlPattern?: string;
   slots: Map<ComposedNode, string>;
   usesLocale: boolean;
+  /** Overlay blocks: the heading naming the dialog and its id, as JSX attribute value code (`"x"`, `{…}`). */
+  overlay?: { heading?: ComposedNode; labelId?: string };
 }
 
 const propExpr = (name: string) => (IDENT.test(name) ? `props.${name}` : `props[${q(name)}]`);
@@ -178,9 +221,12 @@ function element(tag: string, attrs: string[], children: Out[] | null, indent: s
   return `${open}>\n${lines.join('\n')}\n${indent}</${tag}>`;
 }
 
+/** `id` attribute from `anchorId`, as the renderer's `str(p.anchorId)`. */
+const idAttr = (p: Record<string, unknown>) => (typeof p.anchorId === 'string' && p.anchorId ? [attrLit('id', p.anchorId)] : []);
+
 function body(g: Gen, n: ComposedNode, indent: string): Out {
   const p = n.props ?? {};
-  const st = styleAttr(n);
+  const st = [...idAttr(p), ...styleAttr(n)];
   const kids = (): Out[] => (n.children ?? []).map((c) => node(g, c, indent + '  '));
   const jsx = (code: string): Out => ({ jsx: true, code });
   // Same props as the composed renderer (composed/render.tsx), in the same order, then `style`.
@@ -198,12 +244,30 @@ function body(g: Gen, n: ComposedNode, indent: string): Out {
       return jsx(element('ui.Grid', [...tokens(p, ['columns', 'gap']), ...st], kids(), indent));
     case 'Card':
       return jsx(element('ui.Card', [...tokens(p, ['padding', 'background']), ...(p.bordered === false ? ['bordered={false}'] : []), ...st], kids(), indent));
-    case 'Slot': {
+    case 'Slot':
+    case 'Region':
+    case 'PageContent': {
       const name = g.slots.get(n);
       return { jsx: false, code: name ? `${propExpr(name)} ?? null` : 'null' };
     }
-    case 'Heading':
-      return jsx(element('ui.Heading', [attrLit('level', p.level ?? 2), textAttr('text', val(g, n, 'text')), ...tokens(p, ['align']), ...st], null, indent));
+    case 'Overlay': {
+      g.usesLocale = true;
+      const attrs = [
+        'name={overlay}',
+        ...tokens(p, ['variant', 'side', 'size']),
+        ...(p.closeOnBackdrop === false ? ['closeOnBackdrop={false}'] : []),
+        ...(p.showClose === false ? ['showClose={false}'] : []),
+        ...(g.overlay?.labelId ? [`labelledBy=${g.overlay.labelId}`] : []),
+        'locale={locale}',
+        ...st,
+      ];
+      return jsx(element('ui.Overlay', attrs, kids(), indent));
+    }
+    case 'Heading': {
+      const idA = g.overlay?.heading === n && g.overlay.labelId ? [`id=${g.overlay.labelId}`] : idAttr(p);
+      const rest = [...tokens(p, ['align']), ...styleAttr(n)];
+      return jsx(element('ui.Heading', [...idA, attrLit('level', p.level ?? 2), textAttr('text', val(g, n, 'text')), ...rest], null, indent));
+    }
     case 'Text': {
       const html = val(g, n, 'html');
       const htmlAttr = 'expr' in html ? [attrExpr('html', `${html.expr} ?? undefined`)] : html.lit === undefined || html.lit === null ? [] : [attrLit('html', html.lit)];
@@ -216,8 +280,10 @@ function body(g: Gen, n: ComposedNode, indent: string): Out {
       const img = element('ui.Image', attrs, null, indent);
       return { jsx: false, code: `h.when(h.image(${args.join(', ')}), (img) => ${img})` };
     }
-    case 'Button':
-      return jsx(element('ui.Button', [textAttr('label', val(g, n, 'label')), attrExpr('href', `h.href(${code(val(g, n, 'href'))})`), ...tokens(p, ['variant', 'size']), ...st], null, indent));
+    case 'Button': {
+      const action = isObj(p.action) ? [attrLit('action', p.action)] : [];
+      return jsx(element('ui.Button', [textAttr('label', val(g, n, 'label')), attrExpr('href', `h.href(${code(val(g, n, 'href'))})`), ...tokens(p, ['variant', 'size']), ...action, ...st], null, indent));
+    }
     case 'Badge':
       return jsx(element('ui.Badge', [textAttr('text', val(g, n, 'text')), ...tokens(p, ['variant']), ...st], null, indent));
     case 'Price': {
@@ -261,9 +327,15 @@ function node(g: Gen, n: ComposedNode, indent: string): Out {
 /** The `.block.tsx` source of a hand-written `defineBlock` equivalent to `defineComposedBlock(spec)`. */
 export function printEjectedBlockTsx(spec: ComposedBlockSpec): string {
   const binding = spec.binding;
-  const slots = new Map<ComposedNode, string>();
-  slotNodes(spec.tree).forEach((n, i) => slots.set(n, i === 0 ? 'slot' : `slot${i + 1}`));
-  const g: Gen = { bound: !!binding, urlPattern: binding?.urlPattern, slots, usesLocale: false };
+  const kind = composedKind(spec);
+  const g: Gen = { bound: !!binding, urlPattern: binding?.urlPattern, slots: slotNames(spec.tree), usesLocale: false };
+  if (kind === 'overlay') {
+    const heading = firstHeading(spec.tree);
+    const anchor = heading?.props?.anchorId;
+    // Same id as the renderer: the heading's own anchorId, else `<overlay name>-title`.
+    const labelId = !heading ? undefined : typeof anchor === 'string' && anchor ? attrLit('id', anchor).slice('id='.length) : '{`${overlay}-title`}';
+    g.overlay = { heading, labelId };
+  }
 
   const treeIndent = '      ';
   const tree = node(g, spec.tree, treeIndent);
@@ -284,7 +356,11 @@ export function printEjectedBlockTsx(spec: ComposedBlockSpec): string {
     const cfg = flat.length <= 70 && !flat.includes('\n') ? flat : `{\n${parts.map((x) => `      ${x},`).join('\n')}\n    }`;
     ret = `return h.collection(props, ${cfg}, (entry) => ${treeCode});`;
   }
-  const renderLines = [...(g.usesLocale ? ['    const locale = h.locale(props);'] : []), `    ${ret}`];
+  const renderLines = [
+    ...(g.usesLocale ? ['    const locale = h.locale(props);'] : []),
+    ...(kind === 'overlay' ? [`    const overlay = h.overlayName(props.name, ${q(overlayDefaultName(spec.name))});`] : []),
+    `    ${ret}`,
+  ];
 
   const assetPaths = [...imageEntryPaths(spec.tree)];
   const def = [
@@ -293,6 +369,7 @@ export function printEjectedBlockTsx(spec: ComposedBlockSpec): string {
     `  category: ${q(spec.category)},`,
     ...(spec.icon ? [`  icon: ${q(spec.icon)},`] : []),
     `  version: ${spec.version},`,
+    ...(kind !== 'block' ? [`  kind: ${q(kind)},`] : []),
     '  // Reserved props `_locale` (stamped by resolvePage) and `_editor` (editor canvas), as for composed blocks.',
     '  usesLocale: true,',
     ...(assetPaths.length ? [`  entryAssetPaths: ${printLiteral(assetPaths, '  ')},`] : []),
