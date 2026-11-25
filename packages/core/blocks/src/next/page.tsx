@@ -4,7 +4,8 @@ import { cookies, draftMode, headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import { Render } from '@puckeditor/core/rsc';
-import { PAGE_API_ID, type Locale, type StoredPageContent } from '@opencloudcms/schema';
+import { PAGE_API_ID, validatePageLayout, type Locale, type PageLayout, type StoredPageContent } from '@opencloudcms/schema';
+import { composeWithBase, containsInteractive } from '../base-page';
 import { isItem, isObj, mapData, mapSlots, readPageContent, type ItemFn } from '../content';
 import { adminFetcher, FetchError, publicFetcher } from '../fetchers';
 import { toPuckConfig } from '../puck-config';
@@ -12,6 +13,7 @@ import { resolvePage, type ContentFetcher } from '../resolve';
 import { richTextFieldTransforms } from '../richtext-render';
 import type { BlockRegistry, CustomFieldRenderers, PuckConfig, PuckData } from '../types';
 import { PreviewBar, type PreviewBarVariant } from './PreviewBar';
+import { OverlayRouteWatcher } from './overlay-route-watcher';
 import { Welcome } from './Welcome';
 import { PREVIEW_LOCALE_COOKIE, asLocale, copyLocale, isPagePath, resolveBaseUrl } from './shared';
 
@@ -29,10 +31,21 @@ export type CreateCmsPageOptions = {
   siteName?: string;
 };
 
-type PageEntry = { documentId: string; locale?: unknown; title?: unknown; path?: unknown; seo?: unknown; content?: unknown };
+type PageEntry = { documentId: string; locale?: unknown; title?: unknown; path?: unknown; seo?: unknown; content?: unknown; layout?: unknown };
 type Bar = { variant: PreviewBarVariant; locale: Locale };
 type Loaded =
-  | { found: true; draft: boolean; entry: PageEntry; locale: Locale; defaultLocale: Locale; fetcher: ContentFetcher; bar?: Bar }
+  | {
+      found: true;
+      draft: boolean;
+      entry: PageEntry;
+      locale: Locale;
+      defaultLocale: Locale;
+      fetcher: ContentFetcher;
+      /** API base URL and, in draft mode, the session cookie: the base page is fetched the same way as the page. */
+      api: string;
+      cookie?: string;
+      bar?: Bar;
+    }
   | { found: false; draft: boolean; locale: Locale; bar?: Bar };
 
 /** Puck's `Render` only uses component `render` and the field types (slots, richtext); the editor-only custom field UIs are never called. */
@@ -68,6 +81,23 @@ function warnNeedsMigration(documentId: string, locale: Locale): void {
     `[OpenCloudCMS] Page ${documentId} (${locale}) is stored in another content format version and needs migration; its body is not rendered.`,
   );
 }
+
+/** A base page that cannot frame its pages: logged once per base id (or `default`) and reason per process. */
+const warnedBase = new Set<string>();
+function warnBase(id: string, why: string): void {
+  const key = `${id}:${why}`;
+  if (warnedBase.has(key)) return;
+  warnedBase.add(key);
+  console.warn(`[OpenCloudCMS] Base page ${id} ${why}; pages it frames are rendered without it.`);
+}
+
+/** Which base frames the page: `layout` null/absent → the default base, `baseId: null` → none. */
+function baseIdOf(layout: unknown): string | null {
+  if (layout == null || !validatePageLayout(layout).ok) return 'default';
+  return (layout as Exclude<PageLayout, null>).baseId;
+}
+
+const EMPTY_CONTENT = (formatVersion: number): StoredPageContent => ({ format: 'puck', formatVersion, data: { root: { props: {} }, content: [] } });
 
 /** `undefined` → `/`; anything that is not a valid page path → null (never sent to the API). */
 function toPath(segments: string[] | undefined): string | null {
@@ -131,7 +161,7 @@ export function createCmsPage(o: CreateCmsPageOptions): {
     const entry = g.status === 200 ? entryOf(g) : undefined;
     const locale = asLocale(entry?.locale);
     if (!entry || !locale) fail(`GET page ${path}`, g);
-    return { found: true, draft: false, entry, locale, defaultLocale: locale, fetcher: publicFetcher(base) };
+    return { found: true, draft: false, entry, locale, defaultLocale: locale, fetcher: publicFetcher(base), api: base };
   }
 
   /** `null` = the session is missing, expired or lacks `content.read`. */
@@ -152,7 +182,7 @@ export function createCmsPage(o: CreateCmsPageOptions): {
     if (g.status === 404) return { found: false, draft: true, locale, bar };
     const entry = g.status === 200 ? entryOf(g) : undefined;
     if (!entry) fail(`GET draft page ${path}`, g);
-    return { found: true, draft: true, entry, locale, defaultLocale, fetcher: adminFetcher(base, { cookie }), bar };
+    return { found: true, draft: true, entry, locale, defaultLocale, fetcher: adminFetcher(base, { cookie }), api: base, cookie, bar };
   }
 
   async function load(path: string): Promise<Loaded> {
@@ -169,6 +199,40 @@ export function createCmsPage(o: CreateCmsPageOptions): {
   }
   // Per request (React server `cache`): generateMetadata and Page share one load.
   const loadOnce = cache(load);
+
+  /**
+   * Stored content of the base page `id` (a document id or `default`) in `locale` (the API falls back to the default
+   * locale): published, or with `cookie` the draft (same session as the page). `null` when there is none or it cannot
+   * be used: a missing default base is silent, anything else is logged once.
+   */
+  async function loadBase(api: string, id: string, locale: Locale, cookie: string | undefined): Promise<StoredPageContent | null> {
+    const draft = cookie !== undefined;
+    const qs = new URLSearchParams({ id, locale });
+    let g: Got;
+    try {
+      g = await getJson(`${api}${draft ? '/api/admin/content' : '/api/content'}/${PAGE_API_ID}/base?${qs}`, { cookie, noStore: draft });
+    } catch (e) {
+      warnBase(id, `could not be loaded (${(e as Error).message})`);
+      return null;
+    }
+    if (g.status === 404 && id === 'default') return null;
+    if (g.status === 404) {
+      warnBase(id, draft ? 'does not exist' : 'does not exist or is not published');
+      return null;
+    }
+    const entry = g.status === 200 ? entryOf(g) : undefined;
+    if (!entry) {
+      warnBase(id, `could not be loaded (status ${g.status})`);
+      return null;
+    }
+    const read = readPageContent(entry.content ?? null, o.blocks);
+    if (read.status !== 'ok') {
+      warnBase(id, read.status === 'empty' ? 'has no content' : 'is stored in another content format version and needs migration');
+      return null;
+    }
+    return entry.content as StoredPageContent;
+  }
+  const loadBaseOnce = cache(loadBase);
 
   async function Page({ params }: CmsPageProps): Promise<ReactNode> {
     // Always rendered per request: the page is data, and draft mode / sessions are checked on every request.
@@ -190,12 +254,27 @@ export function createCmsPage(o: CreateCmsPageOptions): {
     if (readPageContent(r.entry.content ?? null, o.blocks).status === 'needs-migration') {
       warnNeedsMigration(r.entry.documentId, r.locale);
     } else {
-      const data = await resolvePage((r.entry.content ?? null) as StoredPageContent, o.blocks, r.fetcher, {
+      let content = (r.entry.content ?? null) as StoredPageContent;
+      const baseId = baseIdOf(r.entry.layout);
+      const base = baseId ? await loadBaseOnce(r.api, baseId, r.locale, r.cookie) : null;
+      if (base && baseId) {
+        const own = isObj(content) && Object.keys(content).length ? content : EMPTY_CONTENT(base.formatVersion);
+        const composed = composeWithBase(base, own, r.entry.layout as PageLayout, o.blocks);
+        if (composed === own) warnBase(baseId, 'is not one layout block at its root');
+        else content = composed;
+      }
+      // Data blocks of the base regions and of the page are resolved together.
+      const data = await resolvePage(content, o.blocks, r.fetcher, {
         locale: r.locale,
         defaultLocale: r.defaultLocale,
       });
       warnUnknownBlocks(data, o.blocks);
-      body = <Render config={configFor(r.locale)} data={data} fieldTransforms={richTextFieldTransforms} />;
+      body = (
+        <>
+          <Render config={configFor(r.locale)} data={data} fieldTransforms={richTextFieldTransforms} />
+          {containsInteractive(data, o.blocks) ? <OverlayRouteWatcher /> : null}
+        </>
+      );
     }
     return (
       <>

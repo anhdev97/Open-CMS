@@ -1,6 +1,7 @@
 // Next.js-only entry (`@opencloudcms/core/blocks/next`): server components and route handlers of the website.
 // ESM only; never part of the CommonJS build that Nest loads.
 export { createCmsPage, type CmsPageProps, type CreateCmsPageOptions } from './page';
+export { OverlayRouteWatcher } from './overlay-route-watcher';
 export { createPreviewRoute } from './preview-route';
 export { createPreviewExitRoute } from './exit-route';
 export { PreviewBar, type PreviewBarVariant } from './PreviewBar';

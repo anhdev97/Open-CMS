@@ -27,10 +27,15 @@ const NOT_FOUND = 'NEXT_NOT_FOUND';
 const notFound = vi.fn(() => {
   throw new Error(NOT_FOUND);
 });
-vi.mock('next/navigation', () => ({ notFound: () => notFound() }));
+vi.mock('next/navigation', () => ({ notFound: () => notFound(), usePathname: () => '/' }));
+// The watcher renders nothing; a marker shows where it is mounted.
+vi.mock('../../blocks/src/next/overlay-route-watcher', async () => {
+  const { createElement } = await import('react');
+  return { OverlayRouteWatcher: () => createElement('i', { 'data-test-watcher': '' }) };
+});
 vi.mock('next/server', () => ({ connection: vi.fn(async () => undefined) }));
 
-import { defineBlocks, coreBlocks } from '../../blocks/src';
+import { defineBlocks, defineComposedBlock, coreBlocks, type ComposedBlockSpec } from '../../blocks/src';
 import { createCmsPage } from '../../blocks/src/next/page';
 
 const BASE = 'http://api.local:4100';
@@ -307,5 +312,171 @@ describe('createCmsPage: generateMetadata', () => {
     routes(publicByPath({}));
     expect(await cms.generateMetadata(params('x'))).toEqual({});
     expect(notFound).not.toHaveBeenCalled();
+  });
+});
+
+describe('createCmsPage: base pages', () => {
+  const spec = (over: Partial<ComposedBlockSpec>): ComposedBlockSpec => ({
+    id: 'blk_test01',
+    name: 'TestBlock',
+    label: { 'en-US': 'Test block' },
+    category: 'layout',
+    version: 1,
+    fields: {},
+    tree: { el: 'Box' },
+    ...over,
+  });
+  const frame = defineComposedBlock(
+    spec({
+      id: 'blk_frame01',
+      name: 'SiteFrame',
+      tree: {
+        el: 'Stack',
+        children: [{ el: 'Region', props: { name: 'header' } }, { el: 'PageContent' }, { el: 'Region', props: { name: 'footer' } }],
+      },
+    }),
+  );
+  const modal = defineComposedBlock(
+    spec({ id: 'blk_modal01', name: 'LienHe', tree: { el: 'Overlay', children: [{ el: 'Text', props: { text: 'MODAL-BODY' } }] } }),
+  );
+  const site = createCmsPage({ blocks: defineBlocks([...coreBlocks, frame, modal]), baseUrl: BASE });
+  const B1 = '11111111-1111-4111-8111-111111111111';
+  const MISSING = '22222222-2222-4222-8222-222222222222';
+  const linkButton = { type: 'Button', props: { id: 'bl', _v: 1, label: 'Home', link: { kind: 'page', documentId: 'p2' }, variant: 'default', size: 'default' } };
+  const baseEntry = (header: string, extra: unknown[] = []) => ({
+    documentId: B1,
+    locale: 'en-US',
+    kind: 'base',
+    content: content({
+      type: 'SiteFrame',
+      props: { id: 'f1', _v: 1, region__header: [heading(header, 'bh'), linkButton, ...extra], pageContent: [], region__footer: [heading('BASE-FOOTER', 'bf')] },
+    }),
+  });
+  const baseRoute = (prefix: string, bases: Record<string, unknown>, status?: number): Route => (url) =>
+    url.pathname === `${prefix}/opencloudcmsPage/base`
+      ? status
+        ? json(status, { error: { message: 'boom' } })
+        : bases[url.searchParams.get('id')!]
+          ? json(200, { data: bases[url.searchParams.get('id')!] })
+          : json(404, { error: { message: 'No base page' } })
+      : undefined;
+  const pagePaths = (prefix: string): Route => (url) =>
+    url.pathname === `${prefix}/opencloudcmsPage` ? json(200, { data: [{ documentId: 'p2', locale: 'en-US', path: '/home-target' }] }) : undefined;
+  const baseCalls = () => calls().filter((c) => c.url.pathname.endsWith('/opencloudcmsPage/base'));
+  const order = (out: string, ...parts: string[]) => {
+    const at = parts.map((p) => out.indexOf(p));
+    expect(at.every((i) => i >= 0), `${parts} in ${out}`).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+  };
+
+  it('a page without layout is framed by the default base: regions around the page content, base data blocks resolved', async () => {
+    routes(publicByPath({ '/about': page({}) }), baseRoute('/api/content', { default: baseEntry('BASE-HEADER') }), pagePaths('/api/content'));
+    const out = await html(await site.Page(params('about')));
+    order(out, 'BASE-HEADER', 'Published hello', 'BASE-FOOTER');
+    expect(out).toContain('href="/home-target"');
+    expect(out).not.toContain('data-test-watcher');
+    const [c] = baseCalls();
+    expect(c.url.searchParams.get('id')).toBe('default');
+    expect(c.url.searchParams.get('locale')).toBe('en-US');
+    expect((c.init.headers as Record<string, string>).cookie).toBeUndefined();
+  });
+
+  it('explicit base with region modes: replace uses the page root region blocks, hide renders nothing', async () => {
+    const own = content(heading('Published hello'));
+    (own.data.root.props as Record<string, unknown>).region__header = [heading('OWN-HEADER', 'oh')];
+    routes(
+      publicByPath({ '/about': page({ content: own, layout: { baseId: B1, regions: { header: 'replace', footer: 'hide' } } }) }),
+      baseRoute('/api/content', { [B1]: baseEntry('BASE-HEADER') }),
+    );
+    const out = await html(await site.Page(params('about')));
+    order(out, 'OWN-HEADER', 'Published hello');
+    expect(out).not.toContain('BASE-HEADER');
+    expect(out).not.toContain('BASE-FOOTER');
+    expect(baseCalls()[0].url.searchParams.get('id')).toBe(B1);
+  });
+
+  it('baseId null renders the page without a frame and fetches no base', async () => {
+    routes(publicByPath({ '/about': page({ layout: { baseId: null } }) }), baseRoute('/api/content', { default: baseEntry('BASE-HEADER') }));
+    const out = await html(await site.Page(params('about')));
+    expect(out).toContain('Published hello');
+    expect(out).not.toContain('BASE-HEADER');
+    expect(baseCalls()).toHaveLength(0);
+  });
+
+  it('the public site uses the published base even when a draft exists', async () => {
+    routes(
+      publicByPath({ '/about': page({}) }),
+      baseRoute('/api/content', { default: baseEntry('PUBLISHED-HEADER') }),
+      baseRoute('/api/admin/content', { default: baseEntry('DRAFT-HEADER') }),
+    );
+    const out = await html(await site.Page(params('about')));
+    expect(out).toContain('PUBLISHED-HEADER');
+    expect(out).not.toContain('DRAFT-HEADER');
+    expect(calls().every((c) => !c.url.pathname.startsWith('/api/admin'))).toBe(true);
+  });
+
+  it('draft mode uses the draft base in the preview locale with the session, uncached', async () => {
+    state.draft = true;
+    state.cookies = { opencloudcms_preview_locale: 'vi-VN' };
+    state.headers = { cookie: SESSION };
+    routes(
+      adminMeta(),
+      adminByPath(200, page({ locale: 'vi-VN', content: content(heading('Draft hello')) })),
+      baseRoute('/api/content', { default: baseEntry('PUBLISHED-HEADER') }),
+      baseRoute('/api/admin/content', { default: baseEntry('DRAFT-HEADER') }),
+      pagePaths('/api/admin/content'),
+    );
+    const out = await html(await site.Page(params('about')));
+    order(out, 'DRAFT-HEADER', 'Draft hello');
+    expect(out).not.toContain('PUBLISHED-HEADER');
+    const [c] = baseCalls();
+    expect(c.url.pathname).toBe('/api/admin/content/opencloudcmsPage/base');
+    expect(c.url.searchParams.get('locale')).toBe('vi-VN');
+    expect((c.init.headers as Record<string, string>).cookie).toBe(SESSION);
+    expect(c.init.cache).toBe('no-store');
+  });
+
+  it('a missing explicit base renders the page alone and warns once per base id', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    routes(publicByPath({ '/about': page({ layout: { baseId: MISSING } }) }), baseRoute('/api/content', {}));
+    for (let i = 0; i < 2; i++) {
+      const out = await html(await site.Page(params('about')));
+      expect(out).toContain('Published hello');
+    }
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes(MISSING))).toHaveLength(1);
+  });
+
+  it('no default base: the page renders alone without a warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    routes(publicByPath({ '/about': page({}) }), baseRoute('/api/content', {}));
+    expect(await html(await site.Page(params('about')))).toContain('Published hello');
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes('base'))).toHaveLength(0);
+  });
+
+  it('a failing base fetch or a base that is not one layout block renders the page alone with a warning, never a 500', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const B2 = '33333333-3333-4333-8333-333333333333';
+    const B3 = '44444444-4444-4444-8444-444444444444';
+    routes(publicByPath({ '/about': page({ layout: { baseId: B2 } }) }), baseRoute('/api/content', {}, 500));
+    expect(await html(await site.Page(params('about')))).toContain('Published hello');
+    routes(
+      publicByPath({ '/about': page({ layout: { baseId: B3 } }) }),
+      baseRoute('/api/content', { [B3]: { ...baseEntry('x'), content: content(heading('NOT-A-FRAME')) } }),
+    );
+    const out = await html(await site.Page(params('about')));
+    expect(out).toContain('Published hello');
+    expect(out).not.toContain('NOT-A-FRAME');
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes(B2))).toHaveLength(1);
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes(B3))).toHaveLength(1);
+  });
+
+  it('mounts the overlay route watcher when the composed page has an overlay or an action button', async () => {
+    routes(publicByPath({ '/about': page({}) }), baseRoute('/api/content', { default: baseEntry('BASE-HEADER', [{ type: 'LienHe', props: { id: 'm1', _v: 1, name: 'lien-he' } }]) }), pagePaths('/api/content'));
+    const out = await html(await site.Page(params('about')));
+    expect(out).toContain('data-ocms-overlay="lien-he"');
+    expect(out).toContain('data-test-watcher');
+    const action = { type: 'Button', props: { id: 'ba', _v: 1, label: 'Open', action: { type: 'overlay', op: 'open', target: 'lien-he' }, variant: 'default', size: 'default' } };
+    routes(publicByPath({ '/about': page({ layout: { baseId: null }, content: content(action) }) }));
+    expect(await html(await site.Page(params('about')))).toContain('data-test-watcher');
   });
 });
