@@ -219,8 +219,7 @@ defineContentType({
 
 - Validation: a private type cannot have `review: true` or localizable fields (all fields are document-level); a
   public type cannot reference a private type (`reference` target check); `readOnly` is allowed on any type.
-- Switching a type to private is a breaking schema change: the generated migration deletes its published rows (the
-  draft row stays the working copy). Switching back to public is allowed; entries then need publishing.
+- Switching `private` on or off is allowed only while the type has no entries (decision 10).
 
 **Storage and API**
 
@@ -230,8 +229,8 @@ defineContentType({
   preflight; reference expansion on public reads never includes private entries (the id is kept, no data).
 - Admin API (`/api/admin/content/:apiId`) works as for other types with the usual permissions; writes to `readOnly`
   fields through it are rejected (422 with the field path); the UI shows them disabled.
-- Server API for project modules, exported from `@opencloudcms/core`:
-  `PrivateEntries.create(apiId, data)`, `.update(apiId, documentId, data)`, `.get`, `.list`, `.remove` — may write
+- Server API for project modules: the injectable `PrivateEntriesService` from `@opencloudcms/core` (decision 13) with
+  `create(apiId, data)`, `update(apiId, documentId, data)`, `get`, `list`, `remove` — may write
   `readOnly` fields, runs the same field validation and hooks, never publishes, and accepts files as
   `{ buffer, filename, contentType }` for asset fields (stored privately).
 - Builders: private types are absent from `b.entry`/`b.entries` type lists, the block builder's binding type list and
