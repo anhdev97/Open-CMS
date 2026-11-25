@@ -446,6 +446,48 @@ describe('printEjectedBlockTsx: layout and overlay blocks', () => {
   });
 });
 
+describe('printEjectedBlockTsx: overlay label heading', () => {
+  const spec = (first: Record<string, unknown>): ComposedBlockSpec => ({
+    ...overlaySpec({}),
+    fields: { title: { kind: 'text', default: 'Contact us' }, showIntro: { kind: 'boolean', default: true } },
+    tree: {
+      el: 'Overlay',
+      children: [
+        { el: 'Stack', showIf: { from: 'field', name: 'showIntro', is: 'present' }, children: [{ el: 'Heading', props: { text: 'Intro', ...first } }] },
+        { el: 'Heading', props: { level: 3 }, showIf: { from: 'field', name: 'title', is: 'present' }, bind: { text: { from: 'field', name: 'title' } } },
+        { el: 'Heading', props: { text: 'Always', anchorId: 'always' } },
+        { el: 'Heading', props: { text: 'Never a label' } },
+      ],
+    },
+  });
+  const cases = [
+    { name: 'lien-he', title: 'T', showIntro: true },
+    { name: 'lien-he', title: 'T', showIntro: false },
+    { name: 'lien-he', title: '', showIntro: false },
+  ];
+
+  it('the first heading has its own anchorId: labelled by it when shown, else by the next shown heading', () => {
+    const { source, ejected } = same(spec({ anchorId: 'intro' }), cases);
+    expect(source).toContain('const labelled = h.present(props.showIntro) ? 0 : h.present(props.title) ? 1 : 2;');
+    expect(source).toContain('<ui.Heading id="intro"');
+    const [a, b, c] = cases.map((p) => html(ejected, p));
+    expect(a).toContain('aria-labelledby="intro"');
+    expect(b).toContain('aria-labelledby="lien-he-title"');
+    expect(b).toContain('<h3 id="lien-he-title"');
+    expect(c).toContain('aria-labelledby="always"');
+    expect(c).not.toContain('lien-he-title');
+    expect(c).toContain('<h2 id="always"');
+  });
+
+  it('without anchorIds the shown heading gets <name>-title, the others no id', () => {
+    const { ejected } = same(spec({}), cases);
+    const a = html(ejected, cases[0]);
+    expect(a).toContain('aria-labelledby="lien-he-title"');
+    expect(a.match(/id="lien-he-title"/g)).toHaveLength(1);
+    expect(a).toMatch(/<h2 id="lien-he-title"[^>]*>Intro/);
+  });
+});
+
 describe('ejectComposedBlock', () => {
   const cfg = (root: string) => resolveConfig({ database: { url: 'x' } } as any, root);
 

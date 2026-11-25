@@ -43,14 +43,23 @@ function regionLabel(p: Record<string, unknown>): unknown {
   return p.name;
 }
 
-/** First `Heading` of `n` (depth first), as the composed renderer's `firstHeading`. */
-function firstHeading(n: ComposedNode): ComposedNode | undefined {
-  if (n.el === 'Heading') return n;
-  for (const c of n.children ?? []) {
-    const h = firstHeading(c);
-    if (h) return h;
-  }
-  return undefined;
+/** Headings that may name an overlay (depth first, with the `showIf` chain of each), up to the first always-shown one. */
+type LabelCandidate = { node: ComposedNode; conds: NonNullable<ComposedNode['showIf']>[] };
+function labelCandidates(tree: ComposedNode): LabelCandidate[] {
+  const out: LabelCandidate[] = [];
+  let done = false;
+  const walk = (n: ComposedNode, conds: LabelCandidate['conds']) => {
+    if (done) return;
+    const c = n.showIf ? [...conds, n.showIf] : conds;
+    if (n.el === 'Heading') {
+      out.push({ node: n, conds: c });
+      if (!c.length) done = true;
+      return;
+    }
+    for (const k of n.children ?? []) walk(k, c);
+  };
+  walk(tree, []);
+  return out;
 }
 
 function imageEntryPaths(n: ComposedNode, out = new Set<string>()): Set<string> {
@@ -145,8 +154,11 @@ interface Gen {
   urlPattern?: string;
   slots: Map<ComposedNode, string>;
   usesLocale: boolean;
-  /** Overlay blocks: the heading naming the dialog and its id, as JSX attribute value code (`"x"`, `{…}`). */
-  overlay?: { heading?: ComposedNode; labelId?: string };
+  /**
+   * Overlay blocks: the headings that may name the dialog (the first one shown wins, as in the renderer). With a single
+   * always-shown candidate the ids are static; otherwise a `labelled` index picks one at render time.
+   */
+  overlay?: { candidates: LabelCandidate[]; dynamic: boolean };
 }
 
 const propExpr = (name: string) => (IDENT.test(name) ? `props.${name}` : `props[${q(name)}]`);
@@ -257,14 +269,14 @@ function body(g: Gen, n: ComposedNode, indent: string): Out {
         ...tokens(p, ['variant', 'side', 'size']),
         ...(p.closeOnBackdrop === false ? ['closeOnBackdrop={false}'] : []),
         ...(p.showClose === false ? ['showClose={false}'] : []),
-        ...(g.overlay?.labelId ? [`labelledBy=${g.overlay.labelId}`] : []),
+        ...overlayLabelledBy(g),
         'locale={locale}',
         ...st,
       ];
       return jsx(element('ui.Overlay', attrs, kids(), indent));
     }
     case 'Heading': {
-      const idA = g.overlay?.heading === n && g.overlay.labelId ? [`id=${g.overlay.labelId}`] : idAttr(p);
+      const idA = headingId(g, n) ?? idAttr(p);
       const rest = [...tokens(p, ['align']), ...styleAttr(n)];
       return jsx(element('ui.Heading', [...idA, attrLit('level', p.level ?? 2), textAttr('text', val(g, n, 'text')), ...rest], null, indent));
     }
@@ -311,6 +323,34 @@ function body(g: Gen, n: ComposedNode, indent: string): Out {
   }
 }
 
+/** JS expression of the id a label candidate gets: its own anchorId, else `<overlay name>-title`. */
+function labelExpr(c: LabelCandidate): string {
+  const a = c.node.props?.anchorId;
+  return typeof a === 'string' && a ? q(a) : '`${overlay}-title`';
+}
+
+/** `labelledBy` attribute of the overlay (none when the tree has no Heading). */
+function overlayLabelledBy(g: Gen): string[] {
+  const o = g.overlay;
+  if (!o?.candidates.length) return [];
+  if (!o.dynamic) {
+    const a = o.candidates[0].node.props?.anchorId;
+    return [typeof a === 'string' && a ? attrLit('labelledBy', a) : attrExpr('labelledBy', labelExpr(o.candidates[0]))];
+  }
+  const pick = o.candidates.map((c, i) => `labelled === ${i} ? ${labelExpr(c)} : `).join('');
+  return [attrExpr('labelledBy', `${pick}undefined`)];
+}
+
+/** `id` attribute of a label candidate heading; undefined for other nodes. */
+function headingId(g: Gen, n: ComposedNode): string[] | undefined {
+  const o = g.overlay;
+  const i = o ? o.candidates.findIndex((c) => c.node === n) : -1;
+  if (!o || i < 0) return undefined;
+  const a = n.props?.anchorId;
+  if (typeof a === 'string' && a) return [attrLit('id', a)];
+  return [attrExpr('id', o.dynamic ? `labelled === ${i} ? ${labelExpr(o.candidates[i])} : undefined` : labelExpr(o.candidates[i]))];
+}
+
 function condition(g: Gen, c: NonNullable<ComposedNode['showIf']>): string {
   const v = c.from === 'entry' ? (g.bound ? `get(entry, ${q(c.path ?? '')})` : 'undefined') : propExpr(c.name ?? '');
   return `${c.is === 'present' ? '' : '!'}h.present(${v})`;
@@ -329,12 +369,17 @@ export function printEjectedBlockTsx(spec: ComposedBlockSpec): string {
   const binding = spec.binding;
   const kind = composedKind(spec);
   const g: Gen = { bound: !!binding, urlPattern: binding?.urlPattern, slots: slotNames(spec.tree), usesLocale: false };
+  let labelledLine: string[] = [];
   if (kind === 'overlay') {
-    const heading = firstHeading(spec.tree);
-    const anchor = heading?.props?.anchorId;
-    // Same id as the renderer: the heading's own anchorId, else `<overlay name>-title`.
-    const labelId = !heading ? undefined : typeof anchor === 'string' && anchor ? attrLit('id', anchor).slice('id='.length) : '{`${overlay}-title`}';
-    g.overlay = { heading, labelId };
+    // Same choice as the renderer: the first Heading whose own and ancestors' showIf pass.
+    const candidates = labelCandidates(spec.tree);
+    const dynamic = candidates.length > 1 || (candidates.length === 1 && candidates[0].conds.length > 0);
+    g.overlay = { candidates, dynamic };
+    if (dynamic) {
+      const all = (c: LabelCandidate) => c.conds.map((x) => condition(g, x)).join(' && ');
+      const chain = candidates.map((c, i) => (c.conds.length ? `${all(c)} ? ${i} : ` : `${i}`)).join('');
+      labelledLine = [`    const labelled = ${chain}${candidates[candidates.length - 1].conds.length ? '-1' : ''};`];
+    }
   }
 
   const treeIndent = '      ';
@@ -359,6 +404,7 @@ export function printEjectedBlockTsx(spec: ComposedBlockSpec): string {
   const renderLines = [
     ...(g.usesLocale ? ['    const locale = h.locale(props);'] : []),
     ...(kind === 'overlay' ? [`    const overlay = h.overlayName(props.name, ${q(overlayDefaultName(spec.name))});`] : []),
+    ...labelledLine,
     `    ${ret}`,
   ];
 

@@ -54,11 +54,12 @@ const val = (ctx: Ctx, n: ComposedNode, k: string): unknown => (n.bind && has(n.
 const tok = <T,>(v: unknown) => v as T;
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
 
-/** First `Heading` of `n` (depth first). */
-export function firstHeading(n: ComposedNode): ComposedNode | undefined {
+/** First `Heading` of `n` (depth first) that is rendered: it and every ancestor pass their `showIf`. */
+function firstVisibleHeading(ctx: Ctx, n: ComposedNode): ComposedNode | undefined {
+  if (!visible(ctx, n)) return undefined;
   if (n.el === 'Heading') return n;
   for (const c of n.children ?? []) {
-    const h = firstHeading(c);
+    const h = firstVisibleHeading(ctx, c);
     if (h) return h;
   }
   return undefined;
@@ -197,16 +198,17 @@ export function createComposedRender(spec: ComposedBlockSpec, slots: WeakMap<Com
   const get = h.entryReader(spec.name);
   const binding = spec.binding;
   const block = { name: spec.name, label: spec.label };
-  const heading = spec.tree.el === 'Overlay' ? firstHeading(spec.tree) : undefined;
 
   return (props) => {
     const locale = h.locale(props);
+    const ctx = (entry: Entry | null): Ctx => ({ props, entry, locale, urlPattern: binding?.urlPattern, slots, overlay, get });
     let overlay: Ctx['overlay'];
     if (spec.tree.el === 'Overlay') {
+      // Overlay blocks are never data-bound: visibility only reads fields.
       const name = h.overlayName(props.name, overlayName);
+      const heading = firstVisibleHeading(ctx(null), spec.tree);
       overlay = { name, heading, labelId: heading ? str(heading.props?.anchorId) ?? `${name}-title` : undefined };
     }
-    const ctx = (entry: Entry | null): Ctx => ({ props, entry, locale, urlPattern: binding?.urlPattern, slots, overlay, get });
     if (!binding) return renderNode(ctx(null), spec.tree);
     if (binding.mode === 'single') return h.single(props, block, (entry) => renderNode(ctx(entry), spec.tree));
     return h.collection(

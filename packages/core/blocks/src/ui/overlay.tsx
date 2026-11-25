@@ -34,8 +34,8 @@ export const OVERLAY_SIDE: Record<OverlaySide, string> = {
 };
 /** `modal`: max width; `x`: left/right drawers (width, full height); `y`: top/bottom drawers (height, full width). */
 export const OVERLAY_SIZE: Record<'modal' | 'x' | 'y', Record<OverlaySize, string>> = {
-  modal: { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl', full: 'w-full h-full max-w-none' },
-  x: { sm: 'h-full max-w-sm', md: 'h-full max-w-lg', lg: 'h-full max-w-2xl', xl: 'h-full max-w-4xl', full: 'w-full h-full max-w-none' },
+  modal: { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl', full: 'w-full h-full max-w-none max-h-none' },
+  x: { sm: 'h-full max-w-sm', md: 'h-full max-w-lg', lg: 'h-full max-w-2xl', xl: 'h-full max-w-4xl', full: 'w-full h-full max-w-none max-h-none' },
   y: { sm: 'h-1/3 w-full', md: 'h-1/2 w-full', lg: 'h-2/3 w-full', xl: 'h-5/6 w-full', full: 'h-full w-full' },
 };
 

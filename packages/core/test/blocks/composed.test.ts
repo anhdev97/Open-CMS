@@ -848,6 +848,34 @@ describe('layout and overlay blocks, button actions', () => {
     for (const c of OVERLAY_SIZE.y.sm.split(' ')) expect(/class="([^"]*)"/.exec(top)![1].split(' ')).toContain(c);
   });
 
+  it('overlay: labelled by the first heading that is shown', () => {
+    const def = defineComposedBlock(
+      base({
+        name: 'LienHe',
+        fields: { intro: { kind: 'boolean', default: true } },
+        tree: {
+          el: 'Overlay',
+          children: [
+            { el: 'Box', showIf: { from: 'field', name: 'intro', is: 'present' }, children: [{ el: 'Heading', props: { text: 'Intro' } }] },
+            { el: 'Heading', props: { text: 'Main', anchorId: 'main-title' } },
+          ],
+        },
+      }),
+    );
+    const shown = render(def, { intro: true });
+    expect(shown).toContain('aria-labelledby="lien-he-title"');
+    expect(shown).toMatch(/<h2 id="lien-he-title"[^>]*>Intro/);
+    const hidden = render(def, { intro: false });
+    expect(hidden).toContain('aria-labelledby="main-title"');
+    expect(hidden).not.toContain('lien-he-title');
+  });
+
+  it('overlay: full size lifts the dialog max height', async () => {
+    const { OVERLAY_SIZE } = await import('../../blocks/src/ui/overlay');
+    expect(OVERLAY_SIZE.modal.full.split(' ')).toContain('max-h-none');
+    expect(OVERLAY_SIZE.x.full.split(' ')).toContain('max-h-none');
+  });
+
   it('overlay: the close label follows the locale', () => {
     expect(render(defineComposedBlock(overlaySpec()), { _locale: 'vi-VN' })).toContain('aria-label="Đóng"');
   });
