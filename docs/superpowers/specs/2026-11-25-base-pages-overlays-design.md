@@ -42,6 +42,8 @@ and `/media`.
   private files with permission-checked download.
 - All markup styled with literal Tailwind classes (same rule as the style system), CSS variables for theme colors.
 
+- Admin content and content type setup split into separate list / detail / create / edit pages (section 8).
+
 ## Non-goals (code-side or a later phase, agreed)
 
 - Auto-open rules (delay, exit intent, once per session), custom animations, project-registered actions
@@ -256,6 +258,34 @@ defineContentType({
 - Private types are listed under their content group with a lock icon; their entry screen has no publish, review,
   locale or version-publish controls; `readOnly` fields are shown but disabled; private asset fields show filename,
   size and a Download button.
+
+### 8. Admin UI: separate pages for content and content type setup (UI only)
+
+Today `/content/:apiId` (`Content.tsx`) holds list + side editor + review on one page, and
+`/settings/content-types` (`Builder.tsx`) holds type picker (`?type=`), type form, field options and a Groups tab on
+one page. Split them into separate pages, styled like the Account page (`PageHeader`, one `Card` per section with
+title/description, `react-hook-form` + `zod` with inline errors). APIs, permissions, dev-only schema edits, review
+workflow and locales are unchanged; only routes and screens change.
+
+| Route | Page |
+|---|---|
+| `/content/:apiId` | List: table, status filter (incl. "pending review"), locale select, pagination, "New" |
+| `/content/:apiId/new` | Create: field cards, Save (lands on the detail page) |
+| `/content/:apiId/:documentId` | Detail: read-only field cards; status, versions; Publish / Approve / Reject / Delete / Edit |
+| `/content/:apiId/:documentId/edit` | Edit: field cards, locale select, sticky Save bar, unsaved-changes guard |
+| `/settings/content-types` | List of types: name, apiId, group, field count, private, review; "New" |
+| `/settings/content-types/new` | Create type |
+| `/settings/content-types/:apiId` | Detail: type info card + fields table |
+| `/settings/content-types/:apiId/edit` | Edit: type info card + fields table; add/edit a field in a right-side Sheet; drag to reorder |
+| `/settings/content-types/groups` | Content groups (moved out of the tab) |
+
+- Old links redirect: `/settings/content-types?type=x` → `/settings/content-types/x`, `?tab=groups` → `/groups`.
+- Private types (section 7) use the same pages without publish/review/locale/version-publish controls; readOnly
+  fields are disabled on edit; required-readOnly types have no "New".
+- In production (`schemaEditable` false) the type pages are read-only: no New/Edit, detail only.
+- Sidebar entries stay as they are (content groups → `/content/:apiId`, Settings › Content types); breadcrumbs on
+  every sub-page.
+- Not touched: Pages / Page builder, Blocks, Theme, Users, Groups (users), Languages, Assets.
 
 ## Decisions settled during review (builder's calls)
 
