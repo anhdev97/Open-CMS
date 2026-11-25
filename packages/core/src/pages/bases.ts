@@ -18,6 +18,14 @@ export interface BaseUsage {
   pages: BaseUsagePage[];
 }
 
+/**
+ * Serializes changes of the default base with unpublishing / deleting a base (transaction-scoped advisory lock):
+ * without it, concurrent calls could leave two defaults or an unpublished default.
+ */
+export async function lockDefaultBase(trx: Kysely<any>): Promise<void> {
+  await sql`select pg_advisory_xact_lock(hashtext('opencloudcms.page.default'))`.execute(trx);
+}
+
 /** `{ isDefault }` of the base document (any row), or null when no base document has this id. */
 export async function findBase(db: Kysely<any>, documentId: string, status?: 'draft' | 'published'): Promise<{ isDefault: boolean } | null> {
   const r = await sql<{ is_default: boolean }>`
@@ -45,7 +53,8 @@ export async function baseUsage(db: Kysely<any>, baseId: string, isDefault: bool
 
 /**
  * Refuses unpublishing or deleting the default base (409 `base_is_default`) and a base that pages use
- * (409 `base_in_use`, the pages in `issues`); `force` lets an unpublish through the latter only.
+ * (409 `base_in_use`, the pages in `issues`); `force` lets an unpublish through the latter only. `db` must be the
+ * unpublish / delete transaction: for a base page the default-base lock is taken and the checks run under it.
  */
 export async function guardBaseRemoval(
   db: Kysely<any>,
@@ -53,6 +62,9 @@ export async function guardBaseRemoval(
   op: 'unpublish' | 'delete',
   opts: { force?: boolean; defaultLocale: string },
 ): Promise<void> {
+  // `kind` never changes, so a document that is not a base needs no lock.
+  if (!(await findBase(db, documentId))) return;
+  await lockDefaultBase(db);
   // Unpublish: only a published base matters (otherwise the request 404s as usual).
   const base = await findBase(db, documentId, op === 'unpublish' ? 'published' : undefined);
   if (!base) return;

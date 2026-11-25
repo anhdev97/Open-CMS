@@ -33,6 +33,9 @@
 
 ### Breaking changes
 
+- **Publishing a page without a path answers 422 `path_required`** (was 400 with a validation issue on `path`):
+  `path` is now required by the page hooks for `kind: 'page'` only, since base pages have none.
+
 - **Core link buttons drop links they used to render.** Because of `safeHref` (see Fixed), existing page content
   whose `Button`, `ButtonGroup`, `Card`, `Hero` or `CallToAction` links are relative without a leading `/`
   (`contact`, `./x`, `../x`, `www.example.com`) or use a scheme outside `http(s):`, `mailto:`, `tel:` (`sms:`,

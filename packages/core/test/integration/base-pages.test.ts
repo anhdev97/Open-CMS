@@ -189,6 +189,27 @@ describe('base pages', () => {
       expect(rows.rows).toEqual([{ status: 'draft', is_default: true }, { status: 'published', is_default: true }]);
     });
 
+    it('concurrent setDefault calls leave exactly one default document', async () => {
+      const extra = [await publishedBase('C1'), await publishedBase('C2'), await publishedBase('C3')];
+      const all = [b1, b2, ...extra];
+      const results = await Promise.all([...all, ...all].map((id) => setDefault(id)));
+      expect(results.every((r) => r.status === 200)).toBe(true);
+      const rows = await sql<{ document_id: string }>`select distinct document_id from ct_opencloudcms_page where is_default`.execute(t.db);
+      expect(rows.rows).toHaveLength(1);
+      // Both rows of that document carry the flag.
+      const n = await sql<{ n: number }>`select count(*)::int as n from ct_opencloudcms_page where is_default`.execute(t.db);
+      expect(n.rows[0].n).toBe(2);
+      // setDefault racing an unpublish of the same base: never an unpublished default.
+      const racer = await publishedBase('Racer');
+      await Promise.all([setDefault(racer), unpublish(racer, '?force=true')]);
+      const state = await sql<{ status: string; is_default: boolean }>`select status, is_default from ct_opencloudcms_page where document_id = ${racer}`.execute(t.db);
+      const published = state.rows.some((r) => r.status === 'published');
+      const isDefault = state.rows.some((r) => r.is_default);
+      expect(isDefault && !published).toBe(false);
+      expect((await setDefault(b1)).status).toBe(200);
+      for (const id of [...extra, racer]) expect((await remove(id)).status).toBe(200);
+    });
+
     it('usage counts explicit pages and, for the default, pages with no layout', async () => {
       const u1 = await usage(b1);
       expect(u1.status).toBe(200);
@@ -254,6 +275,18 @@ describe('base pages', () => {
       expect((await publish(id)).status).toBe(200);
       await sql`update ct_opencloudcms_page_l10n set path = '/base-at-path' where entry_id in (select id from ct_opencloudcms_page where document_id = ${id})`.execute(t.db);
       expect((await call(`${PUBLIC}/by-path?path=/base-at-path&locale=en-US`, {}, null)).status).toBe(404);
+    });
+
+    it('the public list and get by id never return a base; admin still does', async () => {
+      const list = await call(`${PUBLIC}?limit=100`, {}, null);
+      expect(list.status).toBe(200);
+      expect(list.body.data.length).toBeGreaterThan(0);
+      expect(list.body.data.every((d: any) => d.kind === 'page')).toBe(true);
+      expect(list.body.meta.total).toBe(list.body.data.length);
+      expect((await call(`${PUBLIC}/${def}`, {}, null)).status).toBe(404);
+      expect((await call(`${ADMIN}/${def}?status=published`)).status).toBe(200);
+      const adminList = await call(`${ADMIN}?status=published&limit=100`);
+      expect(adminList.body.data.some((d: any) => d.kind === 'base')).toBe(true);
     });
 
     it('public base?id=default returns the published default, never the draft', async () => {

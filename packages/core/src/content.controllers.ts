@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Inject,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Headers,
@@ -13,6 +14,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { CurrentUser, RequirePermission, type RequestUser } from '@opencloudcms/oauth2';
+import { PAGE_API_ID } from '@opencloudcms/schema';
 import { EntriesService, type ListParams } from './entries.service';
 import { WorkflowService } from './workflow.service';
 
@@ -57,17 +59,21 @@ export class ContentController {
 
   @Get(':apiId')
   list(@Param('apiId') apiId: string, @Query() query: Record<string, unknown>) {
-    return this.entries.list(apiId, { ...parseListQuery(query), status: 'published' });
+    // Base pages are read publicly only through `opencloudcmsPage/base`.
+    const mainWhere = apiId === PAGE_API_ID ? { kind: 'page' } : undefined;
+    return this.entries.list(apiId, { ...parseListQuery(query), status: 'published', mainWhere });
   }
 
   @Get(':apiId/:documentId')
-  get(
+  async get(
     @Param('apiId') apiId: string,
     @Param('documentId', ParseUUIDPipe) documentId: string,
     @Query('locale') locale?: string,
     @Query('fallback') fallback?: string,
   ) {
-    return this.entries.get(apiId, documentId, 'published', locale, fallback);
+    const r = await this.entries.get(apiId, documentId, 'published', locale, fallback);
+    if (apiId === PAGE_API_ID && r.data.kind === 'base') throw new NotFoundException(`${apiId} ${documentId} not found`);
+    return r;
   }
 }
 

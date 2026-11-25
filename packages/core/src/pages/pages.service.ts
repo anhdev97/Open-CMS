@@ -5,7 +5,7 @@ import { EntriesService } from '../entries.service';
 import { OPENCLOUDCMS_DB, OPENCLOUDCMS_OPTIONS, type ResolvedOpenCloudCmsOptions } from '../options';
 import { PageBlocksManifest } from '../block-builder/page-blocks-manifest';
 import { ContentRegistry } from '../registry.service';
-import { baseUsage, findBase, PAGE_MAIN, type BaseUsage } from './bases';
+import { baseUsage, findBase, lockDefaultBase, PAGE_MAIN, type BaseUsage } from './bases';
 import { unknownBlocks } from './page.hooks';
 import { shadowedPagePaths } from './shadowed';
 
@@ -90,18 +90,21 @@ export class PagesService implements OnModuleInit {
     if (documentId !== null && (typeof documentId !== 'string' || !UUID_RE.test(documentId))) {
       throw new BadRequestException('documentId must be a document id or null');
     }
-    if (documentId !== null) {
-      if (!(await findBase(this.db, documentId))) throw new UnprocessableEntityException({ code: 'unknown_base', message: `No base page ${documentId}` });
-      if (!(await findBase(this.db, documentId, 'published'))) {
-        throw new ConflictException({ code: 'base_not_published', message: 'Only a published base page can be the default' });
-      }
-    }
+    const notPublished = () => new ConflictException({ code: 'base_not_published', message: 'Only a published base page can be the default' });
     await this.db.transaction().execute(async (trx) => {
+      // Same lock as the unpublish / delete guards: checks and writes cannot interleave with them or each other.
+      await lockDefaultBase(trx);
+      if (documentId !== null) {
+        if (!(await findBase(trx, documentId))) throw new UnprocessableEntityException({ code: 'unknown_base', message: `No base page ${documentId}` });
+        if (!(await findBase(trx, documentId, 'published'))) throw notPublished();
+      }
       await sql`update ${sql.table(PAGE_MAIN)} set is_default = false where is_default`.execute(trx);
       if (documentId !== null) {
-        const r = await sql`update ${sql.table(PAGE_MAIN)} set is_default = true where document_id = ${documentId} and kind = 'base'`.execute(trx);
-        // Unpublished between the check and here: nothing marked, keep the previous state.
-        if (!Number(r.numAffectedRows ?? 0)) throw new ConflictException({ code: 'base_not_published', message: 'Only a published base page can be the default' });
+        const r = await sql`update ${sql.table(PAGE_MAIN)} m set is_default = true
+          where m.document_id = ${documentId} and m.kind = 'base'
+            and exists (select 1 from ${sql.table(PAGE_MAIN)} p where p.document_id = m.document_id and p.status = 'published')`.execute(trx);
+        // Defensive (the lock makes it unreachable): no published row, nothing marked; roll back to the previous default.
+        if (!Number(r.numAffectedRows ?? 0)) throw notPublished();
       }
     });
     return { data: { documentId } };

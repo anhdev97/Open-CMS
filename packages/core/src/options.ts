@@ -27,10 +27,13 @@ export interface EntryHooks {
   /** Throw to block publishing (e.g. business validation). */
   beforePublish?(document: PublishedDocument, ctx: HookContext): unknown;
   afterPublish?(document: PublishedDocument, ctx: HookContext): unknown;
-  /** Throw to refuse unpublishing. `ctx.force`: the request asked to override guards that honour it. */
+  /**
+   * Throw to refuse unpublishing. Runs inside the unpublish transaction (`ctx.db` is that transaction).
+   * `ctx.force`: the request asked to override guards that honour it.
+   */
   beforeUnpublish?(documentId: string, ctx: HookContext): unknown;
   afterUnpublish?(documentId: string, ctx: HookContext): unknown;
-  /** Throw to refuse deleting. */
+  /** Throw to refuse deleting. Runs inside the delete transaction (`ctx.db` is that transaction). */
   beforeDelete?(documentId: string, ctx: HookContext): unknown;
   afterDelete?(documentId: string, ctx: HookContext): unknown;
 }

@@ -22,6 +22,8 @@ export interface ListQuery {
   offset: number;
   /** Only documents whose workflow row is `in_review` (spec B §5.3). */
   inReview?: boolean;
+  /** Server-side only (never from request input): main-table column -> required value. */
+  mainWhere?: Record<string, string | boolean>;
 }
 
 /** Runs inside a repository write transaction, before the write (workflow locks and checks). */
@@ -275,6 +277,8 @@ export class EntryRepository {
       );
     }
 
+    for (const [col, value] of Object.entries(q.mainWhere ?? {})) query = query.where(`m.${col}`, '=', value);
+
     for (const [name, raw] of Object.entries(q.filters)) {
       if (name === 'documentId[in]') {
         // Only for documentId; allowed regardless of `indexed`.
@@ -401,8 +405,8 @@ export class EntryRepository {
     });
   }
 
-  async unpublish(def: ContentTypeDefinition, documentId: string): Promise<boolean> {
-    const r = await this.db
+  async unpublish(def: ContentTypeDefinition, documentId: string, db: Kysely<any> = this.db): Promise<boolean> {
+    const r = await db
       .deleteFrom(mainTable(def))
       .where('document_id', '=', documentId)
       .where('status', '=', 'published')

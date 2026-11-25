@@ -19,6 +19,8 @@ export interface ListParams {
   offset?: string | number;
   /** Admin only: `in_review` lists entries waiting for review (spec B §5.3). */
   workflow?: string;
+  /** Server-side only (never from request input): main-table column -> required value. */
+  mainWhere?: Record<string, string | boolean>;
 }
 
 @Injectable()
@@ -86,6 +88,7 @@ export class EntriesService {
       limit,
       offset,
       inReview,
+      mainWhere: params.mainWhere,
     });
     await this.workflow.attach(def, items);
     return { data: items, meta: { total, limit, offset } };
@@ -177,9 +180,12 @@ export class EntriesService {
   async unpublish(apiId: string, documentId: string, user: Pick<RequestUser, 'permissions'>, opts: { force?: boolean } = {}) {
     const def = this.registry.get(apiId);
     this.assertCanPublish(def, user);
-    const ctx = { ...this.ctx(apiId, this.options.config.defaultLocale), force: opts.force === true };
-    for (const h of this.registry.hooksFor(apiId)) await h.beforeUnpublish?.(documentId, ctx);
-    const removed = await this.repo.unpublish(def, documentId);
+    // Guards run in the unpublish transaction (ctx.db is it), so they can lock and see what they guard.
+    const removed = await this.db.transaction().execute(async (trx) => {
+      const ctx = { ...this.ctx(apiId, this.options.config.defaultLocale), db: trx, force: opts.force === true };
+      for (const h of this.registry.hooksFor(apiId)) await h.beforeUnpublish?.(documentId, ctx);
+      return this.repo.unpublish(def, documentId, trx);
+    });
     if (!removed) throw new NotFoundException(`${apiId} ${documentId} is not published`);
     for (const h of this.registry.hooksFor(apiId)) await h.afterUnpublish?.(documentId, this.ctx(apiId, this.options.config.defaultLocale));
     return { ok: true };
@@ -187,8 +193,13 @@ export class EntriesService {
 
   async remove(apiId: string, documentId: string) {
     const def = this.registry.get(apiId);
-    for (const h of this.registry.hooksFor(apiId)) await h.beforeDelete?.(documentId, this.ctx(apiId, this.options.config.defaultLocale));
-    if (!(await this.repo.delete(def, documentId, (trx) => this.workflow.guardDelete(trx, def, documentId)))) throw new NotFoundException(`${apiId} ${documentId} not found`);
+    const guard = async (trx: Kysely<any>) => {
+      // In the delete transaction (ctx.db is it), so guards can lock and see what they guard.
+      const ctx = { ...this.ctx(apiId, this.options.config.defaultLocale), db: trx };
+      for (const h of this.registry.hooksFor(apiId)) await h.beforeDelete?.(documentId, ctx);
+      await this.workflow.guardDelete(trx, def, documentId);
+    };
+    if (!(await this.repo.delete(def, documentId, guard))) throw new NotFoundException(`${apiId} ${documentId} not found`);
     for (const h of this.registry.hooksFor(apiId)) await h.afterDelete?.(documentId, this.ctx(apiId, this.options.config.defaultLocale));
     return { ok: true };
   }
