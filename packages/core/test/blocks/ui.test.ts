@@ -319,3 +319,38 @@ describe('style class tables', () => {
     expect(SHOW.flex).toEqual({ base: 'flex', md: 'md:flex', lg: 'lg:flex' });
   });
 });
+
+describe('ui.Overlay', () => {
+  const src = readFileSync(fileURLToPath(new URL('../../blocks/src/ui/overlay.tsx', import.meta.url)), 'utf8');
+  const leaves = (o: unknown): string[] => (typeof o === 'string' ? [o] : Object.values(o as object).flatMap(leaves));
+  it('every class is a literal string of the overlay tables', async () => {
+    const t = await import('../../blocks/src/ui/overlay');
+    const tables = [t.OVERLAY_BASE, t.OVERLAY_CONTENT, t.OVERLAY_CLOSE, t.OVERLAY_VARIANT, t.OVERLAY_SIDE, t.OVERLAY_SIZE].flatMap(leaves);
+    for (const v of tables) expect(src, v).toContain(`'${v}'`);
+    const known = new Set(tables.flatMap((v) => v.split(' ')));
+    const combos = [
+      {}, { variant: 'drawer' }, { variant: 'drawer', side: 'left', size: 'full' }, { variant: 'drawer', side: 'top', size: 'xl' },
+      { variant: 'drawer', side: 'bottom' }, { size: 'sm' }, { size: 'full' }, { variant: 'nope', side: 'nope', size: 'nope' },
+    ];
+    for (const p of combos) {
+      const out = r(h(ui.Overlay, { name: 'x', ...p } as any, 'body'));
+      for (const m of out.matchAll(/class="([^"]*)"/g)) for (const c of m[1].split(' ')) expect(known.has(c), `${c} in ${JSON.stringify(p)}`).toBe(true);
+    }
+  });
+  it('renders a dialog with name, backdrop flag, labelledby and an id; no style attribute without style', () => {
+    const out = r(h(ui.Overlay, { name: 'lien-he', labelledBy: 'lien-he-title', id: 'anchor' } as any, 'body'));
+    expect(out).toMatch(/^<dialog id="anchor" data-ocms-overlay="lien-he" data-close-on-backdrop="true" aria-labelledby="lien-he-title" class="/);
+    expect(out).not.toMatch(/<dialog[^>]*style=/);
+    expect(r(h(ui.Overlay, { name: 'a', closeOnBackdrop: false, showClose: false } as any, 'b'))).not.toContain('<button');
+  });
+  it('style padding goes to the content box (backdrop clicks are clicks on the dialog itself), the rest to the dialog', () => {
+    const out = r(h(ui.Overlay, { name: 'a', style: { padding: { t: '8' }, background: 'brand:ink', hidden: { base: true }, span: 2 } } as any, 'b'));
+    const [dialog, content] = [...out.matchAll(/class="([^"]*)"/g)].map((m) => m[1]);
+    expect(dialog).toContain('bg-(--ocms-bg)');
+    expect(dialog).not.toContain('bg-card');
+    expect(dialog).not.toContain('hidden');
+    expect(dialog).not.toContain('col-span');
+    expect(content).toContain('pt-(--ocms-pt)');
+    expect(content).not.toContain('p-6');
+  });
+});

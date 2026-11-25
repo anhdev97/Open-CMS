@@ -3,6 +3,9 @@
 // dependencies (router, i18n, radix) so they are safe in server components, Nest (CJS) and the editor iframe.
 // Class names are literal strings so Tailwind's `@source` scan of dist/blocks finds them.
 import type { ReactNode } from 'react';
+import type { ButtonAction } from '@opencloudcms/schema';
+import { ActionButton } from '../client/ActionButton';
+import { validAction } from '../ui/content';
 import {
   ALIGN, BADGE_VARIANT, BG, BUTTON_BASE, BUTTON_SIZE, BUTTON_VARIANT, COLS, GAP, GRID_COLS, H, JUSTIFY, MY, PY, cn,
   type BadgeVariant, type ButtonSize, type ButtonVariant,
@@ -14,11 +17,16 @@ export const L = (en: string, vi: string, fr: string, id: string) => ({ 'en-US':
 export { ALIGN, BG, COLS, GAP, GRID_COLS, H, JUSTIFY, MY, PY, cn };
 export type { BadgeVariant, ButtonSize, ButtonVariant };
 
-/** A link-styled button: an anchor when `href` resolved to a safe target (`safeHref`), otherwise an inert span (never a dead `<a>`). */
+/**
+ * A link-styled button: an anchor when `href` resolved to a safe target (`safeHref`), otherwise an inert span (never a
+ * dead `<a>`). With a valid `action`, a `<button type="button">` (client `ActionButton`) with the same classes.
+ */
 export function LinkButton({
-  label, href, variant = 'default', size = 'default', className,
-}: { label: string; href: string | null | undefined; variant?: ButtonVariant; size?: ButtonSize; className?: string }) {
+  label, href, variant = 'default', size = 'default', className, action,
+}: { label: string; href: string | null | undefined; variant?: ButtonVariant; size?: ButtonSize; className?: string; action?: ButtonAction | null }) {
   const cls = cn(BUTTON_BASE, BUTTON_VARIANT[variant], BUTTON_SIZE[size], className);
+  const act = validAction(action);
+  if (act) return <ActionButton action={act} className={cls}>{label}</ActionButton>;
   const safe = safeHref(href);
   return safe ? (
     <a data-slot="button" href={safe} className={cls}>{label}</a>

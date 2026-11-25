@@ -5,13 +5,17 @@ import { closeOverlay, openOverlay, toggleOverlay } from './overlay-store';
 
 export function ActionButton({
   action,
+  id,
   className,
   style,
+  'aria-label': ariaLabel,
   children,
 }: {
   action: ButtonAction;
+  id?: string;
   className?: string;
   style?: CSSProperties;
+  'aria-label'?: string;
   children?: ReactNode;
 }) {
   const run = (e: { currentTarget: HTMLElement }) => {
@@ -26,7 +30,7 @@ export function ActionButton({
     closeOverlay(own?.getAttribute('data-ocms-overlay') ?? undefined);
   };
   return (
-    <button type="button" className={className} style={style} onClick={run}>
+    <button type="button" id={id} className={className} style={style} aria-label={ariaLabel} onClick={run}>
       {children}
     </button>
   );

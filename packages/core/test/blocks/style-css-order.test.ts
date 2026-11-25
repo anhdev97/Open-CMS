@@ -161,6 +161,11 @@ const CASES: Case[] = [
   ['DateText', (style) => h(ui.DateText, { value: '2026-01-01', locale: 'en', format: 'short', style } as any)],
   ['Divider', (style) => h(ui.Divider, { style } as any)],
   ['Spacer', (style) => h(ui.Spacer, { size: '12', style } as any)],
+  ...(['modal', 'drawer'] as const).flatMap((variant) =>
+    (['left', 'top'] as const).flatMap((side) =>
+      (['md', 'full'] as const).map((size): Case => [`Overlay ${variant} ${side} ${size}`, (style) => h(ui.Overlay, { name: 'x', variant, side, size, style } as any, 'x')]),
+    ),
+  ),
 ];
 
 describe('style classes win over token classes in the compiled CSS', () => {
@@ -197,6 +202,17 @@ describe('style classes win over token classes in the compiled CSS', () => {
       // Compiled: no flex-wrap rule at all, so nowrap holds at every width.
       expect(declarations(tw.build(cls), cls).filter((d) => d.prop === 'flex-wrap').map((d) => d.cls)).toEqual(nowrap);
     }
+  });
+});
+
+describe('Overlay classes', () => {
+  it('every overlay table class compiles to a CSS rule', async () => {
+    const t = await import('../../blocks/src/ui/overlay');
+    const leaves = (o: unknown): string[] => (typeof o === 'string' ? [o] : Object.values(o as object).flatMap(leaves));
+    const classes = [...new Set([t.OVERLAY_BASE, t.OVERLAY_CONTENT, t.OVERLAY_CLOSE, t.OVERLAY_VARIANT, t.OVERLAY_SIDE, t.OVERLAY_SIZE].flatMap(leaves).flatMap((v) => v.split(' ')))];
+    const css = tw.build(classes);
+    const esc = (c: string) => c.replace(/[^A-Za-z0-9_-]/g, (ch) => `\\${ch}`);
+    for (const c of classes) expect(css.includes(`.${esc(c)}`), c).toBe(true);
   });
 });
 

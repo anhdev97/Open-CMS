@@ -72,9 +72,10 @@ export const CORE_BLOCK_NAMES: readonly string[] = [
 
 /**
  * The blocks a project defines (`blockManifest`). `richText`: prop paths of the block's `b.richText` fields
- * (`'body'`, `'rows[].note'` inside list rows), normalized by the server when a page is saved.
+ * (`'body'`, `'rows[].note'` inside list rows), normalized by the server when a page is saved. `kind`: `layout` or
+ * `overlay` for layout and overlay blocks; absent for ordinary blocks (`block`).
  */
-export type BlockManifest = { name: string; version: number; richText?: string[] }[];
+export type BlockManifest = { name: string; version: number; richText?: string[]; kind?: 'block' | 'layout' | 'overlay' }[];
 
 function isItem(v: unknown): v is { type: string; props?: unknown } {
   if (!v || typeof v !== 'object') return false;

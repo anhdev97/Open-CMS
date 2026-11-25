@@ -118,6 +118,18 @@ describe('toPuckConfig', () => {
     expect(plain.defaultProps.tracks).toBeNull();
   });
 
+  it('maps b.action to a custom field with metadata when a renderer exists, else leaves it out of the editor', () => {
+    const A = defineBlock({ name: 'A', label: 'A', category: 'basic', fields: { label: b.text(), action: b.action({ label: 'Action' }) }, render: () => null });
+    const reg = defineBlocks([A]);
+    const action = dummy('action');
+    const withR = toPuckConfig(reg, { locale: 'en-US', customFields: { ...customFields, action } }).components.A as any;
+    expect(withR.fields.action).toMatchObject({ type: 'custom', label: 'Action', render: action, metadata: { blockField: { kind: 'action' } } });
+    expect(withR.defaultProps.action).toBeNull();
+    const plain = toPuckConfig(reg, { locale: 'en-US', customFields }).components.A as any;
+    expect(Object.keys(plain.fields)).toEqual(['label']);
+    expect(plain.defaultProps.action).toBeNull();
+  });
+
   it('puts defaults in defaultProps', () => {
     expect(hero.defaultProps).toEqual({
       heading: 'Hello',

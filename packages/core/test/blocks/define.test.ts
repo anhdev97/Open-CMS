@@ -55,6 +55,18 @@ describe('defineBlocks', () => {
     expect(() => defineBlocks([ok('A', { render: undefined })])).toThrow(/A.*render/);
   });
 
+  it('checks b.action defaults, region slot names and kind', () => {
+    const f = (fields: Record<string, unknown>, extra: Record<string, unknown> = {}) => () => defineBlocks([ok('A', { fields, ...extra })]);
+    expect(f({ a: b.action(), c: b.action({ default: { type: 'scroll', target: 'top' } }) })).not.toThrow();
+    expect(f({ a: b.action({ default: { type: 'overlay', op: 'open' } as any }) })).toThrow(/field "a": default\.target/);
+    expect(f({ 'region__menu-mobile': b.slot(), pageContent: b.slot() }, { kind: 'layout' })).not.toThrow();
+    expect(f({ 'region__menu-mobile': b.text() })).toThrow(/region__menu-mobile.*invalid field name/);
+    expect(f({ 'region__Bad': b.slot() })).toThrow(/invalid field name/);
+    expect(f({}, { kind: 'page' })).toThrow(/kind must be one of block, layout, overlay/);
+    const r = defineBlocks([ok('L', { kind: 'layout' }), ok('O', { kind: 'overlay' }), ok('B', { kind: 'block' }), ok('C')]);
+    expect(blockManifest(r)).toEqual([{ name: 'L', version: 1, kind: 'layout' }, { name: 'O', version: 1, kind: 'overlay' }, { name: 'B', version: 1 }, { name: 'C', version: 1 }]);
+  });
+
   it('accepts every field builder', () => {
     const all = defineBlock({
       name: 'Everything',

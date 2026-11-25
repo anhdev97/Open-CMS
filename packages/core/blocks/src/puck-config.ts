@@ -45,7 +45,7 @@ const TRACK_PRESETS: readonly [string, ...number[]][] = [
 
 const tokens = (list: readonly string[]) => list.map((t) => ({ label: t, value: t }));
 
-function toPuckField(f: BlockField, opts: ToPuckConfigOptions): Field {
+function toPuckField(f: BlockField, opts: ToPuckConfigOptions): Field | null {
   const { locale, customFields } = opts;
   const label = f.label === undefined ? undefined : localizedText(f.label as Label, locale);
   const base = label === undefined ? {} : { label };
@@ -96,8 +96,7 @@ function toPuckField(f: BlockField, opts: ToPuckConfigOptions): Field {
     case 'entries':
       return { ...base, type: 'custom', render: customFields[f.kind] as never, metadata: { blockField: f } };
     case 'list': {
-      const arrayFields: Record<string, Field> = {};
-      for (const [k, sub] of Object.entries(f.fields as Record<string, BlockField>)) arrayFields[k] = toPuckField(sub, opts);
+      const arrayFields = toPuckFields(f.fields as Record<string, BlockField>, opts);
       const firstText = Object.entries(f.fields as Record<string, BlockField>).find(([, s]) => s.kind === 'text')?.[0];
       return {
         ...base,
@@ -112,7 +111,19 @@ function toPuckField(f: BlockField, opts: ToPuckConfigOptions): Field {
     }
     case 'slot':
       return { ...base, type: 'slot', ...(f.allow ? { allow: f.allow } : {}), metadata: { blockField: f } };
+    case 'action':
+      return customFields.action ? { ...base, type: 'custom', render: customFields.action as never, metadata: { blockField: f } } : null;
   }
+}
+
+/** Puck fields of `fields`; fields with no editor (`b.action` without its renderer) are left out. */
+function toPuckFields(fields: Record<string, BlockField>, opts: ToPuckConfigOptions): Record<string, Field> {
+  const out: Record<string, Field> = {};
+  for (const [k, f] of Object.entries(fields)) {
+    const pf = toPuckField(f, opts);
+    if (pf) out[k] = pf;
+  }
+  return out;
 }
 
 /** Puck passes each slot as a component; blocks receive it rendered (ReactNode). Same inside list rows. */
@@ -150,8 +161,7 @@ export function toPuckConfig(r: BlockRegistry, opts: ToPuckConfigOptions): PuckC
   const components: Record<string, ComponentConfig> = {};
   const categories: Record<string, { title: string; components: string[] }> = {};
   for (const d of r.list) {
-    const fields: Record<string, Field> = {};
-    for (const [k, f] of Object.entries(d.fields as Record<string, BlockField>)) fields[k] = toPuckField(f, opts);
+    const fields = toPuckFields(d.fields as Record<string, BlockField>, opts);
     components[d.name] = {
       label: localizedText(d.label, opts.locale, d.name),
       fields,

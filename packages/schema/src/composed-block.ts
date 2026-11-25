@@ -123,6 +123,7 @@ const DEFAULT_EXPECTED: Record<ComposedFieldKind, string> = {
 };
 const NAME_RE = /^[A-Z][A-Za-z0-9]{0,63}$/;
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const has = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 
 const enumLeaf = (allowed: readonly string[], add: (p: (string | number)[], m: string) => void) => (v: unknown, p: (string | number)[]) => {
   if (typeof v !== 'string' || !allowed.includes(v)) add(p, `must be one of ${allowed.join(', ')}`);
@@ -265,6 +266,15 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
     }
   }
 
+  // layout and overlay blocks
+  const rootEl = isObj(spec.tree) ? spec.tree.el : undefined;
+  if (rootEl === 'Overlay' && spec.binding !== undefined) add(['binding'], 'an overlay block cannot have a binding');
+  if (isObj(spec.fields)) {
+    const kind = composedKind(spec as unknown as ComposedBlockSpec);
+    if (kind === 'overlay' && has(spec.fields, 'name')) add(['fields', 'name'], '"name" is reserved for the overlay name field');
+    if (kind === 'layout' && has(spec.fields, 'pageContent')) add(['fields', 'pageContent'], '"pageContent" is reserved for the page content slot');
+  }
+
   // tree
   const collection = binding?.mode === 'collection';
   const hasBinding = binding !== undefined;
@@ -377,9 +387,28 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
   return issues;
 }
 
-export function composedManifestEntry(spec: ComposedBlockSpec): { name: string; version: number; richText?: string[] } {
+export function composedManifestEntry(spec: ComposedBlockSpec): { name: string; version: number; richText?: string[]; kind?: ComposedBlockKind } {
   const richText = Object.entries(spec.fields ?? {}).filter(([, f]) => f.kind === 'richText').map(([n]) => n);
-  return richText.length ? { name: spec.name, version: spec.version, richText } : { name: spec.name, version: spec.version };
+  const kind = composedKind(spec);
+  return {
+    name: spec.name,
+    version: spec.version,
+    ...(richText.length ? { richText } : {}),
+    ...(kind !== 'block' ? { kind } : {}),
+  };
+}
+
+/** `ProductCard` → `product-card` (block folders and file names, default overlay names). */
+export function kebabName(name: string): string {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .toLowerCase();
+}
+
+/** Default `name` of an overlay block placement: the block name in kebab case, cut to the overlay name length. */
+export function overlayDefaultName(blockName: string): string {
+  return kebabName(blockName).slice(0, 32).replace(/-+$/, '');
 }
 
 /**

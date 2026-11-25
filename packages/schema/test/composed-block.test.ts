@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  composedKind, composedManifestEntry, isBreakingChange, regionNames, slotSignature, validateComposedSpec, withAutoVersion, type ComposedBlockSpec,
+  composedKind, composedManifestEntry, isBreakingChange, kebabName, overlayDefaultName, regionNames, slotSignature, validateComposedSpec, withAutoVersion, type ComposedBlockSpec,
 } from '../src/composed-block';
 
 const single = (): ComposedBlockSpec => ({
@@ -272,5 +272,29 @@ describe('layout and overlay elements', () => {
     expect(isBreakingChange(layout(), layout())).toBe(false);
     expect(isBreakingChange(layout(), mut(layout(), (s) => (s.tree.children[2].props.name = 'bottom')))).toBe(true);
     expect(isBreakingChange(layout(), mut(layout(), (s) => s.tree.children.push({ el: 'Region', props: { name: 'aside' } })))).toBe(true);
+  });
+});
+
+describe('layout and overlay blocks: binding, reserved fields, manifest, default name', () => {
+  it('rejects a binding on an overlay block', () => {
+    expect(paths(mut(overlay(), (s) => (s.binding = { apiId: 'product', mode: 'single' })))).toEqual(['binding']);
+  });
+  it('reserves the generated field names of layout and overlay blocks', () => {
+    expect(paths(mut(overlay(), (s) => (s.fields.name = { kind: 'text' })))).toEqual(['fields.name']);
+    expect(paths(mut(layout(), (s) => (s.fields.pageContent = { kind: 'text' })))).toEqual(['fields.pageContent']);
+    expect(validateComposedSpec(mut(unbound(), (s) => (s.fields.name = { kind: 'text' })))).toEqual([]);
+  });
+  it('lists the kind of layout and overlay blocks in the manifest entry', () => {
+    expect(composedManifestEntry(layout())).toEqual({ name: 'SiteLayout', version: 1, richText: ['body'], kind: 'layout' });
+    expect(composedManifestEntry(overlay())).toEqual({ name: 'MenuMobile', version: 1, richText: ['body'], kind: 'overlay' });
+  });
+  it('kebab-cases block names for the default overlay name', () => {
+    expect(kebabName('LienHe')).toBe('lien-he');
+    expect(kebabName('HTMLBlock2Go')).toBe('html-block2-go');
+    expect(overlayDefaultName('MenuMobile')).toBe('menu-mobile');
+    const long = overlayDefaultName('A'.repeat(1) + 'bcdefghij'.repeat(3) + 'KlmnopQrst');
+    expect(long.length).toBeLessThanOrEqual(32);
+    expect(long).toMatch(/^[a-z][a-z0-9-]{0,31}$/);
+    expect(long.endsWith('-')).toBe(false);
   });
 });
