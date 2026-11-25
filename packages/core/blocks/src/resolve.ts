@@ -22,6 +22,12 @@ export interface ContentFetcher {
    * `entryAssetPaths`. Optional: without it those asset ids stay unresolved (images render nothing).
    */
   assets?(ids: string[]): Promise<AssetRef[]>;
+  /**
+   * apiIds of private content types (spec §7). Their entries are never fetched: a stored binding to one resolves
+   * to nothing. Fetchers that can read private entries (the admin, draft previews) must provide it; the public API
+   * answers 404 for private types, so the public fetcher needs none.
+   */
+  privateApiIds?(): Promise<ReadonlySet<string>>;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -162,6 +168,13 @@ export async function resolvePage(
       return fallback;
     }
   };
+  // Private types: drop their ids and queries before fetching. If the list cannot be read, fetch no entries at all.
+  if (f.privateApiIds && (ids.size || queries.size)) {
+    const all = new Set([...ids.keys(), ...[...queries.values()].map((q) => q.apiId)]);
+    const hidden = await safe('privateApiIds', 'loading private content types', all as ReadonlySet<string>, () => f.privateApiIds!());
+    for (const apiId of hidden) ids.delete(apiId);
+    for (const [key, q] of queries) if (hidden.has(q.apiId)) queries.delete(key);
+  }
   const [byId, queried, paths] = await Promise.all([
     Promise.all(
       [...ids].map(async ([apiId, set]) => {

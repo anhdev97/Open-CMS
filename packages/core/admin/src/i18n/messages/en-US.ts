@@ -610,6 +610,7 @@ export const enUS = {
     },
     fields: {
       none: "None",
+      privateType: "\"{type}\" is a private content type: its entries are never shown on pages, so this field renders nothing.",
       contentType: {
         placeholder: "Choose a content type",
       },
@@ -875,6 +876,7 @@ export const enUS = {
     problemsTitle: "This block does not fit its content type any more",
     contentType: "Content type",
     noContentType: "No content type",
+    privateBinding: "This block is bound to \"{type}\", a private content type: it renders nothing on pages. Choose another content type.",
     contentTypeOption: "Content: {type}",
     sampleEntry: "Sample entry",
     previewLocale: "Preview language",

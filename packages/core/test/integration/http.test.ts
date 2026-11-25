@@ -77,8 +77,11 @@ describe('HTTP layer owned by core', () => {
   });
 
   describe('CORS for the delivery API', () => {
+    // A route the public API serves (the core page type); unknown and private apiIds get no CORS (below).
+    const PUBLIC = '/api/content/opencloudcmsPage';
+
     it('allows a configured origin on GET /api/content/*', async () => {
-      const res = await call('/api/content/x', { headers: { origin: ALLOWED } });
+      const res = await call(PUBLIC, { headers: { origin: ALLOWED } });
       expect(res.headers.get('access-control-allow-origin')).toBe(ALLOWED);
       expect(res.headers.get('vary')).toMatch(/Origin/i);
       expect(res.headers.get('access-control-allow-methods')).toBe('GET, HEAD, OPTIONS');
@@ -88,23 +91,33 @@ describe('HTTP layer owned by core', () => {
     });
 
     it('answers a preflight with 204 and the headers', async () => {
-      const res = await call('/api/content/x', { method: 'OPTIONS', headers: { origin: ALLOWED } });
+      const res = await call(PUBLIC, { method: 'OPTIONS', headers: { origin: ALLOWED } });
       expect(res.status).toBe(204);
       expect(res.headers.get('access-control-allow-origin')).toBe(ALLOWED);
     });
 
     it('varies on Origin even without an Origin header', async () => {
-      const res = await call('/api/content/x');
+      const res = await call(PUBLIC);
       expect(res.headers.get('vary')).toMatch(/Origin/i);
       expect(res.headers.get('access-control-allow-origin')).toBeNull();
     });
 
     it('adds nothing for an unknown origin (preflight still 204)', async () => {
-      const get = await call('/api/content/x', { headers: { origin: 'https://evil.example.com' } });
+      const get = await call(PUBLIC, { headers: { origin: 'https://evil.example.com' } });
       expect(get.headers.get('access-control-allow-origin')).toBeNull();
-      const pre = await call('/api/content/x', { method: 'OPTIONS', headers: { origin: 'https://evil.example.com' } });
+      const pre = await call(PUBLIC, { method: 'OPTIONS', headers: { origin: 'https://evil.example.com' } });
       expect(pre.status).toBe(204);
       expect(pre.headers.get('access-control-allow-origin')).toBeNull();
+    });
+
+    it('answers a preflight for an unknown apiId with the GET 404 and no CORS headers', async () => {
+      const pre = await call('/api/content/x', { method: 'OPTIONS', headers: { origin: ALLOWED } });
+      expect(pre.status).toBe(404);
+      expect(await pre.json()).toEqual({ error: { code: 'not_found', message: 'Unknown content type "x"' } });
+      expect(pre.headers.get('access-control-allow-origin')).toBeNull();
+      const get = await call('/api/content/x', { headers: { origin: ALLOWED } });
+      expect(get.status).toBe(404);
+      expect(get.headers.get('access-control-allow-origin')).toBeNull();
     });
 
     it('adds no CORS headers outside /api/content', async () => {

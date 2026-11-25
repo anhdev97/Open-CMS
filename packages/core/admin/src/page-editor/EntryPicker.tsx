@@ -6,7 +6,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { t } from '../i18n';
 import type { ContentTypeDefinition } from '../lib/types';
-import { FieldShell, fieldLabel } from './FieldShell';
+import { FieldShell, PrivateTypeNote, fieldLabel } from './FieldShell';
 import { entryLabel, loadContentType, loadEntries, type EntryRow } from './data';
 import { useEditorInfo } from './editor-context';
 
@@ -32,12 +32,16 @@ export function EntryPicker({ id, apiId, displayField, selected, multiple, readO
     if (!apiId) return;
     let live = true;
     setEntries(null);
+    setType(null);
     setFailed(false);
-    Promise.all([loadContentType(apiId), loadEntries(apiId, locale)])
-      .then(([ct, rows]) => {
+    // The type first: entries of a private type are never loaded (a stored binding to one renders nothing).
+    loadContentType(apiId)
+      .then(async (ct) => {
         if (!live) return;
         setType(ct);
-        setEntries(rows);
+        if (ct?.private) return;
+        const rows = await loadEntries(apiId, locale);
+        if (live) setEntries(rows);
       })
       .catch(() => live && setFailed(true));
     return () => {
@@ -55,6 +59,7 @@ export function EntryPicker({ id, apiId, displayField, selected, multiple, readO
   }, [entries, query, selected, type, displayField]);
 
   if (!apiId) return <p className="text-sm text-muted-foreground">{t('pageEditor.fields.entry.noType')}</p>;
+  if (type?.private) return <PrivateTypeNote apiId={apiId} />;
 
   const move = (i: number, d: -1 | 1) => {
     const next = [...selected];

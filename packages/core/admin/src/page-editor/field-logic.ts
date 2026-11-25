@@ -70,10 +70,10 @@ export function tokenOptions(kind: 'color' | 'spacing'): string[] {
   return [...(kind === 'color' ? COLOR_TOKENS : SPACING_TOKENS)];
 }
 
-/** Content types a block may list (core-owned types hidden), labelled in `locale`. */
+/** Content types a block may list (core-owned and private types hidden), labelled in `locale`. */
 export function contentTypeOptions(types: readonly ContentTypeDefinition[], locale: Locale): { value: string; label: string }[] {
   return types
-    .filter((t) => t.apiId !== PAGE_API_ID)
+    .filter((t) => t.apiId !== PAGE_API_ID && !t.private)
     .map((t) => ({ value: t.apiId, label: localizedText(t.displayName, locale, t.apiId) }));
 }
 

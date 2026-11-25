@@ -559,6 +559,7 @@ const viVN: Messages = {
     },
     fields: {
       none: "Không có",
+      privateType: "\"{type}\" là loại nội dung riêng tư: các mục của nó không bao giờ hiển thị trên trang, nên trường này không hiện gì.",
       contentType: {
         placeholder: "Chọn loại nội dung",
       },
@@ -817,6 +818,7 @@ const viVN: Messages = {
     problemsTitle: "Block này không còn khớp với content type",
     contentType: "Content type",
     noContentType: "Không gắn content type",
+    privateBinding: "Block này gắn với \"{type}\", một loại nội dung riêng tư: nó không hiện gì trên trang. Hãy chọn loại nội dung khác.",
     contentTypeOption: "Nội dung: {type}",
     sampleEntry: "Mục mẫu",
     previewLocale: "Ngôn ngữ xem trước",

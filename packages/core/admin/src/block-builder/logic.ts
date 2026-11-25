@@ -1,6 +1,7 @@
 // Pure logic of the block builder: which sources a property may use (spec §5.4), filter/sort fields, names,
 // the save flow and change summaries. Relative imports only (root vitest).
 import {
+  isCoreApiId,
   COMPOSED_GENERATED_FIELD_RE,
   composedFieldNameIssue,
   composedKind,
@@ -19,6 +20,11 @@ import { ApiError } from '../lib/api-error';
 import type { ContentTypeDefinition, FieldDefinition, FieldKind } from '../lib/types';
 
 const TEXT: readonly FieldKind[] = ['text', 'longText', 'slug', 'email'];
+
+/** Types a block may bind to: core-owned and private types are left out (spec §7). */
+export function bindableTypes(types: readonly ContentTypeDefinition[]): ContentTypeDefinition[] {
+  return types.filter((ct) => !isCoreApiId(ct.apiId) && !ct.private);
+}
 
 /**
  * Content field kinds each bindable element prop accepts (spec §5.4). Mirrors `ENTRY_PROP_KINDS` of the server

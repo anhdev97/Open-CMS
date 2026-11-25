@@ -13,6 +13,8 @@ export interface FieldDefinition {
   localizable: boolean;
   indexed: boolean;
   unique: boolean;
+  /** Only the server API writes it (only `true` is stored). */
+  readOnly?: boolean;
   label?: string;
   description?: string;
   options: Record<string, any>;
@@ -26,6 +28,8 @@ export interface ContentTypeDefinition {
   description?: string;
   /** Entries need a reviewer's approval before they are published (only `true` is stored). */
   review?: boolean;
+  /** Server-only entries: never published, absent from page and block builder pickers (only `true` is stored). */
+  private?: boolean;
   fields: FieldDefinition[];
 }
 

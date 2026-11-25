@@ -18,6 +18,7 @@ import { AdminContentController, ContentController, WorkflowController } from '.
 import { AdminPagesController, PagesController, PublicPagesController } from './pages/pages.controller';
 import { PagesService } from './pages/pages.service';
 import { EntriesService } from './entries.service';
+import { PrivateEntriesService } from './private-entries.service';
 import { EntryRepository } from './entry.repository';
 import { LocalesController, LocalesService } from './locales';
 import { ThemeController, ThemeService } from './theme';
@@ -101,6 +102,7 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, BeforeAppli
         ContentRegistry,
         EntryRepository,
         EntriesService,
+        PrivateEntriesService,
         WorkflowService,
         PagesService,
         SchemaWriteQueue,
@@ -111,7 +113,7 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, BeforeAppli
         ThemeService,
         { provide: CORE_READY_CORE, useValue: new DeferredCoreReady() },
       ],
-      exports: [OPENCLOUDCMS_DB, CORE_READY_CORE, ContentRegistry, EntriesService, PageBlocksManifest],
+      exports: [OPENCLOUDCMS_DB, CORE_READY_CORE, ContentRegistry, EntriesService, PrivateEntriesService, PageBlocksManifest],
     };
   }
 

@@ -227,6 +227,49 @@ describe('resolvePage', () => {
     expect(c[2]).toEqual(unknown);
   });
 
+  it('a stored binding to a private type resolves to nothing, without fetching it', async () => {
+    const privateApiIds = vi.fn(async () => new Set(['post']));
+    const { f, calls } = fake({ privateApiIds });
+    const out = await resolvePage(
+      page([
+        item('Product', { item: { documentId: A } }, 'p1'),
+        item('Grid', { items: { mode: 'pick', ids: [B] }, items2: { mode: 'pick', ids: [A] }, body: [] }, 'g1'),
+        item('Grid', { items: { mode: 'query', limit: 2 }, items2: { mode: 'query', limit: 3 }, body: [] }, 'g2'),
+      ]),
+      reg,
+      f,
+      O,
+    );
+    expect(privateApiIds).toHaveBeenCalledTimes(1);
+    expect(calls.byIds).toEqual([['product', [A, B], 'vi-VN']]);
+    expect(calls.query.map((c) => c[0])).toEqual(['product']);
+    const [p1, g1, g2] = out.content as any[];
+    expect(p1.props.item.documentId).toBe(A);
+    expect(g1.props.items2).toEqual([]);
+    expect(g2.props.items2).toEqual([]);
+    expect(g2.props.items).toEqual([ent('q1')]);
+  });
+
+  it('an entry bound to a private type resolves to null; a failing private-type lookup fetches no entries', async () => {
+    const { f, calls } = fake({ privateApiIds: async () => new Set(['product']) });
+    const out = await resolvePage(page([item('Product', { item: { documentId: A } })]), reg, f, O);
+    expect((out.content as any[])[0].props.item).toBeNull();
+    expect(calls.byIds).toEqual([]);
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const failing = fake({ privateApiIds: async () => Promise.reject(new Error('down')) });
+    const out2 = await resolvePage(page([item('Product', { item: { documentId: A } })]), reg, failing.f, O);
+    expect((out2.content as any[])[0].props.item).toBeNull();
+    expect(failing.calls.byIds).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not ask for private types when nothing is data-bound', async () => {
+    const privateApiIds = vi.fn(async () => new Set<string>());
+    await resolvePage(page([item('Links', { link: { kind: 'url', href: '/x' } })]), reg, fake({ privateApiIds }).f, O);
+    expect(privateApiIds).not.toHaveBeenCalled();
+  });
+
   it('makes no requests for pages without data-bound fields and tolerates empty content', async () => {
     const { f, calls } = fake();
     const out = await resolvePage(null as never, reg, f, O);
@@ -291,6 +334,15 @@ describe('fetchers', () => {
     expect(init.credentials).toBeUndefined();
     // Drafts are never cached (browser or Next fetch cache).
     expect(calls.map((c) => (c.init as RequestInit).cache)).toEqual(['no-store', 'no-store']);
+  });
+
+  it('adminFetcher.privateApiIds reads the admin type list once; publicFetcher has none (the API answers 404)', async () => {
+    const calls = mockFetch(() => ({ body: { data: [{ apiId: 'order', private: true }, { apiId: 'product' }] } }));
+    const f = adminFetcher('http://h');
+    expect([...(await f.privateApiIds!())]).toEqual(['order']);
+    await f.privateApiIds!();
+    expect(calls.map((c) => new URL(c.url).pathname)).toEqual(['/api/admin/content-types']);
+    expect(publicFetcher('http://h').privateApiIds).toBeUndefined();
   });
 
   it('non-2xx throws an Error carrying status', async () => {

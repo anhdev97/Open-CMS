@@ -559,6 +559,7 @@ const frFR: Messages = {
     },
     fields: {
       none: "Aucun",
+      privateType: "« {type} » est un type de contenu privé : ses entrées ne sont jamais affichées sur les pages, ce champ n'affiche donc rien.",
       contentType: {
         placeholder: "Choisir un type de contenu",
       },
@@ -817,6 +818,7 @@ const frFR: Messages = {
     problemsTitle: "Ce bloc ne correspond plus à son type de contenu",
     contentType: "Type de contenu",
     noContentType: "Aucun type de contenu",
+    privateBinding: "Ce bloc est lié à « {type} », un type de contenu privé : il n'affiche rien sur les pages. Choisissez un autre type de contenu.",
     contentTypeOption: "Contenu : {type}",
     sampleEntry: "Entrée d'exemple",
     previewLocale: "Langue de l'aperçu",

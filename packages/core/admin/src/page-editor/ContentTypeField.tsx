@@ -3,7 +3,7 @@ import type { CustomFieldRender } from '@puckeditor/core';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { t } from '../i18n';
 import { useLocale } from '../i18n/hooks';
-import { FieldShell, fieldLabel } from './FieldShell';
+import { FieldShell, PrivateTypeNote, fieldLabel } from './FieldShell';
 import { contentTypeOptions } from './field-logic';
 import { loadContentTypes } from './data';
 
@@ -13,10 +13,15 @@ const NONE = '__none__';
 export const ContentTypeField: CustomFieldRender<string> = ({ field, name, id, value, onChange, readOnly }) => {
   const locale = useLocale();
   const [options, setOptions] = useState<{ value: string; label: string }[]>([]);
+  const [privateIds, setPrivateIds] = useState<ReadonlySet<string>>(() => new Set());
   useEffect(() => {
     let live = true;
     loadContentTypes()
-      .then((types) => live && setOptions(contentTypeOptions(types, locale)))
+      .then((types) => {
+        if (!live) return;
+        setOptions(contentTypeOptions(types, locale));
+        setPrivateIds(new Set(types.filter((ct) => ct.private).map((ct) => ct.apiId)));
+      })
       .catch(() => live && setOptions([]));
     return () => {
       live = false;
@@ -39,6 +44,7 @@ export const ContentTypeField: CustomFieldRender<string> = ({ field, name, id, v
           ))}
         </SelectContent>
       </Select>
+      {value && privateIds.has(value) && <PrivateTypeNote apiId={value} />}
     </FieldShell>
   );
 };

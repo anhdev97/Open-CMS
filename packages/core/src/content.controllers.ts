@@ -16,6 +16,7 @@ import {
 import { CurrentUser, RequirePermission, type RequestUser } from '@opencloudcms/oauth2';
 import { PAGE_API_ID } from '@opencloudcms/schema';
 import { EntriesService, type ListParams } from './entries.service';
+import { ContentRegistry } from './registry.service';
 import { WorkflowService } from './workflow.service';
 
 /** Accepts both `filter[name]=x` flat keys (Express 5) and nested objects (qs). */
@@ -52,13 +53,20 @@ function ifMatchValue(header: string | undefined): string | undefined {
   return v ? v : undefined;
 }
 
-/** Storefront / delivery API: published content only, no auth. */
+/**
+ * Storefront / delivery API: published content only, no auth. Private types answer exactly like an unknown apiId
+ * (`ContentRegistry.getPublic`); `ContentCorsMiddleware` does the same for preflights.
+ */
 @Controller('api/content')
 export class ContentController {
-  constructor(@Inject(EntriesService) private readonly entries: EntriesService) {}
+  constructor(
+    @Inject(EntriesService) private readonly entries: EntriesService,
+    @Inject(ContentRegistry) private readonly registry: ContentRegistry,
+  ) {}
 
   @Get(':apiId')
   list(@Param('apiId') apiId: string, @Query() query: Record<string, unknown>) {
+    this.registry.getPublic(apiId);
     // Base pages are read publicly only through `opencloudcmsPage/base`.
     const mainWhere = apiId === PAGE_API_ID ? { kind: 'page' } : undefined;
     return this.entries.list(apiId, { ...parseListQuery(query), status: 'published', mainWhere });
@@ -71,6 +79,7 @@ export class ContentController {
     @Query('locale') locale?: string,
     @Query('fallback') fallback?: string,
   ) {
+    this.registry.getPublic(apiId);
     const r = await this.entries.get(apiId, documentId, 'published', locale, fallback);
     if (apiId === PAGE_API_ID && r.data.kind === 'base') throw new NotFoundException(`${apiId} ${documentId} not found`);
     return r;

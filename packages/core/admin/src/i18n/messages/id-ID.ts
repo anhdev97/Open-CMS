@@ -559,6 +559,7 @@ const idID: Messages = {
     },
     fields: {
       none: "Tidak ada",
+      privateType: "\"{type}\" adalah tipe konten privat: entrinya tidak pernah ditampilkan di halaman, jadi bidang ini tidak menampilkan apa pun.",
       contentType: {
         placeholder: "Pilih tipe konten",
       },
@@ -817,6 +818,7 @@ const idID: Messages = {
     problemsTitle: "Blok ini tidak lagi cocok dengan tipe kontennya",
     contentType: "Tipe konten",
     noContentType: "Tanpa tipe konten",
+    privateBinding: "Blok ini terikat ke \"{type}\", tipe konten privat: blok ini tidak menampilkan apa pun di halaman. Pilih tipe konten lain.",
     contentTypeOption: "Konten: {type}",
     sampleEntry: "Entri contoh",
     previewLocale: "Bahasa pratinjau",

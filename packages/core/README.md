@@ -455,6 +455,24 @@ submittedAt, note } | null`. `GET /api/admin/content/:apiId?workflow=in_review` 
 review; `GET /api/admin/workflow/pending-count` → `{ count, byType }`. Publishing through `approve` runs the
 same hooks as `publish`.
 
+## Private content types
+
+A type with `private: true` (and fields with `readOnly: true`) holds data the admin sees and the public never does:
+
+- `GET /api/content/:apiId[/…]` answers exactly like an unknown apiId (404, same body), and so does the CORS
+  preflight (404, no CORS headers). There is no public reference expansion.
+- An entry has one row (`status = 'draft'`) and is never published: `publish`, `approve`, `unpublish`, `submit`,
+  `withdraw` and `reject` answer 409 `private_type`.
+- The admin API never writes `readOnly` fields: on create a non-null value is 422 `read_only` (with the paths); on
+  update an unchanged value is ignored and a changed one is 422 `read_only`. This holds for every type.
+- Page and block builder pickers leave private types out; a block bound to one resolves to nothing
+  (`ContentFetcher.privateApiIds`) and the editor shows a warning.
+- Server code writes entries with the injectable `PrivateEntriesService` (`create`, `update`, `get`, `list`,
+  `remove`): it may write `readOnly` fields, runs the same validation and entry hooks, and each call has its own
+  transaction. `opts.user` is optional (actor `system`; entries store no author).
+
+Core has no webhooks, search or sitemap today; whoever adds them must skip private types.
+
 ## Breaking changes
 
 - `adminToken` and `OPENCLOUDCMS_ADMIN_TOKEN` are removed; `/api/admin/*` needs a signed-in session whose groups grant the matching permission (`content.*`, `settings.*`); `GET /api/admin/meta` and content type reads need only a session.

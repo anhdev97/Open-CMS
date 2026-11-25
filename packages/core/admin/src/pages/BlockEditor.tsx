@@ -5,7 +5,7 @@ import { createElement, useCallback, useContext, useEffect, useMemo, useReducer,
 import { toast } from 'sonner';
 import { Puck, type Data, type Dictionary, type useGetPuck } from '@puckeditor/core';
 import { adminFetcher, coreBlocks, defineBlocks, type Entry } from '@opencloudcms/core/blocks';
-import { composedKind, isCoreApiId, validateComposedSpec, type ComposedBlockSpec, type ComposedElement, type ComposedField, type ComposedNode, type ThemeDefinition } from '@opencloudcms/schema';
+import { composedKind, validateComposedSpec, type ComposedBlockSpec, type ComposedElement, type ComposedField, type ComposedNode, type ThemeDefinition } from '@opencloudcms/schema';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
@@ -36,6 +36,7 @@ import { LengthPuckField, ResponsiveSelectPuckField, TracksPuckField } from '../
 import { DeviceMemory, ViewportBreakpoint, deviceUi, deviceViewports } from '../block-builder/style/DeviceToggle';
 import { CanvasFrame, ThemeProvider, loadTheme } from '../block-builder/style/theme-context';
 import {
+  bindableTypes,
   bindingResetNotes,
   breakingNotes,
   buildSpec,
@@ -107,7 +108,7 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
   const adminLocale = useLocale();
   const registry = useContext(BlocksContext);
   const readOnly = !meta.schemaEditable;
-  const types = useMemo(() => allTypes.filter((ct) => !isCoreApiId(ct.apiId)), [allTypes]);
+  const types = useMemo(() => bindableTypes(allTypes), [allTypes]);
 
   const [initialSpec] = useState<ComposedBlockSpec>(() => detail?.spec ?? emptySpec(undefined, startKind));
   const [initialData] = useState<BuilderPuckData>(() => treeToPuck(initialSpec).data);
@@ -119,6 +120,8 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
   const setDraft = useCallback((u: (d: BlockDraft) => BlockDraft) => setDraftState(u), []);
 
   const type = draft.binding ? (types.find((ct) => ct.apiId === draft.binding!.apiId) ?? null) : null;
+  // A binding stored before its type became private: it renders nothing on pages (spec §7).
+  const privateBinding = draft.binding && allTypes.some((ct) => ct.apiId === draft.binding!.apiId && ct.private) ? draft.binding.apiId : null;
   const typeRef = useRef(type);
   typeRef.current = type;
 
@@ -387,6 +390,12 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
         <Alert variant="warning" className="rounded-none border-x-0 border-t-0">
           <TriangleAlertIcon aria-hidden="true" />
           <AlertDescription>{t('blocks.readOnly')}</AlertDescription>
+        </Alert>
+      )}
+      {privateBinding && (
+        <Alert variant="warning" className="rounded-none border-x-0 border-t-0" data-private-type="">
+          <TriangleAlertIcon aria-hidden="true" />
+          <AlertDescription>{t('blockBuilder.privateBinding', { type: privateBinding })}</AlertDescription>
         </Alert>
       )}
       {detail && detail.problems.length > 0 && (
