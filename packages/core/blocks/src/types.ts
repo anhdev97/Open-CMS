@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Config, CustomField, CustomFieldRender, Data } from '@puckeditor/core';
-import type { LocalizedText } from '@opencloudcms/schema';
+import type { LocalizedText, Responsive, Track } from '@opencloudcms/schema';
 
 /** Design-system colour tokens offered by `b.color` (stored as the token name). */
 export const COLOR_TOKENS = ['primary', 'secondary', 'muted', 'accent', 'background', 'foreground', 'destructive'] as const;
@@ -70,6 +70,12 @@ export interface SpacingBlockField extends FieldBase {
   kind: 'spacing';
   default?: SpacingToken;
 }
+export interface TracksBlockField extends FieldBase {
+  kind: 'tracks';
+  /** Most tracks per breakpoint (and most column slots). */
+  max?: number;
+  default?: Responsive<Track[]> | null;
+}
 export interface EntryBlockField extends FieldBase {
   kind: 'entry';
   apiId: string;
@@ -84,6 +90,17 @@ export interface EntriesBlockField extends FieldBase {
   limit?: number;
   sortable?: boolean;
   filterable?: boolean;
+  /**
+   * Fixed equality filters, enforced by `resolvePage` and never stored: merged over the stored query filter (base wins
+   * on the same field); picked entries that do not match are dropped.
+   */
+  baseFilter?: Record<string, string>;
+  /** `field:asc|desc`. Used when the stored query has no sort, and always when `sortable` is not true. */
+  defaultSort?: string;
+  /** `resolvePage` uses `limit` whatever the stored value (and caps picks to it). */
+  lockLimit?: boolean;
+  /** Value when the block is inserted. Default `{ mode: 'pick', ids: [] }`. */
+  default?: StoredEntries;
 }
 export interface ListBlockField<S extends Record<string, BlockField> = Record<string, BlockField>> extends FieldBase {
   kind: 'list';
@@ -111,6 +128,7 @@ export type BlockField =
   | ImageBlockField
   | ColorBlockField
   | SpacingBlockField
+  | TracksBlockField
   | EntryBlockField
   | EntriesBlockField
   | ListBlockField<any>
@@ -145,7 +163,9 @@ export type ResolvedValue<F> = F extends { kind: 'text' | 'longText' }
           ? T
           : F extends { kind: 'color' }
             ? ColorToken
-            : F extends { kind: 'spacing' }
+            : F extends { kind: 'tracks' }
+              ? Responsive<Track[]> | null
+              : F extends { kind: 'spacing' }
               ? SpacingToken
               : F extends { kind: 'link' }
                 ? ResolvedLink
@@ -181,6 +201,22 @@ export interface BlockDefinition<F extends Record<string, BlockField> = Record<s
   fields: F;
   migrate?: BlockMigration[];
   render(props: ResolvedProps<F>): ReactNode;
+  /**
+   * Set by `defineComposedBlock`. `resolvePage` stamps the reserved prop `_locale` on its items and the Puck config
+   * passes `_locale`/`_editor` to `render` (never stored: `writePageContent` drops undeclared props).
+   */
+  composed?: true;
+  /**
+   * Hand-written blocks (e.g. ejected from the Block Builder) that render like composed blocks: same reserved props
+   * as `composed` (`resolvePage` stamps `_locale`; the Puck config passes `_locale`/`_editor`), without a spec.
+   * Read them with `composedHelpers.locale(props)` / `composedHelpers.editor(props)`.
+   */
+  usesLocale?: true;
+  /**
+   * Entry fields (of the block's `entry`/`entries` values) that hold an asset id: `resolvePage` replaces a uuid there
+   * by `{ id, url, alt, width, height }` (one `ContentFetcher.assets` call per page). Set by `defineComposedBlock`.
+   */
+  entryAssetPaths?: readonly string[];
 }
 
 export interface BlockRegistry {
@@ -214,4 +250,7 @@ export type BlockCustomField<K extends CustomFieldKind = CustomFieldKind> = Cust
 };
 
 /** One Puck custom-field renderer per data field kind (supplied by the admin editor). */
-export type CustomFieldRenderers = { [K in CustomFieldKind]: CustomFieldRender<StoredFieldValue<K>> };
+export type CustomFieldRenderers = { [K in CustomFieldKind]: CustomFieldRender<StoredFieldValue<K>> } & {
+  /** Optional: without it `b.tracks` falls back to a select of presets. */
+  tracks?: CustomFieldRender<Responsive<Track[]> | null>;
+};

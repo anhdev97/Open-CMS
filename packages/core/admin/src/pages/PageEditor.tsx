@@ -12,11 +12,12 @@ import {
   normalizePageRichText,
   readPageContent,
   type BlockDefinition,
-  type BlockField,
   type BlockRegistry,
   type PuckData,
 } from '@opencloudcms/core/blocks';
-import type { Locale } from '@opencloudcms/schema';
+import type { Locale, ThemeDefinition } from '@opencloudcms/schema';
+import { DeviceMemory, ViewportBreakpoint, deviceUi, deviceViewports } from '../block-builder/style/DeviceToggle';
+import { CanvasFrame, ThemeProvider, loadTheme } from '../block-builder/style/theme-context';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
@@ -33,15 +34,12 @@ import { getPage, getShadowedPaths, pageErrorMessageKey, pagePreviewUrl, publish
 import type { Meta } from '../lib/types';
 import { BlocksContext } from '../page-editor/blocks-context';
 import { ContentTypeField } from '../page-editor/ContentTypeField';
+import { PAGE_CUSTOM_FIELDS } from '../page-editor/custom-fields';
 import { buildEditorConfig } from '../page-editor/editor-config';
 import { EditorInfoContext, ResolvedContext, type EditorInfo } from '../page-editor/editor-context';
 import { EditorHeader, HeaderContext, type HeaderModel } from '../page-editor/EditorHeader';
-import { EntriesField } from '../page-editor/EntriesField';
-import { EntryField } from '../page-editor/EntryPicker';
-import { fromEditorData, previewProps, slotOverflows, toEditorData, unknownBlockTypes, type PageSeo } from '../page-editor/field-logic';
+import { canvasProps, fromEditorData, slotOverflows, toEditorData, unknownBlockTypes, type PageSeo } from '../page-editor/field-logic';
 import { UNSAVED_STATES, useAutosave, usePreviewResolution } from '../page-editor/hooks';
-import { ImageField } from '../page-editor/ImageField';
-import { LinkField } from '../page-editor/LinkField';
 import { fieldTypes } from '../page-editor/puck-fields';
 import { TokenField } from '../page-editor/TokenField';
 import { UnknownBlock } from '../page-editor/UnknownBlock';
@@ -83,10 +81,23 @@ function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** Canvas render of one block: data fields come from the latest preview resolution (see `previewProps`). */
-function PreviewBlock({ def, render, props }: { def: BlockDefinition<any>; render: (p: Record<string, unknown>) => ReactElement; props: Record<string, unknown> }) {
+/**
+ * Canvas render of one block: data fields come from the latest preview resolution; composed (and `usesLocale`)
+ * blocks render in the page's content `locale`, like the website (see `canvasProps`).
+ */
+function PreviewBlock({
+  def,
+  render,
+  props,
+  locale,
+}: {
+  def: BlockDefinition<any>;
+  render: (p: Record<string, unknown>) => ReactElement;
+  props: Record<string, unknown>;
+  locale: Locale;
+}) {
   const resolved = useContext(ResolvedContext);
-  return render(previewProps(def.fields as Record<string, BlockField>, props, resolved.get(String(props.id))));
+  return render(canvasProps(def, props, resolved.get(String(props.id)), locale));
 }
 
 interface EditorProps {
@@ -95,9 +106,10 @@ interface EditorProps {
   defaultLocale: Locale;
   locales: Locale[];
   entry: PageEntry;
+  theme: ThemeDefinition | null;
 }
 
-function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorProps) {
+function Editor({ documentId, locale, defaultLocale, locales, entry, theme }: EditorProps) {
   const registry = useBlocks();
   const adminLocale = useLocale();
   const can = useCan();
@@ -183,13 +195,13 @@ function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorPro
   const config = useMemo(() => {
     const wrapRender = (name: string, render: (p: Record<string, unknown>) => ReactElement) => {
       const def = registry.get(name)!;
-      return (props: Record<string, unknown>) => createElement(PreviewBlock, { def, render, props });
+      return (props: Record<string, unknown>) => createElement(PreviewBlock, { def, render, props, locale });
     };
     const c = buildEditorConfig(
       registry,
       {
         locale: adminLocale,
-        customFields: { entry: EntryField, entries: EntriesField, link: LinkField, image: ImageField } as never,
+        customFields: PAGE_CUSTOM_FIELDS,
         token: TokenField,
         contentType: ContentTypeField,
         unknown: ({ name }) => createElement(UnknownBlock, { name }),
@@ -202,10 +214,14 @@ function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorPro
       if (title !== `pageEditor.categories.${key}`) cat.title = title;
     }
     return c;
-  }, [registry, adminLocale, unknownTypes]);
+  }, [registry, adminLocale, locale, unknownTypes]);
 
-  const overrides = useMemo(() => ({ header: () => createElement(EditorHeader), fieldTypes }), []);
+  const overrides = useMemo(() => ({ header: () => createElement(EditorHeader), puck: ViewportBreakpoint, iframe: CanvasFrame, fieldTypes }), []);
   const dictionary = useMemo(() => puckDictionary(), [adminLocale]); // eslint-disable-line react-hooks/exhaustive-deps
+  const viewports = useMemo(() => deviceViewports(), [adminLocale]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The device chosen last, so a remount ("copy from default") keeps the canvas width.
+  const device = useRef<{ current?: number }>({}).current;
+  const ui = useMemo(() => deviceUi(device.current), [puckKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Leaving saves first; if edits are still not saved (error, conflict) the user must confirm losing them.
   const [leaveTo, setLeaveTo] = useState<string | null>(null);
@@ -337,30 +353,36 @@ function Editor({ documentId, locale, defaultLocale, locales, entry }: EditorPro
         onConfirm={() => leaveTo !== null && navigate(leaveTo)}
       />
       <div className="min-h-0 flex-1">
-        <EditorInfoContext.Provider value={info}>
-          <ResolvedContext.Provider value={resolved}>
-            <HeaderContext.Provider value={header}>
-              <Puck
-                key={puckKey}
-                config={config}
-                data={initial}
-                onChange={onChange}
-                onAction={onAction as never}
-                overrides={overrides as never}
-                permissions={readOnly ? READ_ONLY : undefined}
-                iframe={{ enabled: true, syncHostStyles: true, waitForStyles: true }}
-                dictionary={dictionary}
-                height="100%"
-              />
-            </HeaderContext.Provider>
-          </ResolvedContext.Provider>
-        </EditorInfoContext.Provider>
+        <ThemeProvider theme={theme}>
+          <DeviceMemory.Provider value={device}>
+            <EditorInfoContext.Provider value={info}>
+              <ResolvedContext.Provider value={resolved}>
+                <HeaderContext.Provider value={header}>
+                  <Puck
+                    key={puckKey}
+                    config={config}
+                    data={initial}
+                    onChange={onChange}
+                    onAction={onAction as never}
+                    overrides={overrides as never}
+                    permissions={readOnly ? READ_ONLY : undefined}
+                    iframe={{ enabled: true, syncHostStyles: true, waitForStyles: true }}
+                    viewports={viewports}
+                    ui={ui}
+                    dictionary={dictionary}
+                    height="100%"
+                  />
+                </HeaderContext.Provider>
+              </ResolvedContext.Provider>
+            </EditorInfoContext.Provider>
+          </DeviceMemory.Provider>
+        </ThemeProvider>
       </div>
     </div>
   );
 }
 
-type Loaded = { meta: Meta; entry: PageEntry; locale: Locale };
+type Loaded = { meta: Meta; entry: PageEntry; locale: Locale; theme: ThemeDefinition | null };
 
 function EditorLoader({ documentId, requested }: { documentId: string; requested: string | null }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -369,11 +391,14 @@ function EditorLoader({ documentId, requested }: { documentId: string; requested
 
   useEffect(() => {
     let live = true;
+    // The theme only adds canvas colours and brand swatches: the editor opens without it.
+    const theme = loadTheme();
     (async () => {
       const meta = await api<Meta>('/api/admin/meta');
       const locale = pickEditorLocale(requested, meta.locales, meta.defaultLocale) as Locale;
       const entry = await getPage(documentId, locale);
-      if (live) setLoaded({ meta, entry, locale });
+      const projectTheme = await theme;
+      if (live) setLoaded({ meta, entry, locale, theme: projectTheme });
     })().catch((e) => live && setError(e instanceof ApiError && e.status === 404 ? new Error(t('pageEditor.notFound')) : (e as Error)));
     return () => {
       live = false;
@@ -406,6 +431,7 @@ function EditorLoader({ documentId, requested }: { documentId: string; requested
       defaultLocale={loaded.meta.defaultLocale as Locale}
       locales={loaded.meta.locales as Locale[]}
       entry={loaded.entry}
+      theme={loaded.theme}
     />
   );
 }

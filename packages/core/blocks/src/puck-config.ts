@@ -1,6 +1,7 @@
 import { createElement, Fragment, type ComponentType, type ReactElement } from 'react';
 import type { ComponentConfig, Field } from '@puckeditor/core';
 import { localizedText, type Locale } from '@opencloudcms/schema';
+import { MAX_TRACKS } from './tracks';
 import { fieldsDefaults, optionValue } from './fields';
 import {
   COLOR_TOKENS,
@@ -37,6 +38,11 @@ function toOptions(options: readonly SelectOption<OptionValue>[], locale: Locale
   });
 }
 
+/** Presets of the plain `b.tracks` fallback select: [label, ...fr per column]; stored as `{ base: ['1fr'], md: [...] }`. */
+const TRACK_PRESETS: readonly [string, ...number[]][] = [
+  ['1:1', 1, 1], ['1:2', 1, 2], ['2:1', 2, 1], ['1:1:1', 1, 1, 1], ['1:2:1', 1, 2, 1], ['1:1:1:1', 1, 1, 1, 1],
+];
+
 const tokens = (list: readonly string[]) => list.map((t) => ({ label: t, value: t }));
 
 function toPuckField(f: BlockField, opts: ToPuckConfigOptions): Field {
@@ -71,6 +77,19 @@ function toPuckField(f: BlockField, opts: ToPuckConfigOptions): Field {
       return { ...base, type: 'select', options: tokens(COLOR_TOKENS) };
     case 'spacing':
       return { ...base, type: 'select', options: tokens(SPACING_TOKENS) };
+    case 'tracks':
+      if (customFields.tracks) return { ...base, type: 'custom', render: customFields.tracks as never, metadata: { blockField: f } };
+      return {
+        ...base,
+        type: 'select',
+        options: [
+          { label: 'Default', value: null },
+          ...TRACK_PRESETS.map(([label, ...fr]) => ({
+            label,
+            value: { base: ['1fr'], md: fr.map((n) => `${n}fr`) },
+          })),
+        ].filter((o) => o.value === null || (o.value.md.length <= (f.max ?? MAX_TRACKS))) as never,
+      };
     case 'link':
     case 'image':
     case 'entry':
@@ -114,6 +133,18 @@ function toRenderProps(fields: Record<string, BlockField>, props: Record<string,
   return out;
 }
 
+/**
+ * Reserved props of composed (and `usesLocale`) blocks: `_locale` stamped by `resolvePage`/the canvas (else the config's locale) and
+ * `_editor` (canvas flag, or Puck's `isEditing`).
+ */
+function composedReserved(props: Record<string, unknown>, locale: Locale): Record<string, unknown> {
+  const puck = props.puck as { isEditing?: unknown } | undefined;
+  return {
+    _locale: typeof props._locale === 'string' && props._locale ? props._locale : locale,
+    _editor: props._editor === true || puck?.isEditing === true,
+  };
+}
+
 /** Puck `Config` for the editor and renderer. Labels are resolved for `locale` (en-US fallback). */
 export function toPuckConfig(r: BlockRegistry, opts: ToPuckConfigOptions): PuckConfig {
   const components: Record<string, ComponentConfig> = {};
@@ -126,7 +157,11 @@ export function toPuckConfig(r: BlockRegistry, opts: ToPuckConfigOptions): PuckC
       fields,
       defaultProps: fieldsDefaults(d.fields),
       render: ((props: Record<string, unknown>): ReactElement =>
-        createElement(Fragment, null, d.render(toRenderProps(d.fields, props) as never))) as never,
+        createElement(
+          Fragment,
+          null,
+          d.render((d.composed || d.usesLocale ? { ...toRenderProps(d.fields, props), ...composedReserved(props, opts.locale) } : toRenderProps(d.fields, props)) as never),
+        )) as never,
     };
     (categories[d.category] ??= { title: d.category, components: [] }).components.push(d.name);
   }

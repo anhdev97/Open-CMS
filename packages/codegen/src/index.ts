@@ -5,5 +5,7 @@ export * from './snapshot';
 export * from './migration-file';
 export * from './codegen';
 export * from './printer';
+export * from './blocks';
 export * from './loader';
 export * from './pipeline';
+export * from './eject';

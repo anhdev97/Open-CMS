@@ -6,17 +6,21 @@ import { Inject, Logger, Module, RequestMethod, type BeforeApplicationShutdown, 
 import { HttpAdapterHost } from '@nestjs/core';
 import type { Kysely } from 'kysely';
 import { createDb, migrateUp, pendingMigrations } from '@opencloudcms/db';
-import { AssetsModule } from '@opencloudcms/assets';
+import { AssetsModule, PublicAssetsController } from '@opencloudcms/assets';
 import { OAuth2Module, type CoreReady } from '@opencloudcms/oauth2';
 import { resolveConfig } from '@opencloudcms/schema';
 import { ContentCorsMiddleware } from './http/content-cors.middleware';
 import { JsonBodyParserMiddleware } from './http/body-parser.middleware';
+import { BlocksController } from './block-builder/blocks.controller';
+import { BlocksService } from './block-builder/blocks.service';
+import { PageBlocksManifest } from './block-builder/page-blocks-manifest';
 import { AdminContentController, ContentController, WorkflowController } from './content.controllers';
 import { AdminPagesController, PagesController, PublicPagesController } from './pages/pages.controller';
 import { PagesService } from './pages/pages.service';
 import { EntriesService } from './entries.service';
 import { EntryRepository } from './entry.repository';
 import { LocalesController, LocalesService } from './locales';
+import { ThemeController, ThemeService } from './theme';
 import { ContentGroupsController, ContentGroupsService } from './content-groups';
 import { CORE_READY_CORE, OPENCLOUDCMS_DB, OPENCLOUDCMS_OPTIONS, type OpenCloudCmsModuleOptions, type ResolvedOpenCloudCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
@@ -89,10 +93,11 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, BeforeAppli
         }),
         AssetsModule.forRoot({ dbToken: OPENCLOUDCMS_DB, assets: input.assets ?? null }),
       ],
-      controllers: [PublicPagesController, AdminPagesController, PagesController, ContentController, AdminContentController, SchemaController, ContentGroupsController, LocalesController, SystemController, WorkflowController],
+      controllers: [PublicPagesController, PublicAssetsController, AdminPagesController, PagesController, ContentController, AdminContentController, SchemaController, BlocksController, ContentGroupsController, LocalesController, ThemeController, SystemController, WorkflowController],
       providers: [
         { provide: OPENCLOUDCMS_OPTIONS, useValue: options },
         { provide: OPENCLOUDCMS_DB, useFactory: () => createDb(options.config.database.url) },
+        PageBlocksManifest,
         ContentRegistry,
         EntryRepository,
         EntriesService,
@@ -100,11 +105,13 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, BeforeAppli
         PagesService,
         SchemaWriteQueue,
         SchemaBuilderService,
+        BlocksService,
         ContentGroupsService,
         LocalesService,
+        ThemeService,
         { provide: CORE_READY_CORE, useValue: new DeferredCoreReady() },
       ],
-      exports: [OPENCLOUDCMS_DB, CORE_READY_CORE, ContentRegistry, EntriesService],
+      exports: [OPENCLOUDCMS_DB, CORE_READY_CORE, ContentRegistry, EntriesService, PageBlocksManifest],
     };
   }
 

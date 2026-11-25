@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "lastMigration": "20260923042345_init",
+  "lastMigration": "20261123180832_add_field_product_active_boolean",
   "contentTypes": [
     {
       "id": "ct_brand0001",
@@ -158,6 +158,16 @@
           "required": false,
           "localizable": false,
           "indexed": false,
+          "unique": false,
+          "options": {}
+        },
+        {
+          "id": "fld_git2h07p",
+          "name": "active",
+          "kind": "boolean",
+          "required": false,
+          "localizable": false,
+          "indexed": true,
           "unique": false,
           "options": {}
         }

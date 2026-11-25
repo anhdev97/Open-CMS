@@ -4,6 +4,7 @@ import {
   COLOR_TOKENS,
   SPACING_TOKENS,
   writePageContent,
+  type BlockDefinition,
   type BlockField,
   type BlockRegistry,
   type EntriesBlockField,
@@ -21,6 +22,45 @@ const isItem = (v: unknown): v is Item => isObj(v) && typeof v.type === 'string'
 /** Fields of `ct` the list API can filter on: `indexed` or `unique`, single-column (the server rejects the rest). */
 export function filterableFields(ct: ContentTypeDefinition): FieldDefinition[] {
   return ct.fields.filter((f) => (f.indexed || f.unique) && !f.options?.multiple);
+}
+
+/** Which controls the page editor shows for a `b.entries` field (mirrors what `resolvePage` honours). */
+export interface EntriesControls {
+  /** Pick ⇄ query select (hidden only for `filterable: false`, as before). */
+  modeSelect: boolean;
+  /** "Add filter": hidden only for `filterable: false` (composed blocks always set it). */
+  addFilter: boolean;
+  /** Sort: hidden only for `sortable: false` (then `resolvePage` uses `defaultSort` when set). */
+  sort: boolean;
+  /** Editable limit; false when `lockLimit` (then `lockedLimit` is the limit shown read-only). */
+  limit: boolean;
+  lockedLimit: number | null;
+  /** Fixed `baseFilter` conditions, shown read-only. */
+  fixed: { field: string; value: string }[];
+}
+
+export function entriesFieldControls(f: EntriesBlockField): EntriesControls {
+  return {
+    modeSelect: f.filterable !== false,
+    addFilter: f.filterable !== false,
+    sort: f.sortable !== false,
+    limit: f.lockLimit !== true,
+    lockedLimit: f.lockLimit === true ? (f.limit ?? 10) : null,
+    fixed: Object.entries(f.baseFilter ?? {}).map(([field, value]) => ({ field, value })),
+  };
+}
+
+/** Fields an editor filter may use: filterable, minus those a fixed filter already decides (base wins). */
+export function editorFilterFields(fields: readonly FieldDefinition[], f: EntriesBlockField): FieldDefinition[] {
+  const fixed = f.baseFilter ?? {};
+  return fields.filter((x) => !Object.hasOwn(fixed, x.name));
+}
+
+/** `Label = value` of a fixed condition (booleans through `t` as Yes/No). */
+export function fixedConditionText(c: { field: string; value: string }, def: FieldDefinition | undefined, t: (key: string) => string): string {
+  const label = def?.label || c.field;
+  const value = def?.kind === 'boolean' ? t(c.value === 'true' ? 'pageEditor.root.yes' : 'pageEditor.root.no') : c.value;
+  return `${label} = ${value}`;
 }
 
 /** Design-system tokens offered by `b.color` / `b.spacing` fields. */
@@ -101,6 +141,25 @@ export function previewProps(fields: Record<string, BlockField>, live: Props, re
         return previewProps(f.fields as Record<string, BlockField>, row, r);
       });
     }
+  }
+  return out;
+}
+
+/**
+ * Props for a block render in the canvas (`previewProps`), plus the reserved props of composed (and `usesLocale`)
+ * blocks: `_locale` = the page's content locale (not the admin UI locale, so prices, dates and texts match the
+ * website) and `_editor: true`.
+ */
+export function canvasProps(
+  def: Pick<BlockDefinition<any>, 'fields' | 'composed' | 'usesLocale'>,
+  live: Props,
+  resolved: ResolvedItem | undefined,
+  locale: Locale,
+): Props {
+  const out = previewProps(def.fields as Record<string, BlockField>, live, resolved);
+  if (def.composed || def.usesLocale) {
+    out._locale = locale;
+    out._editor = true;
   }
   return out;
 }

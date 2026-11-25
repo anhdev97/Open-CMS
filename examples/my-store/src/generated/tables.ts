@@ -48,6 +48,7 @@ export interface ProductTable {
   featured: boolean | null;
   brand_document_id: string | null;
   specs: unknown | null;
+  active: boolean | null;
 }
 
 export interface ProductL10nTable {

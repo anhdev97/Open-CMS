@@ -10,7 +10,7 @@ import { t } from '../i18n';
 import type { ContentTypeDefinition, FieldDefinition } from '../lib/types';
 import { EntryPicker } from './EntryPicker';
 import { FieldShell, fieldLabel } from './FieldShell';
-import { entriesApiId, filterableFields } from './field-logic';
+import { editorFilterFields, entriesApiId, entriesFieldControls, filterableFields, fixedConditionText } from './field-logic';
 import { loadContentType } from './data';
 
 const usePuck = createUsePuck();
@@ -46,7 +46,9 @@ function FilterValue({ id, field, value, onChange, readOnly }: { id: string; fie
 }
 
 function QueryBuilder({ id, type, value, bf, onChange, readOnly }: { id: string; type: ContentTypeDefinition | null; value: Query; bf: EntriesBlockField; onChange: (v: Query) => void; readOnly?: boolean }) {
-  const fields = type ? filterableFields(type) : [];
+  const controls = entriesFieldControls(bf);
+  const sortFields = type ? filterableFields(type) : [];
+  const fields = editorFilterFields(sortFields, bf);
   const filter = Object.entries(value.filter ?? {});
   const unused = fields.filter((f) => !filter.some(([k]) => k === f.name));
   const setFilter = (entries: [string, unknown][]) => onChange({ ...value, filter: Object.fromEntries(entries) });
@@ -54,7 +56,7 @@ function QueryBuilder({ id, type, value, bf, onChange, readOnly }: { id: string;
 
   return (
     <div className="space-y-3">
-      {fields.length === 0 ? (
+      {!controls.addFilter && filter.length === 0 ? null : fields.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('pageEditor.fields.entries.noFilterable')}</p>
       ) : (
         <div className="space-y-2">
@@ -94,7 +96,7 @@ function QueryBuilder({ id, type, value, bf, onChange, readOnly }: { id: string;
               )}
             </div>
           ))}
-          {!readOnly && unused.length > 0 && (
+          {!readOnly && controls.addFilter && unused.length > 0 && (
             <Button type="button" variant="outline" size="sm" onClick={() => setFilter([...filter, [unused[0]!.name, '']])}>
               <PlusIcon aria-hidden="true" />
               {t('pageEditor.fields.entries.addFilter')}
@@ -102,7 +104,7 @@ function QueryBuilder({ id, type, value, bf, onChange, readOnly }: { id: string;
           )}
         </div>
       )}
-      {bf.sortable !== false && fields.length > 0 && (
+      {controls.sort && sortFields.length > 0 && (
         <div className="flex items-end gap-1">
           <div className="min-w-0 flex-1 space-y-1">
             <Label htmlFor={`${id}-sort`} className="text-xs text-muted-foreground">
@@ -118,7 +120,7 @@ function QueryBuilder({ id, type, value, bf, onChange, readOnly }: { id: string;
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={NONE}>{t('pageEditor.fields.entries.sortNone')}</SelectItem>
-                {fields.map((f) => (
+                {sortFields.map((f) => (
                   <SelectItem key={f.name} value={f.name}>
                     {f.label ?? f.name}
                   </SelectItem>
@@ -139,6 +141,7 @@ function QueryBuilder({ id, type, value, bf, onChange, readOnly }: { id: string;
           )}
         </div>
       )}
+      {controls.limit ? (
       <div className="space-y-1">
         <Label htmlFor={`${id}-limit`} className="text-xs text-muted-foreground">
           {t('pageEditor.fields.entries.limit')}
@@ -153,6 +156,9 @@ function QueryBuilder({ id, type, value, bf, onChange, readOnly }: { id: string;
           onChange={(e) => onChange({ ...value, limit: Math.min(100, Math.max(1, Number(e.target.value) || 1)) })}
         />
       </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">{t('pageEditor.fields.entries.lockedLimit', { count: controls.lockedLimit ?? 10 })}</p>
+      )}
     </div>
   );
 }
@@ -174,11 +180,19 @@ export const EntriesField: CustomFieldRender<StoredEntries> = ({ field, name, id
   }, [apiId]);
 
   const v: StoredEntries = value && (value.mode === 'pick' || value.mode === 'query') ? value : { mode: 'pick', ids: [] };
-  const allowQuery = bf.filterable !== false;
+  const controls = entriesFieldControls(bf);
+  const allowQuery = controls.modeSelect;
 
   return (
     <FieldShell id={id} label={fieldLabel(field, name)} as="legend">
       <div className="space-y-2">
+        {controls.fixed.length > 0 && (
+          <p role="note" className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+            {t('pageEditor.fields.entries.fixed', {
+              conditions: controls.fixed.map((c) => fixedConditionText(c, type?.fields.find((f) => f.name === c.field), t)).join(', '),
+            })}
+          </p>
+        )}
         {allowQuery && (
           <div className="space-y-1">
             <Label htmlFor={modeId} className="text-xs text-muted-foreground">

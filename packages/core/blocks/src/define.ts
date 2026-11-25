@@ -1,11 +1,12 @@
-import { validateLocalizedText, type BlockManifest } from '@opencloudcms/schema';
+import { BLOCK_FIELD_KEY_RE, RESERVED_BLOCK_PROPS, validateComposedSpec, validateLocalizedText, type BlockManifest } from '@opencloudcms/schema';
 import { optionValue } from './fields';
+import { MAX_TRACKS, tracksValid } from './tracks';
 import { COLOR_TOKENS, SPACING_TOKENS, type BlockDefinition, type BlockField, type BlockRegistry } from './types';
 
 export const BLOCK_NAME_RE = /^[A-Z][A-Za-z0-9]{0,63}$/;
-const FIELD_KEY_RE = /^[A-Za-z][A-Za-z0-9]*$/;
-/** Prop names used by core or Puck on every item. */
-const RESERVED_PROPS = ['id', '_v', 'puck', 'editMode'];
+const FIELD_KEY_RE = BLOCK_FIELD_KEY_RE;
+/** Prop names used by core or Puck on every item (shared with `validateComposedSpec`). */
+const RESERVED_PROPS = RESERVED_BLOCK_PROPS;
 
 /** Typing helper: returns the definition unchanged. Validation happens in `defineBlocks`. */
 export function defineBlock<F extends Record<string, BlockField>>(d: BlockDefinition<F>): BlockDefinition<F> {
@@ -14,6 +15,8 @@ export function defineBlock<F extends Record<string, BlockField>>(d: BlockDefini
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const show = (v: unknown) => JSON.stringify(v);
+/** `['tree', 'children', 0, 'el']` → `tree.children.0.el`. */
+export const formatIssuePath = (path: readonly (string | number)[]) => (path.length ? path.join('.') : '(spec)');
 
 function validateLabel(v: unknown, where: string): string[] {
   if (v === undefined) return [];
@@ -67,6 +70,12 @@ function validateField(f: unknown, block: string, path: string, siblings: Record
     case 'spacing':
       if (d !== undefined && !(SPACING_TOKENS as readonly unknown[]).includes(d)) bad(`a spacing token (${SPACING_TOKENS.join(', ')})`);
       break;
+    case 'tracks':
+      if (f.max !== undefined && !(Number.isInteger(f.max) && (f.max as number) >= 1 && (f.max as number) <= MAX_TRACKS)) {
+        issues.push(`${where}: max must be an integer from 1 to ${MAX_TRACKS}`);
+      }
+      if (d !== undefined && d !== null && !tracksValid(d, typeof f.max === 'number' ? f.max : MAX_TRACKS)) bad('valid tracks or null');
+      break;
     case 'link':
     case 'image':
       if (d !== undefined && d !== null && !isObj(d)) bad('an object or null');
@@ -83,6 +92,16 @@ function validateField(f: unknown, block: string, path: string, siblings: Record
       } else if (typeof f.apiId !== 'string' || !f.apiId) issues.push(`${where}: apiId must be a non-empty string`);
       if (f.kind === 'entries' && f.limit !== undefined && !(Number.isInteger(f.limit) && (f.limit as number) > 0)) {
         issues.push(`${where}: limit must be a positive integer`);
+      }
+      if (f.kind === 'entries') {
+        if (f.baseFilter !== undefined && (!isObj(f.baseFilter) || !Object.values(f.baseFilter).every((v) => typeof v === 'string'))) {
+          issues.push(`${where}: baseFilter must map field names to strings`);
+        }
+        if (f.defaultSort !== undefined && (typeof f.defaultSort !== 'string' || !/^[^:]+:(asc|desc)$/.test(f.defaultSort))) {
+          issues.push(`${where}: defaultSort must be "field:asc" or "field:desc"`);
+        }
+        if (f.lockLimit !== undefined && typeof f.lockLimit !== 'boolean') issues.push(`${where}: lockLimit must be a boolean`);
+        if (d !== undefined && !(isObj(d) && (d.mode === 'pick' || d.mode === 'query'))) bad("a { mode: 'pick' | 'query' } value");
       }
       break;
     case 'list':
@@ -127,6 +146,14 @@ function validateBlock(d: unknown, index: number): string[] {
   const version = d.version ?? 1;
   if (!Number.isInteger(version) || (version as number) < 1) issues.push(`${where}: version must be a positive integer`);
   if (typeof d.render !== 'function') issues.push(`${where}: render must be a function`);
+  if (d.composed !== undefined && d.composed !== true) issues.push(`${where}: composed must be true when set`);
+  if (d.usesLocale !== undefined && d.usesLocale !== true) issues.push(`${where}: usesLocale must be true when set`);
+  if (d.entryAssetPaths !== undefined && !(Array.isArray(d.entryAssetPaths) && d.entryAssetPaths.every((p) => typeof p === 'string' && p))) {
+    issues.push(`${where}: entryAssetPaths must be an array of field names`);
+  }
+  if (d.composed === true && 'spec' in d) {
+    for (const i of validateComposedSpec(d.spec)) issues.push(`${where}: ${formatIssuePath(i.path)}: ${i.message}`);
+  }
   if (!isObj(d.fields)) issues.push(`${where}: fields must be an object`);
   else issues.push(...validateFields(d.fields, where, ''));
   if (d.migrate !== undefined) {

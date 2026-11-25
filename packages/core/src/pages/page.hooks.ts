@@ -26,19 +26,22 @@ function normalizeContent(data: Record<string, unknown>, manifest: BlockManifest
 
 /**
  * Registered by ContentRegistry for the core page type. Without a manifest, publishing never checks blocks and
- * rich text is not normalized on save (the website renderer still sanitizes it).
+ * rich text is not normalized on save (the website renderer still sanitizes it). `manifest` may be a getter
+ * (PageBlocksManifest.current), read on every call so that Block Builder changes apply at once.
  */
-export function createPageHooks(manifest: BlockManifest | undefined): HookRegistration['hooks'] {
+export function createPageHooks(manifest: BlockManifest | undefined | (() => BlockManifest | undefined)): HookRegistration['hooks'] {
+  const get = typeof manifest === 'function' ? manifest : () => manifest;
   return {
     beforeCreate: (data) => {
       checkPath(data);
-      return normalizeContent(data, manifest);
+      return normalizeContent(data, get());
     },
     beforeUpdate: (data) => {
       checkPath(data);
-      return normalizeContent(data, manifest);
+      return normalizeContent(data, get());
     },
     beforePublish: (doc, ctx) => {
+      const manifest = get();
       if (!manifest || ctx.force) return;
       const total = new Map<string, number>();
       for (const t of Object.values(doc.translations)) {

@@ -8,6 +8,14 @@ export const CORE_API_IDS: readonly string[] = [PAGE_API_ID];
 
 export const isCoreApiId = (apiId: string): boolean => CORE_API_IDS.includes(apiId);
 
+/**
+ * apiIds a project may not use: the core-owned types plus `assets`, whose delivery path `/api/content/assets` is the
+ * public asset lookup. Rejected in project schema files and by the Content Type Builder.
+ */
+export const RESERVED_API_IDS: readonly string[] = [...CORE_API_IDS, 'assets'];
+
+export const isReservedApiId = (apiId: string): boolean => RESERVED_API_IDS.includes(apiId);
+
 /** First path segments that belong to the CMS itself (compared case-insensitively). */
 export const RESERVED_PATH_SEGMENTS: readonly string[] = ['admin', 'api', 'oauth2', '__opencloudcms', '_next'];
 
@@ -52,6 +60,15 @@ export type StoredPageContent = {
   formatVersion: number;
   data: { root: unknown; content: unknown[]; zones?: Record<string, unknown[]> };
 };
+
+/**
+ * Names of the ready-made `coreBlocks` of `@opencloudcms/core/blocks` (kept here, React-free, so the server can
+ * tell core blocks from project blocks; a blocks test checks it against `coreBlocks`).
+ */
+export const CORE_BLOCK_NAMES: readonly string[] = [
+  'Section', 'Columns', 'Grid', 'Spacer', 'Divider', 'Heading', 'Text', 'Image', 'Button', 'ButtonGroup',
+  'Card', 'Badge', 'Hero', 'FeatureList', 'CallToAction', 'FAQ', 'EntryList',
+];
 
 /**
  * The blocks a project defines (`blockManifest`). `richText`: prop paths of the block's `b.richText` fields

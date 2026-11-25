@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>my-store · Phác thảo</title>
+<style>
+  * { box-sizing: border-box }
+  body { margin: 0; background: #eae8e1; color: #25271e; font: 15px/1.55 system-ui, sans-serif }
+  h1,h2,h3,p,figure { margin: 0 }
+  h1,h2,.wordmark { font-family: Georgia, serif; font-weight: 400; letter-spacing: -.04em }
+  h1 { font-size: clamp(2.8rem, 6vw, 6.25rem); line-height: .96 }
+  h2 { font-size: clamp(2.1rem, 4vw, 3.7rem); line-height: 1.04 }
+  p { max-width: 53ch }
+  .controls { max-width: 1320px; margin: auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 24px; padding: 13px 22px; font-size: .86rem }
+  .controls strong { font-weight: 700 }
+  .controls form { display: flex; flex-wrap: wrap; gap: 8px 16px }
+  .controls label { display: flex; align-items: center; gap: 7px }
+  select { background: #fff; color: #25271e; padding: .38rem .55rem; border-radius: 5px; border: 1px solid #b3b3a7; font: inherit }
+  a { color: inherit; text-underline-offset: 4px }
+  #store { --surface: #fbf8ef; --feature: #ece9d7; --ink: #28291e; --accent: #3d462c; --accent-ink: #fffdf4; --line: #cfcab9; --split: 2fr 3fr; max-width: 1320px; margin: auto; background: var(--surface); color: var(--ink) }
+  #store[data-palette="clay"] { --surface: #fcf5ef; --feature: #f4e3db; --ink: #39251e; --accent: #8b432f; --accent-ink: #fff8f2; --line: #e3c4b7 }
+  #store[data-palette="night"] { --surface: #f3f5f3; --feature: #e3eae5; --ink: #19322b; --accent: #20483c; --accent-ink: #f8fbf8; --line: #bfcfc6 }
+  #store[data-ratio="equal"] { --split: 1fr 1fr }
+  #store[data-ratio="wide"] { --split: 3fr 2fr }
+  header { min-height: 76px; display: flex; justify-content: space-between; align-items: center; gap: 16px 36px; padding: 14px 5%; border-bottom: 1px solid var(--line) }
+  .wordmark { font-size: 2rem; line-height: 1.1; text-decoration: none }
+  nav { display: flex; flex-wrap: wrap; gap: 10px 25px }
+  nav a { text-decoration: none }
+  nav a:hover, nav a[aria-current] { text-decoration: underline }
+  .hero { display: grid; grid-template-columns: var(--split); background: var(--feature) }
+  .hero-copy { display: grid; align-content: center; justify-items: start; gap: 24px; padding: clamp(30px, 5vw, 75px) }
+  .hero-img { width: 100%; height: 100%; min-height: 450px; object-fit: cover; display: block }
+  .button { display: inline-block; padding: .8em 1.2em; text-decoration: none; background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); font-weight: 650 }
+  .button:hover { box-shadow: 0 0 0 3px var(--line) }
+  .wrap { padding: clamp(30px, 5vw, 72px) 5% }
+  .section-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px 35px; justify-content: space-between; margin-bottom: 24px }
+  .products { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(12px, 2vw, 28px) }
+  .product { display: grid; gap: 6px; text-decoration: none }
+  .product:hover h3 { text-decoration: underline; text-underline-offset: 4px }
+  .product h3 { font-size: 1rem; font-weight: 650 }
+  .photo { display: block; aspect-ratio: 4/3; margin-bottom: 6px; background: var(--feature) url('/files/store-editorial.png') no-repeat }
+  .shirt { background-size: 205%; background-position: 60% 35% }
+  .tote { background-size: 255%; background-position: 18% 84% }
+  .scarf { background-size: 275%; background-position: 90% 92% }
+  .story { background: var(--feature); display: grid; grid-template-columns: 2fr 3fr; gap: 24px 50px; align-items: start }
+  .story p, .detail p { margin: 10px 0 20px }
+  .detail { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(24px, 5vw, 80px); margin-top: 20px }
+  .detail .photo { aspect-ratio: 1 }
+  .detail-copy { align-self: center }
+  .detail dl { margin-block: 22px 0; border-top: 1px solid var(--line) }
+  .detail dl div { display: flex; justify-content: space-between; gap: 1rem; padding: 10px 0; border-bottom: 1px solid var(--line) }
+  .detail dd { margin: 0; text-align: right }
+  footer { background: var(--accent); color: var(--accent-ink); display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 24px 42px }
+  footer h3 { font-size: .92rem; margin-bottom: .45rem }
+  footer p { margin-top: .7rem }
+  footer nav { display: grid; gap: .3rem }
+  :focus-visible { outline: 2px solid currentColor; outline-offset: 4px }
+  @media (max-width: 760px) {
+    .hero,.detail,.story { grid-template-columns: 1fr }
+    .hero-copy { gap: 16px }
+    .hero-img { min-height: 0; aspect-ratio: 3/2 }
+    .products { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+  }
+  @media (max-width: 420px) {
+    header { align-items: start; flex-direction: column; gap: .65rem }
+    header nav { gap: .75rem }
+    footer { grid-template-columns: repeat(2,minmax(0,1fr)) }
+    footer .intro { grid-column: span 2 }
+  }
+</style>
+</head>
+<body>
+<aside class="controls" aria-label="Điều khiển bản phác thảo">
+  <strong>Phác thảo Page Builder · my-store</strong>
+  <form>
+    <label>Tỷ lệ cột trang chủ <select id="ratio"><option value="balanced">40 / 60</option><option value="equal">50 / 50</option><option value="wide">60 / 40</option></select></label>
+    <label>Bảng màu <select id="palette"><option value="olive">Kem và ô liu</option><option value="clay">Kem và đất nung</option><option value="night">Trắng và xanh rừng</option></select></label>
+  </form>
+</aside>
+<div id="store">
+  <header>
+    <a class="wordmark" href="#home">my-store</a>
+    <nav aria-label="Menu chính"><a href="#home">Trang chủ</a><a href="#shop">Cửa hàng</a><a href="#about">Giới thiệu</a></nav>
+  </header>
+  <main>
+    <div data-page="home">
+      <section class="hero">
+        <div class="hero-copy"><h1>Mặc đẹp mỗi ngày</h1><p>Áo linen thoáng nhẹ, túi canvas chắc tay và những món đồ đơn giản để dùng lâu.</p><a class="button" href="#shop">Xem bộ sưu tập →</a></div>
+        <img class="hero-img" src="/files/store-editorial.png" alt="Áo linen ô liu, túi canvas và khăn màu đất trên ghế gỗ">
+      </section>
+      <section class="wrap"><div class="section-head"><h2>Sản phẩm nổi bật</h2><a href="#shop">Xem tất cả →</a></div><div class="products" data-catalogue></div></section>
+      <section class="wrap story"><h2>Về my-store</h2><div><p>Chúng mình chọn những chất liệu dễ chăm sóc và kiểu dáng dễ phối để mỗi món bạn mua đều có chỗ trong tủ đồ.</p><a href="#about">Đọc câu chuyện của cửa hàng →</a></div></section>
+    </div>
+    <section data-page="shop" class="wrap" hidden><div class="section-head"><h1>Cửa hàng</h1></div><div class="products" data-catalogue></div></section>
+    <section data-page="detail" class="wrap" hidden>
+      <a href="#shop">← Cửa hàng</a>
+      <div class="detail">
+        <figure id="detail-photo" class="photo" role="img"></figure>
+        <div class="detail-copy"><h1 id="detail-name"></h1><p id="detail-price"></p><p id="detail-copy"></p><dl><div><dt>Chất liệu</dt><dd id="detail-material"></dd></div><div><dt>Tình trạng</dt><dd>Đang bán</dd></div></dl></div>
+      </div>
+    </section>
+    <section data-page="about" class="wrap" hidden>
+      <div class="detail"><div class="detail-copy"><h1>Về my-store</h1><p>Chúng mình chọn quần áo và phụ kiện theo cách sẽ chọn cho mình: chất liệu dễ chăm sóc, màu sắc dễ phối và thiết kế có thể dùng qua nhiều mùa.</p><a class="button" href="#shop">Xem sản phẩm →</a></div><img src="/files/store-editorial.png" alt="Góc trưng bày của my-store" style="width:100%;display:block"></div>
+    </section>
+  </main>
+  <footer class="wrap">
+    <div class="intro"><a class="wordmark" href="#home">my-store</a><p>Quần áo và phụ kiện cho mỗi ngày.</p></div>
+    <div><h3>Khám phá</h3><nav aria-label="Menu chân trang"><a href="#shop">Cửa hàng</a><a href="#about">Giới thiệu</a></nav></div>
+    <div><h3>Liên hệ</h3><a href="mailto:hello@example.com">hello@example.com</a></div>
+  </footer>
+</div>
+<script>
+  const store = document.querySelector('#store');
+  const products = [
+    { id: 'shirt', name: 'Áo linen ô liu', price: '390.000 ₫', material: 'Linen', copy: 'Áo dáng thẳng, thấm hút tốt và đủ nhẹ để mặc nhiều lớp.' },
+    { id: 'tote', name: 'Túi canvas mộc', price: '150.000 ₫', material: 'Canvas cotton', copy: 'Túi quai dài với thân rộng, đủ chỗ cho sách và những vật dụng mang theo mỗi ngày.' },
+    { id: 'scarf', name: 'Khăn linen màu gạch', price: '250.000 ₫', material: 'Linen', copy: 'Khăn dệt mềm, dùng để quàng nhẹ hoặc làm điểm nhấn cho trang phục hằng ngày.' },
+  ];
+  document.querySelectorAll('[data-catalogue]').forEach((grid) => {
+    products.forEach((product) => {
+      const link = document.createElement('a');
+      link.className = 'product';
+      link.href = '#product/' + product.id;
+      const photo = document.createElement('span');
+      photo.className = 'photo ' + product.id;
+      photo.setAttribute('aria-hidden', 'true');
+      const name = document.createElement('h3');
+      name.textContent = product.name;
+      const price = document.createElement('span');
+      price.textContent = product.price;
+      link.append(photo, name, price);
+      grid.append(link);
+    });
+  });
+  function showPage() {
+    const hash = location.hash.slice(1);
+    const product = products.find(({ id }) => hash === 'product/' + id);
+    const page = product ? 'detail' : ['shop', 'about'].includes(hash) ? hash : 'home';
+    if (product) {
+      const photo = document.querySelector('#detail-photo');
+      photo.className = 'photo ' + product.id;
+      photo.setAttribute('aria-label', product.name);
+      ['name', 'price', 'copy', 'material'].forEach((key) => {
+        document.querySelector('#detail-' + key).textContent = product[key];
+      });
+    }
+    document.querySelectorAll('[data-page]').forEach((view) => { view.hidden = view.dataset.page !== page; });
+    document.querySelectorAll('header nav a').forEach((link) => {
+      if (link.hash === '#' + (product ? 'shop' : page)) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+    });
+    window.scrollTo(0, 0);
+  }
+  ['ratio', 'palette'].forEach((key) => {
+    const field = document.querySelector('#' + key);
+    field.addEventListener('change', () => { store.dataset[key] = field.value; });
+  });
+  window.addEventListener('hashchange', showPage);
+  showPage();
+</script>
+</body>
+</html>

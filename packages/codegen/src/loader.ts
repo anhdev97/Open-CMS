@@ -1,8 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createJiti } from 'jiti';
-import type { ContentGroupDefinition, ContentTypeDefinition, OpenCloudCmsConfig, ResolvedConfig } from '@opencloudcms/schema';
-import { CONFIG_FILE_NAMES, CORE_API_IDS, normalizeDefinition, resolveConfig } from '@opencloudcms/schema';
+import type { ContentGroupDefinition, ContentTypeDefinition, OpenCloudCmsConfig, ResolvedConfig, ThemeDefinition } from '@opencloudcms/schema';
+import { CONFIG_FILE_NAMES, RESERVED_API_IDS, normalizeDefinition, resolveConfig, validateTheme } from '@opencloudcms/schema';
 
 function freshJiti(root: string) {
   // No caches: the admin UI rewrites schema files while the process is running.
@@ -34,6 +34,22 @@ export function localesFile(config: ResolvedConfig): string {
   return path.join(config.root, 'src', 'locales.ts');
 }
 
+export function themeFile(config: ResolvedConfig): string {
+  return path.join(config.root, 'src', 'theme.ts');
+}
+
+/** Loads `src/theme.ts`; a missing file means no theme. An invalid theme throws with the issue list. */
+export async function loadTheme(config: ResolvedConfig): Promise<ThemeDefinition | null> {
+  const file = themeFile(config);
+  if (!fs.existsSync(file)) return null;
+  const mod = await freshJiti(config.root).import<ThemeDefinition>(file, { default: true });
+  const issues = validateTheme(mod);
+  if (issues.length) {
+    throw new Error(`Invalid ${path.relative(config.root, file)}: ${issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+  }
+  return mod;
+}
+
 /** Loads `src/content-groups.ts`; a missing file means no groups. */
 export async function loadContentGroups(config: ResolvedConfig): Promise<ContentGroupDefinition[]> {
   const file = contentGroupsFile(config);
@@ -59,10 +75,10 @@ function walk(dir: string): string[] {
   });
 }
 
-/** Core-owned apiIds (the page type) cannot be redefined by a project. */
+/** Reserved apiIds (core-owned types such as the page type, and `assets`) cannot be defined by a project. */
 export function assertNoCoreApiIds(defs: Pick<ContentTypeDefinition, 'apiId'>[]): void {
   for (const d of defs) {
-    if (CORE_API_IDS.includes(d.apiId)) throw new Error(`apiId "${d.apiId}" is reserved by OpenCloudCMS`);
+    if (RESERVED_API_IDS.includes(d.apiId)) throw new Error(`apiId "${d.apiId}" is reserved by OpenCloudCMS`);
   }
 }
 

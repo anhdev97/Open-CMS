@@ -104,6 +104,20 @@ describe('toPuckConfig', () => {
     expect(hero.fields.products.metadata.blockField).toMatchObject({ kind: 'entries', apiId: 'product', limit: 12, sortable: true });
   });
 
+  it('maps tracks to a custom field with metadata when a renderer exists, else a preset select', () => {
+    const T = defineBlock({ name: 'T', label: 'T', category: 'layout', fields: { tracks: b.tracks({ max: 4 }) }, render: () => null });
+    const reg = defineBlocks([T]);
+    const tracks = dummy('tracks');
+    const withR = toPuckConfig(reg, { locale: 'en-US', customFields: { ...customFields, tracks } }).components.T as any;
+    expect(withR.fields.tracks).toMatchObject({ type: 'custom', render: tracks, metadata: { blockField: { kind: 'tracks', max: 4 } } });
+    const plain = toPuckConfig(reg, { locale: 'en-US', customFields }).components.T as any;
+    expect(plain.fields.tracks.type).toBe('select');
+    const labels = plain.fields.tracks.options.map((o: any) => o.label);
+    expect(labels).toEqual(['Default', '1:1', '1:2', '2:1', '1:1:1', '1:2:1', '1:1:1:1']);
+    expect(plain.fields.tracks.options.find((o: any) => o.label === '1:2').value).toEqual({ base: ['1fr'], md: ['1fr', '2fr'] });
+    expect(plain.defaultProps.tracks).toBeNull();
+  });
+
   it('puts defaults in defaultProps', () => {
     expect(hero.defaultProps).toEqual({
       heading: 'Hello',

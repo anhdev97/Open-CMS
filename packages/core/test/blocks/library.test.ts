@@ -1,7 +1,8 @@
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { blockManifest, defineBlocks, resolvePage, toPuckConfig, writePageContent, type CustomFieldRenderers } from '../../blocks/src';
+import { CORE_BLOCK_NAMES, blockManifest, defineBlocks, resolvePage, toPuckConfig, writePageContent, type CustomFieldRenderers } from '../../blocks/src';
+import { ThemeStyle } from '../../blocks/src/theme-style';
 import { coreBlocks } from '../../blocks/src/library';
 
 const NAMES = [
@@ -21,6 +22,7 @@ describe('coreBlocks', () => {
   it('defines exactly the expected blocks and passes defineBlocks', () => {
     expect(coreBlocks.map((x) => x.name)).toEqual(NAMES);
     expect(blockManifest(registry).map((m) => m.name)).toEqual(NAMES);
+    expect(CORE_BLOCK_NAMES).toEqual(NAMES);
   });
 
   it('labels every block and select option in all four locales', () => {
@@ -60,6 +62,39 @@ describe('coreBlocks', () => {
   it('Columns and Grid use literal grid classes', () => {
     expect(html('Columns', { columns: 3 })).toContain('md:grid-cols-3');
     expect(html('Grid', { columns: 4 })).toContain('lg:grid-cols-4');
+  });
+
+  it('Columns renders tracks (count from the widest breakpoint) and falls back to columns', () => {
+    const slots = { column1: 'A', column2: 'B', column3: 'C', column4: 'D', column5: 'E', column6: 'F' };
+    const out = html('Columns', { ...slots, tracks: { base: ['1fr'], md: ['2fr', '1fr', '1fr'] } });
+    expect(out).toContain('--ocms-cols-md:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)');
+    expect(out).toContain('md:grid-cols-(--ocms-cols-md)');
+    expect(out.match(/class="min-w-0"/g)).toHaveLength(3);
+    const old = html('Columns', { ...slots, columns: 3, tracks: null });
+    expect(old).toContain('md:grid-cols-3');
+    expect(old).not.toContain('--ocms-cols');
+    expect(old.match(/class="min-w-0"/g)).toHaveLength(3);
+    // invalid stored tracks are treated as absent
+    expect(html('Columns', { ...slots, columns: 2, tracks: { base: ['bad;}'] } })).toContain('md:grid-cols-2');
+  });
+
+  it('ThemeStyle outputs the active palette, honours an override and never emits unsafe values', () => {
+    const theme = {
+      colors: { surface: {}, ink: {} },
+      palettes: {
+        olive: { values: { surface: '#fbf8ef', ink: '#28291e' } },
+        clay: { values: { surface: '#f6ece4', ink: '#3a2a22' } },
+      },
+      activePalette: 'olive',
+    };
+    const out = (props: object) => renderToString(createElement(ThemeStyle, { theme, ...props } as never));
+    expect(out({})).toContain('--ocms-color-surface:#fbf8ef');
+    expect(out({ palette: 'clay' })).toContain('--ocms-color-surface:#f6ece4');
+    expect(out({ palette: 'nope' })).toContain('--ocms-color-surface:#fbf8ef');
+    const bad = out({ theme: { ...theme, palettes: { olive: { values: { surface: '#fff;}body{', ink: '#28291e' } } } } });
+    expect(bad).not.toContain('body{');
+    const badName = out({ theme: { colors: { 'x;}': {} }, palettes: { olive: { values: { 'x;}': '#fff' } } }, activePalette: 'olive' } });
+    expect(badName).not.toContain('x;}');
   });
 
   it('Text renders rich text nodes and treats plain strings as text', () => {

@@ -2,7 +2,10 @@
 // Smoke test for `opencloudcms init` (spec §8): scaffold a project linked to this repo, install, migrate,
 // add a review-workflow content type and a product type (generate + migrate:create), build it, run it in production and walk
 // the site/admin checks, the setup/login/logout chain, the page builder + draft preview (page-builder spec §12) and the
-// groups + review workflow (Contenter submits, Reviewer rejects then approves) over HTTP.
+// groups + review workflow (Contenter submits, Reviewer rejects then approves) over HTTP. A composed block
+// (block-builder spec §10: written as a Block Builder file before the build) lists only products with active = true,
+// even when the page data asks for active = false. The brand theme (src/theme.ts + ThemeStyle) and the StoreHeader
+// Block Builder file of examples/my-store survive a Theme / Block Builder save without changes byte-identically.
 // Exit code 0 = pass, 1 = fail.
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -156,8 +159,14 @@ async function main() {
   for (const f of ['src/locales.ts', 'src/content-groups.ts', 'app/(site)/messages.ts']) assert(existsSync(join(app, f)), `init did not write ${f}`);
   assert(readFileSync(join(app, 'src/locales.ts'), 'utf8').includes("locales: ['en-US']"), 'src/locales.ts is not en-US only');
   ok('src/locales.ts (en-US), src/content-groups.ts, app/(site)/messages.ts present');
+  const themeSrc = readFileSync(join(app, 'src/theme.ts'), 'utf8');
+  assert(themeSrc.includes('export default defineTheme({') && themeSrc.includes("activePalette: 'default'"), 'src/theme.ts is not the one-palette theme');
+  const siteLayout = readFileSync(join(app, 'app/(site)/layout.tsx'), 'utf8');
+  assert(siteLayout.includes('<ThemeStyle theme={theme} />') && siteLayout.includes("import theme from '../../src/theme';"), 'site layout lacks ThemeStyle');
+  ok('src/theme.ts (one palette) present; app/(site)/layout.tsx renders <ThemeStyle theme={theme} />');
   for (const f of [
     'src/blocks/index.ts',
+    'src/blocks/composed.ts',
     'src/blocks/example/example.block.tsx',
     'app/(site)/[[...path]]/page.tsx',
     'app/(site)/%5F_opencloudcms/preview/route.ts',
@@ -167,7 +176,13 @@ async function main() {
     assert(existsSync(join(app, f)), `init did not write ${f}`);
   }
   assert(!existsSync(join(app, 'app/(site)/page.tsx')), 'init still writes the static app/(site)/page.tsx');
-  ok('page builder files present (src/blocks, catch-all, preview routes, admin wrapper); no static home');
+  const blocksIndex = readFileSync(join(app, 'src/blocks/index.ts'), 'utf8');
+  assert(
+    blocksIndex.includes("import { composedBlocks } from './composed';") && blocksIndex.includes('defineBlocks([...coreBlocks, ...composedBlocks])'),
+    'src/blocks/index.ts does not spread composedBlocks',
+  );
+  assert(readFileSync(join(app, 'src/blocks/composed.ts'), 'utf8').includes('export const composedBlocks = [];'), 'src/blocks/composed.ts is not the empty index');
+  ok('page builder files present (src/blocks with the empty composed.ts wired in, catch-all, preview routes, admin wrapper); no static home');
 
   // pnpm: use the repo's pinned version via corepack; plain `pnpm` outside the repo may try another version
   const corepack = spawnSync('corepack', ['--version'], { stdio: 'ignore' });
@@ -206,6 +221,7 @@ export default defineContentType({
   displayName: 'Product',
   fields: {
     name: f.text({ id: 'fld_smprod_name', required: true }),
+    active: f.boolean({ id: 'fld_smprod_active', indexed: true }),
   },
 });
 `,
@@ -216,6 +232,42 @@ export default defineContentType({
   assert(readFileSync(join(app, 'src/generated/registry.ts'), 'utf8').match(/"?review"?: true/), 'generated registry lacks review: true for article');
   assert(readFileSync(join(app, 'migrations/_snapshot.json'), 'utf8').includes('"article"'), 'migrations/_snapshot.json lacks article');
   ok('article (review: true) + product schemas -> opencloudcms generate + opencloudcms migrate:create');
+
+  // A composed block, as the admin Block Builder writes it (production cannot run the builder: write it before the
+  // build). Printed by the codegen printer, so the files are byte-identical to the builder's.
+  const codegen = createRequire(join(repo, 'packages/cli/package.json'))('@opencloudcms/codegen');
+  const activeProducts = {
+    id: 'blk_smokeactive',
+    name: 'ActiveProducts',
+    label: { 'en-US': 'Products on sale' },
+    category: 'commerce',
+    version: 1,
+    binding: {
+      apiId: 'product',
+      mode: 'collection',
+      filter: [{ field: 'active', value: true }],
+      limit: 12,
+      layout: { kind: 'grid', columns: 4 },
+      options: { editorFilter: true, emptyText: { 'en-US': 'Nothing on sale' } },
+    },
+    fields: {},
+    tree: { el: 'Card', children: [{ el: 'Heading', props: { level: 3 }, bind: { text: { from: 'entry', path: 'name' } } }] },
+  };
+  mkdirSync(join(app, 'src/blocks/active-products'), { recursive: true });
+  writeFileSync(join(app, 'src/blocks/active-products/active-products.block.ts'), codegen.printComposedBlockFile(activeProducts));
+  // The my-store StoreHeader (style, responsive Stack, brand colors), as the Block Builder wrote it.
+  const storeHeaderRel = 'src/blocks/store-header/store-header.block.ts';
+  const storeHeaderSrc = readFileSync(join(repo, 'examples/my-store', storeHeaderRel), 'utf8');
+  mkdirSync(join(app, 'src/blocks/store-header'), { recursive: true });
+  writeFileSync(join(app, storeHeaderRel), storeHeaderSrc);
+  writeFileSync(
+    join(app, 'src/blocks/composed.ts'),
+    codegen.printComposedIndex([
+      { name: 'ActiveProducts', importPath: './active-products/active-products.block' },
+      { name: 'StoreHeader', importPath: './store-header/store-header.block' },
+    ]),
+  );
+  ok('composed blocks ActiveProducts (product, collection, fixed filter active = true, grid 4) + StoreHeader (examples/my-store) written to src/blocks + composed.ts');
 
   // Registry-install approximation: with symlinks preserved, @types/node must come from the project's own devDependencies.
   run('node', [join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.server.json', '--noEmit', '--preserveSymlinks'], { cwd: app });
@@ -289,7 +341,7 @@ export default defineContentType({
       assert(callback.status === 302, `callback (${who}) -> ${callback.status}`);
       assert(jar.has('oc_session'), `callback did not set oc_session (${who})`);
     };
-    return { jar, send, post: json('POST'), patch: json('PATCH'), startLogin, login };
+    return { jar, send, post: json('POST'), patch: json('PATCH'), put: json('PUT'), startLogin, login };
   };
   const admin = browser();
   const { send, post, startLogin } = admin;
@@ -303,6 +355,7 @@ export default defineContentType({
   assert(!siteRes.headers.has('content-security-policy'), 'GET / must not carry a Content-Security-Policy');
   // No page is published at / yet: the catch-all renders the welcome page (en-US copy, link to /admin/pages).
   assert(siteHtml.includes('A website and its OpenCloudCMS admin, served by one Next.js app.'), 'GET / lacks the welcome text');
+  assert(siteHtml.includes('<style>:root{--ocms-color-surface:#ffffff;'), 'GET / lacks the ThemeStyle variables of src/theme.ts');
   assert(siteHtml.includes('href="/admin/pages"'), 'GET / welcome page lacks the link to /admin/pages');
   const nopeRes = await send('/no-such-page');
   await nopeRes.text();
@@ -465,6 +518,63 @@ export default defineContentType({
   r = await page$(admin, '/');
   assert(r.text.includes(PUB) && !r.text.includes('data-opencloudcms-preview'), 'GET / after exit is not the published page without the bar');
   ok('preview exit -> published page again, no preview bar');
+
+  // 4c. composed block (block-builder spec §10): the fixed filter active = true wins over the page data.
+  const onSale = (await api(admin, 'POST', '/api/admin/content/product', { name: 'Smoke On Sale', active: true })).data;
+  const offSale = (await api(admin, 'POST', '/api/admin/content/product', { name: 'Smoke Off Sale', active: false })).data;
+  for (const p of [onSale, offSale]) await api(admin, 'POST', `/api/admin/content/product/${p.documentId}/publish`);
+  const shopContent = (entries) => ({
+    format: 'puck',
+    formatVersion: PUCK_FORMAT_VERSION,
+    data: { root: { props: {} }, content: [{ type: 'ActiveProducts', props: { id: 'active-1', _v: 1, entries } }] },
+  });
+  const shop = (await api(admin, 'POST', `${pageApi}?locale=en-US`, { title: 'Shop', path: '/shop', content: shopContent({ mode: 'query', limit: 12 }) })).data;
+  await api(admin, 'POST', `${pageApi}/${shop.documentId}/publish`);
+  const onlyActive = async (what) => {
+    const s = await page$(browser(), '/shop');
+    assert(s.res.status === 200, `GET /shop (${what}) -> ${s.res.status}`);
+    assert(s.text.includes('Smoke On Sale'), `GET /shop (${what}) lacks the active product`);
+    assert(!s.text.includes('Smoke Off Sale'), `GET /shop (${what}) shows the inactive product`);
+    assert(!s.text.includes('Acme Published'), `GET /shop (${what}) shows a product without active = true`);
+    assert(s.text.includes('lg:grid-cols-4'), `GET /shop (${what}) lacks the 4-column grid`);
+  };
+  await onlyActive('published');
+  ok('composed ActiveProducts on /shop: only the active = true product, 4-column grid');
+
+  await api(admin, 'PATCH', `${pageApi}/${shop.documentId}?locale=en-US`, { content: shopContent({ mode: 'query', limit: 12, filter: { active: 'false' } }) });
+  const stored = (await api(admin, 'GET', `${pageApi}/${shop.documentId}?locale=en-US`)).data;
+  const storedFilter = stored.content?.data?.content?.[0]?.props?.entries?.filter;
+  assert(storedFilter?.active === 'false', `the page data does not store the filter active = 'false': ${JSON.stringify(stored.content)}`);
+  await api(admin, 'POST', `${pageApi}/${shop.documentId}/publish`);
+  await onlyActive("stored filter active = 'false'");
+  ok("page data PATCHed to filter active = 'false' and republished: /shop still lists only the active product");
+
+  const blockList = await api(admin, 'GET', '/api/admin/blocks');
+  const composed = blockList.data.find((b) => b.name === 'ActiveProducts');
+  assert(blockList.editable === false && blockList.composedIndexWired === true, `GET /api/admin/blocks flags: ${JSON.stringify({ editable: blockList.editable, wired: blockList.composedIndexWired })}`);
+  assert(
+    composed?.source === 'composed' && composed.usage === 1 && composed.file === 'src/blocks/active-products/active-products.block.ts' && composed.problems.length === 0,
+    `GET /api/admin/blocks ActiveProducts: ${JSON.stringify(composed)}`,
+  );
+  ok('GET /api/admin/blocks: ActiveProducts composed, usage 1, no problems; not editable in production, index wired');
+
+  // 4d. theme + Block Builder round trip. Production cannot write (schemaEditable is dev only): the server's save
+  // path prints with the same codegen printers, so "save without changes" = the printed GET result equals the file.
+  const themeGet = await api(admin, 'GET', '/api/admin/theme');
+  assert(themeGet.editable === false && themeGet.theme?.activePalette === 'default', `GET /api/admin/theme: ${JSON.stringify(themeGet)}`);
+  assert(codegen.printThemeFile(themeGet.theme) === themeSrc, 'Theme save without changes would not keep src/theme.ts byte-identical');
+  const themePut = await admin.put('/api/admin/theme', themeGet.theme);
+  assert(themePut.status === 403, `PUT /api/admin/theme in production -> ${themePut.status} (want 403)`);
+  assert(readFileSync(join(app, 'src/theme.ts'), 'utf8') === themeSrc, 'PUT /api/admin/theme changed src/theme.ts');
+  ok('GET /api/admin/theme (not editable) prints back byte-identical; PUT -> 403 in production, file unchanged');
+
+  const header = await api(admin, 'GET', '/api/admin/blocks/StoreHeader');
+  assert(header.file === storeHeaderRel && header.problems.length === 0, `GET /api/admin/blocks/StoreHeader: ${JSON.stringify({ file: header.file, problems: header.problems })}`);
+  assert(codegen.printComposedBlockFile(header.spec) === storeHeaderSrc, 'Block Builder save of StoreHeader without changes would not keep the file byte-identical');
+  const headerPut = await admin.put('/api/admin/blocks/StoreHeader', { spec: header.spec });
+  assert(headerPut.status === 403, `PUT /api/admin/blocks/StoreHeader in production -> ${headerPut.status} (want 403)`);
+  assert(readFileSync(join(app, storeHeaderRel), 'utf8') === storeHeaderSrc, 'PUT /api/admin/blocks/StoreHeader changed the file');
+  ok('builder opens StoreHeader (no problems); its spec prints back byte-identical; PUT -> 403 in production, file unchanged');
 
   // 5. groups + review workflow: the super admin creates a Contenter and a Reviewer from the seed groups
   const call = async (b, method, path, body) => {

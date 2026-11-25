@@ -51,6 +51,8 @@ export interface Product extends EntryMeta {
   categories: string[];
   /** json */
   specs: unknown | null;
+  /** boolean, indexed */
+  active: boolean | null;
 }
 
 export interface ProductInput {
@@ -63,6 +65,7 @@ export interface ProductInput {
   brand?: string | null;
   categories?: string[] | null;
   specs?: unknown | null;
+  active?: boolean | null;
 }
 
 export interface ContentTypeMap {

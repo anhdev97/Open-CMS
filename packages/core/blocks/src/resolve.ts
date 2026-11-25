@@ -4,6 +4,9 @@ import type { BlockField, BlockRegistry, PuckData, ResolvedEntry } from './types
 
 export type Entry = ResolvedEntry;
 
+/** What `ContentFetcher.assets` returns per existing asset. */
+export type AssetRef = { id: string; url: string; alt?: string; width?: number; height?: number };
+
 export interface ContentFetcher {
   /** Entries by documentId (unordered; missing/unpublished ids are simply absent). */
   byIds(apiId: string, ids: string[], locale: Locale): Promise<Entry[]>;
@@ -14,7 +17,14 @@ export interface ContentFetcher {
   ): Promise<Entry[]>;
   /** documentId -> page path in `locale`, else in `defaultLocale`, else null. */
   pagePaths(ids: string[], locale: Locale, defaultLocale: Locale): Promise<Record<string, string | null>>;
+  /**
+   * Assets by id (unordered; missing ids are absent), for asset fields of entries rendered by blocks with
+   * `entryAssetPaths`. Optional: without it those asset ids stay unresolved (images render nothing).
+   */
+  assets?(ids: string[]): Promise<AssetRef[]>;
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
@@ -24,17 +34,41 @@ type DataField = Extract<BlockField, { kind: 'entry' | 'entries' | 'link' | 'ima
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
 
-function querySpec(apiId: string, v: Record<string, unknown>): QuerySpec {
-  const filter = isObj(v.filter)
-    ? Object.fromEntries(Object.entries(v.filter).map(([k, x]) => [k, String(x)]))
-    : undefined;
-  const raw = typeof v.limit === 'number' && Number.isFinite(v.limit) ? Math.floor(v.limit) : DEFAULT_LIMIT;
+type EntriesField = Extract<BlockField, { kind: 'entries' }>;
+
+/**
+ * Query of a stored `{ mode: 'query' }` value. The field's `baseFilter` is merged over the stored filter (base wins),
+ * `lockLimit` replaces the stored limit by the field's, `defaultSort` applies when nothing is stored or the field is
+ * not `sortable`.
+ */
+function querySpec(apiId: string, v: Record<string, unknown>, field?: EntriesField): QuerySpec {
+  const stored = isObj(v.filter) ? Object.fromEntries(Object.entries(v.filter).map(([k, x]) => [k, String(x)])) : {};
+  const filter = { ...stored, ...(field?.baseFilter ?? {}) };
+  const storedLimit = typeof v.limit === 'number' && Number.isFinite(v.limit) ? Math.floor(v.limit) : DEFAULT_LIMIT;
+  const raw = field?.lockLimit ? (field.limit ?? DEFAULT_LIMIT) : storedLimit;
+  const sort = field?.defaultSort && (field.sortable !== true || !str(v.sort)) ? field.defaultSort : str(v.sort);
   return {
     apiId,
-    ...(filter && Object.keys(filter).length ? { filter } : {}),
-    ...(str(v.sort) ? { sort: v.sort as string } : {}),
+    ...(Object.keys(filter).length ? { filter } : {}),
+    ...(sort ? { sort } : {}),
     limit: Math.min(Math.max(raw, 1), MAX_LIMIT),
   };
+}
+
+/**
+ * Whether `e` satisfies every `baseFilter` equality. Picked entries come from `byIds`, which cannot take the filter,
+ * so this approximates the list API's SQL equality in JS: numbers and money amounts compare numerically, everything
+ * else (booleans, text, dates, ids) by `String(value)`, and null/missing never matches. Datetimes compare as the ISO
+ * strings the API returns, so a filter value in another ISO form would not match. Accepted for v1 (controller ruling).
+ */
+function matchesBase(e: Entry, base: Record<string, string>): boolean {
+  return Object.entries(base).every(([k, want]) => {
+    const got = e[k];
+    if (got === null || got === undefined) return false;
+    if (typeof got === 'number') return Number(want) === got;
+    if (isObj(got) && 'amount' in got) return Number(want) === Number(got.amount);
+    return String(got) === want;
+  });
 }
 
 const queryKey = (q: QuerySpec) => JSON.stringify([q.apiId, q.filter ? Object.entries(q.filter).sort() : null, q.sort ?? null, q.limit]);
@@ -65,6 +99,8 @@ function mapFieldValues(
  * entries are fetched in batches (one `byIds` per apiId, one `query` per distinct query, one `pagePaths`).
  * Missing entries become `null` / are dropped; a failing `query` yields `[]` with a warning. Unknown blocks
  * are left untouched. Traversal (content, zones, slots, list rows) is shared with `readPageContent`.
+ * `b.entries` `baseFilter`/`lockLimit`/`defaultSort` are enforced here (stored data cannot lift them), and items of
+ * composed (and `usesLocale`) blocks get the reserved props `_locale` (= `o.locale`) and `_editor: false`.
  */
 export async function resolvePage(
   content: StoredPageContent,
@@ -77,12 +113,18 @@ export async function resolvePage(
   const queries = new Map<string, QuerySpec>();
   const pageIds = new Set<string>();
 
-  const walk = (fn: (field: DataField, value: unknown, apiId: string | null) => unknown): ItemFn => {
+  const walk = (fn: (field: DataField, value: unknown, apiId: string | null) => unknown, stamp = false): ItemFn => {
     const visit: ItemFn = (item) => {
       if (!isItem(item)) return item;
       const def = r.get(item.type);
       if (!def) return item;
       const props = mapFieldValues(def.fields, item.props, fn);
+      // Reserved, never stored: composed blocks format prices/dates and pick texts for the rendered locale.
+      // `_editor: false` overrides any stored value, so editor-only output never reaches the website.
+      if (stamp && (def.composed || def.usesLocale)) {
+        props._locale = o.locale;
+        props._editor = false;
+      }
       return { ...item, props: mapSlots(def.fields, props, visit) };
     };
     return visit;
@@ -99,7 +141,7 @@ export async function resolvePage(
     else if (field.kind === 'entries' && apiId && isObj(v)) {
       if (v.mode === 'pick' && Array.isArray(v.ids)) for (const id of v.ids) if (str(id)) idSet(apiId).add(id);
       if (v.mode === 'query') {
-        const q = querySpec(apiId, v);
+        const q = querySpec(apiId, v, field);
         queries.set(queryKey(q), q);
       }
     } else if (field.kind === 'link' && isObj(v) && v.kind === 'page' && str(v.documentId)) pageIds.add(v.documentId as string);
@@ -155,9 +197,11 @@ export async function resolvePage(
         if (v.mode === 'pick') {
           const map = byId.get(apiId);
           const ordered = Array.isArray(v.ids) ? v.ids : [];
-          return ordered.flatMap((id) => (typeof id === 'string' && map?.get(id)) || []);
+          let picked = ordered.flatMap((id) => (typeof id === 'string' && map?.get(id)) || []);
+          if (field.baseFilter) picked = picked.filter((e) => matchesBase(e, field.baseFilter!));
+          return field.lockLimit ? picked.slice(0, field.limit ?? DEFAULT_LIMIT) : picked;
         }
-        if (v.mode === 'query') return queried.get(queryKey(querySpec(apiId, v))) ?? [];
+        if (v.mode === 'query') return queried.get(queryKey(querySpec(apiId, v, field))) ?? [];
         return [];
       }
       case 'link': {
@@ -170,6 +214,52 @@ export async function resolvePage(
       default:
         return v;
     }
-  });
-  return mapData(data as unknown as Record<string, unknown>, substitute);
+  }, true);
+  const resolved = mapData(data as unknown as Record<string, unknown>, substitute);
+
+  // Pass 3: asset ids in entry fields listed by `entryAssetPaths` → one `assets` call → `{ id, url, alt, … }`.
+  const onEntries = (fn: (e: Entry, paths: readonly string[]) => Entry): ItemFn => {
+    const visit: ItemFn = (item) => {
+      if (!isItem(item)) return item;
+      const def = r.get(item.type);
+      if (!def) return item;
+      const paths = def.entryAssetPaths;
+      const props = paths?.length
+        ? mapFieldValues(def.fields, item.props, (field, v) => {
+            if (field.kind === 'entry') return isObj(v) ? fn(v as Entry, paths) : v;
+            if (field.kind === 'entries') return Array.isArray(v) ? v.map((e) => (isObj(e) ? fn(e as Entry, paths) : e)) : v;
+            return v;
+          })
+        : item.props;
+      return { ...item, props: mapSlots(def.fields, props, visit) };
+    };
+    return visit;
+  };
+  const assetIds = new Set<string>();
+  const isAssetId = (v: unknown): v is string => typeof v === 'string' && UUID_RE.test(v);
+  // A multiple asset field (array of ids) renders its first asset: only that one is fetched.
+  const idAt = (e: Entry, p: string): string | undefined => {
+    const v = Array.isArray(e[p]) ? (e[p] as unknown[])[0] : e[p];
+    return isAssetId(v) ? v : undefined;
+  };
+  mapData(resolved as unknown as Record<string, unknown>, onEntries((e, paths) => {
+    for (const p of paths) {
+      const id = idAt(e, p);
+      if (id) assetIds.add(id);
+    }
+    return e;
+  }));
+  if (!assetIds.size || !f.assets) return resolved;
+  const found = await safe('assets', 'loading assets', [] as AssetRef[], () => f.assets!([...assetIds]));
+  const byAsset = new Map(found.map((a) => [a.id, a] as const));
+  if (!byAsset.size) return resolved;
+  return mapData(resolved as unknown as Record<string, unknown>, onEntries((e, paths) => {
+    let out = e;
+    for (const p of paths) {
+      const id = idAt(e, p);
+      const a = id ? byAsset.get(id) : undefined;
+      if (a) out = { ...out, [p]: { ...a } }; // copy: fetched entries may be shared between blocks
+    }
+    return out;
+  }));
 }

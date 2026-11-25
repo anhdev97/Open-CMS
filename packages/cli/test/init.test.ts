@@ -3,8 +3,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import ts from 'typescript';
+import { isComposedIndexWired, printComposedIndex, printThemeFile } from '@opencloudcms/codegen';
+import { resolveConfig, validateTheme } from '@opencloudcms/schema';
 import { runInit } from '../src/init';
 import { dbNameFor, packageNameFor } from '../src/init/names';
+import { defaultTheme } from '../src/init/templates';
 
 let tmp: string;
 beforeEach(() => {
@@ -69,6 +72,7 @@ describe('runInit', () => {
       'package.json',
       'postcss.config.mjs',
       'src/app.module.ts',
+      'src/blocks/composed.ts',
       'src/blocks/example/example.block.tsx',
       'src/blocks/index.ts',
       'src/content-groups.ts',
@@ -82,6 +86,7 @@ describe('runInit', () => {
       'src/locales.ts',
       'src/main.ts',
       'src/root.ts',
+      'src/theme.ts',
       'tsconfig.json',
       'tsconfig.server.json',
     ];
@@ -131,7 +136,7 @@ describe('runInit', () => {
     expect(pkg.devDependencies['@opencloudcms/cli']).toBe('^1.2.3');
     expect(pkg.devDependencies['@types/node']).toBe('^22.0.0');
     expect(read(dir, 'README.md')).toContain('Install with dev dependencies');
-    expect(pkg.dependencies).toMatchObject({ next: '^16.4.2', react: '^19.3.1', 'react-dom': '^19.3.1', 'cross-env': '^10.1.0' });
+    expect(pkg.dependencies).toMatchObject({ next: '^16.4.6', react: '^19.3.1', 'react-dom': '^19.3.1', 'cross-env': '^10.1.0' });
     expect(pkg.devDependencies).toMatchObject({
       tailwindcss: '^4.3.3',
       '@tailwindcss/postcss': '^4.3.3',
@@ -204,7 +209,18 @@ describe('runInit', () => {
     expect(messages).toContain("'vi-VN': {");
     expect(messages).not.toMatch(/tagline|openAdmin/); // the welcome page has its own strings
     expect(read(dir, 'app/(site)/layout.tsx')).toContain('lang={locales.defaultLocale}');
-    for (const f of ['src/locales.ts', 'src/content-groups.ts', 'app/(site)/messages.ts', 'opencloudcms.config.ts', 'src/app.module.ts']) {
+    // Brand theme: one palette, printed exactly as the admin Page builder > Theme writes it; ThemeStyle in the site layout.
+    const theme = read(dir, 'src/theme.ts');
+    expect(theme).toBe(printThemeFile(defaultTheme()));
+    expect(validateTheme(defaultTheme())).toEqual([]);
+    expect(Object.keys(defaultTheme().palettes)).toHaveLength(1);
+    const layout = read(dir, 'app/(site)/layout.tsx');
+    expect(layout).toContain("import { ThemeStyle } from '@opencloudcms/core/blocks';");
+    expect(layout).toContain("import theme from '../../src/theme';");
+    expect(layout).toMatch(/<head>\s*<ThemeStyle theme=\{theme\} \/>\s*<\/head>/);
+    expect(layout).toContain('bg-(--ocms-color-surface) text-(--ocms-color-ink)');
+    expect(read(dir, 'README.md')).toContain('src/theme.ts');
+    for (const f of ['src/locales.ts', 'src/theme.ts', 'app/(site)/layout.tsx', 'src/content-groups.ts', 'app/(site)/messages.ts', 'opencloudcms.config.ts', 'src/app.module.ts']) {
       const out = ts.transpileModule(read(dir, f), { reportDiagnostics: true, compilerOptions: { jsx: ts.JsxEmit.ReactJSX } });
       expect(out.diagnostics ?? [], f).toEqual([]);
     }
@@ -216,8 +232,15 @@ describe('runInit', () => {
 
     const blocks = read(dir, 'src/blocks/index.ts');
     expect(blocks).toContain("import { coreBlocks, defineBlocks } from '@opencloudcms/core/blocks';");
-    expect(blocks).toContain('export default defineBlocks([...coreBlocks]);');
+    expect(blocks).toContain("import { composedBlocks } from './composed';");
+    expect(blocks).toContain('export default defineBlocks([...coreBlocks, ...composedBlocks]);');
     expect(blocks).toContain("// import Example from './example/example.block';");
+    expect(blocks).toContain('defineBlocks([...coreBlocks, ...composedBlocks, Example])');
+    // The managed index is byte-identical to what the Block Builder prints for no blocks.
+    expect(read(dir, 'src/blocks/composed.ts')).toBe(printComposedIndex([]));
+    expect(read(dir, 'src/blocks/composed.ts')).toContain('export const composedBlocks = [];');
+    // The builder's "wired" check sees the generated index.
+    expect(isComposedIndexWired(resolveConfig({ database: { url: 'postgres://x' } } as any, dir))).toBe(true);
     const example = read(dir, 'src/blocks/example/example.block.tsx');
     expect(example).toContain("import { b, defineBlock } from '@opencloudcms/core/blocks';");
     expect(example).toContain('export default defineBlock({');
@@ -268,9 +291,12 @@ describe('runInit', () => {
     const readme = read(dir, 'README.md');
     expect(readme).toContain('src/blocks');
     expect(readme).toContain('/admin/pages');
+    expect(readme).toContain('/admin/settings/blocks');
+    expect(readme).toContain('src/blocks/composed.ts');
 
     for (const f of [
       'src/blocks/index.ts',
+      'src/blocks/composed.ts',
       'src/blocks/example/example.block.tsx',
       'app/(site)/[[...path]]/page.tsx',
       'app/(site)/%5F_opencloudcms/preview/route.ts',

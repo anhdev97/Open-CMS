@@ -19,5 +19,7 @@ export default defineContentType({
     brand: f.reference({ id: 'fld_prod_brand', target: 'brand', indexed: true }),
     categories: f.taxonomy({ id: 'fld_prod_cats', taxonomy: 'product-category', multiple: true }),
     specs: f.json({ id: 'fld_prod_specs' }),
+    // On sale: the ActiveProducts block (src/blocks/active-products) only lists products with active = true.
+    active: f.boolean({ id: 'fld_git2h07p', indexed: true }),
   },
 });

@@ -1,6 +1,7 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { ContentGroupDefinition, ContentTypeDefinition } from '@opencloudcms/schema';
 import { buildEntryValidator, PAGE_API_ID } from '@opencloudcms/schema';
+import { PageBlocksManifest } from './block-builder/page-blocks-manifest';
 import { createPageHooks } from './pages/page.hooks';
 import { pageType } from './pages/page.type';
 import { OPENCLOUDCMS_OPTIONS, type EntryHooks, type ResolvedOpenCloudCmsOptions } from './options';
@@ -15,11 +16,14 @@ export class ContentRegistry {
   private validators = new Map<string, ReturnType<typeof buildEntryValidator>>();
   private hooks = new Map<string, EntryHooks[]>();
 
-  constructor(@Inject(OPENCLOUDCMS_OPTIONS) options: ResolvedOpenCloudCmsOptions) {
+  constructor(
+    @Inject(OPENCLOUDCMS_OPTIONS) options: ResolvedOpenCloudCmsOptions,
+    @Inject(PageBlocksManifest) blocks: PageBlocksManifest,
+  ) {
     this.registerCore(pageType, { hidden: true, editable: false });
     this.reload(options.contentTypes);
     this.reloadGroups(options.contentGroups ?? []);
-    this.hooks.set(PAGE_API_ID, [createPageHooks(options.pages?.blocks)]);
+    this.hooks.set(PAGE_API_ID, [createPageHooks(() => blocks.current())]);
     for (const h of options.hooks) this.hooks.set(h.apiId, [...(this.hooks.get(h.apiId) ?? []), h.hooks]);
   }
 
