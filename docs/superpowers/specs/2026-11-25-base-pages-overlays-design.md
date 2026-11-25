@@ -96,7 +96,8 @@ Button (composed element and library `Button`/`ButtonGroup` items) gets an optio
 
 ```ts
 type ButtonAction =
-  | { type: 'overlay'; op: 'open' | 'close' | 'toggle'; target?: string } // close without target = top-most
+  | { type: 'overlay'; op: 'open' | 'close' | 'toggle'; target?: string } // close without target: the overlay
+                                                                           // containing the button, else top-most
   | { type: 'scroll'; target: string };                                    // element id on the page, smooth scroll
 ```
 
@@ -114,7 +115,7 @@ see decision 6):
 
 ```ts
 openOverlay(name: string): void
-closeOverlay(name?: string): void        // no name: top-most
+closeOverlay(name?: string): void        // no name: top-most (code has no containing overlay)
 toggleOverlay(name: string): void
 useOverlay(name: string): { open(): void; close(): void; toggle(): void; isOpen: boolean }
 OverlayTrigger: (props: { name: string; op?: 'open'|'close'|'toggle'; children: ReactElement }) => ReactElement
@@ -124,6 +125,7 @@ ActionButton  // used by the renderers
 - Overlays render as `<dialog data-ocms-overlay="<name>" aria-labelledby=…>` with literal Tailwind classes
   (`backdrop:` variant for the dim layer, `open:` and `starting:` for the default fade/slide); content is
   server-rendered.
+- The built-in × (`showClose`) always closes its own overlay.
 - Module-level store (no provider): open → `showModal()`; tracks a stack for Esc/close-top; returns focus to the
   opener; adds/removes a literal `overflow-hidden` class on `<html>` while any overlay is open; backdrop click closes
   when `closeOnBackdrop`.
