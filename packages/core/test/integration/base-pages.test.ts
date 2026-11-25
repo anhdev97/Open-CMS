@@ -312,6 +312,24 @@ describe('base pages', () => {
       expect((await call(`${PUBLIC}/base`, {}, null)).status).toBe(400);
     });
 
+    it('public and admin by-path return the page layout (explicit base with regions, and baseId null)', async () => {
+      const framed = await createId({ title: 'Framed', path: '/framed-layout', layout: { baseId: def, regions: { header: 'replace' } } });
+      const bare = await createId({ title: 'Bare', path: '/bare-layout', layout: { baseId: null } });
+      for (const id of [framed, bare]) expect((await publish(id)).status).toBe(200);
+      const cases: [string, unknown][] = [
+        ['/framed-layout', { baseId: def, regions: { header: 'replace' } }],
+        ['/bare-layout', { baseId: null }],
+      ];
+      for (const [path, layout] of cases) {
+        const pub = await call(`${PUBLIC}/by-path?path=${path}`, {}, null);
+        expect(pub.status).toBe(200);
+        expect(pub.body.data.layout).toEqual(layout);
+        const adm = await call(`${ADMIN}/by-path?path=${path}&locale=en-US`);
+        expect(adm.status).toBe(200);
+        expect(adm.body.data.layout).toEqual(layout);
+      }
+    });
+
     it('no default base -> 404 for id=default', async () => {
       expect((await setDefault(null)).status).toBe(200);
       expect((await call(`${PUBLIC}/base?id=default`, {}, null)).status).toBe(404);

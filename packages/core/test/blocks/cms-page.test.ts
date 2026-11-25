@@ -446,11 +446,32 @@ describe('createCmsPage: base pages', () => {
     expect(warn.mock.calls.filter((c) => String(c[0]).includes(MISSING))).toHaveLength(1);
   });
 
-  it('no default base: the page renders alone without a warning', async () => {
+  it('no default base: the page renders alone without a warning; "no default" is remembered for 30 s (published)', async () => {
+    const own = createCmsPage({ blocks: defineBlocks([...coreBlocks, frame, modal]), baseUrl: BASE });
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let now = 1_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
     routes(publicByPath({ '/about': page({}) }), baseRoute('/api/content', {}));
-    expect(await html(await site.Page(params('about')))).toContain('Published hello');
+    expect(await html(await own.Page(params('about')))).toContain('Published hello');
     expect(warn.mock.calls.filter((c) => String(c[0]).includes('base'))).toHaveLength(0);
+    expect(baseCalls()).toHaveLength(1);
+    now += 29_000;
+    expect(await html(await own.Page(params('about')))).toContain('Published hello');
+    expect(baseCalls()).toHaveLength(1);
+    now += 2_000;
+    routes(publicByPath({ '/about': page({}) }), baseRoute('/api/content', { default: baseEntry('LATER-HEADER') }), pagePaths('/api/content'));
+    expect(await html(await own.Page(params('about')))).toContain('LATER-HEADER');
+    expect(baseCalls()).toHaveLength(2);
+  });
+
+  it('draft mode never uses the remembered "no default base"', async () => {
+    const own = createCmsPage({ blocks: defineBlocks([...coreBlocks, frame, modal]), baseUrl: BASE });
+    routes(publicByPath({ '/about': page({}) }), baseRoute('/api/content', {}));
+    await html(await own.Page(params('about')));
+    state.draft = true;
+    state.headers = { cookie: SESSION };
+    routes(adminMeta(), adminByPath(200, page({})), baseRoute('/api/admin/content', { default: baseEntry('DRAFT-HEADER') }), pagePaths('/api/admin/content'));
+    expect(await html(await own.Page(params('about')))).toContain('DRAFT-HEADER');
   });
 
   it('a failing base fetch or a base that is not one layout block renders the page alone with a warning, never a 500', async () => {

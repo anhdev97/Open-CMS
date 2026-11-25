@@ -23,7 +23,11 @@ beforeEach(() => {
   closeAll.mockClear();
   nav.pathname = '/a';
 });
-afterEach(() => act(() => root.unmount()));
+let mounted = true;
+afterEach(() => {
+  if (mounted) act(() => root.unmount());
+  mounted = true;
+});
 
 describe('OverlayRouteWatcher', () => {
   it('renders nothing and closes every overlay when the pathname changes (not on mount)', () => {
@@ -34,6 +38,14 @@ describe('OverlayRouteWatcher', () => {
     expect(closeAll).not.toHaveBeenCalled();
     nav.pathname = '/b';
     act(() => root.render(createElement(OverlayRouteWatcher)));
+    expect(closeAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes every overlay when it unmounts (App Router: the old page subtree is hidden, the new watcher mounts with the new path)', () => {
+    act(() => root.render(createElement(OverlayRouteWatcher)));
+    expect(closeAll).not.toHaveBeenCalled();
+    act(() => root.unmount());
+    mounted = false;
     expect(closeAll).toHaveBeenCalledTimes(1);
   });
 });

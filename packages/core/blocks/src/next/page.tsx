@@ -88,8 +88,11 @@ function warnBase(id: string, why: string): void {
   const key = `${id}:${why}`;
   if (warnedBase.has(key)) return;
   warnedBase.add(key);
-  console.warn(`[OpenCloudCMS] Base page ${id} ${why}; pages it frames are rendered without it.`);
+  console.warn(`[OpenCloudCMS] Cannot frame this page with base ${id} (${why}); the page is rendered without it.`);
 }
+
+/** How long the published site remembers that there is no default base page (saves a loopback 404 per request). */
+const NO_DEFAULT_BASE_TTL_MS = 30_000;
 
 /** Which base frames the page: `layout` null/absent → the default base, `baseId: null` → none. */
 function baseIdOf(layout: unknown): string | null {
@@ -199,6 +202,8 @@ export function createCmsPage(o: CreateCmsPageOptions): {
   }
   // Per request (React server `cache`): generateMetadata and Page share one load.
   const loadOnce = cache(load);
+  /** API base URL → time until which the published site skips `base?id=default` (no default base page). */
+  const noDefaultBaseUntil = new Map<string, number>();
 
   /**
    * Stored content of the base page `id` (a document id or `default`) in `locale` (the API falls back to the default
@@ -207,27 +212,33 @@ export function createCmsPage(o: CreateCmsPageOptions): {
    */
   async function loadBase(api: string, id: string, locale: Locale, cookie: string | undefined): Promise<StoredPageContent | null> {
     const draft = cookie !== undefined;
+    const memo = !draft && id === 'default';
+    if (memo && (noDefaultBaseUntil.get(api) ?? 0) > Date.now()) return null;
     const qs = new URLSearchParams({ id, locale });
     let g: Got;
     try {
       g = await getJson(`${api}${draft ? '/api/admin/content' : '/api/content'}/${PAGE_API_ID}/base?${qs}`, { cookie, noStore: draft });
     } catch (e) {
-      warnBase(id, `could not be loaded (${(e as Error).message})`);
+      warnBase(id, `it could not be loaded: ${(e as Error).message}`);
       return null;
     }
-    if (g.status === 404 && id === 'default') return null;
+    if (g.status === 404 && id === 'default') {
+      if (memo) noDefaultBaseUntil.set(api, Date.now() + NO_DEFAULT_BASE_TTL_MS);
+      return null;
+    }
+    if (memo) noDefaultBaseUntil.delete(api);
     if (g.status === 404) {
-      warnBase(id, draft ? 'does not exist' : 'does not exist or is not published');
+      warnBase(id, draft ? 'it does not exist' : 'it does not exist or is not published');
       return null;
     }
     const entry = g.status === 200 ? entryOf(g) : undefined;
     if (!entry) {
-      warnBase(id, `could not be loaded (status ${g.status})`);
+      warnBase(id, `it could not be loaded: status ${g.status}`);
       return null;
     }
     const read = readPageContent(entry.content ?? null, o.blocks);
     if (read.status !== 'ok') {
-      warnBase(id, read.status === 'empty' ? 'has no content' : 'is stored in another content format version and needs migration');
+      warnBase(id, read.status === 'empty' ? 'it has no content' : 'it is stored in another content format version and needs migration');
       return null;
     }
     return entry.content as StoredPageContent;
@@ -260,7 +271,8 @@ export function createCmsPage(o: CreateCmsPageOptions): {
       if (base && baseId) {
         const own = isObj(content) && Object.keys(content).length ? content : EMPTY_CONTENT(base.formatVersion);
         const composed = composeWithBase(base, own, r.entry.layout as PageLayout, o.blocks);
-        if (composed === own) warnBase(baseId, 'is not one layout block at its root');
+        // Not one layout block at the base root, or a content format mismatch.
+        if (composed === own) warnBase(baseId, 'its content is not one layout block in this content format');
         else content = composed;
       }
       // Data blocks of the base regions and of the page are resolved together.
