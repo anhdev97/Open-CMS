@@ -20,6 +20,8 @@ export interface AssetVariants {
 export interface LocalAssetsConfig {
   root: string;
   publicBaseUrl: string;
+  /** Directory of private files (spec §7). Default: `private-assets` next to `root`; never under `root`. */
+  privateRoot?: string;
 }
 
 export interface S3AssetsConfig {

@@ -53,6 +53,9 @@ export class FakeDb {
       provider: null,
       variants: null,
       folder_id: null,
+      visibility: 'public',
+      owner_api_id: null,
+      owner_document_id: null,
       created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, this.seq++)),
     };
   }
@@ -108,6 +111,7 @@ export class FakeDb {
       else if (op === 'is') preds.push((r) => r[col] == null);
       else if (op === 'is not') preds.push((r) => r[col] != null);
       else if (op === 'in') preds.push((r) => Array.isArray(v) && v.includes(r[col]));
+      else if (op === '<') preds.push((r) => r[col] != null && (r[col] as any) < (v as any));
       else throw new Error(`FakeDb: unsupported op ${op}`);
     };
 

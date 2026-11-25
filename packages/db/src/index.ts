@@ -227,6 +227,25 @@ export const coreMigrations: Record<string, Migration> = {
       await db.schema.alterTable('ct_opencloudcms_page').dropColumn('layout').dropColumn('is_default').dropColumn('kind').execute();
     },
   },
+  '0008_private_assets': {
+    /**
+     * Private files (spec §7, decision 9): `visibility` ('public' | 'private'), the private content type and entry
+     * that own a private file (`owner_document_id` null = uploaded, not yet attached). Private rows store `url = ''`.
+     */
+    async up(db) {
+      await db.schema
+        .alterTable(SYSTEM_TABLES.assets)
+        .addColumn('visibility', 'varchar(16)', (c) => c.notNull().defaultTo('public'))
+        .addColumn('owner_api_id', 'varchar(64)')
+        .addColumn('owner_document_id', 'uuid')
+        .execute();
+      await db.schema.createIndex('opencms_assets_owner_idx').on(SYSTEM_TABLES.assets).columns(['owner_api_id', 'owner_document_id']).execute();
+    },
+    async down(db) {
+      await db.schema.dropIndex('opencms_assets_owner_idx').execute();
+      await db.schema.alterTable(SYSTEM_TABLES.assets).dropColumn('owner_document_id').dropColumn('owner_api_id').dropColumn('visibility').execute();
+    },
+  },
 };
 
 /* ----------------------------- project ---------------------------- */

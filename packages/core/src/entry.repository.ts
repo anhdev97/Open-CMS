@@ -146,11 +146,13 @@ export class EntryRepository {
     return (row?.id as string | undefined) ?? null;
   }
 
-  async create(def: ContentTypeDefinition, data: Row, locale: string): Promise<string> {
+  /** `inTrx` runs first in the write transaction, with the new entry's documentId. */
+  async create(def: ContentTypeDefinition, data: Row, locale: string, inTrx?: (trx: Kysely<any>, documentId: string) => Promise<void>): Promise<string> {
     const documentId = randomUUID();
     const id = randomUUID();
     const { main, l10n, rels } = this.split(def, data);
     await this.writeTx(def, async (trx) => {
+      await inTrx?.(trx, documentId);
       await trx.insertInto(mainTable(def)).values({ id, document_id: documentId, status: 'draft', ...main }).execute();
       if (Object.keys(l10n).length) {
         await trx.insertInto(l10nTable(def)).values({ entry_id: id, locale, status: 'draft', ...l10n }).execute();

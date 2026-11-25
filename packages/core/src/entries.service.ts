@@ -3,6 +3,7 @@ import type { Kysely } from 'kysely';
 import type { ContentTypeDefinition, FieldDefinition, Locale } from '@opencloudcms/schema';
 import { AuthError, type RequestUser } from '@opencloudcms/oauth2';
 import { EntryRepository, type ListQuery, type Status } from './entry.repository';
+import { PrivateAssetOwnership } from './private-assets';
 import { OPENCLOUDCMS_DB, OPENCLOUDCMS_OPTIONS, type HookContext, type ResolvedOpenCloudCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
 import { WorkflowService } from './workflow.service';
@@ -70,6 +71,7 @@ export class EntriesService {
     @Inject(OPENCLOUDCMS_OPTIONS) private readonly options: ResolvedOpenCloudCmsOptions,
     @Inject(OPENCLOUDCMS_DB) private readonly db: Kysely<any>,
     @Inject(WorkflowService) private readonly workflow: WorkflowService,
+    @Inject(PrivateAssetOwnership) private readonly assetOwnership: PrivateAssetOwnership,
   ) {}
 
   private ctx(apiId: string, locale: string): HookContext {
@@ -176,7 +178,8 @@ export class EntriesService {
       const r = await h.beforeCreate?.(data, this.ctx(apiId, loc));
       if (r && typeof r === 'object') data = r as Row;
     }
-    const documentId = await this.repo.create(def, data, loc);
+    await this.assetOwnership.assertNoPrivate(def, data);
+    const documentId = await this.repo.create(def, data, loc, (trx, id) => this.assetOwnership.attach(trx, def, id, data));
     return this.get(apiId, documentId, 'draft', loc);
   }
 
@@ -197,8 +200,24 @@ export class EntriesService {
       const r = await h.beforeUpdate?.(data, { ...this.ctx(apiId, loc), documentId });
       if (r && typeof r === 'object') data = r as Row;
     }
-    await this.repo.update(def, documentId, data, loc, (trx) => this.workflow.guardUpdate(trx, def, documentId, user), opts?.expectedUpdatedAt);
-    return this.get(apiId, documentId, 'draft', loc);
+    await this.assetOwnership.assertNoPrivate(def, data);
+    await this.repo.update(
+      def,
+      documentId,
+      data,
+      loc,
+      async (trx) => {
+        await this.workflow.guardUpdate(trx, def, documentId, user);
+        await this.assetOwnership.attach(trx, def, documentId, data);
+      },
+      opts?.expectedUpdatedAt,
+    );
+    const saved = await this.get(apiId, documentId, 'draft', loc);
+    // Decision 9: a replaced private file is deleted once the save has committed.
+    if (def.private && def.fields.some((f) => f.kind === 'asset' && f.name in data)) {
+      await this.assetOwnership.deleteUnreferenced(def, documentId, saved.data);
+    }
+    return saved;
   }
 
   /**
@@ -269,6 +288,7 @@ export class EntriesService {
       await this.workflow.guardDelete(trx, def, documentId);
     };
     if (!(await this.repo.delete(def, documentId, guard))) throw new NotFoundException(`${apiId} ${documentId} not found`);
+    await this.assetOwnership.deleteOwned(def, documentId);
     for (const h of this.registry.hooksFor(apiId)) await h.afterDelete?.(documentId, this.ctx(apiId, this.options.config.defaultLocale));
     return { ok: true };
   }

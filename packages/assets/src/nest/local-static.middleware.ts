@@ -2,6 +2,9 @@ import path from 'node:path';
 import type { NextFunction, Request, Response } from 'express';
 import type { LocalAssetsConfig } from '../types';
 
+/** Path segments that name private storage (`private/…` keys, the `private-assets` directory). */
+const PRIVATE_SEGMENT = /^private(-assets)?$/i;
+
 /** URL path prefix (no trailing slash) of `publicBaseUrl`, or '' when it is served from the origin root. */
 export function localStaticPrefix(cfg: LocalAssetsConfig): string {
   let pathname: string;
@@ -29,6 +32,8 @@ export function createLocalStaticMiddleware(cfg: LocalAssetsConfig) {
       return next();
     }
     if (!rel || rel.includes('\0')) return next();
+    // Private files are stored outside `root`; refuse anything that names them anyway (defence in depth).
+    if (rel.split(/[\\/]+/).some((seg) => PRIVATE_SEGMENT.test(seg))) return next();
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');

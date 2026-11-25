@@ -12,7 +12,11 @@ import {
   Patch,
   Post,
   Query,
+  BadRequestException,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { AssetsService, AssetUploadInterceptor, decodeMultipartFilename, type UploadedFileInput } from '@opencloudcms/assets';
 import { CurrentUser, RequirePermission, type RequestUser } from '@opencloudcms/oauth2';
 import { PAGE_API_ID } from '@opencloudcms/schema';
 import { EntriesService, type ListParams } from './entries.service';
@@ -211,5 +215,42 @@ export class WorkflowController {
   @Get('pending-count')
   pendingCount() {
     return this.workflow.pendingCount();
+  }
+}
+
+/**
+ * Upload into an asset field of a private type (spec §7, decision 9): multipart `file` + `field` (the asset field's
+ * name). The file is sniffed against the field's `accept`, limited by the assets `maxBytes`, stored privately and
+ * owned by the uploader until an entry save attaches it (unattached uploads are swept after 24 h). Registered only
+ * when asset uploads are configured.
+ */
+@Controller('api/admin/content')
+export class PrivateAssetUploadController {
+  constructor(
+    @Inject(ContentRegistry) private readonly registry: ContentRegistry,
+    @Inject(AssetsService) private readonly assets: AssetsService,
+  ) {}
+
+  @RequirePermission('content.update')
+  @Post(':apiId/assets')
+  @UseInterceptors(AssetUploadInterceptor)
+  async upload(
+    @Param('apiId') apiId: string,
+    @UploadedFile() file: UploadedFileInput | undefined,
+    @Body('field') fieldName: string | undefined,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const def = this.registry.get(apiId);
+    if (!def.private) {
+      throw new BadRequestException({ code: 'not_private', message: `"${apiId}" is not a private content type: use the media library` });
+    }
+    const field = def.fields.find((f) => f.name === fieldName && f.kind === 'asset');
+    if (!field) throw new BadRequestException({ code: 'invalid_field', message: `"${String(fieldName)}" is not an asset field of ${apiId}` });
+    if (!file) throw new BadRequestException('file is required (multipart field "file")');
+    const data = await this.assets.uploadPrivate(
+      { buffer: file.buffer, filename: decodeMultipartFilename(file.originalname), contentType: file.mimetype },
+      { ownerApiId: apiId, accept: (field.options as { accept?: string[] }).accept, uploadedBy: user?.id ?? null },
+    );
+    return { data };
   }
 }

@@ -7,7 +7,11 @@ import {
   Patch,
   Post,
   Query,
+  Req,
+  Res,
   BadRequestException,
+  ForbiddenException,
+  UnauthorizedException,
   Injectable,
   Inject,
   Optional,
@@ -18,7 +22,8 @@ import {
   type NestInterceptor,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { RequirePermission } from '@opencloudcms/oauth2';
+import type { Request, Response } from 'express';
+import { CurrentUser, Public, RequirePermission, SessionAuthenticator, type RequestUser } from '@opencloudcms/oauth2';
 import { ASSETS_OPTIONS, DEFAULT_MAX_BYTES } from '../constants';
 import type { AssetsModuleOptions } from '../types';
 import { AssetsService, type RegisterAssetInput, type UploadedFileInput } from './assets.service';
@@ -28,8 +33,8 @@ import { FoldersService } from './folders.service';
 @Injectable()
 export class AssetUploadInterceptor implements NestInterceptor {
   private readonly inner: NestInterceptor;
-  constructor(@Inject(ASSETS_OPTIONS) options: AssetsModuleOptions) {
-    const Cls = FileInterceptor('file', { limits: { fileSize: options.limits?.maxBytes ?? DEFAULT_MAX_BYTES, files: 1 } });
+  constructor(@Optional() @Inject(ASSETS_OPTIONS) options: AssetsModuleOptions | null) {
+    const Cls = FileInterceptor('file', { limits: { fileSize: options?.limits?.maxBytes ?? DEFAULT_MAX_BYTES, files: 1 } });
     this.inner = new Cls();
   }
   intercept(context: ExecutionContext, next: CallHandler) {
@@ -43,6 +48,7 @@ export class AssetsController {
     @Inject(AssetsService) private readonly assets: AssetsService,
     @Inject(FoldersService) private readonly folders: FoldersService,
     @Optional() @Inject(ASSETS_OPTIONS) private readonly assetsOptions: AssetsModuleOptions | null = null,
+    @Optional() @Inject(SessionAuthenticator) private readonly sessions: SessionAuthenticator | null = null,
   ) {}
 
   @RequirePermission('content.read')
@@ -108,6 +114,45 @@ export class AssetsController {
   remove(@Param('id') id: string) {
     return this.assets.delete(id);
   }
+
+  /**
+   * Private file download (spec §7): `content.read` (the owner type's read permission) with a session, or a valid
+   * signed `?token=` from `POST assets/:id/link` without one. Public because the token path has no session; the
+   * session path is checked here exactly as the guard would.
+   */
+  @Public()
+  @Get('assets/:id/file')
+  async download(@Param('id') id: string, @Query('token') token: string | undefined, @Req() req: Request, @Res() res: Response) {
+    if (token !== undefined) {
+      if (!this.assets.verifyLink(id, String(token))) throw new ForbiddenException({ code: 'forbidden', message: 'Invalid or expired link' });
+    } else {
+      const user = this.sessions
+        ? await this.sessions.authenticate(req, res)
+        : ((req as Request & { user?: Pick<RequestUser, 'permissions'> }).user ?? null);
+      if (!user) throw new UnauthorizedException({ code: 'unauthenticated', message: 'Authentication required' });
+      if (!user.permissions.includes('content.read')) throw new ForbiddenException({ code: 'forbidden', message: 'Missing permission: content.read' });
+    }
+    const { asset, stream } = await this.assets.openPrivate(id);
+    res.setHeader('Content-Type', asset.mimeType ?? 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeRFC5987(asset.filename)}`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (asset.size != null) res.setHeader('Content-Length', String(asset.size));
+    stream.on('error', () => res.destroy());
+    stream.pipe(res);
+  }
+
+  /** A 5-minute signed download URL for links that cannot send headers (decision 15). */
+  @RequirePermission('content.read')
+  @Post('assets/:id/link')
+  link(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.assets.createLink(id, user.id);
+  }
+}
+
+/** RFC 5987 `ext-value` encoding (`encodeURIComponent` plus the characters it leaves that are not attr-chars). */
+function encodeRFC5987(s: string): string {
+  return encodeURIComponent(s).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 }
 
 /** Only registered when the `assets` option is non-null. */

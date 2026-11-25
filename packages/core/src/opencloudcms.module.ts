@@ -14,7 +14,8 @@ import { JsonBodyParserMiddleware } from './http/body-parser.middleware';
 import { BlocksController } from './block-builder/blocks.controller';
 import { BlocksService } from './block-builder/blocks.service';
 import { PageBlocksManifest } from './block-builder/page-blocks-manifest';
-import { AdminContentController, ContentController, WorkflowController } from './content.controllers';
+import { AdminContentController, ContentController, PrivateAssetUploadController, WorkflowController } from './content.controllers';
+import { PrivateAssetOwnership } from './private-assets';
 import { AdminPagesController, PagesController, PublicPagesController } from './pages/pages.controller';
 import { PagesService } from './pages/pages.service';
 import { EntriesService } from './entries.service';
@@ -94,7 +95,11 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, BeforeAppli
         }),
         AssetsModule.forRoot({ dbToken: OPENCLOUDCMS_DB, assets: input.assets ?? null }),
       ],
-      controllers: [PublicPagesController, PublicAssetsController, AdminPagesController, PagesController, ContentController, AdminContentController, SchemaController, BlocksController, ContentGroupsController, LocalesController, ThemeController, SystemController, WorkflowController],
+      controllers: [
+        PublicPagesController, PublicAssetsController, AdminPagesController, PagesController, ContentController, AdminContentController,
+        ...(input.assets ? [PrivateAssetUploadController] : []),
+        SchemaController, BlocksController, ContentGroupsController, LocalesController, ThemeController, SystemController, WorkflowController,
+      ],
       providers: [
         { provide: OPENCLOUDCMS_OPTIONS, useValue: options },
         { provide: OPENCLOUDCMS_DB, useFactory: () => createDb(options.config.database.url) },
@@ -102,6 +107,7 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, BeforeAppli
         ContentRegistry,
         EntryRepository,
         EntriesService,
+        PrivateAssetOwnership,
         PrivateEntriesService,
         WorkflowService,
         PagesService,

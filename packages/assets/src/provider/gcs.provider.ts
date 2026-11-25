@@ -1,9 +1,12 @@
+import type { Readable } from 'node:stream';
 import type { GcsAssetsConfig } from '../types';
 import type { StorageProvider } from './storage-provider';
 
 interface GcsFile {
   save(data: Buffer, options?: { contentType?: string; resumable?: boolean }): Promise<unknown>;
   delete(options?: { ignoreNotFound?: boolean }): Promise<unknown>;
+  createReadStream(): Readable;
+  exists?(): Promise<[boolean]>;
 }
 
 interface GcsBucket {
@@ -47,6 +50,16 @@ export function createGcsProvider(cfg: GcsAssetsConfig, deps?: GcsProviderDeps):
 
     publicUrl(key: string): string {
       return `${baseUrl}/${key}`;
+    },
+
+    async get(key: string): Promise<Readable> {
+      // Fail before streaming when the object is missing (the stream would only error later).
+      const file = bucket.file(key);
+      if (file.exists) {
+        const [exists] = await file.exists();
+        if (!exists) throw Object.assign(new Error(`GCS object "${key}" not found`), { code: 'ENOENT' });
+      }
+      return file.createReadStream();
     },
   };
 }

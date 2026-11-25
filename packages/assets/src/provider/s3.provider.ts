@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import type { S3AssetsConfig } from '../types';
 import type { StorageProvider } from './storage-provider';
 
@@ -9,6 +10,7 @@ interface S3Sdk {
   S3Client: new (config: { region: string }) => S3Client;
   PutObjectCommand: new (input: { Bucket: string; Key: string; Body: Buffer; ContentType: string }) => unknown;
   DeleteObjectCommand: new (input: { Bucket: string; Key: string }) => unknown;
+  GetObjectCommand: new (input: { Bucket: string; Key: string }) => unknown;
 }
 
 export interface S3ProviderDeps {
@@ -44,6 +46,16 @@ export function createS3Provider(cfg: S3AssetsConfig, deps?: S3ProviderDeps): St
 
     publicUrl(key: string): string {
       return `${baseUrl}/${key}`;
+    },
+
+    async get(key: string): Promise<Readable> {
+      const out = (await client.send(new sdk.GetObjectCommand({ Bucket: bucket, Key: key }))) as { Body?: unknown };
+      const body = out?.Body;
+      if (body instanceof Readable) return body;
+      if (body && typeof (body as { transformToByteArray?: unknown }).transformToByteArray === 'function') {
+        return Readable.from([Buffer.from(await (body as { transformToByteArray(): Promise<Uint8Array> }).transformToByteArray())]);
+      }
+      throw new Error(`S3 object "${key}" has no readable body`);
     },
   };
 }
