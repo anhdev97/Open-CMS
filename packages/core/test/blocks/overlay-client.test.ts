@@ -7,6 +7,7 @@ import {
   OverlayTrigger,
   closeAllOverlays,
   closeOverlay,
+  isOverlayOpen,
   openOverlay,
   toggleOverlay,
   useOverlay,
@@ -52,15 +53,49 @@ describe('overlay store', () => {
     expect(html().classList.contains('overflow-hidden')).toBe(true);
   });
 
-  it('keeps a stack: native close on the top removes only it', () => {
+  it('keeps a stack: Esc-style native close on the top removes only it', () => {
     container.innerHTML = dialog('a') + dialog('b');
     openOverlay('a');
     openOverlay('b');
-    d('b').dispatchEvent(new Event('close'));
+    d('b').close(); // stub: removes `open` and dispatches `close`, like Esc
+    expect(d('a').open).toBe(true);
     expect(html().classList.contains('overflow-hidden')).toBe(true);
-    d('b').removeAttribute('open');
     closeOverlay();
     expect(d('a').open).toBe(false);
+    expect(html().classList.contains('overflow-hidden')).toBe(false);
+  });
+
+  it('a stale queued close event does not release a re-opened dialog', async () => {
+    container.innerHTML = dialog('a');
+    openOverlay('a');
+    closeOverlay('a');
+    openOverlay('a');
+    await new Promise<void>((r) => setTimeout(r, 0));
+    d('a').dispatchEvent(new Event('close')); // late native event
+    expect(d('a').open).toBe(true);
+    expect(html().classList.contains('overflow-hidden')).toBe(true);
+    let seen = false;
+    const Probe = () => (seen = useOverlay('a').isOpen, null);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const r = createRoot(host);
+    act(() => r.render(createElement(Probe)));
+    expect(seen).toBe(true);
+    act(() => r.unmount());
+  });
+
+  it('prunes dialogs removed from the DOM', () => {
+    container.innerHTML = dialog('a');
+    openOverlay('a');
+    d('a').remove();
+    expect(isOverlayOpen('a')).toBe(false);
+    expect(html().classList.contains('overflow-hidden')).toBe(false);
+    container.innerHTML = dialog('a');
+    openOverlay('a');
+    expect(d('a').open).toBe(true);
+    expect(html().classList.contains('overflow-hidden')).toBe(true);
+    d('a').remove();
+    closeOverlay();
     expect(html().classList.contains('overflow-hidden')).toBe(false);
   });
 
