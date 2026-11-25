@@ -169,6 +169,9 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme, base
   const [layout, setLayout] = useState<PageLayout>(kind === 'page' ? (entry.layout ?? null) : null);
   const lastLayout = useRef(JSON.stringify(layout));
   const base = useBasePage({ kind, layout, registry, fetcher, locale, defaultLocale, load: loadBase });
+  // Region modes saved are those of the current base page once it is known (modes left from another base are dropped).
+  const knownRegions = useRef<readonly string[] | null>(null);
+  knownRegions.current = base.status === 'ok' ? base.regions : null;
   const [confirmPublish, setConfirmPublish] = useState(false);
   const getPuck = useRef<ReturnType<typeof useGetPuck> | null>(null);
 
@@ -184,7 +187,7 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme, base
   const unknownTypes = useMemo(() => unknownBlockTypes(initial, registry), [initial, registry]);
 
   const { autosave, state: saveState } = useAutosave<PuckData>({
-    save: (data, ifMatch) => savePage(documentId, locale, { ...fromEditorData(data, registry, storedSeo, kind) }, ifMatch),
+    save: (data, ifMatch) => savePage(documentId, locale, { ...fromEditorData(data, registry, storedSeo, kind, knownRegions.current) }, ifMatch),
     debounceMs: 1500,
     ifMatch: entry.updatedAt,
   });
@@ -206,7 +209,7 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme, base
         }
       }
       if (readOnly) return;
-      const body = JSON.stringify(fromEditorData(d, registry, storedSeo, kind));
+      const body = JSON.stringify(fromEditorData(d, registry, storedSeo, kind, knownRegions.current));
       if (body === lastBody.current) return; // Puck also reports loads and selection-only updates
       lastBody.current = body;
       autosave.change(d);
@@ -252,8 +255,9 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme, base
 
   const regionsOf = useCallback(
     async (baseId: string) => {
+      // null: no such base page (Default: none set); a base that cannot frame pages has no regions to choose.
       const b = await loadBase(baseId, locale);
-      return b ? baseRegionNames(b.content, registry) : null;
+      return b ? (baseRegionNames(b.content, registry) ?? []) : null;
     },
     [locale, registry],
   );

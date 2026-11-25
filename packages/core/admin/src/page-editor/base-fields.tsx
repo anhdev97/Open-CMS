@@ -124,9 +124,10 @@ export const regionSlotField = (layouts: readonly string[], label?: string): Fie
   ({ type: 'slot', ...(label ? { label } : {}), ...(layouts.length ? { disallow: [...layouts] } : {}) }) as Field;
 
 /**
- * Root `resolveFields` of a page: the static fields (slots left out) plus, for a chosen base page, one mode field per
- * region and a slot field `region__<name>` per replaced region; for the default base page, a hint. Blocks of a region
- * that is no longer replaced stay in the data (switching back restores them); the website ignores them.
+ * Root `resolveFields` of a page: the static fields (slots left out) plus, for the base page it uses (the default one
+ * included: `regionsOf('default')`), one mode field per region and a slot field `region__<name>` per replaced region.
+ * Default without a usable default base page: a hint. Blocks of a region that is no longer replaced stay in the data
+ * (switching back restores them); the website ignores them.
  */
 export function pageRootResolveFields(o: { regionsOf: (baseId: string) => Promise<string[] | null>; registry: BlockRegistry; locale?: Locale }) {
   const layouts = layoutBlockNames(o.registry);
@@ -134,13 +135,15 @@ export function pageRootResolveFields(o: { regionsOf: (baseId: string) => Promis
     const props = data.props ?? {};
     const out: Record<string, Field> = {};
     for (const [k, f] of Object.entries(params.fields)) if ((f as { type?: string }).type !== 'slot') out[k] = f;
-    const choice = props[BASE_FIELD];
-    if (choice === undefined || choice === BASE_DEFAULT) {
+    const raw = props[BASE_FIELD];
+    const choice = raw === undefined || raw === BASE_DEFAULT ? 'default' : raw;
+    if (typeof choice !== 'string' || choice === BASE_NONE) return out;
+    const found = await o.regionsOf(choice).catch(() => null);
+    if (choice === 'default' && found === null) {
       out[BASE_HINT_FIELD] = { type: 'custom', render: BaseHint } as Field;
       return out;
     }
-    if (typeof choice !== 'string' || choice === BASE_NONE) return out;
-    const regions = (await o.regionsOf(choice).catch(() => null)) ?? [];
+    const regions = found ?? [];
     for (const r of regions) {
       out[`${REGION_MODE_PREFIX}${r}`] = {
         type: 'custom',

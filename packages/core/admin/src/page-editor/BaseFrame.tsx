@@ -7,6 +7,7 @@ import { TriangleAlertIcon } from 'lucide-react';
 import { createElement, useContext, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { Render } from '@puckeditor/core';
 import {
+  blockRenderProps,
   composeWithBase,
   PUCK_FORMAT_VERSION,
   resolvePage,
@@ -130,9 +131,12 @@ function BaseWarning() {
   );
 }
 
-/** Calls the layout block's own render with its slots given as nodes (the frame is never a Puck item of the page). */
-function FrameRender({ def, props }: { def: BlockDefinition<any>; props: Props }) {
-  return <>{def.render(props as never)}</>;
+/**
+ * Calls the layout block's own render with the props built as Puck's render builds them (`blockRenderProps`: slots,
+ * list rows, reserved props), its slots given as elements: the frame is never a Puck item of the page.
+ */
+function FrameRender({ def, props, locale }: { def: BlockDefinition<any>; props: Props; locale: Locale }) {
+  return <>{def.render(blockRenderProps(def, props, locale) as never)}</>;
 }
 
 /**
@@ -146,7 +150,7 @@ export function BaseFrame(props: Props & { children?: ReactNode }) {
   const base = useContext(BaseContext);
   const { children } = props;
   const layout = rootPropsToLayout(props);
-  const key = layout === null ? 'default' : layout.baseId;
+  const key = layout === null || layout.baseId === undefined ? 'default' : layout.baseId;
   const registry = base.registry;
   const config = useMemo(() => (registry ? baseRenderConfig(registry, base.locale) : null), [registry, base.locale]);
   if (key === null || base.key !== key || base.status === 'none' || base.status === 'missing' || base.status === 'loading') return <>{children}</>;
@@ -170,10 +174,10 @@ export function BaseFrame(props: Props & { children?: ReactNode }) {
     } else if (mode === 'hide') slots[k] = <HiddenRegion name={r} />;
     else slots[k] = <DefaultRegion name={r} items={Array.isArray(base.frame.props[k]) ? (base.frame.props[k] as unknown[]) : []} config={config} />;
   }
-  const frameProps = { ...base.frame.props, ...slots, pageContent: children, _locale: base.locale, _editor: true };
+  const frameProps = { ...base.frame.props, ...slots, pageContent: <>{children}</>, _locale: base.locale, _editor: true };
   return (
     <div data-base-frame={base.frame.type}>
-      <FrameRender def={def} props={frameProps} />
+      <FrameRender def={def} props={frameProps} locale={base.locale} />
     </div>
   );
 }

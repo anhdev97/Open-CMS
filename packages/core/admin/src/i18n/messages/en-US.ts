@@ -602,7 +602,7 @@ export const enUS = {
       baseDefaultNone: "Default (none set)",
       baseNone: "None",
       baseUnknown: "Unknown base page",
-      baseHint: "Shows the default base page as it is. Choose a base page to change its regions.",
+      baseHint: "No default base page is set: pages on Default are shown without a frame. Set one in Pages › Base pages.",
       regionMode: "Region: {name}",
       regionDefault: "Default",
       regionReplace: "Replace for this page",

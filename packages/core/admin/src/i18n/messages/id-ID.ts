@@ -551,7 +551,7 @@ const idID: Messages = {
       baseDefaultNone: "Default (belum diatur)",
       baseNone: "Tidak ada",
       baseUnknown: "Halaman dasar tidak dikenal",
-      baseHint: "Menampilkan halaman dasar default apa adanya. Pilih halaman dasar untuk mengubah areanya.",
+      baseHint: "Belum ada halaman dasar default: halaman dengan Default ditampilkan tanpa bingkai. Atur di Halaman › Halaman dasar.",
       regionMode: "Area: {name}",
       regionDefault: "Default",
       regionReplace: "Ganti untuk halaman ini",

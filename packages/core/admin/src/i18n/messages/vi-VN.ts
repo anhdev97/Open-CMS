@@ -551,7 +551,7 @@ const viVN: Messages = {
       baseDefaultNone: "Mặc định (chưa đặt)",
       baseNone: "Không dùng",
       baseUnknown: "Trang nền không xác định",
-      baseHint: "Hiển thị trang nền mặc định như hiện có. Chọn một trang nền để thay đổi các vùng của nó.",
+      baseHint: "Chưa đặt trang nền mặc định: các trang dùng Mặc định sẽ hiển thị không có khung. Hãy đặt trong Trang › Trang nền.",
       regionMode: "Vùng: {name}",
       regionDefault: "Mặc định",
       regionReplace: "Thay thế cho trang này",

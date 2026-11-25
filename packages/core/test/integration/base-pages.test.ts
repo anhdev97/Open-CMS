@@ -153,6 +153,7 @@ describe('base pages', () => {
     let b2: string;
     let explicit1: string;
     let implicit: string;
+    let regionsOnly: string;
 
     beforeAll(async () => {
       // Clean slate for the default and usage counts.
@@ -163,6 +164,8 @@ describe('base pages', () => {
       await createId({ title: 'Uses B2', path: '/uses-b2', layout: { baseId: b2 } });
       await createId({ title: 'No frame', path: '/no-frame', layout: { baseId: null } });
       implicit = await createId({ title: 'Implicit', path: '/implicit' });
+      // The default base with region modes (no baseId).
+      regionsOnly = await createId({ title: 'Default with regions', path: '/default-regions', layout: { regions: { header: 'replace' } } });
     });
 
     it('setDefault on a draft base -> 409 base_not_published; on a page -> 422 unknown_base', async () => {
@@ -216,6 +219,7 @@ describe('base pages', () => {
       const ids = u1.body.pages.map((p: any) => p.documentId);
       expect(ids).toContain(explicit1);
       expect(ids).toContain(implicit);
+      expect(ids).toContain(regionsOnly);
       expect(u1.body.count).toBe(ids.length);
       // Base pages themselves (layout null) never count; published + draft rows count once.
       expect(ids).not.toContain(b2);
@@ -225,6 +229,7 @@ describe('base pages', () => {
       expect((await publish(explicit1)).status).toBe(200);
       expect((await usage(b1)).body.count).toBe(u1.body.count);
       const u2 = await usage(b2);
+      // `{ regions }` only counts for the default base, not for another base.
       expect(u2.body.count).toBe(1);
       expect(u2.body.pages[0].title).toBe('Uses B2');
     });

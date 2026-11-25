@@ -35,11 +35,14 @@ describe('validatePageLayout', () => {
     expect(validatePageLayout(null)).toEqual({ ok: true });
     expect(validatePageLayout(undefined)).toEqual({ ok: true });
     expect(validatePageLayout({ baseId: null })).toEqual({ ok: true });
+    // Absent baseId = the default base page, with or without region modes.
+    expect(validatePageLayout({})).toEqual({ ok: true });
+    expect(validatePageLayout({ regions: { header: 'replace' } })).toEqual({ ok: true });
     expect(validatePageLayout({ baseId: '00000000-0000-4000-8000-000000000001', regions: { header: 'hide', 'side-2': 'replace', footer: 'default' } })).toEqual({ ok: true });
   });
 
   it('rejects bad shapes, ids, region names and modes', () => {
-    for (const bad of [[], 'x', {}, { baseId: 'nope' }, { baseId: null, regions: [] }, { baseId: null, regions: { Header: 'hide' } }, { baseId: null, regions: { header: 'show' } }, { baseId: null, extra: 1 }]) {
+    for (const bad of [[], 'x', { baseId: 'nope' }, { baseId: undefined }, { regions: { Header: 'hide' } }, { baseId: null, regions: [] }, { baseId: null, regions: { Header: 'hide' } }, { baseId: null, regions: { header: 'show' } }, { baseId: null, extra: 1 }]) {
       expect(validatePageLayout(bad).ok, JSON.stringify(bad)).toBe(false);
     }
   });
@@ -62,6 +65,9 @@ describe('page hooks', () => {
     await expect(h.beforeCreate!({ layout: { baseId: 'x' } }, ctx)).rejects.toMatchObject({ response: { code: 'invalid_layout' } });
     await expect(h.beforeCreate!({ kind: 'base', layout: { baseId: null } }, ctx)).rejects.toMatchObject({ response: { code: 'invalid_layout' } });
     expect(await h.beforeCreate!({ layout: { baseId: null, regions: { header: 'hide' } } }, ctx)).toMatchObject({ layout: { baseId: null } });
+    // No baseId = the default base page with region modes: no base lookup.
+    expect(await h.beforeCreate!({ layout: { regions: { header: 'replace' } } }, ctx)).toMatchObject({ layout: { regions: { header: 'replace' } } });
+    await expect(h.beforeCreate!({ kind: 'base', layout: { regions: {} } }, ctx)).rejects.toMatchObject({ response: { code: 'invalid_layout' } });
   });
 
   it('publishing a page requires a path in every translation', async () => {

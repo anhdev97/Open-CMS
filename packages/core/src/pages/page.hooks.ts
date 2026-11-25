@@ -54,7 +54,10 @@ function stripManaged(data: Record<string, unknown>, current: boolean): Record<s
   return rest;
 }
 
-/** Shape of `layout`, none on base pages, and `baseId` naming an existing base document (draft or published). */
+/**
+ * Shape of `layout`, none on base pages, and `baseId` (when it is a document id) naming an existing base document
+ * (draft or published). An absent `baseId` is the default base page, `null` no base page: neither is looked up.
+ */
 async function checkLayout(data: Record<string, unknown>, kind: PageKind, db: Kysely<any> | null): Promise<void> {
   if (!('layout' in data)) return;
   const layout = data.layout as { baseId?: string | null } | null | undefined;
@@ -62,7 +65,7 @@ async function checkLayout(data: Record<string, unknown>, kind: PageKind, db: Ky
   if (!shape.ok) throw unprocessable('invalid_layout', shape.message);
   if (layout == null) return;
   if (kind === 'base') throw unprocessable('invalid_layout', 'A base page has no layout of its own');
-  if (layout.baseId == null || !db) return;
+  if (typeof layout.baseId !== 'string' || !db) return;
   const r = await sql`select 1 from ${sql.table(PAGE_MAIN)} where document_id = ${layout.baseId} and kind = 'base' limit 1`.execute(db);
   if (!r.rows.length) throw unprocessable('unknown_base', `No base page ${layout.baseId}`);
 }

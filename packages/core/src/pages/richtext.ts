@@ -77,7 +77,8 @@ function applyPath(obj: Record<string, unknown>, segs: string[]): Record<string,
 
 /**
  * Copy of a stored page `content` with the `b.richText` props of the blocks in `manifest` (by their `richText`
- * paths) normalized, in `data.content`, `data.zones` and nested slots. Anything else is returned as is.
+ * paths) normalized, in `data.content`, `data.zones`, the root `region__<name>` props (blocks of replaced base page
+ * regions) and nested slots. Anything else is returned as is.
  */
 export function normalizeStoredRichText(content: unknown, manifest: BlockManifest): unknown {
   const paths = new Map(manifest.filter((m) => m.richText?.length).map((m) => [m.name, m.richText!.map((p) => p.split('.'))]));
@@ -97,5 +98,12 @@ export function normalizeStoredRichText(content: unknown, manifest: BlockManifes
   const data = { ...content.data };
   if (Array.isArray(data.content)) data.content = walk(data.content);
   if (isObj(data.zones)) data.zones = Object.fromEntries(Object.entries(data.zones).map(([k, z]) => [k, walk(z)]));
+  if (isObj(data.root) && isObj(data.root.props)) {
+    const props = data.root.props;
+    data.root = {
+      ...data.root,
+      props: Object.fromEntries(Object.entries(props).map(([k, v]) => [k, k.startsWith('region__') ? walk(v) : v])),
+    };
+  }
   return { ...content, data };
 }

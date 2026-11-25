@@ -1,4 +1,4 @@
-import { createElement, Fragment, type ComponentType, type ReactElement } from 'react';
+import { createElement, Fragment, isValidElement, type ComponentType, type ReactElement } from 'react';
 import type { ComponentConfig, Field } from '@puckeditor/core';
 import { localizedText, type Locale } from '@opencloudcms/schema';
 import { MAX_TRACKS } from './tracks';
@@ -6,6 +6,7 @@ import { fieldsDefaults, optionValue } from './fields';
 import {
   COLOR_TOKENS,
   SPACING_TOKENS,
+  type BlockDefinition,
   type BlockField,
   type BlockRegistry,
   type CustomFieldRenderers,
@@ -126,13 +127,16 @@ function toPuckFields(fields: Record<string, BlockField>, opts: ToPuckConfigOpti
   return out;
 }
 
-/** Puck passes each slot as a component; blocks receive it rendered (ReactNode). Same inside list rows. */
+/**
+ * Puck passes each slot as a component; blocks receive it rendered (ReactNode). Same inside list rows. A slot value that
+ * is already a React element (a caller rendering the block outside Puck, e.g. the editor's base frame) is kept.
+ */
 function toRenderProps(fields: Record<string, BlockField>, props: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, f] of Object.entries(fields)) {
     const v = props[k];
     if (f.kind === 'slot') {
-      out[k] = typeof v === 'function' ? createElement(v as ComponentType) : null;
+      out[k] = typeof v === 'function' ? createElement(v as ComponentType) : isValidElement(v) ? v : null;
     } else if (f.kind === 'list' && Array.isArray(v)) {
       out[k] = v.map((row) =>
         row && typeof row === 'object' ? toRenderProps(f.fields, row as Record<string, unknown>) : row,
@@ -156,6 +160,15 @@ function composedReserved(props: Record<string, unknown>, locale: Locale): Recor
   };
 }
 
+/**
+ * Props `d.render` receives for the Puck props `props`, exactly as the Puck config's render builds them: slots rendered
+ * (functions as components, React elements kept), list rows mapped, and for composed / `usesLocale` blocks the reserved
+ * `_locale` / `_editor` props (`locale` when `_locale` is not stamped).
+ */
+export function blockRenderProps(d: Pick<BlockDefinition<any>, 'fields' | 'composed' | 'usesLocale'>, props: Record<string, unknown>, locale: Locale): Record<string, unknown> {
+  return d.composed || d.usesLocale ? { ...toRenderProps(d.fields, props), ...composedReserved(props, locale) } : toRenderProps(d.fields, props);
+}
+
 /** Puck `Config` for the editor and renderer. Labels are resolved for `locale` (en-US fallback). */
 export function toPuckConfig(r: BlockRegistry, opts: ToPuckConfigOptions): PuckConfig {
   const components: Record<string, ComponentConfig> = {};
@@ -170,7 +183,7 @@ export function toPuckConfig(r: BlockRegistry, opts: ToPuckConfigOptions): PuckC
         createElement(
           Fragment,
           null,
-          d.render((d.composed || d.usesLocale ? { ...toRenderProps(d.fields, props), ...composedReserved(props, opts.locale) } : toRenderProps(d.fields, props)) as never),
+          d.render(blockRenderProps(d, props, opts.locale) as never),
         )) as never,
     };
     (categories[d.category] ??= { title: d.category, components: [] }).components.push(d.name);

@@ -29,7 +29,7 @@ describe('server rich text normalizer', () => {
       format: 'puck',
       formatVersion: 24,
       data: {
-        root: { props: { title: EVIL } },
+        root: { props: { title: EVIL, region__header: [text('r1')], other: [text('o1')] } },
         content: [
           text('t1'),
           { type: 'Section', props: { id: 's1', children: [text('t2')] } },
@@ -47,7 +47,8 @@ describe('server rich text normalizer', () => {
     expect(c[2].props.rows[0]).toEqual({ question: EVIL, answer: clean, inner: [{ type: 'Text', props: { id: 't3', content: clean, align: 'left' } }] });
     expect(c[3].props.content).toBe(EVIL); // unknown block: untouched
     expect((out.data.zones as any)['s1:z'][0].props.content).toBe(clean);
-    expect(out.data.root).toEqual({ props: { title: EVIL } });
+    // Replaced base page regions (root `region__<name>`) are page content too; other root props are left alone.
+    expect(out.data.root).toEqual({ props: { title: EVIL, region__header: [{ type: 'Text', props: { id: 'r1', content: clean, align: 'left' } }], other: [text('o1')] } });
     expect(content.data.content[0]).toEqual(text('t1')); // input not mutated
   });
 

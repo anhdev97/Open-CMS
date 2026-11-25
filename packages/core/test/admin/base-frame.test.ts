@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   PUCK_FORMAT_VERSION,
+  blockRenderProps,
   coreBlocks,
   defineBlocks,
   defineComposedBlock,
@@ -79,6 +80,18 @@ describe('prefixItemIds', () => {
   });
 });
 
+describe('blockRenderProps (frame props built like the Puck render)', () => {
+  it('renders slot components, keeps slot elements, drops raw arrays and adds the reserved props', () => {
+    const el = createElement('i', null, 'x');
+    const Comp = () => createElement('b');
+    const out = blockRenderProps(frameBlock, { id: 'f', region__header: el, region__footer: Comp, pageContent: [], _locale: 'vi-VN', _editor: true }, 'en-US');
+    expect(out.region__header).toBe(el);
+    expect((out.region__footer as { type: unknown }).type).toBe(Comp);
+    expect(out.pageContent).toBeNull();
+    expect(out).toMatchObject({ _locale: 'vi-VN', _editor: true });
+  });
+});
+
 describe('loadBaseFrame', () => {
   it('composes the base like the website (all regions default) and resolves it; ids are made unique', async () => {
     const r = await loadBaseFrame(baseContent(), registry, fetcher, { locale: 'en-US', defaultLocale: 'en-US' });
@@ -119,6 +132,14 @@ describe('BaseFrame', () => {
     draw(await state(), { basePage: BASE_ID, regionMode__header: 'replace', region__header: Slot }, 'body');
     expect(container.querySelector('[data-slot-zone="header"]')?.textContent).toBe('My header');
     expect(container.textContent).not.toContain('Base header');
+    expect(container.textContent).toContain('Base footer');
+  });
+
+  it('frames with the default base when the layout has region modes but no baseId', async () => {
+    const value = { ...(await state()), key: 'default' };
+    const Slot = () => createElement('div', { 'data-slot-zone': 'header' }, 'My header');
+    draw(value, { basePage: '__default', regionMode__header: 'replace', region__header: Slot }, 'body');
+    expect(container.querySelector('[data-slot-zone="header"]')?.textContent).toBe('My header');
     expect(container.textContent).toContain('Base footer');
   });
 

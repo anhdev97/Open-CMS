@@ -176,29 +176,32 @@ export const REGION_MODE_PREFIX = 'regionMode__';
 /** Editor-only root prop of the "uses the default base page" hint field. */
 export const BASE_HINT_FIELD = 'basePageHint';
 
-/** Root props of the editor for a page's `layout` (base choice and region modes). */
+/** Root props of the editor for a page's `layout` (base choice and region modes; no `baseId` = the default base). */
 export function layoutToRootProps(layout: PageLayout | undefined): Props {
-  if (!layout) return { [BASE_FIELD]: BASE_DEFAULT };
-  if (layout.baseId === null) return { [BASE_FIELD]: BASE_NONE };
-  const out: Props = { [BASE_FIELD]: layout.baseId };
-  for (const [name, mode] of Object.entries(layout.regions ?? {})) out[`${REGION_MODE_PREFIX}${name}`] = mode;
+  if (layout && layout.baseId === null) return { [BASE_FIELD]: BASE_NONE };
+  const out: Props = { [BASE_FIELD]: !layout || layout.baseId === undefined ? BASE_DEFAULT : layout.baseId };
+  for (const [name, mode] of Object.entries(layout?.regions ?? {})) out[`${REGION_MODE_PREFIX}${name}`] = mode;
   return out;
 }
 
 /**
- * The page's `layout` from the editor root props: Default → null (the default base page, every region as it is),
- * None → `{ baseId: null }`, a base → `{ baseId, regions }` with the regions that are not `default` (none: no `regions`).
+ * The page's `layout` from the editor root props: None → `{ baseId: null }`; Default → `{ regions }` (no `baseId`) or,
+ * with every region as it is, null; a base → `{ baseId, regions }`. `regions` holds the modes that are not `default`
+ * (omitted when none); with `known` (the current base page's region names) modes of other regions are left out.
  */
-export function rootPropsToLayout(props: Props): PageLayout {
+export function rootPropsToLayout(props: Props, known?: readonly string[] | null): PageLayout {
   const choice = props[BASE_FIELD];
-  if (typeof choice !== 'string' || !choice || choice === BASE_DEFAULT) return null;
   if (choice === BASE_NONE) return { baseId: null };
   const regions: Record<string, RegionMode> = {};
   for (const [k, v] of Object.entries(props)) {
     if (!k.startsWith(REGION_MODE_PREFIX) || v === 'default' || !REGION_MODES.includes(v as RegionMode)) continue;
-    regions[k.slice(REGION_MODE_PREFIX.length)] = v as RegionMode;
+    const name = k.slice(REGION_MODE_PREFIX.length);
+    if (known && !known.includes(name)) continue;
+    regions[name] = v as RegionMode;
   }
-  return Object.keys(regions).length ? { baseId: choice, regions } : { baseId: choice };
+  const own = Object.keys(regions).length ? { regions } : {};
+  if (typeof choice !== 'string' || !choice || choice === BASE_DEFAULT) return Object.keys(own).length ? own : null;
+  return { baseId: choice, ...own };
 }
 
 const isEditorOnlyRootKey = (k: string) => k === BASE_FIELD || k === BASE_HINT_FIELD || k.startsWith(REGION_MODE_PREFIX);
@@ -390,7 +393,14 @@ export interface PageSaveBody {
  * like the page content; empty ones are dropped. `storedSeo` is the page's current `seo`: keys the editor does not
  * edit (e.g. `image`) are carried over. A base page saves its title and content only.
  */
-export function fromEditorData(data: PuckData, registry: BlockRegistry, storedSeo?: PageSeo | null, kind: PageKind = 'page'): PageSaveBody {
+export function fromEditorData(
+  data: PuckData,
+  registry: BlockRegistry,
+  storedSeo?: PageSeo | null,
+  kind: PageKind = 'page',
+  /** Region names of the page's current base page (`rootPropsToLayout`), when known. */
+  regions?: readonly string[] | null,
+): PageSaveBody {
   const root = (data.root ?? {}) as { props?: Props };
   const props = root.props ?? {};
   const rest: Props = {};
@@ -412,5 +422,5 @@ export function fromEditorData(data: PuckData, registry: BlockRegistry, storedSe
   if (str(props.seoTitle).trim()) seo.title = str(props.seoTitle).trim();
   if (str(props.seoDescription).trim()) seo.description = str(props.seoDescription).trim();
   if (props.seoNoindex === true) seo.noindex = true;
-  return { title: str(props.title), path: str(props.path), seo, layout: rootPropsToLayout(props), content };
+  return { title: str(props.title), path: str(props.path), seo, layout: rootPropsToLayout(props, regions), content };
 }

@@ -127,10 +127,11 @@ export type RegionMode = 'default' | 'replace' | 'hide';
 export const REGION_MODES: readonly RegionMode[] = ['default', 'replace', 'hide'];
 
 /**
- * A page's base choice (page-level, same for every locale). `null` = framed by the default base page;
- * `baseId: null` = no frame. An absent region is `default`.
+ * A page's base choice (page-level, same for every locale). `null`, `{}` or an absent `baseId` = framed by the default
+ * base page (its region modes may still be set: `{ regions }`); `baseId: null` = no frame; a document id = that base
+ * page. An absent region is `default`.
  */
-export type PageLayout = { baseId: string | null; regions?: Record<string, RegionMode> } | null;
+export type PageLayout = { baseId?: string | null; regions?: Record<string, RegionMode> } | null;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -140,8 +141,8 @@ export function validatePageLayout(value: unknown): { ok: true } | { ok: false; 
   if (!isPlainObject(value)) return { ok: false, message: 'layout must be null or an object' };
   const extra = Object.keys(value).filter((k) => k !== 'baseId' && k !== 'regions');
   if (extra.length) return { ok: false, message: `layout has unknown keys: ${extra.join(', ')}` };
-  if (!('baseId' in value)) return { ok: false, message: 'layout.baseId is required (null = no base page)' };
-  if (value.baseId !== null && (typeof value.baseId !== 'string' || !UUID_RE.test(value.baseId))) {
+  // Absent `baseId` = the default base page; when present it is a document id or null (no base page).
+  if ('baseId' in value && value.baseId !== null && (typeof value.baseId !== 'string' || !UUID_RE.test(value.baseId))) {
     return { ok: false, message: 'layout.baseId must be a document id or null' };
   }
   if (value.regions !== undefined) {

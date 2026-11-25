@@ -395,6 +395,20 @@ describe('createCmsPage: base pages', () => {
     expect(baseCalls()[0].url.searchParams.get('id')).toBe(B1);
   });
 
+  it('the default base with region modes ({ regions }, no baseId): replace and hide apply to the default base', async () => {
+    const own = content(heading('Published hello'));
+    (own.data.root.props as Record<string, unknown>).region__header = [heading('OWN-HEADER', 'oh')];
+    routes(
+      publicByPath({ '/about': page({ content: own, layout: { regions: { header: 'replace', footer: 'hide' } } }) }),
+      baseRoute('/api/content', { default: baseEntry('BASE-HEADER') }),
+    );
+    const out = await html(await site.Page(params('about')));
+    order(out, 'OWN-HEADER', 'Published hello');
+    expect(out).not.toContain('BASE-HEADER');
+    expect(out).not.toContain('BASE-FOOTER');
+    expect(baseCalls()[0].url.searchParams.get('id')).toBe('default');
+  });
+
   it('baseId null renders the page without a frame and fetches no base', async () => {
     routes(publicByPath({ '/about': page({ layout: { baseId: null } }) }), baseRoute('/api/content', { default: baseEntry('BASE-HEADER') }));
     const out = await html(await site.Page(params('about')));

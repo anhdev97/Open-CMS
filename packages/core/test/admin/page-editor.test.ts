@@ -70,8 +70,18 @@ describe('layout ⇄ root props', () => {
       regionMode__header: 'replace',
       regionMode__footer: 'hide',
     });
-    expect(rootPropsToLayout({ basePage: BASE_DEFAULT, regionMode__header: 'replace' })).toBeNull();
+    // The default base with region modes: no baseId.
+    expect(layoutToRootProps({ regions: { header: 'replace' } })).toEqual({ basePage: BASE_DEFAULT, regionMode__header: 'replace' });
+    expect(layoutToRootProps({})).toEqual({ basePage: BASE_DEFAULT });
+    expect(rootPropsToLayout({ basePage: BASE_DEFAULT, regionMode__header: 'replace' })).toEqual({ regions: { header: 'replace' } });
+    expect(rootPropsToLayout({ basePage: BASE_DEFAULT, regionMode__header: 'default' })).toBeNull();
     expect(rootPropsToLayout({})).toBeNull();
+    // Modes of regions the current base page does not have are left out.
+    expect(rootPropsToLayout({ basePage: BASE_ID, regionMode__header: 'hide', regionMode__old: 'replace' }, ['header', 'footer'])).toEqual({
+      baseId: BASE_ID,
+      regions: { header: 'hide' },
+    });
+    expect(rootPropsToLayout({ basePage: BASE_DEFAULT, regionMode__old: 'replace' }, ['header'])).toBeNull();
     expect(rootPropsToLayout({ basePage: BASE_NONE })).toEqual({ baseId: null });
     expect(rootPropsToLayout({ basePage: BASE_ID, regionMode__header: 'default' })).toEqual({ baseId: BASE_ID });
     expect(rootPropsToLayout({ basePage: BASE_ID, regionMode__header: 'replace', regionMode__footer: 'hide' })).toEqual({
@@ -103,7 +113,7 @@ describe('page root fields', () => {
   });
 
   it('radio "Replace" on a region adds the region__<name> slot field; other modes do not', async () => {
-    const resolve = pageRootResolveFields({ regionsOf: async (id) => (id === BASE_ID ? ['header', 'footer'] : null), registry });
+    const resolve = pageRootResolveFields({ regionsOf: async (id) => (id === BASE_ID || id === 'default' ? ['header', 'footer'] : null), registry });
     const props = { basePage: BASE_ID, regionMode__header: 'replace' };
     const out = (await resolve({ props } as never, { fields } as never)) as Record<string, { type: string; label?: string; metadata?: { options: { value: string }[] } }>;
     // One radio group per region (Default / Replace for this page / Hide; unset shows as Default).
@@ -114,8 +124,16 @@ describe('page root fields', () => {
     expect(out.region__footer).toBeUndefined();
     expect(out.title).toBeDefined();
 
-    const def = (await resolve({ props: { basePage: BASE_DEFAULT } } as never, { fields } as never)) as Record<string, unknown>;
-    expect(Object.keys(def).some((k) => k.startsWith('region'))).toBe(false);
+    // Default: the default base page's regions, like a chosen base.
+    const def = (await resolve({ props: { basePage: BASE_DEFAULT, regionMode__footer: 'replace' } } as never, { fields } as never)) as Record<string, unknown>;
+    expect(def.regionMode__header).toBeDefined();
+    expect(def.region__footer).toMatchObject({ type: 'slot' });
+    expect(def.basePageHint).toBeUndefined();
+    // Default without a default base page: a hint only.
+    const none = pageRootResolveFields({ regionsOf: async () => null, registry });
+    const hint = (await none({ props: { basePage: BASE_DEFAULT } } as never, { fields } as never)) as Record<string, unknown>;
+    expect(hint.basePageHint).toMatchObject({ type: 'custom' });
+    expect(Object.keys(hint).some((k) => k.startsWith('region'))).toBe(false);
   });
 
   it('base pages: title only, the root accepts layout blocks only, layout blocks are in the drawer', () => {
@@ -146,6 +164,12 @@ describe('save payload', () => {
     expect(root).not.toHaveProperty('regionMode__header');
     expect(root).not.toHaveProperty('region__footer');
     expect(root.region__header).toEqual([{ type: 'Heading', props: { id: 'h1', text: 'Mine', level: 2, align: 'left', _v: 1 } }]);
+  });
+  it('Default base with a replaced region writes layout { regions } (no baseId)', () => {
+    const data = toEditorData({ title: 'A', path: '/a', layout: { regions: { header: 'replace' } } }, { root: { props: { region__header: [heading('Mine')] } }, content: [] } as unknown as PuckData);
+    expect(data.root.props).toMatchObject({ basePage: BASE_DEFAULT, regionMode__header: 'replace' });
+    expect(fromEditorData(data, registry).layout).toEqual({ regions: { header: 'replace' } });
+    expect(fromEditorData(data, registry, null, 'page', ['footer']).layout).toBeNull();
   });
   it('keeps region blocks when the region is no longer replaced (switching back restores them)', () => {
     const data = toEditorData(

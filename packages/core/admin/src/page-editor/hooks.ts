@@ -98,7 +98,7 @@ export function useBasePage(o: {
   load: (id: string, locale: Locale) => Promise<{ content?: unknown; [k: string]: unknown } | null>;
 }): BaseState {
   const { kind, registry, fetcher, locale, defaultLocale, load } = o;
-  const key = kind === 'base' ? null : o.layout === null ? 'default' : o.layout.baseId;
+  const key = kind === 'base' ? null : o.layout === null || o.layout.baseId === undefined ? 'default' : o.layout.baseId;
   const [state, setState] = useState<BaseState>(() => ({ kind, registry, locale, key, status: key === null ? 'none' : 'loading', frame: null, regions: [] }));
   useEffect(() => {
     const at = { kind, registry, locale, key };

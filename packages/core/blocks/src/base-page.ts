@@ -19,6 +19,9 @@ const defOf = (m: BlockKinds, name: string): Def | undefined =>
  * declared region fields); region modes for other names are ignored. The page's `root` is kept without its
  * `region__*` props; zones are merged (the page's win).
  *
+ * `layout` null or without `baseId` (`{ regions }`: the default base page with region modes) composes like a chosen
+ * base: the caller passes the base it loaded.
+ *
  * Returns `page` itself (same object) when `base` is null, `layout.baseId` is null, or the base content is not exactly
  * one layout block at root in the page's format version: the caller renders the page alone (and may warn).
  */

@@ -551,7 +551,7 @@ const frFR: Messages = {
       baseDefaultNone: "Par défaut (aucune)",
       baseNone: "Aucune",
       baseUnknown: "Page de base inconnue",
-      baseHint: "Affiche la page de base par défaut telle quelle. Choisissez une page de base pour modifier ses zones.",
+      baseHint: "Aucune page de base par défaut : les pages réglées sur Par défaut s’affichent sans cadre. Définissez-en une dans Pages › Pages de base.",
       regionMode: "Zone : {name}",
       regionDefault: "Par défaut",
       regionReplace: "Remplacer pour cette page",

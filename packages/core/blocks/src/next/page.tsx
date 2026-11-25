@@ -94,10 +94,11 @@ function warnBase(id: string, why: string): void {
 /** How long the published site remembers that there is no default base page (saves a loopback 404 per request). */
 const NO_DEFAULT_BASE_TTL_MS = 30_000;
 
-/** Which base frames the page: `layout` null/absent → the default base, `baseId: null` → none. */
+/** Which base frames the page: `layout` null/absent or without `baseId` (`{ regions }`) → the default base, `baseId: null` → none. */
 function baseIdOf(layout: unknown): string | null {
   if (layout == null || !validatePageLayout(layout).ok) return 'default';
-  return (layout as Exclude<PageLayout, null>).baseId;
+  const { baseId } = layout as Exclude<PageLayout, null>;
+  return baseId === undefined ? 'default' : baseId;
 }
 
 const EMPTY_CONTENT = (formatVersion: number): StoredPageContent => ({ format: 'puck', formatVersion, data: { root: { props: {} }, content: [] } });
