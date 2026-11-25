@@ -1,4 +1,4 @@
-export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'assets' | 'content' | 'pages' | 'pageEditor' | 'settingsUsers' | 'settingsGroups' | 'settingsContentTypes' | 'settingsLanguages' | 'settingsBlocks' | 'settingsTheme' | 'blockEditor' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
+export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'assets' | 'content' | 'contentNew' | 'contentDetail' | 'contentEdit' | 'pages' | 'pageEditor' | 'settingsUsers' | 'settingsGroups' | 'settingsContentTypes' | 'settingsLanguages' | 'settingsBlocks' | 'settingsTheme' | 'blockEditor' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
 
 export interface RouteMatch {
   id: RouteId;
@@ -34,6 +34,13 @@ export function matchRoute(slug: string[] | undefined, opts: { dev?: boolean } =
   }
   if (s.length === 2 && first === 'content' && second) {
     return { id: 'content', params: { apiId: second }, guarded: true };
+  }
+  if (s.length === 3 && first === 'content' && second && s[2]) {
+    if (s[2] === 'new') return { id: 'contentNew', params: { apiId: second }, guarded: true };
+    return { id: 'contentDetail', params: { apiId: second, documentId: s[2] }, guarded: true };
+  }
+  if (s.length === 4 && first === 'content' && second && s[2] && s[3] === 'edit') {
+    return { id: 'contentEdit', params: { apiId: second, documentId: s[2] }, guarded: true };
   }
   if (s.length === 2 && first === 'pages' && second) {
     return { id: 'pageEditor', params: { documentId: second }, guarded: true, fullScreen: true };

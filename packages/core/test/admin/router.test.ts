@@ -13,7 +13,13 @@ describe('matchRoute', () => {
   it('captures content apiId', () => {
     expect(matchRoute(['content', 'posts'])).toEqual({ id: 'content', params: { apiId: 'posts' }, guarded: true });
     expect(matchRoute(['content']).id).toBe('notFound');
-    expect(matchRoute(['content', 'a', 'b']).id).toBe('notFound');
+    expect(matchRoute(['content', 'a', 'b', 'c']).id).toBe('notFound');
+  });
+  it('matches the content sub-pages', () => {
+    expect(matchRoute(['content', 'posts', 'new'])).toEqual({ id: 'contentNew', params: { apiId: 'posts' }, guarded: true });
+    expect(matchRoute(['content', 'posts', 'd1'])).toEqual({ id: 'contentDetail', params: { apiId: 'posts', documentId: 'd1' }, guarded: true });
+    expect(matchRoute(['content', 'posts', 'd1', 'edit'])).toEqual({ id: 'contentEdit', params: { apiId: 'posts', documentId: 'd1' }, guarded: true });
+    expect(matchRoute(['content', 'posts', 'd1', 'edit', 'x']).id).toBe('notFound');
   });
   it('matches the simple guarded pages', () => {
     expect(matchRoute(['account'])).toEqual({ id: 'account', params: {}, guarded: true });

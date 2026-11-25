@@ -55,4 +55,12 @@ describe('buildSidebarTree', () => {
       { apiId: 'b', title: 'Plain' },
     ]);
   });
+  it('marks private types (lock icon in the sidebar)', () => {
+    const tree = buildSidebarTree([{ apiId: 'order', displayName: 'Order', private: true }, { apiId: 'post', displayName: 'Post' }], [], 'en-US');
+    expect(tree[0].items).toEqual([
+      { apiId: 'order', title: 'Order', private: true },
+      { apiId: 'post', title: 'Post' },
+    ]);
+    expect('private' in tree[0].items[1]!).toBe(false);
+  });
 });
