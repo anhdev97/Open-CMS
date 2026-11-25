@@ -688,6 +688,7 @@ const idID: Messages = {
     deleted: 'Dihapus',
     deleteTitle: 'Hapus entri ini?',
     deleteDescription: 'Draf dan versi yang dipublikasikan sama-sama dihapus. Tindakan ini tidak dapat dibatalkan.',
+    deletePrivateDescription: "Entri ini beserta berkas privatnya dihapus. Tindakan ini tidak dapat dibatalkan.",
     fieldsCard: "Bidang",
     fieldsDescription: "Nilai yang disimpan di entri ini.",
     statusCard: "Status",

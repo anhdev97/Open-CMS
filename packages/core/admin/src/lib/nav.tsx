@@ -24,11 +24,12 @@ export function Link({ to, onClick, ...rest }: LinkProps) {
   );
 }
 
-export function useAdminNavigate(): (to: string, opts?: { replace?: boolean }) => void {
+/** `skipGuard`: the caller already confirmed, or the move keeps the page (e.g. a `?locale=` replace). */
+export function useAdminNavigate(): (to: string, opts?: { replace?: boolean; skipGuard?: boolean }) => void {
   const router = useRouter();
   return useCallback(
     (to, opts) => {
-      if (!confirmNavigation()) return;
+      if (!opts?.skipGuard && !confirmNavigation()) return;
       if (opts?.replace) router.replace(adminHref(to));
       else router.push(adminHref(to));
     },

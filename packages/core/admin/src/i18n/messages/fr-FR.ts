@@ -688,6 +688,7 @@ const frFR: Messages = {
     deleted: 'Supprimé',
     deleteTitle: 'Supprimer cette entrée ?',
     deleteDescription: 'Le brouillon et la version publiée sont tous deux supprimés. Cette action est irréversible.',
+    deletePrivateDescription: "Cette entrée et ses fichiers privés sont supprimés. Cette action est irréversible.",
     fieldsCard: "Champs",
     fieldsDescription: "Les valeurs enregistrées dans cette entrée.",
     statusCard: "Statut",

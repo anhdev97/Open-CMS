@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import { Input } from './ui/input';
@@ -27,6 +27,10 @@ const optionCache = new Map<string, Promise<Option[]>>();
 // Set from `meta.uploadEnabled` of the asset list response; upload route only exists when `assets` is configured.
 let assetsUploadEnabled = false;
 const NONE = '__none__';
+
+type AriaProps = { 'aria-invalid'?: boolean; 'aria-describedby'?: string };
+/** Error state of the field (form validation) for the widget's main control. */
+const FieldAria = createContext<AriaProps>({});
 const META_KEYS = ['documentId', 'status', 'locale', 'createdAt', 'updatedAt', 'publishedAt'];
 
 function loadOptions(field: FieldDefinition): Promise<Option[]> {
@@ -175,6 +179,7 @@ function AssetTools({
 function RelationInput({ id, field, value, onChange, disabled }: { id: string; field: FieldDefinition; value: any; onChange: (v: any) => void; disabled?: boolean }) {
   const [options, setOptions] = useState<Option[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
+  const aria = useContext(FieldAria);
   useEffect(() => {
     let live = true;
     loadOptions(field).then((o) => live && setOptions(o));
@@ -195,6 +200,7 @@ function RelationInput({ id, field, value, onChange, disabled }: { id: string; f
       <>
         <div
           id={id}
+          {...aria}
           role="group"
           aria-labelledby={`${id}-label`}
           className="max-h-44 space-y-2 overflow-y-auto rounded-md border border-input p-3"
@@ -216,7 +222,7 @@ function RelationInput({ id, field, value, onChange, disabled }: { id: string; f
   return (
     <>
       <Select value={value ?? NONE} disabled={disabled} onValueChange={(v) => onChange(v === NONE ? null : v)}>
-        <SelectTrigger id={id} className="w-full">
+        <SelectTrigger id={id} {...aria} className="w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -236,6 +242,8 @@ function RelationInput({ id, field, value, onChange, disabled }: { id: string; f
 function JsonInput({ id, value, onChange, disabled }: { id: string; value: any; onChange: (v: any) => void; disabled?: boolean }) {
   const [text, setText] = useState(value == null ? '' : JSON.stringify(value, null, 2));
   const [bad, setBad] = useState(false);
+  const aria = useContext(FieldAria);
+  const describedBy = [bad ? `${id}-error` : '', aria['aria-describedby'] ?? ''].filter(Boolean).join(' ');
   return (
     <>
       <Textarea
@@ -243,8 +251,8 @@ function JsonInput({ id, value, onChange, disabled }: { id: string; value: any; 
         className="font-mono"
         disabled={disabled}
         value={text}
-        aria-invalid={bad}
-        aria-describedby={bad ? `${id}-error` : undefined}
+        aria-invalid={bad || aria['aria-invalid'] || undefined}
+        aria-describedby={describedBy || undefined}
         onChange={(e) => {
           setText(e.target.value);
           if (!e.target.value.trim()) {
@@ -281,12 +289,24 @@ interface FieldInputProps {
    * Download; `files` holds the metadata of the files the entry already owns.
    */
   privateAssets?: { apiId: string; files: EntryFile[] };
+  /** Validation state: sets `aria-invalid` and `aria-describedby` (the error / help ids) on the main control. */
+  invalid?: boolean;
+  describedBy?: string;
 }
 
-export function FieldInput({ id, field, value, onChange, disabled, privateAssets }: FieldInputProps) {
+export function FieldInput({ invalid, describedBy, ...props }: FieldInputProps) {
+  const aria: AriaProps = { 'aria-invalid': invalid || undefined, 'aria-describedby': describedBy || undefined };
+  return (
+    <FieldAria.Provider value={aria}>
+      <FieldControl {...props} aria={aria} />
+    </FieldAria.Provider>
+  );
+}
+
+function FieldControl({ id, field, value, onChange, disabled, privateAssets, aria }: FieldInputProps & { aria: AriaProps }) {
   switch (field.kind) {
     case 'longText':
-      return <Textarea id={id} disabled={disabled} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} />;
+      return <Textarea id={id} {...aria} disabled={disabled} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} />;
     case 'richText':
     case 'json':
       return <JsonInput id={id} disabled={disabled} value={value} onChange={onChange} />;
@@ -294,6 +314,7 @@ export function FieldInput({ id, field, value, onChange, disabled, privateAssets
       return (
         <Input
           id={id}
+          {...aria}
           disabled={disabled}
           type="number"
           step={field.options.format === 'decimal' ? 'any' : 1}
@@ -302,13 +323,14 @@ export function FieldInput({ id, field, value, onChange, disabled, privateAssets
         />
       );
     case 'boolean':
-      return <Checkbox id={id} disabled={disabled} checked={!!value} onCheckedChange={(c) => onChange(c === true)} />;
+      return <Checkbox id={id} {...aria} disabled={disabled} checked={!!value} onCheckedChange={(c) => onChange(c === true)} />;
     case 'date':
-      return <Input id={id} disabled={disabled} type="date" value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} />;
+      return <Input id={id} {...aria} disabled={disabled} type="date" value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} />;
     case 'datetime':
       return (
         <Input
           id={id}
+          {...aria}
           disabled={disabled}
           type="datetime-local"
           value={value ? new Date(value).toISOString().slice(0, 16) : ''}
@@ -321,6 +343,7 @@ export function FieldInput({ id, field, value, onChange, disabled, privateAssets
         <div className="flex gap-2">
           <Input
             id={id}
+            {...aria}
             disabled={disabled}
             type="number"
             step="any"
@@ -350,7 +373,7 @@ export function FieldInput({ id, field, value, onChange, disabled, privateAssets
     case 'taxonomy':
       return <RelationInput id={id} field={field} value={value} onChange={onChange} disabled={disabled} />;
     default:
-      return <Input id={id} disabled={disabled} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} />;
+      return <Input id={id} {...aria} disabled={disabled} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} />;
   }
 }
 
@@ -397,12 +420,14 @@ function PrivateAssetInput({
   files: EntryFile[];
 }) {
   const { formatNumber } = useFormat();
+  const aria = useContext(FieldAria);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploaded, setUploaded] = useState<EntryFile[]>([]);
   const multiple = !!field.options.multiple;
   const selected: string[] = multiple ? (value ?? []) : value ? [value] : [];
   const known = (sid: string) => uploaded.find((f) => f.id === sid) ?? files.find((f) => f.id === sid);
+  const saved = (sid: string) => !uploaded.some((f) => f.id === sid);
 
   const upload = async (file: File) => {
     setBusy(true);
@@ -435,7 +460,7 @@ function PrivateAssetInput({
   };
 
   return (
-    <div id={id} role="group" aria-labelledby={`${id}-label`} className="space-y-2">
+    <div id={id} {...aria} role="group" aria-labelledby={`${id}-label`} className="space-y-2">
       {selected.length === 0 && <p className="text-sm text-muted-foreground">{t('content.noFile')}</p>}
       {selected.length > 0 && (
         <ul className="divide-y rounded-md border">
@@ -447,10 +472,13 @@ function PrivateAssetInput({
                 <FileIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate">{name}</span>
                 {f?.size != null && <span className="shrink-0 text-muted-foreground">{formatBytes(f.size, formatNumber)}</span>}
-                <Button type="button" variant="outline" size="sm" aria-label={t('content.downloadFile', { name })} onClick={() => void download(sid, name)}>
-                  <DownloadIcon aria-hidden="true" />
-                  {t('content.download')}
-                </Button>
+                {/* A file uploaded in this session is not the entry's yet (the save attaches it): no download link. */}
+                {saved(sid) && (
+                  <Button type="button" variant="outline" size="sm" aria-label={t('content.downloadFile', { name })} onClick={() => void download(sid, name)}>
+                    <DownloadIcon aria-hidden="true" />
+                    {t('content.download')}
+                  </Button>
+                )}
                 {!disabled && (
                   <Button
                     type="button"

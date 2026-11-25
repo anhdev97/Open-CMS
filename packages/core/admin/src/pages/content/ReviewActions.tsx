@@ -153,7 +153,7 @@ export function ReviewActions({ def, entry, editTo, onChanged, onDeleted, onErro
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title={t('content.deleteTitle')}
-        description={t('content.deleteDescription')}
+        description={def.private ? t('content.deletePrivateDescription') : t('content.deleteDescription')}
         confirmLabel={t('content.delete')}
         destructive
         onConfirm={() => void run(() => api(base, { method: 'DELETE' }), t('content.deleted'), onDeleted)}

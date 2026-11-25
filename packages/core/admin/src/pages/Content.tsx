@@ -8,6 +8,10 @@ import { ContentList } from './content/ContentList';
 export function Content() {
   const { apiId = '' } = useAdminParams();
   const entry = useAdminSearchParam('entry');
-  if (entry) return <Redirect to={`/content/${apiId}/${encodeURIComponent(entry)}`} />;
+  const locale = useAdminSearchParam('locale');
+  if (entry) {
+    const q = locale ? `?locale=${encodeURIComponent(locale)}` : '';
+    return <Redirect to={`/content/${apiId}/${encodeURIComponent(entry)}${q}`} />;
+  }
   return <ContentList key={apiId} apiId={apiId} />;
 }

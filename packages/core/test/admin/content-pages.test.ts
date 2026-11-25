@@ -10,6 +10,7 @@ vi.mock('../../admin/src/lib/api', () => ({ api: (...a: unknown[]) => api(...a) 
 const navigate = vi.fn();
 let params: Record<string, string> = {};
 let search: Record<string, string> = {};
+let pathname = '/';
 vi.mock('../../admin/src/lib/nav', async () => {
   const { createElement: h, useEffect } = await import('react');
   const { confirmNavigation } = await import('../../admin/src/lib/nav-guard');
@@ -17,11 +18,11 @@ vi.mock('../../admin/src/lib/nav', async () => {
     adminHref: (to: string) => `/admin${to}`,
     Link: ({ to, children, onClick, ...rest }: any) =>
       h('a', { ...rest, href: `/admin${to}`, onClick: (e: any) => { onClick?.(e); e.preventDefault(); if (confirmNavigation()) navigate(to); } }, children),
-    useAdminNavigate: () => (to: string, opts?: unknown) => { if (confirmNavigation()) (opts === undefined ? navigate(to) : navigate(to, opts)); },
+    useAdminNavigate: () => (to: string, opts?: { skipGuard?: boolean }) => { if (opts?.skipGuard || confirmNavigation()) (opts === undefined ? navigate(to) : navigate(to, opts)); },
     useAdminParams: () => params,
     useAdminSearch: () => '',
     useAdminSearchParam: (name: string) => search[name] ?? null,
-    useAdminPathname: () => '/',
+    useAdminPathname: () => pathname,
     Redirect: ({ to }: { to: string }) => { useEffect(() => navigate(to, { replace: true }), [to]); return null; },
   };
 });
@@ -40,6 +41,7 @@ import { ContentNew } from '../../admin/src/pages/content/ContentNew';
 import { canCreateEntries, writableBody } from '../../admin/src/pages/content/useEntry';
 import { confirmNavigation, registerNavigationGuard } from '../../admin/src/lib/nav-guard';
 import { enUS } from '../../admin/src/i18n/messages/en-US';
+import { ApiError } from '../../admin/src/lib/api-error';
 import type { ContentTypeDefinition, FieldDefinition } from '../../admin/src/lib/types';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -85,6 +87,7 @@ beforeEach(() => {
   mockApi();
   params = {};
   search = {};
+  pathname = '/';
   entries = [];
   one = entry();
   files = [];
@@ -315,8 +318,89 @@ describe('unsaved-changes guard', () => {
   });
 });
 
+describe('fix round 1', () => {
+  it('a failed save (500) keeps the unsaved-changes guard on', async () => {
+    params = { apiId: 'post', documentId: DOC };
+    await render(createElement(ContentEdit));
+    type(container.querySelector<HTMLInputElement>('#field-fld_title')!, 'Changed');
+    api.mockImplementationOnce(async () => { throw new ApiError(500, 'internal', 'Boom'); });
+    await act(async () => button('Save')!.click());
+    await flush();
+    expect(calls('PATCH')).toHaveLength(1);
+    expect(container.textContent).toContain('Boom');
+    expect(navigate).not.toHaveBeenCalled();
+    const confirm = vi.fn().mockReturnValue(false);
+    window.confirm = confirm;
+    expect(confirmNavigation()).toBe(false);
+    expect(confirm).toHaveBeenCalledTimes(1);
+    const e = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+  });
+  it('the ?entry= redirect keeps ?locale=', async () => {
+    params = { apiId: 'post' };
+    search = { entry: DOC, locale: 'vi-VN' };
+    await render(createElement(Content));
+    expect(navigate).toHaveBeenCalledWith(`/content/post/${DOC}?locale=vi-VN`, { replace: true });
+  });
+  it('changing the locale writes ?locale= (replace)', async () => {
+    params = { apiId: 'post' };
+    pathname = '/content/post';
+    await render(createElement(Content));
+    act(() => container.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="Locale"]')!.click());
+    const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent?.trim() === 'vi-VN');
+    act(() => option!.click());
+    await flush();
+    expect(navigate).toHaveBeenCalledWith('/content/post?locale=vi-VN', { replace: true, skipGuard: true });
+    expect(api).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/admin\/content\/post\?locale=vi-VN&/));
+  });
+  it('the editor locale comes from ?locale=', async () => {
+    params = { apiId: 'post', documentId: DOC };
+    search = { locale: 'vi-VN' };
+    await render(createElement(ContentDetail));
+    expect(api).toHaveBeenCalledWith(`/api/admin/content/post/${DOC}?locale=vi-VN`);
+    expect(container.querySelector(`a[href="/admin/content/post/${DOC}/edit?locale=vi-VN"]`)).not.toBeNull();
+  });
+  it('field errors set aria-invalid and aria-describedby on the control', async () => {
+    params = { apiId: 'post', documentId: DOC };
+    await render(createElement(ContentEdit));
+    const title = container.querySelector<HTMLInputElement>('#field-fld_title')!;
+    expect(title.getAttribute('aria-invalid')).not.toBe('true');
+    type(title, '');
+    await act(async () => button('Save')!.click());
+    await flush();
+    const input = container.querySelector<HTMLInputElement>('#field-fld_title')!;
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    const ids = (input.getAttribute('aria-describedby') ?? '').split(' ').filter(Boolean);
+    const msg = ids.map((id) => document.getElementById(id)).find((el) => el?.textContent === enUS.content.fieldRequired);
+    expect(msg).toBeTruthy();
+  });
+  it('private delete uses the private description', async () => {
+    params = { apiId: 'order', documentId: DOC };
+    one = { documentId: DOC, status: 'draft', publishedAt: null, updatedAt: '2026-11-20T10:00:00.000Z', code: 'O-1', total: 1, invoice: null };
+    await render(createElement(ContentDetail));
+    act(() => button('Delete')!.click());
+    await flush();
+    expect(document.body.textContent).toContain(enUS.content.deletePrivateDescription);
+    expect(document.body.textContent).not.toContain(enUS.content.deleteDescription);
+  });
+  it('a file uploaded in this edit session has no Download until saved', async () => {
+    params = { apiId: 'order', documentId: DOC };
+    one = { documentId: DOC, status: 'draft', publishedAt: null, updatedAt: '2026-11-20T10:00:00.000Z', code: 'O-1', total: 12, invoice: null };
+    await render(createElement(ContentEdit));
+    const fileInput = container.querySelector<HTMLInputElement>('#field-fld_invoice-upload')!;
+    api.mockImplementationOnce(async () => ({ data: { id: 'a9', filename: 'x.pdf', size: 10, mimeType: 'application/pdf' } }));
+    Object.defineProperty(fileInput, 'files', { value: [new File(['%PDF-1.4'], 'x.pdf', { type: 'application/pdf' })], configurable: true });
+    await act(async () => fileInput.dispatchEvent(new Event('change', { bubbles: true })));
+    await flush();
+    expect(container.textContent).toContain('x.pdf');
+    expect(button('Download x.pdf')).toBeUndefined();
+    expect(button('Remove x.pdf')).toBeDefined();
+  });
+});
+
 describe('i18n', () => {
-  const keys = ['fieldsCard', 'fieldsDescription', 'statusCard', 'versions', 'noVersions', 'fieldRequired', 'unsavedConfirm', 'privateType', 'download', 'save', 'cancel', 'edit', 'updatedAt', 'previous', 'next', 'filterPublished'];
+  const keys = ['fieldsCard', 'fieldsDescription', 'statusCard', 'versions', 'noVersions', 'fieldRequired', 'unsavedConfirm', 'privateType', 'download', 'save', 'cancel', 'edit', 'updatedAt', 'previous', 'next', 'filterPublished', 'deletePrivateDescription'];
   it.each(['en-US', 'vi-VN', 'fr-FR', 'id-ID'])('%s has the new content keys', async (code) => {
     const bundle = code === 'en-US' ? enUS : (await import(`../../admin/src/i18n/messages/${code}.ts`)).default;
     for (const k of keys) expect(typeof bundle.content[k], `${code} content.${k}`).toBe('string');

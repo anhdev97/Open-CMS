@@ -741,6 +741,7 @@ export const enUS = {
     deleteTitle: "Delete this entry?",
     deleteDescription:
       "The draft and the published version are both deleted. This cannot be undone.",
+    deletePrivateDescription: "This entry and its private files are deleted. This cannot be undone.",
     fieldsCard: "Fields",
     fieldsDescription: "The values stored in this entry.",
     statusCard: "Status",

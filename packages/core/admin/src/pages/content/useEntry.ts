@@ -8,7 +8,7 @@ import { api } from '../../lib/api';
 import { ApiError } from '../../lib/api-error';
 import type { WorkflowState } from '../../lib/entry-actions';
 import { pickEditorLocale } from '../../lib/locales';
-import { useAdminSearchParam } from '../../lib/nav';
+import { useAdminNavigate, useAdminPathname, useAdminSearchParam } from '../../lib/nav';
 import { registerNavigationGuard } from '../../lib/nav-guard';
 import type { ContentTypeDefinition, FieldDefinition, Meta } from '../../lib/types';
 
@@ -139,9 +139,20 @@ export function useContentType(apiId: string) {
  */
 export function useEditorLocale(meta: Meta | null, def: ContentTypeDefinition | null): [string, (l: string) => void] {
   const requested = useAdminSearchParam('locale');
+  const pathname = useAdminPathname();
+  const navigate = useAdminNavigate();
   const [chosen, setChosen] = useState<string | null>(requested);
-  if (!meta || !def) return ['', setChosen];
-  return [pickEditorLocale(def.private ? null : chosen, meta.locales, meta.defaultLocale), setChosen];
+  const defaultLocale = meta?.defaultLocale;
+  // The choice is kept in `?locale=` (replace, so Back still leaves the page); the default locale has no parameter.
+  const choose = useCallback(
+    (l: string) => {
+      setChosen(l);
+      navigate(l === defaultLocale ? pathname : `${pathname}?locale=${encodeURIComponent(l)}`, { replace: true, skipGuard: true });
+    },
+    [navigate, pathname, defaultLocale],
+  );
+  if (!meta || !def) return ['', choose];
+  return [pickEditorLocale(def.private ? null : chosen, meta.locales, meta.defaultLocale), choose];
 }
 
 /** The draft of one entry in a locale; `null` until the draft of the current locale has loaded. */

@@ -688,6 +688,7 @@ const viVN: Messages = {
     deleted: 'Đã xóa',
     deleteTitle: 'Xóa bản ghi này?',
     deleteDescription: 'Cả bản nháp và bản đã xuất bản đều bị xóa. Không thể hoàn tác.',
+    deletePrivateDescription: "Bản ghi này và các tệp riêng tư của nó sẽ bị xóa. Không thể hoàn tác.",
     fieldsCard: "Trường",
     fieldsDescription: "Các giá trị được lưu trong bản ghi này.",
     statusCard: "Trạng thái",

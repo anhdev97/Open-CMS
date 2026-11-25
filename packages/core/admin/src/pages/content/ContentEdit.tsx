@@ -61,7 +61,7 @@ export function EntryForm({ def, locale, entry, files, crumbs, title, cancelTo, 
   const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: formValues(def, entry) });
   const [formError, setFormError] = useState<Error | null>(null);
   const dirty = form.formState.isDirty;
-  const release = useUnsavedChangesGuard(dirty && !form.formState.isSubmitSuccessful);
+  const release = useUnsavedChangesGuard(dirty);
   const submitting = form.formState.isSubmitting;
 
   async function onSubmit(values: Values) {
