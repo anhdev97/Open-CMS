@@ -344,7 +344,7 @@ describe('printEjectedBlockTsx: my-store composed blocks', () => {
     entry('p2', { price: { amount: 150000, currency: 'VND' } }),
     entry('p3'),
   ];
-  for (const name of ['store-header', 'store-hero', 'section-head', 'story-band', 'store-footer', 'featured-products']) {
+  for (const name of ['store-header', 'store-hero', 'section-head', 'story-band', 'store-footer', 'featured-products', 'store-frame', 'contact-modal', 'mobile-menu']) {
     it(`${name} renders the same HTML ejected as composed`, () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       const spec = loadSpec(name);

@@ -45,38 +45,69 @@ export default defineComposedBlock({
       label: { 'en-US': 'Menu 3 link', 'vi-VN': 'Liên kết menu 3' },
       default: { kind: 'url', href: '/about' },
     },
+    contactLabel: {
+      kind: 'text',
+      label: { 'en-US': 'Contact button', 'vi-VN': 'Nút liên hệ' },
+      default: 'Contact',
+    },
+    menuLabel: {
+      kind: 'text',
+      label: { 'en-US': 'Menu button (mobile)', 'vi-VN': 'Nút menu (di động)' },
+      default: '☰ Menu',
+    },
   },
   tree: {
     el: 'Stack',
-    props: {
-      direction: { base: 'vertical', md: 'horizontal' },
-      gap: '4',
-      align: { base: 'start', md: 'center' },
-      justify: 'between',
-    },
+    props: { direction: 'horizontal', gap: '4', align: 'center', justify: 'between' },
     children: [
       { el: 'Text', props: { size: 'lg' }, bind: { text: { from: 'field', name: 'brand' } } },
       {
         el: 'Stack',
-        props: { direction: 'horizontal', gap: '6', align: 'center', wrap: true },
+        props: { direction: 'horizontal', gap: '6', align: 'center' },
         children: [
           {
-            el: 'Button',
-            props: { variant: 'link', size: 'sm' },
-            bind: { label: { from: 'field', name: 'nav1Label' }, href: { from: 'field', name: 'nav1Link' } },
-            style: { padding: { l: '0', r: '0' }, color: 'brand:ink' },
+            el: 'Stack',
+            props: { direction: 'horizontal', gap: '6', align: 'center', wrap: true },
+            children: [
+              {
+                el: 'Button',
+                props: { variant: 'link', size: 'sm' },
+                bind: { label: { from: 'field', name: 'nav1Label' }, href: { from: 'field', name: 'nav1Link' } },
+                style: { padding: { l: '0', r: '0' }, color: 'brand:ink' },
+              },
+              {
+                el: 'Button',
+                props: { variant: 'link', size: 'sm' },
+                bind: { label: { from: 'field', name: 'nav2Label' }, href: { from: 'field', name: 'nav2Link' } },
+                style: { padding: { l: '0', r: '0' }, color: 'brand:ink' },
+              },
+              {
+                el: 'Button',
+                props: { variant: 'link', size: 'sm' },
+                bind: { label: { from: 'field', name: 'nav3Label' }, href: { from: 'field', name: 'nav3Link' } },
+                style: { padding: { l: '0', r: '0' }, color: 'brand:ink' },
+              },
+            ],
+            style: { hidden: { base: true } },
           },
           {
             el: 'Button',
-            props: { variant: 'link', size: 'sm' },
-            bind: { label: { from: 'field', name: 'nav2Label' }, href: { from: 'field', name: 'nav2Link' } },
-            style: { padding: { l: '0', r: '0' }, color: 'brand:ink' },
+            props: {
+              variant: 'outline',
+              size: 'sm',
+              action: { type: 'overlay', op: 'open', target: 'lien-he' },
+            },
+            bind: { label: { from: 'field', name: 'contactLabel' } },
           },
           {
             el: 'Button',
-            props: { variant: 'link', size: 'sm' },
-            bind: { label: { from: 'field', name: 'nav3Label' }, href: { from: 'field', name: 'nav3Link' } },
-            style: { padding: { l: '0', r: '0' }, color: 'brand:ink' },
+            props: {
+              variant: 'ghost',
+              size: 'sm',
+              action: { type: 'overlay', op: 'toggle', target: 'menu-mobile' },
+            },
+            bind: { label: { from: 'field', name: 'menuLabel' } },
+            style: { color: 'brand:ink', hidden: { md: true, lg: true } },
           },
         ],
       },

@@ -1,12 +1,15 @@
 // Index of composed blocks. Managed by OpenCloudCMS: rewritten by the admin
 // Block Builder. Spread `composedBlocks` into src/blocks/index.ts.
 import blockActiveProducts from './active-products/active-products.block';
+import blockContactModal from './contact-modal/contact-modal.block';
 import blockFeaturedProducts from './featured-products/featured-products.block';
+import blockMobileMenu from './mobile-menu/mobile-menu.block';
 import blockProductCard from './product-card/product-card.block';
 import blockSectionHead from './section-head/section-head.block';
 import blockStoreFooter from './store-footer/store-footer.block';
+import blockStoreFrame from './store-frame/store-frame.block';
 import blockStoreHeader from './store-header/store-header.block';
 import blockStoreHero from './store-hero/store-hero.block';
 import blockStoryBand from './story-band/story-band.block';
 
-export const composedBlocks = [blockActiveProducts, blockFeaturedProducts, blockProductCard, blockSectionHead, blockStoreFooter, blockStoreHeader, blockStoreHero, blockStoryBand];
+export const composedBlocks = [blockActiveProducts, blockContactModal, blockFeaturedProducts, blockMobileMenu, blockProductCard, blockSectionHead, blockStoreFooter, blockStoreFrame, blockStoreHeader, blockStoreHero, blockStoryBand];
