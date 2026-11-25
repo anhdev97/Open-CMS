@@ -125,7 +125,7 @@ export function ContentList({ apiId }: { apiId: string }) {
             )}
             {can('settings.content-types') && (
               <Button asChild variant="outline" size="sm">
-                <Link to={`/settings/content-types?type=${def.apiId}`}>{t('content.editSchema')}</Link>
+                <Link to={`/settings/content-types/${def.apiId}`}>{t('content.editSchema')}</Link>
               </Button>
             )}
             {mayCreate && (

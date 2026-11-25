@@ -1,4 +1,4 @@
-export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'assets' | 'content' | 'contentNew' | 'contentDetail' | 'contentEdit' | 'pages' | 'pageEditor' | 'settingsUsers' | 'settingsGroups' | 'settingsContentTypes' | 'settingsLanguages' | 'settingsBlocks' | 'settingsTheme' | 'blockEditor' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
+export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'assets' | 'content' | 'contentNew' | 'contentDetail' | 'contentEdit' | 'pages' | 'pageEditor' | 'settingsUsers' | 'settingsGroups' | 'settingsContentTypes' | 'settingsContentTypeNew' | 'settingsContentTypeDetail' | 'settingsContentTypeEdit' | 'settingsContentGroups' | 'settingsLanguages' | 'settingsBlocks' | 'settingsTheme' | 'blockEditor' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
 
 export interface RouteMatch {
   id: RouteId;
@@ -48,6 +48,14 @@ export function matchRoute(slug: string[] | undefined, opts: { dev?: boolean } =
   if (s.length === 2 && first === 'settings') {
     const id = Object.hasOwn(SETTINGS, second) ? SETTINGS[second] : undefined;
     if (id) return { id, params: {}, guarded: true };
+  }
+  if (s.length === 3 && first === 'settings' && second === 'content-types' && s[2]) {
+    if (s[2] === 'new') return { id: 'settingsContentTypeNew', params: {}, guarded: true };
+    if (s[2] === 'groups') return { id: 'settingsContentGroups', params: {}, guarded: true };
+    return { id: 'settingsContentTypeDetail', params: { apiId: s[2] }, guarded: true };
+  }
+  if (s.length === 4 && first === 'settings' && second === 'content-types' && s[2] && s[3] === 'edit') {
+    return { id: 'settingsContentTypeEdit', params: { apiId: s[2] }, guarded: true };
   }
   if (s.length === 3 && first === 'settings' && second === 'blocks' && s[2]) {
     return { id: 'blockEditor', params: { name: s[2] }, guarded: true, fullScreen: true };
