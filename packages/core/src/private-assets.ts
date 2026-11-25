@@ -11,6 +11,14 @@ import { OPENCLOUDCMS_DB } from './options';
 
 type Row = Record<string, unknown>;
 
+/** A private file owned by an entry: `GET /api/admin/content/:apiId/:documentId/files`. */
+export interface EntryFile {
+  id: string;
+  filename: string;
+  size: number | null;
+  mime: string | null;
+}
+
 const idsOf = (v: unknown): string[] =>
   (Array.isArray(v) ? v : [v]).filter((x): x is string => typeof x === 'string' && x !== '');
 
@@ -132,6 +140,26 @@ export class PrivateAssetOwnership {
   async deleteOwned(def: ContentTypeDefinition, documentId: string): Promise<void> {
     if (!def.private) return;
     await this.remove(await this.owned(def, documentId), documentId);
+  }
+
+  /** Metadata of the private files an entry owns (admin detail and edit pages). Oldest first. */
+  async files(def: ContentTypeDefinition, documentId: string): Promise<EntryFile[]> {
+    if (!def.private) return [];
+    const rows = await this.db
+      .selectFrom(SYSTEM_TABLES.assets)
+      .select(['id', 'filename', 'size', 'mime_type'])
+      .where('visibility', '=', 'private')
+      .where('owner_api_id', '=', def.apiId)
+      .where('owner_document_id', '=', documentId)
+      .orderBy('created_at')
+      .orderBy('id')
+      .execute();
+    return rows.map((r) => ({
+      id: r.id as string,
+      filename: r.filename as string,
+      size: r.size == null ? null : Number(r.size),
+      mime: (r.mime_type as string | null) ?? null,
+    }));
   }
 
   private async owned(def: ContentTypeDefinition, documentId: string): Promise<string[]> {

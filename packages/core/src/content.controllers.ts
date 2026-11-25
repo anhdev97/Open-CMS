@@ -21,6 +21,7 @@ import { CurrentUser, RequirePermission, type RequestUser } from '@opencloudcms/
 import { PAGE_API_ID } from '@opencloudcms/schema';
 import { EntriesService, type ListParams } from './entries.service';
 import { ContentRegistry } from './registry.service';
+import { PrivateAssetOwnership } from './private-assets';
 import { WorkflowService } from './workflow.service';
 
 /** Accepts both `filter[name]=x` flat keys (Express 5) and nested objects (qs). */
@@ -215,6 +216,28 @@ export class WorkflowController {
   @Get('pending-count')
   pendingCount() {
     return this.workflow.pendingCount();
+  }
+}
+
+/**
+ * Metadata (`{ id, filename, size, mime }[]`) of the private files an entry of a private type owns, for the admin
+ * entry pages. 404 for unknown and public types and for unknown entries.
+ */
+@Controller('api/admin/content')
+export class PrivateEntryFilesController {
+  constructor(
+    @Inject(ContentRegistry) private readonly registry: ContentRegistry,
+    @Inject(EntriesService) private readonly entries: EntriesService,
+    @Inject(PrivateAssetOwnership) private readonly ownership: PrivateAssetOwnership,
+  ) {}
+
+  @RequirePermission('content.read')
+  @Get(':apiId/:documentId/files')
+  async files(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string) {
+    const def = this.registry.get(apiId);
+    if (!def.private) throw new NotFoundException(`"${apiId}" has no entry files`);
+    await this.entries.get(apiId, documentId, 'draft');
+    return { data: await this.ownership.files(def, documentId) };
   }
 }
 

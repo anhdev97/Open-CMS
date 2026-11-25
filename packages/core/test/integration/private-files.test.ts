@@ -166,6 +166,32 @@ describe('private files (spec §7, decisions 9 and 15)', () => {
     expect(ok.headers.get('cache-control')).toBe('private, no-store');
   });
 
+  it('entry files: metadata of the files an entry owns (content.read; private types only; 404 otherwise)', async () => {
+    const a = await upload('invoice', 'file', PDF, 'Main.pdf', 'application/pdf');
+    const b = await upload('invoice', 'extras', PDF2, 'Extra.pdf', 'application/pdf');
+    const created = await admin('/api/admin/content/invoice', json('POST', { code: 'F-1', file: a.body.data.id, extras: [b.body.data.id] }));
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const docId = created.body.data.documentId as string;
+    // An unattached upload of the same type is not listed.
+    await upload('invoice', 'file', PDF, 'Loose.pdf', 'application/pdf');
+
+    const r = await admin(`/api/admin/content/invoice/${docId}/files`);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const byName = [...r.body.data].sort((x: any, y: any) => x.filename.localeCompare(y.filename));
+    expect(byName).toEqual([
+      { id: b.body.data.id, filename: 'Extra.pdf', size: PDF2.length, mime: 'application/pdf' },
+      { id: a.body.data.id, filename: 'Main.pdf', size: PDF.length, mime: 'application/pdf' },
+    ]);
+
+    expect((await anon(`/api/admin/content/invoice/${docId}/files`)).status).toBe(401);
+    expect((await nobody(`/api/admin/content/invoice/${docId}/files`)).status).toBe(403);
+    expect((await admin(`/api/admin/content/invoice/00000000-0000-4000-8000-000000000000/files`)).status).toBe(404);
+    expect((await admin(`/api/admin/content/receipt/${docId}/files`)).status).toBe(404);
+    const prod = await admin('/api/admin/content/product', json('POST', { title: 'P' }));
+    expect((await admin(`/api/admin/content/product/${prod.body.data.documentId}/files`)).status).toBe(404);
+    expect((await admin(`/api/admin/content/nope/${docId}/files`)).status).toBe(404);
+  });
+
   it('signed links work without a session; tampered or expired tokens are 403', async () => {
     const up = await upload('invoice', 'file', PDF, 'a.pdf', 'application/pdf');
     const link = await admin(`/api/admin/assets/${up.body.data.id}/link`, { method: 'POST' });
