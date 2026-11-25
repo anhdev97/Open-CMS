@@ -169,7 +169,7 @@ ActionButton  // used by the renderers
 
 ```ts
 layout: null                                     // absent/null = use the default base page
-      | { baseId: string | null;                 // a base document id; null = no base page
+      | { baseId?: string | null;                // absent = the default base page; an id; null = no base page
           regions?: Record<string, 'default' | 'replace' | 'hide'> }  // absent region = 'default'
 ```
 
@@ -301,7 +301,7 @@ workflow and locales are unchanged; only routes and screens change.
 3. **Locales:** base choice and region modes are page-level (`layout` column); region default contents and
    replacement blocks are localized content. A base page missing the page's locale falls back to the default locale.
 4. **Usage count** ("used by N pages", 409 on delete/unpublish): page documents of kind `page` (any status) whose
-   `layout.baseId` is the base, plus, for the default base, those with `layout` null. Unpublish may be forced; delete
+   `layout.baseId` is the base, plus, for the default base, those with `layout` null or without a `baseId` key. Unpublish may be forced; delete
    may not. A plain query on the `layout` column, no extra index.
 5. **Default base:** only a published base can be set as default; unpublishing or deleting the default is refused
    until another base is default or the default is cleared. Clearing the default leaves unframed pages unframed.
