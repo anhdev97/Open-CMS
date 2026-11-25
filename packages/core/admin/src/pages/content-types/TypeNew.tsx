@@ -18,7 +18,7 @@ export function TypeNew() {
       base={base}
       types={types}
       meta={meta}
-      entryCount={null}
+      entries={null}
       title={t('contentTypes.newTitle')}
       crumbs={[{ label: t('contentTypes.listTitle'), to: typesPath() }, { label: t('contentTypes.newTitle') }]}
       cancelTo={typesPath()}

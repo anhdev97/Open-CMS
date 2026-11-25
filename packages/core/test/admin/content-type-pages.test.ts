@@ -327,10 +327,80 @@ describe('edit', () => {
     expect((input('#type-private') as unknown as HTMLButtonElement).disabled).toBe(true);
     expect(container.textContent).toContain('3 entries');
   });
-  it('the API id is create-only', async () => {
+  it('renames the API id: payload carries the new apiId and Save lands on the new path', async () => {
     params = { apiId: 'post' };
     await render(createElement(TypeEdit));
-    expect(input('#type-api-id').disabled).toBe(true);
+    const apiId = input('#type-api-id');
+    expect(apiId.disabled).toBe(false);
+    expect(container.textContent).not.toContain('renames every table');
+    type(apiId, 'article');
+    expect(container.textContent).toContain('renames every table');
+    await click(button('Save and generate'));
+    const sent = posts()[0]![1].json.definition as ContentTypeDefinition;
+    expect(sent).toEqual({ ...post, apiId: 'article' });
+    expect(navigate).toHaveBeenCalledWith('/settings/content-types/article', { replace: true, skipGuard: true });
+  });
+  it('rejects renaming to a taken, route or reserved API id', async () => {
+    params = { apiId: 'post' };
+    await render(createElement(TypeEdit));
+    for (const [value, text] of [['order', 'Another type uses this API id'], ['groups', '"groups" is reserved'], ['new', '"new" is reserved'], ['assets', '"assets" is reserved']]) {
+      type(input('#type-api-id'), value!);
+      await click(button('Save and generate'));
+      expect(container.textContent).toContain(text);
+    }
+    expect(posts()).toHaveLength(0);
+  });
+  it('a type can reference itself; an existing self-reference shows its target', async () => {
+    types[0]!.fields.push(fld('related', 'reference', { options: { target: 'post' } }));
+    params = { apiId: 'post' };
+    await render(createElement(TypeEdit));
+    await click(button('Edit related'));
+    const trigger = dialog().querySelector('#field-opt-target')!;
+    expect(trigger.textContent).toContain('Post');
+    const options = [...dialog().querySelectorAll('select option')].map((o) => (o as HTMLOptionElement).value);
+    expect(options).toContain('post');
+    expect(options).not.toContain('order');
+  });
+  it('the Sheet form submit stays local (does not save the type)', async () => {
+    params = { apiId: 'post' };
+    await render(createElement(TypeEdit));
+    await click(button('Edit title'));
+    type(input('#field-label'), 'Headline');
+    const sheetForm = dialog().querySelector('form')!;
+    await act(async () => sheetForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    await flush();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(posts()).toHaveLength(0);
+  });
+  it('private lock: disabled while counting; enabled with a hint when the count fails', async () => {
+    let release!: () => void;
+    const base = api.getMockImplementation()!;
+    api.mockImplementation(async (url: string, init?: any) =>
+      /^\/api\/admin\/content\/\w+\?/.test(url) ? new Promise((_r, reject) => { release = () => reject(new Error('down')); }) : base(url, init),
+    );
+    params = { apiId: 'post' };
+    await render(createElement(TypeEdit));
+    expect((input('#type-private') as unknown as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => release());
+    await flush();
+    expect((input('#type-private') as unknown as HTMLButtonElement).disabled).toBe(false);
+    expect(container.textContent).toContain('Could not count the entries');
+  });
+  it('scrolls the error into view when saving fails', async () => {
+    const scroll = vi.fn();
+    (HTMLElement.prototype as any).scrollIntoView = scroll;
+    const base = api.getMockImplementation()!;
+    api.mockImplementation(async (url: string, init?: any) => {
+      if (url === '/api/admin/content-types' && init?.method === 'POST') throw new Error('boom');
+      return base(url, init);
+    });
+    params = { apiId: 'post' };
+    await render(createElement(TypeEdit));
+    type(input('#type-description'), 'Changed');
+    await click(button('Save and generate'));
+    expect(container.textContent).toContain('boom');
+    expect(scroll).toHaveBeenCalled();
+    delete (HTMLElement.prototype as any).scrollIntoView;
   });
   it('asks before leaving with unsaved changes', async () => {
     params = { apiId: 'post' };

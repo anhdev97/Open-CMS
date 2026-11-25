@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { localizedText, SUPPORTED_LOCALES } from '@opencloudcms/schema';
+import { isReservedApiId, localizedText, SUPPORTED_LOCALES } from '@opencloudcms/schema';
 import { PlusIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -34,6 +34,7 @@ import {
   typesPath,
   TypesSkeleton,
   useEntryCount,
+  type EntryCount,
   useSchemaTypes,
 } from './shared';
 
@@ -87,7 +88,10 @@ export function stableJson(v: unknown): string {
   );
 }
 
-function infoSchema(isNew: boolean, types: ContentTypeDefinition[]) {
+/** apiIds the admin routes use as sub-pages (`/settings/content-types/new`, `/groups`). */
+const ROUTE_API_IDS = ['new', 'groups'];
+
+function infoSchema(base: ContentTypeDefinition, types: ContentTypeDefinition[]) {
   return z
     .object({
       apiId: z.string(),
@@ -98,12 +102,11 @@ function infoSchema(isNew: boolean, types: ContentTypeDefinition[]) {
       private: z.boolean(),
     })
     .superRefine((v, ctx) => {
-      if (isNew) {
-        if (!API_ID_RE.test(v.apiId.trim())) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['apiId'], message: t('contentTypes.apiIdInvalid') });
-        else if (types.some((ty) => ty.apiId === v.apiId.trim())) {
-          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['apiId'], message: t('contentTypes.apiIdTaken') });
-        }
-      }
+      const apiId = v.apiId.trim();
+      const issue = (message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['apiId'], message });
+      if (!API_ID_RE.test(apiId)) issue(t('contentTypes.apiIdInvalid'));
+      else if (isReservedApiId(apiId) || ROUTE_API_IDS.includes(apiId)) issue(t('contentTypes.apiIdReserved', { apiId }));
+      else if (types.some((ty) => ty.id !== base.id && ty.apiId === apiId)) issue(t('contentTypes.apiIdTaken'));
       if (!(v.names['en-US'] ?? '').trim()) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['names', 'en-US'], message: t('contentTypes.nameRequired') });
     });
 }
@@ -144,17 +147,18 @@ interface TypeFormProps {
   base: ContentTypeDefinition;
   types: ContentTypeDefinition[];
   meta: Meta;
-  entryCount: number | null;
+  /** Entries of the stored type (private lock); `null` for a new type. */
+  entries: EntryCount | null;
   crumbs: Crumb[];
   title: string;
   cancelTo: string;
 }
 
 /** Shared by new and edit: info Card (react-hook-form + zod), Fields Card with the Sheet, sticky Save bar, guard. */
-export function TypeForm({ original, base, types, meta, entryCount, crumbs, title, cancelTo }: TypeFormProps) {
+export function TypeForm({ original, base, types, meta, entries, crumbs, title, cancelTo }: TypeFormProps) {
   const navigate = useAdminNavigate();
   const isNew = original === null;
-  const schema = useMemo(() => infoSchema(isNew, types), [isNew, types]);
+  const schema = useMemo(() => infoSchema(base, types), [base, types]);
   const form = useForm<InfoValues>({ resolver: zodResolver(schema), defaultValues: infoValues(base) });
   const [fields, setFields] = useState<FieldDefinition[]>(() => structuredClone(base.fields));
   const [sheet, setSheet] = useState<{ index: number | null; field: FieldDefinition } | null>(null);
@@ -169,7 +173,22 @@ export function TypeForm({ original, base, types, meta, entryCount, crumbs, titl
   const submitting = form.formState.isSubmitting;
   const errors = form.formState.errors;
   const isPrivate = values.private;
-  const privateLocked = !isNew && (entryCount ?? 0) > 0;
+  const renamed = !isNew && values.apiId.trim() !== original!.apiId;
+  // Switching private needs an empty type: locked while the count loads and when entries exist.
+  const privateLocked = !isNew && (entries?.state === 'loading' || (entries?.state === 'ok' && entries.count > 0));
+  const privateHint = isNew
+    ? t('contentTypes.privateHint')
+    : entries?.state === 'ok' && entries.count > 0
+      ? t('contentTypes.privateLocked', { count: entries.count })
+      : entries?.state === 'loading'
+        ? t('contentTypes.privateCounting')
+        : entries?.state === 'error'
+          ? t('contentTypes.privateCountFailed')
+          : t('contentTypes.privateHint');
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (formError) errorRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  }, [formError]);
   const table = `ct_${values.apiId.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase() || '…'}`;
 
   const changeFields = (next: FieldDefinition[]) => {
@@ -217,7 +236,9 @@ export function TypeForm({ original, base, types, meta, entryCount, crumbs, titl
     <form className="space-y-6" onSubmit={form.handleSubmit(onSubmit)} noValidate>
       <Breadcrumbs items={crumbs} />
       <PageHeader title={title} />
-      <ErrorAlert error={formError} />
+      <div ref={errorRef}>
+        <ErrorAlert error={formError} />
+      </div>
 
       <Card>
         <CardHeader>
@@ -230,16 +251,15 @@ export function TypeForm({ original, base, types, meta, entryCount, crumbs, titl
               <Label htmlFor="type-api-id">{t('builder.apiId')}</Label>
               <Input
                 id="type-api-id"
-                disabled={!isNew}
                 placeholder={t('builder.apiIdPlaceholder')}
                 aria-invalid={errors.apiId ? true : undefined}
-                aria-describedby={errors.apiId ? 'type-api-id-error' : !isNew ? 'type-api-id-hint' : undefined}
+                aria-describedby={errors.apiId ? 'type-api-id-error' : renamed ? 'type-api-id-hint' : undefined}
                 {...form.register('apiId')}
               />
               <ErrorText id="type-api-id-error" message={errors.apiId?.message} />
-              {!isNew && (
-                <p id="type-api-id-hint" className="text-xs text-muted-foreground">
-                  {t('contentTypes.apiIdLocked')}
+              {renamed && (
+                <p id="type-api-id-hint" className="text-xs text-warning">
+                  {t('contentTypes.renameWarning')}
                 </p>
               )}
             </div>
@@ -297,7 +317,7 @@ export function TypeForm({ original, base, types, meta, entryCount, crumbs, titl
             <SwitchRow
               id="type-private"
               label={t('contentTypes.private')}
-              hint={privateLocked ? t('contentTypes.privateLocked', { count: entryCount ?? 0 }) : t('contentTypes.privateHint')}
+              hint={privateHint}
               checked={isPrivate}
               disabled={privateLocked}
               onChange={setPrivate}
@@ -400,7 +420,12 @@ export function TypeForm({ original, base, types, meta, entryCount, crumbs, titl
         field={sheet?.field ?? null}
         isNew={sheet?.index === null}
         siblings={sheet ? fields.filter((_, j) => j !== sheet.index) : fields}
-        types={types.filter((ty) => ty.id !== base.id)}
+        types={
+          // This type may reference itself; its `private` follows the form (a new type is not in the list yet).
+          types.some((ty) => ty.id === base.id)
+            ? types.map((ty) => (ty.id === base.id ? { ...ty, private: isPrivate } : ty))
+            : [...types, { ...base, apiId: values.apiId.trim(), private: isPrivate }].filter((ty) => ty.apiId)
+        }
         kinds={meta.fieldKinds}
         privateType={isPrivate}
         onClose={() => setSheet(null)}
@@ -419,7 +444,7 @@ export function TypeEdit() {
   const { apiId = '' } = useAdminParams();
   const { meta, types, error } = useSchemaTypes();
   const original = types?.find((ty) => ty.apiId === apiId) ?? null;
-  const entryCount = useEntryCount(original ? apiId : null);
+  const entries = useEntryCount(original ? apiId : null);
   if (error) return <ErrorAlert error={error} />;
   if (!meta || !types) return <TypesSkeleton />;
   if (!meta.schemaEditable) return <Redirect to={typesPath(apiId)} />;
@@ -432,7 +457,7 @@ export function TypeEdit() {
       base={original}
       types={types}
       meta={meta}
-      entryCount={entryCount}
+      entries={entries}
       title={t('contentTypes.editTitle')}
       crumbs={[{ label: t('contentTypes.listTitle'), to: typesPath() }, { label: typeName(original), to: detailTo }, { label: t('contentTypes.edit') }]}
       cancelTo={detailTo}

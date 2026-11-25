@@ -13,7 +13,6 @@ export const NONE = '__none__';
 /** Same rules as `@opencloudcms/schema` validate (kept here so the form can say so inline). */
 export const API_ID_RE = /^[a-z][a-zA-Z0-9]{0,39}$/;
 export const FIELD_NAME_RE = /^[a-z][a-zA-Z0-9]{0,49}$/;
-export const RESERVED_FIELD_NAMES = ['id', 'documentId', 'status', 'locale', 'createdAt', 'updatedAt', 'publishedAt', 'entryId'];
 
 export const ALL_KINDS: FieldKind[] = [
   'text', 'longText', 'richText', 'slug', 'email', 'url', 'number', 'boolean',
@@ -58,21 +57,24 @@ export function useSchemaTypes() {
   return { meta, types, error, reload };
 }
 
-/** Number of entries of a type (content list `meta.total`); `null` while loading or for a new type. */
-export function useEntryCount(apiId: string | null): number | null {
-  const [count, setCount] = useState<number | null>(null);
+export type EntryCount = { state: 'loading' } | { state: 'ok'; count: number } | { state: 'error' };
+
+/** Number of entries of a type (content list `meta.total`); `null` for no type (a new one). */
+export function useEntryCount(apiId: string | null): EntryCount | null {
+  const [count, setCount] = useState<EntryCount>({ state: 'loading' });
   useEffect(() => {
     if (!apiId) return;
     let live = true;
+    setCount({ state: 'loading' });
     api<{ meta: { total: number } }>(`/api/admin/content/${apiId}?limit=1&offset=0`).then(
-      (r) => live && setCount(r.meta?.total ?? 0),
-      () => live && setCount(null),
+      (r) => live && setCount({ state: 'ok', count: r.meta?.total ?? 0 }),
+      () => live && setCount({ state: 'error' }),
     );
     return () => {
       live = false;
     };
   }, [apiId]);
-  return count;
+  return apiId ? count : null;
 }
 
 // The save response (files to commit) is shown once on the detail page the editor lands on.

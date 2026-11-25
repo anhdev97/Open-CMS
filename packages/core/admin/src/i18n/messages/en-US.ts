@@ -1418,7 +1418,8 @@ export const enUS = {
     storage: "Storage",
     infoCard: "Type details",
     infoCardDescription: "Name, API id, group and publishing options.",
-    apiIdLocked: "The API id is set when the type is created.",
+    renameWarning: "Renaming the API id renames every table and changes the REST path.",
+    apiIdReserved: '"{apiId}" is reserved and cannot be used as an API id.',
     apiIdInvalid: "Use camelCase: a lowercase letter, then letters and digits (max 40).",
     apiIdTaken: "Another type uses this API id.",
     nameRequired: "Enter an English (en-US) name.",
@@ -1428,6 +1429,8 @@ export const enUS = {
     privateHint:
       "Entries are written by the server only: never published and not shown in page or block pickers.",
     privateLocked: "This type has {count} entries. Empty it before switching private.",
+    privateCounting: "Checking whether this type has entries…",
+    privateCountFailed: "Could not count the entries. Saving is refused if the type has entries.",
     privateNoReview: "Private types cannot use review (their entries are never published).",
     privateNoLocalizable: "Private types have document-level fields only.",
     fieldsCard: "Fields",

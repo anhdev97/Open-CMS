@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../../components/ui/sheet';
 import { t } from '../../i18n';
 import type { ContentTypeDefinition, FieldDefinition, FieldKind } from '../../lib/types';
-import { ALL_KINDS, FIELD_NAME_RE, NONE, RESERVED_FIELD_NAMES, typeName } from './shared';
+import { RESERVED_FIELD_NAMES } from '@opencloudcms/schema';
+import { ALL_KINDS, FIELD_NAME_RE, NONE, typeName } from './shared';
 
 /** Types a reference field may target: a public type cannot reference private types (the server rejects it). */
 export function referenceTargets(types: ContentTypeDefinition[], privateType: boolean): ContentTypeDefinition[] {
@@ -183,7 +184,7 @@ export function fieldNameSchema(others: FieldDefinition[]) {
   return z
     .string()
     .regex(FIELD_NAME_RE, t('contentTypes.fieldNameInvalid'))
-    .refine((n) => !RESERVED_FIELD_NAMES.includes(n), t('contentTypes.fieldNameReserved'))
+    .refine((n) => !RESERVED_FIELD_NAMES.has(n), t('contentTypes.fieldNameReserved'))
     .refine((n) => !others.some((f) => f.name === n), t('contentTypes.fieldNameTaken'));
 }
 
@@ -250,7 +251,9 @@ export function FieldSheet({ field, isNew, siblings, types, kinds, privateType, 
             className="grid gap-4 px-4"
             noValidate
             onSubmit={(e) => {
+              // The Sheet is portalled but React events still bubble to the type form: keep this submit local.
               e.preventDefault();
+              e.stopPropagation();
               apply();
             }}
           >
