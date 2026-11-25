@@ -53,7 +53,8 @@ header and hides the footer.
 
 **Base page storage**
 - **A (picked).** Base pages are rows of the core page type with `kind: 'base'`; they reuse the Page builder,
-  drafts/publish, versions, locales and permissions. Page-side choices live in the page's own content data.
+  drafts/publish, versions, locales and permissions. A page's base choice is a page-level column; replacement blocks
+  live in the page's own localized content.
 - B. A separate `basePage` type with its own table, API and screens: cleaner split, but rebuilds editor, publishing
   and versions that pages already have.
 
@@ -108,7 +109,8 @@ type ButtonAction =
 
 ### 3. Overlay runtime (client)
 
-New client entry `@opencloudcms/core/blocks/client` (`'use client'`, ESM only, not imported by the blocks index):
+New client entry `@opencloudcms/core/blocks/client` (`'use client'`, ESM and CJS, no browser globals at import time;
+see decision 6):
 
 ```ts
 openOverlay(name: string): void
@@ -163,7 +165,7 @@ layout: null                                     // absent/null = use the defaul
 - **Page settings** (root fields shown when no block is selected): `Base page` select (Default (name) / each base /
   None) and, for each region of the chosen base, a radio Default / Replace for this page / Hide.
 - Page canvas: the base frame is drawn around the page content; default regions render the base page's content
-  dimmed and not editable; replaced regions are editable drop zones (stored in `root.props.regions[name]`); hidden
+  dimmed and not editable; replaced regions are editable drop zones (stored in `root.props.region__<name>`); hidden
   regions show a thin "hidden" marker.
 - Strings in en-US, vi-VN, fr-FR, id-ID.
 
@@ -172,7 +174,7 @@ layout: null                                     // absent/null = use the defaul
 - `next/page.tsx`: load the page, then its base (explicit id, else the default base, else none). Published site: the
   base's published version in the page's locale (fallback default locale); draft mode: the base's draft.
 - Render the layout block with each Region filled by mode (default → base content, replace → page's
-  `regions[name]`, hide → nothing) and `PageContent` → the page content. Data blocks in both base and page content
+  `region__<name>`, hide → nothing) and `PageContent` → the page content. Data blocks in both base and page content
   are resolved (`resolvePage` on both).
 - A missing or unpublished base renders the page without a frame and logs one warning (never a 500).
 
@@ -213,7 +215,7 @@ layout: null                                     // absent/null = use the defaul
 
 ## Review focus (for the plan)
 
-1. Page with no `base` while a default base exists → framed by the default; `base.id: null` → no frame.
+1. Page with no `base` while a default base exists → framed by the default; `layout.baseId: null` → no frame.
 2. Base page edited (region content changed) and published → every page using it shows the change; draft base never
    leaks to the public site.
 3. Two overlays with the same name on page + base → editor warning, runtime opens the first; no crash.
