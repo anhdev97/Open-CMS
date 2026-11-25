@@ -52,6 +52,7 @@ export const ELEMENT_PROPS: Record<ComposedElement, readonly PropDef[]> = {
   Date: [select('format', ['short', 'long']), { name: 'timeZone', kind: 'text' }],
   Divider: [],
   Spacer: [spacing('size')],
+  Region: [], PageContent: [], Overlay: [], // real props come with the layout/overlay builder UI
 };
 
 /** Props of a freshly dropped element (what its render needs, plus visible placeholder text). */
@@ -85,7 +86,7 @@ export const STYLE_SECTIONS: Record<ComposedElement, readonly StyleSection[]> = 
   Button: ['margin', 'size', 'colors', 'visibility', 'span'],
   Badge: ['margin', 'size', 'textColor', 'visibility', 'span'],
   Heading: TEXT, Text: TEXT, Price: TEXT, Date: TEXT,
-  Divider: PLAIN, Spacer: PLAIN, Slot: PLAIN,
+  Divider: PLAIN, Spacer: PLAIN, Slot: PLAIN, Region: PLAIN, PageContent: PLAIN, Overlay: PLAIN,
 };
 
 export const LAYOUT_ELEMENTS: readonly ComposedElement[] = ['Box', 'Stack', 'Columns', 'Grid', 'Card', 'Slot'];
