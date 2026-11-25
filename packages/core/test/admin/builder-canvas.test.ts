@@ -154,3 +154,45 @@ describe('canvas item frame', () => {
     expect(dims[0]!.className).toContain('h-full');
   });
 });
+
+describe('layout and overlay elements on the canvas', () => {
+  const Slot = ({ className }: { className?: string }) => createElement('div', { 'data-zone': true, className });
+
+  it('a Region is a dashed drop area labelled with its label (else its name)', () => {
+    render(createElement(elementRender('Region'), { id: 'Region-1', name: 'header', label: 'Site header', puck: {} }));
+    const r = container.querySelector('[data-region]') as HTMLElement;
+    expect(r.getAttribute('data-region')).toBe('header');
+    expect(r.className).toContain('border-dashed');
+    expect(r.textContent).toContain('Site header');
+    render(createElement(elementRender('Region'), { id: 'Region-1', name: 'footer', puck: {} }));
+    expect(container.textContent).toContain('footer');
+  });
+
+  it('PageContent is a hatched "Page content" placeholder', () => {
+    render(createElement(elementRender('PageContent'), { id: 'PageContent-1', puck: {} }));
+    const p = container.querySelector('[data-page-content]') as HTMLElement;
+    expect(p.textContent).toContain('Page content');
+    expect(p.getAttribute('style')).toContain('repeating-linear-gradient');
+  });
+
+  it('an Overlay is a framed preview at its size and side, not a <dialog>', () => {
+    render(createElement(elementRender('Overlay'), { id: 'Overlay-1', variant: 'modal', size: 'lg', showClose: true, children: Slot, puck: {} }));
+    expect(container.querySelector('dialog')).toBeNull();
+    const panel = container.querySelector('[data-overlay-panel]') as HTMLElement;
+    expect(panel.getAttribute('data-variant')).toBe('modal');
+    expect(panel.className).toContain('max-w-2xl');
+    expect(panel.className).toContain('m-auto');
+    expect(panel.querySelector('[data-zone]')).not.toBeNull();
+    expect(container.querySelector('[data-overlay-close]')).not.toBeNull();
+
+    render(createElement(elementRender('Overlay'), { id: 'Overlay-1', variant: 'drawer', side: 'left', size: 'sm', showClose: false, children: Slot, puck: {} }));
+    const drawer = container.querySelector('[data-overlay-panel]') as HTMLElement;
+    expect(drawer.getAttribute('data-side')).toBe('left');
+    expect(drawer.className).toContain('mr-auto');
+    expect(drawer.className).toContain('max-w-sm');
+    expect(container.querySelector('[data-overlay-close]')).toBeNull();
+
+    render(createElement(elementRender('Overlay'), { id: 'Overlay-1', variant: 'drawer', side: 'bottom', size: 'md', children: Slot, puck: {} }));
+    expect((container.querySelector('[data-overlay-panel]') as HTMLElement).className).toContain('h-1/2');
+  });
+});

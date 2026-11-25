@@ -1,9 +1,10 @@
 // Custom Puck fields of the element panel (right side, when an element is selected): the sources of its bindable
-// props, "show when", and a Slot's allowed blocks. Token props use the page editor's fields.
-import { useId } from 'react';
+// props, "show when", a Slot's allowed blocks and the name / anchor id texts. Token props use the page editor's fields.
+import { useEffect, useId, useRef, useState } from 'react';
 import type { CustomFieldRender } from '@puckeditor/core';
-import { ELEMENT_BINDABLE, type BindSource, type ComposedElement, type ComposedNode } from '@opencloudcms/schema';
+import { ANCHOR_ID_RE, ELEMENT_BINDABLE, OVERLAY_NAME_RE, type BindSource, type ComposedElement, type ComposedNode } from '@opencloudcms/schema';
 import { Checkbox } from '../components/ui/checkbox';
+import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from '../components/ui/select';
 import { t } from '../i18n';
@@ -137,6 +138,55 @@ export const AllowField: CustomFieldRender<unknown> = ({ field, name, value, onC
             {b}
           </label>
         ))}
+      </div>
+    </FieldShell>
+  );
+};
+
+/**
+ * A text checked against a name pattern (`metadata.pattern`): `name` (Region names, required) or `anchor`
+ * (`anchorId`, optional). An invalid text shows an inline error and is not written; empty clears an optional value.
+ */
+export const PatternField: CustomFieldRender<unknown> = ({ field, name, id, value, onChange, readOnly }) => {
+  const m = useBuilder();
+  const meta = (field.metadata ?? {}) as { pattern?: 'name' | 'anchor'; required?: boolean };
+  const kind = meta.pattern ?? 'anchor';
+  const re = kind === 'name' ? OVERLAY_NAME_RE : ANCHOR_ID_RE;
+  const stored = typeof value === 'string' ? value : '';
+  const [text, setText] = useState(stored);
+  const last = useRef(stored);
+  useEffect(() => {
+    if (stored === last.current) return;
+    last.current = stored;
+    setText(stored);
+  }, [stored]);
+
+  const v = text.trim();
+  const error = !v ? (meta.required ? t('blockBuilder.pattern.required') : null) : re.test(v) ? null : t(`blockBuilder.pattern.${kind}`);
+  // Region names are unique in the block (the stored name counts once for this Region).
+  const duplicate = !error && kind === 'name' && v && m.regionCount(v) > (v === stored ? 1 : 0) ? t('blockBuilder.pattern.duplicateRegion', { name: v }) : null;
+  const msgId = `${id}-msg`;
+  return (
+    <FieldShell id={id} label={fieldLabel(field, name)}>
+      <Input
+        id={id}
+        data-pattern={kind}
+        value={text}
+        disabled={readOnly || m.readOnly}
+        aria-invalid={error || duplicate ? true : undefined}
+        aria-describedby={msgId}
+        onChange={(e) => {
+          const next = e.target.value;
+          setText(next);
+          const n = next.trim();
+          if (n ? !re.test(n) : meta.required) return;
+          const out = n || undefined;
+          last.current = n;
+          onChange(out);
+        }}
+      />
+      <div id={msgId}>
+        {(error || duplicate) && <p className="text-xs text-destructive">{error ?? duplicate}</p>}
       </div>
     </FieldShell>
   );

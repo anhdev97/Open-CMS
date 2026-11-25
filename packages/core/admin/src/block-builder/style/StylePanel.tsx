@@ -41,6 +41,8 @@ export interface StylePanelProps {
   readOnly?: boolean;
   /** Box/Card semantic `background` prop, shown next to the style background. */
   legacyBackground?: { value: string | undefined; onChange: (v: string | undefined) => void };
+  /** Overlay props choosing its size fields: width and max width (modal), width (left/right drawer), height (top/bottom). */
+  overlay?: { variant?: unknown; side?: unknown };
 }
 
 function Section({ id, children }: { id: StyleSection; children: ReactNode }) {
@@ -95,7 +97,7 @@ function Toggle({ on, onClick, children, readOnly, ...data }: { on: boolean; onC
   );
 }
 
-export function StylePanel({ el, value, onChange, theme, parent, readOnly, legacyBackground }: StylePanelProps) {
+export function StylePanel({ el, value, onChange, theme, parent, readOnly, legacyBackground, overlay }: StylePanelProps) {
   const s = value ?? {};
   const put = <K extends keyof NodeStyle>(key: K, v: NodeStyle[K] | undefined) => {
     const next: NodeStyle = { ...s };
@@ -107,17 +109,31 @@ export function StylePanel({ el, value, onChange, theme, parent, readOnly, legac
   const f = (k: string) => styleText(`fields.${k}`);
   const common = { readOnly };
 
+  const overlaySize = () => {
+    const drawer = overlay?.variant === 'drawer';
+    const vertical = drawer && (overlay?.side === 'top' || overlay?.side === 'bottom');
+    if (vertical) return <LengthField label={f('height')} value={s.height} onChange={on('height')} auto {...common} />;
+    return (
+      <>
+        <LengthField label={f('width')} value={s.width} onChange={on('width')} auto {...common} />
+        {!drawer && <LengthField label={f('maxWidth')} value={s.maxWidth} onChange={on('maxWidth')} {...common} />}
+      </>
+    );
+  };
   const margin = (inner?: ReactNode) => <SidesField label={f('margin')} value={s.margin} onChange={on('margin')} negative auto inner={inner} {...common} />;
   const sections: Partial<Record<StyleSection, () => ReactNode>> = {
     spacing: () => margin(<SidesField label={f('padding')} value={s.padding} onChange={on('padding')} defaults={PADDING_DEFAULTS[el]} {...common} />),
     margin: () => margin(),
-    size: () => (
-      <>
-        <LengthField label={f('width')} value={s.width} onChange={on('width')} auto {...common} />
-        <LengthField label={f('height')} value={s.height} onChange={on('height')} auto {...common} />
-        <LengthField label={f('minHeight')} value={s.minHeight} onChange={on('minHeight')} {...common} />
-      </>
-    ),
+    size: () =>
+      el === 'Overlay' ? (
+        overlaySize()
+      ) : (
+        <>
+          <LengthField label={f('width')} value={s.width} onChange={on('width')} auto {...common} />
+          <LengthField label={f('height')} value={s.height} onChange={on('height')} auto {...common} />
+          <LengthField label={f('minHeight')} value={s.minHeight} onChange={on('minHeight')} {...common} />
+        </>
+      ),
     maxWidth: () => <LengthField label={f('maxWidth')} value={s.maxWidth} onChange={on('maxWidth')} {...common} />,
     colors: () => (
       <>
@@ -241,6 +257,7 @@ export const StyleField: CustomFieldRender<unknown> = ({ field, value, onChange,
         parent={parent}
         readOnly={readOnly || m.readOnly}
         legacyBackground={el === 'Box' || el === 'Card' ? { value: props.background as string | undefined, onChange: (v) => writeProp('background', v) } : undefined}
+        overlay={el === 'Overlay' ? { variant: props.variant, side: props.side } : undefined}
       />
     </fieldset>
   );

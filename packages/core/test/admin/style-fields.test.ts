@@ -153,6 +153,21 @@ describe('TrackField', () => {
 });
 
 describe('StylePanel', () => {
+  it('Overlay size: width and max width for a modal, width for a side drawer, height for a top/bottom drawer', () => {
+    const onChange = vi.fn();
+    const labels = () => [...container.querySelectorAll('[data-section="size"] label')].map((l) => l.textContent?.trim());
+    render(createElement(StylePanel, { el: 'Overlay', value: undefined, onChange, theme: null, overlay: { variant: 'modal' } }));
+    expect([...container.querySelectorAll('[data-section]')].map((s) => s.getAttribute('data-section'))).toEqual(['spacing', 'size', 'colors']);
+    expect(labels()).toEqual(expect.arrayContaining(['Width', 'Max width']));
+    expect(labels()).not.toContain('Height');
+    render(createElement(StylePanel, { el: 'Overlay', value: undefined, onChange, theme: null, overlay: { variant: 'drawer', side: 'left' } }));
+    expect(labels()).toContain('Width');
+    expect(labels()).not.toContain('Height');
+    render(createElement(StylePanel, { el: 'Overlay', value: undefined, onChange, theme: null, overlay: { variant: 'drawer', side: 'top' } }));
+    expect(labels()).toContain('Height');
+    expect(labels()).not.toContain('Width');
+  });
+
   it('shows only the sections of the element; span only inside Columns or Grid', () => {
     const onChange = vi.fn();
     render(createElement(StylePanel, { el: 'Heading', value: undefined, onChange, theme: null, parent: 'Stack' }));

@@ -3,6 +3,8 @@
 import {
   COMPOSED_GENERATED_FIELD_RE,
   composedFieldNameIssue,
+  composedKind,
+  regionNames,
   isBreakingChange,
   slotsChanged,
   type ComposedBinding,
@@ -173,7 +175,25 @@ export function newBlockId(): string {
 }
 
 /** Starting spec of a new block: a card with one heading. */
-export function emptySpec(id = newBlockId()): ComposedBlockSpec {
+export function emptySpec(id = newBlockId(), kind: 'block' | 'overlay' = 'block'): ComposedBlockSpec {
+  if (kind === 'overlay') {
+    return {
+      id,
+      name: '',
+      label: { 'en-US': '' },
+      category: 'basic',
+      version: 1,
+      fields: {},
+      tree: {
+        el: 'Overlay',
+        props: { variant: 'modal', size: 'md', closeOnBackdrop: true, showClose: true },
+        children: [
+          { el: 'Heading', props: { level: 2 }, bind: { text: { from: 'const', value: 'Heading' } } },
+          { el: 'Text', bind: { text: { from: 'const', value: 'Text' } } },
+        ],
+      },
+    };
+  }
   return {
     id,
     name: '',
@@ -278,7 +298,8 @@ export function saveReducer(s: SaveState, a: SaveAction): SaveState {
 
 // ---- summaries -------------------------------------------------------------------------------------------------
 
-export type ChangeNote = { key: string; name?: string };
+/** A change; `from`/`to` (kind changes) are block kinds: `block`, `layout` or `overlay`. */
+export type ChangeNote = { key: string; name?: string; from?: string; to?: string };
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
@@ -310,6 +331,9 @@ export function breakingNotes(prev: ComposedBlockSpec | null, next: ComposedBloc
   const b = next.binding;
   if (!a !== !b || (a && b && (a.apiId !== b.apiId || a.mode !== b.mode))) out.push({ key: 'binding' });
   if (slotsChanged(prev, next)) out.push({ key: 'slots' });
+  const [k0, k1] = [composedKind(prev), composedKind(next)];
+  if (k0 !== k1) out.push({ key: 'kind', from: k0, to: k1 });
+  else if (regionNames(prev).join('\n') !== regionNames(next).join('\n')) out.push({ key: 'regions' });
   return out;
 }
 

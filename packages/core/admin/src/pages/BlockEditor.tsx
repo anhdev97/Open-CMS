@@ -5,7 +5,7 @@ import { createElement, useCallback, useContext, useEffect, useMemo, useReducer,
 import { toast } from 'sonner';
 import { Puck, type Data, type Dictionary, type useGetPuck } from '@puckeditor/core';
 import { adminFetcher, coreBlocks, defineBlocks, type Entry } from '@opencloudcms/core/blocks';
-import { isCoreApiId, validateComposedSpec, type ComposedBlockSpec, type ComposedElement, type ComposedField, type ComposedNode, type ThemeDefinition } from '@opencloudcms/schema';
+import { composedKind, isCoreApiId, validateComposedSpec, type ComposedBlockSpec, type ComposedElement, type ComposedField, type ComposedNode, type ThemeDefinition } from '@opencloudcms/schema';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
@@ -18,7 +18,7 @@ import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
 import { blockErrorMessageKey, getBlock, saveBlock, type BlockDetail } from '../lib/blocks';
 import { formatIssue } from '../lib/format-issue';
-import { adminHref, useAdminNavigate, useAdminParams } from '../lib/nav';
+import { adminHref, useAdminNavigate, useAdminParams, useAdminSearch } from '../lib/nav';
 import type { ContentTypeDefinition, Meta } from '../lib/types';
 import { BlocksContext } from '../page-editor/blocks-context';
 import { entryLabel, invalidate, loadContentTypes } from '../page-editor/data';
@@ -28,8 +28,9 @@ import { BlockPanel } from '../block-builder/BlockPanel';
 import { BuilderHeader, BuilderHeaderContext, type BuilderHeaderModel } from '../block-builder/BuilderHeader';
 import { elementRender, RootPreview } from '../block-builder/Canvas';
 import { BuilderContext, CanvasContext, type BuilderModel, type CanvasModel } from '../block-builder/context';
-import { buildBuilderConfig } from '../block-builder/element-config';
-import { AllowField, ShowIfField, SourcesField } from '../block-builder/ElementPanel';
+import { ComposedActionField, treeAnchorIds } from '../block-builder/ActionField';
+import { REGION_ELEMENTS, buildBuilderConfig, paletteCategories } from '../block-builder/element-config';
+import { AllowField, PatternField, ShowIfField, SourcesField } from '../block-builder/ElementPanel';
 import { StyleField } from '../block-builder/style/StylePanel';
 import { LengthPuckField, ResponsiveSelectPuckField, TracksPuckField } from '../block-builder/style/puck-fields';
 import { DeviceMemory, ViewportBreakpoint, deviceUi, deviceViewports } from '../block-builder/style/DeviceToggle';
@@ -49,7 +50,7 @@ import {
   type ResetNote,
 } from '../block-builder/logic';
 import { canvasFieldValues, imageEntryPaths, loadSamples, placeholderEntry } from '../block-builder/sample-data';
-import { puckToTree, treeToPuck, type BuilderPuckData } from '../block-builder/tree-puck';
+import { hoistOverlay, isEmptyTree, puckRegionNames, puckToTree, treeToPuck, type BuilderPuckData } from '../block-builder/tree-puck';
 
 const READ_ONLY = { drag: false, duplicate: false, delete: false, edit: false, insert: false };
 const SAMPLE_DEBOUNCE_MS = 300;
@@ -86,6 +87,7 @@ function draftOf(spec: ComposedBlockSpec): BlockDraft {
 }
 
 function noteText(n: ChangeNote): string {
+  if (n.key === 'kind') return t('blockBuilder.changes.kind', { from: t(`blockBuilder.kindNames.${n.from}`), to: t(`blockBuilder.kindNames.${n.to}`) });
   return t(`blockBuilder.changes.${n.key}`, n.name ? { name: n.name } : undefined);
 }
 
@@ -96,16 +98,18 @@ interface BuilderProps {
   types: ContentTypeDefinition[];
   detail: BlockDetail | null;
   theme: ThemeDefinition | null;
+  /** A new block starts as an overlay (`/settings/blocks/new?kind=overlay`). */
+  startKind?: 'block' | 'overlay';
 }
 
-function Builder({ meta, types: allTypes, detail, theme }: BuilderProps) {
+function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: BuilderProps) {
   const navigate = useAdminNavigate();
   const adminLocale = useLocale();
   const registry = useContext(BlocksContext);
   const readOnly = !meta.schemaEditable;
   const types = useMemo(() => allTypes.filter((ct) => !isCoreApiId(ct.apiId)), [allTypes]);
 
-  const [initialSpec] = useState<ComposedBlockSpec>(() => detail?.spec ?? emptySpec());
+  const [initialSpec] = useState<ComposedBlockSpec>(() => detail?.spec ?? emptySpec(undefined, startKind));
   const [initialData] = useState<BuilderPuckData>(() => treeToPuck(initialSpec).data);
   const [stored, setStored] = useState<ComposedBlockSpec | null>(detail?.spec ?? null);
   const [draft, setDraftState] = useState<BlockDraft>(() => draftOf(initialSpec));
@@ -157,6 +161,16 @@ function Builder({ meta, types: allTypes, detail, theme }: BuilderProps) {
   );
 
   // ---- builder model ----
+  const anchors = useMemo(() => treeAnchorIds(tree), [tree]);
+  const regionNamesAll = useMemo(() => {
+    const out: string[] = [];
+    const walk = (n: ComposedNode) => {
+      if (n.el === 'Region' && typeof n.props?.name === 'string') out.push(n.props.name);
+      for (const c of n.children ?? []) walk(c);
+    };
+    walk(tree);
+    return out;
+  }, [tree]);
   const addField = useCallback((name: string, field: ComposedField) => setDraftState((d) => ({ ...d, fields: { ...d.fields, [name]: field } })), []);
   const model: BuilderModel = {
     draft,
@@ -169,10 +183,17 @@ function Builder({ meta, types: allTypes, detail, theme }: BuilderProps) {
     pageBlocks,
     addField,
     fieldUsage: (name) => fieldUsage(tree, name),
+    kind: composedKind({ tree }),
+    anchors,
+    regionCount: (name) => regionNamesAll.filter((n) => n === name).length,
   };
 
   // ---- Puck ----
   const collection = draft.binding?.mode === 'collection';
+  const collectionRef = useRef(collection);
+  collectionRef.current = collection;
+  const overlayRoot = tree.el === 'Overlay';
+  const emptyRoot = isEmptyTree(tree);
   const config = useMemo(
     () =>
       buildBuilderConfig({
@@ -185,6 +206,10 @@ function Builder({ meta, types: allTypes, detail, theme }: BuilderProps) {
         style: StyleField,
         responsiveSelect: ResponsiveSelectPuckField,
         length: LengthPuckField,
+        action: ComposedActionField,
+        pattern: PatternField,
+        regionNames: (exceptId) => puckRegionNames(latest.current, exceptId),
+        palette: { overlayRoot, emptyRoot },
         render: elementRender,
         root: RootPreview,
         onPropsChange: (el: ComposedElement, next, prev, trigger) => {
@@ -208,6 +233,11 @@ function Builder({ meta, types: allTypes, detail, theme }: BuilderProps) {
       iframe: CanvasFrame,
       fieldTypes,
       fields: ({ children, itemSelector }: { children: ReactNode; itemSelector?: unknown }) => (itemSelector ? children : createElement(BlockPanel)),
+      // Region / Page content cannot be inserted in a list block (Puck disables the drag): say why.
+      drawerItem: ({ children, name }: { children: ReactNode; name: string }) =>
+        collectionRef.current && (REGION_ELEMENTS as readonly string[]).includes(name)
+          ? createElement('div', { title: t('blockBuilder.palette.notInCollection'), className: 'cursor-not-allowed' }, children)
+          : children,
     }),
     [],
   );
@@ -224,7 +254,21 @@ function Builder({ meta, types: allTypes, detail, theme }: BuilderProps) {
   const onChange = useCallback((data: Data) => {
     latest.current = data as unknown as BuilderPuckData;
     setTree(puckToTree(latest.current));
+    // An Overlay dropped next to an empty root becomes the root (it is only allowed there).
+    const hoisted = hoistOverlay(latest.current);
+    if (hoisted) queueMicrotask(() => getPuck.current?.().dispatch({ type: 'setData', data: hoisted as unknown as Data }));
   }, []);
+
+  // The palette follows the tree: the layout regions hide in an overlay block; Overlay is offered on an empty root.
+  useEffect(() => {
+    const get = getPuck.current;
+    if (!get) return;
+    const api = get();
+    const cur = (api.appState.ui.componentList ?? {}) as Record<string, object>;
+    const cats = paletteCategories({ collection, overlayRoot, emptyRoot });
+    const componentList = Object.fromEntries(Object.entries(cats).map(([k, c]) => [k, { ...(cur[k] ?? {}), ...c }]));
+    api.dispatch({ type: 'setUi', ui: { componentList } as never });
+  }, [overlayRoot, emptyRoot]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- save ----
   const spec = useMemo(() => buildSpec(draft, tree), [draft, tree]);
@@ -506,7 +550,7 @@ function Builder({ meta, types: allTypes, detail, theme }: BuilderProps) {
 
 type Loaded = { meta: Meta; types: ContentTypeDefinition[]; detail: BlockDetail | null; theme: ThemeDefinition | null };
 
-function BuilderLoader({ name }: { name: string }) {
+function BuilderLoader({ name, startKind }: { name: string; startKind: 'block' | 'overlay' }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<unknown>(null);
   const navigate = useAdminNavigate();
@@ -543,14 +587,16 @@ function BuilderLoader({ name }: { name: string }) {
       </div>
     );
   }
-  return <Builder meta={loaded.meta} types={loaded.types} detail={loaded.detail} theme={loaded.theme} />;
+  return <Builder meta={loaded.meta} types={loaded.types} detail={loaded.detail} theme={loaded.theme} startKind={startKind} />;
 }
 
 /** `/settings/blocks/:name` (or `new`): the full-screen drag-and-drop block builder. */
 export function BlockEditor() {
   const { name = 'new' } = useAdminParams();
+  const search = useAdminSearch();
   // Saving a new block replaces the URL with its name: keep the open builder (and its "commit these files" card).
   const [initial] = useState(name);
-  return <BuilderLoader name={initial} />;
+  const [startKind] = useState<'block' | 'overlay'>(() => (new URLSearchParams(search).get('kind') === 'overlay' ? 'overlay' : 'block'));
+  return <BuilderLoader name={initial} startKind={startKind} />;
 }
 

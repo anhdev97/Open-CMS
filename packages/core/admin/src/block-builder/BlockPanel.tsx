@@ -1,4 +1,4 @@
-// Right panel when no element is selected: the block itself (labels, name, category, icon), its manual fields and
+// Right panel when no element is selected: the block itself (labels, name, category, icon, kind), its manual fields and
 // the content binding (URL pattern; collection: fixed filters, sort, limit, layout, page-builder options, empty text).
 import { PlusIcon, TrashIcon, XIcon } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
@@ -587,6 +587,10 @@ export function BlockPanel() {
         <Row label={t('blockBuilder.block.icon')} hint={t('blockBuilder.block.iconHint')}>
           {(id) => <Input id={id} value={d.icon ?? ''} readOnly={m.readOnly} placeholder="shopping-bag" onChange={(e) => m.setDraft((x) => ({ ...x, icon: e.target.value }))} />}
         </Row>
+        <div data-block-kind={m.kind} className="space-y-0.5 text-sm">
+          <p className="font-medium">{t('blockBuilder.kindInfo.label')}</p>
+          <p className="text-xs text-muted-foreground">{t(`blockBuilder.kindInfo.${m.kind}`)}</p>
+        </div>
       </Section>
       <ManualFields />
       {d.binding ? (

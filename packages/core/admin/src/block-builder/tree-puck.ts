@@ -4,7 +4,7 @@
 import type { BindSource, ComposedBlockSpec, ComposedElement, ComposedNode, NodeStyle } from '@opencloudcms/schema';
 
 /** Elements that hold other elements (their Puck `children` slot). */
-export const CONTAINER_ELEMENTS: readonly ComposedElement[] = ['Box', 'Stack', 'Columns', 'Grid', 'Card'];
+export const CONTAINER_ELEMENTS: readonly ComposedElement[] = ['Box', 'Stack', 'Columns', 'Grid', 'Card', 'Overlay'];
 
 /** Puck prop names that are not node props. */
 export const RESERVED_ITEM_KEYS = ['id', 'bind', 'showIf', 'style', 'children'] as const;
@@ -72,4 +72,46 @@ export function puckToTree(data: BuilderPuckData): ComposedNode {
   if (items.length === 1) return itemToNode(items[0]!);
   if (items.length === 0) return { el: 'Box' };
   return { el: 'Stack', props: { direction: 'vertical' }, children: items.map(itemToNode) };
+}
+
+/** `base`, or `base-2`, `base-3`… when taken: the name of a newly added Region. */
+export function uniqueRegionName(base: string, taken: readonly string[]): string {
+  if (!taken.includes(base)) return base;
+  let n = 2;
+  while (taken.includes(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
+/** Nothing designed yet: the root is a container (not an Overlay) without children. */
+export function isEmptyTree(tree: ComposedNode): boolean {
+  return tree.el !== 'Overlay' && isContainer(tree.el) && !(tree.children ?? []).length;
+}
+
+/**
+ * An `Overlay` dropped next to an empty root (Overlay may only be the root; slots refuse it): the Puck data with the
+ * Overlay alone at the top, or null when nothing has to move.
+ */
+export function hoistOverlay(data: BuilderPuckData): BuilderPuckData | null {
+  const items = Array.isArray(data.content) ? data.content : [];
+  if (items.length < 2) return null;
+  const overlays = items.filter((i) => i.type === 'Overlay');
+  if (overlays.length !== 1) return null;
+  const rest = items.filter((i) => i.type !== 'Overlay');
+  const empty = rest.every((i) => i.type !== 'Overlay' && isContainer(i.type) && !(Array.isArray(i.props?.children) && i.props.children.length));
+  return empty ? { ...data, content: [overlays[0]!] } : null;
+}
+
+/** Region names of the Puck data (every Region item, nested ones included), skipping item `exceptId`. */
+export function puckRegionNames(data: BuilderPuckData | null | undefined, exceptId?: string): string[] {
+  const out: string[] = [];
+  const walk = (items: unknown) => {
+    if (!Array.isArray(items)) return;
+    for (const it of items as PuckItem[]) {
+      if (!isObj(it) || !isObj(it.props)) continue;
+      if (it.type === 'Region' && it.props.id !== exceptId && typeof it.props.name === 'string') out.push(it.props.name);
+      walk(it.props.children);
+    }
+  };
+  walk(data?.content);
+  return out;
 }

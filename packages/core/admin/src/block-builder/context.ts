@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext } from 'react';
-import type { ComposedBinding, ComposedField, ComposedNode } from '@opencloudcms/schema';
+import type { ComposedBinding, ComposedBlockKind, ComposedField, ComposedNode } from '@opencloudcms/schema';
 import type { Entry } from '@opencloudcms/core/blocks';
 import type { ContentTypeDefinition } from '../lib/types';
 import type { BlockDraft } from './logic';
@@ -25,6 +25,12 @@ export interface BuilderModel {
   addField: (name: string, field: ComposedField) => void;
   /** Elements of the canvas that read manual field `name` (bind or show-if). */
   fieldUsage: (name: string) => number;
+  /** What the tree makes the block: `layout` (regions), `overlay` (Overlay root) or `block`. */
+  kind: ComposedBlockKind;
+  /** Valid `anchorId`s of the tree (scroll targets offered to Button actions). */
+  anchors: readonly string[];
+  /** Regions of the tree named `name`. */
+  regionCount: (name: string) => number;
 }
 
 export const BuilderContext = createContext<BuilderModel | null>(null);

@@ -1,9 +1,11 @@
 'use client';
 
-// Custom field renderers of the page builder (`toPuckConfig` `customFields`): pickers and the library Columns tracks.
+// Custom field renderers of the page builder (`toPuckConfig` `customFields`): pickers, the library Columns tracks and
+// button actions.
 import type { CustomFieldRender } from '@puckeditor/core';
 import type { CustomFieldRenderers } from '@opencloudcms/core/blocks';
 import type { Responsive, Track } from '@opencloudcms/schema';
+import { PageActionField } from '../block-builder/ActionField';
 import { TrackField } from '../block-builder/style/fields';
 import { EntriesField } from './EntriesField';
 import { EntryField } from './EntryPicker';
@@ -29,4 +31,5 @@ export const PAGE_CUSTOM_FIELDS = {
   link: LinkField,
   image: ImageField,
   tracks: PageTracksPuckField,
+  action: PageActionField,
 } as unknown as CustomFieldRenderers;
