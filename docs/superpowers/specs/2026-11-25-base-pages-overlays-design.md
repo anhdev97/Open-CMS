@@ -277,7 +277,7 @@ workflow and locales are unchanged; only routes and screens change.
 | `/settings/content-types/new` | Create type |
 | `/settings/content-types/:apiId` | Detail: type info card + fields table |
 | `/settings/content-types/:apiId/edit` | Edit: type info card + fields table; add/edit a field in a right-side Sheet; drag to reorder |
-| `/settings/content-types/groups` | Content groups (moved out of the tab) |
+| `/settings/content-types/groups` | Content groups (moved out of the tab): one list page; create / edit / delete in a modal `Dialog` (small entity, no separate pages) |
 
 - Old links redirect: `/settings/content-types?type=x` → `/settings/content-types/x`, `?tab=groups` → `/groups`.
 - Private types (section 7) use the same pages without publish/review/locale/version-publish controls; readOnly
