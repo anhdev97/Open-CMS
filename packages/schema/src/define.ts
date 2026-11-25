@@ -11,7 +11,7 @@ import type {
 
 type BuilderArg<K extends FieldKind> = FieldFlags & { id: string } & FieldOptionsMap[K];
 
-const FLAG_KEYS = ['id', 'required', 'localizable', 'indexed', 'unique', 'label', 'description'] as const;
+const FLAG_KEYS = ['id', 'required', 'localizable', 'indexed', 'unique', 'readOnly', 'label', 'description'] as const;
 
 function builder<K extends FieldKind>(kind: K) {
   return (arg: BuilderArg<K>): FieldSpec<K> => {
@@ -56,6 +56,7 @@ export function normalizeField(name: string, spec: FieldSpec): FieldDefinition {
     unique: !!spec.unique,
     options: { ...(spec.options ?? {}) } as FieldDefinition['options'],
   };
+  if (spec.readOnly) field.readOnly = true;
   if (spec.label) field.label = spec.label;
   if (spec.description) field.description = spec.description;
   return field;
@@ -72,6 +73,7 @@ export function defineContentType(input: ContentTypeInput): ContentTypeDefinitio
   if (input.group) def.group = input.group;
   if (input.description) def.description = input.description;
   if (input.review) def.review = true;
+  if (input.private) def.private = true;
   return def;
 }
 
@@ -88,6 +90,7 @@ export function normalizeDefinition(raw: ContentTypeDefinition): ContentTypeDefi
   if (raw.group) def.group = raw.group;
   if (raw.description) def.description = raw.description;
   if (raw.review) def.review = true;
+  if (raw.private) def.private = true;
   return def;
 }
 

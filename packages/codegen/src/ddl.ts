@@ -24,7 +24,9 @@ export type Statement =
   | { type: 'alterColumnType'; table: string; column: string; toType: string }
   | { type: 'createIndex'; index: IndexSpec }
   | { type: 'dropIndex'; name: string }
-  | { type: 'renameIndex'; from: string; to: string };
+  | { type: 'renameIndex'; from: string; to: string }
+  /** Throws when the table has any row (guards switching `private` on a type). */
+  | { type: 'assertTableEmpty'; table: string; apiId: string; option: string };
 
 const IDENT_RE = /^[a-z_][a-z0-9_]*$/;
 const TYPE_RE = /^[a-z ]+(\(\d+(, ?\d+)?\))?$/;
@@ -44,6 +46,8 @@ function defaultSql(value: string): string {
 
 function rawSql(stmt: Statement): string | null {
   switch (stmt.type) {
+    case 'assertTableEmpty':
+      return `select 1 from ${ident(stmt.table)} limit 1`;
     case 'renameIndex':
       return `alter index ${ident(stmt.from)} rename to ${ident(stmt.to)}`;
     case 'alterColumnType':
@@ -136,7 +140,16 @@ export function compileStatement(stmt: Statement): string {
   return build(getCompilerDb(), stmt).sql;
 }
 
+export function emptyTableMessage(stmt: { apiId: string; option: string }): string {
+  return `Cannot change "${stmt.option}" on ${stmt.apiId}: the type has entries`;
+}
+
 export async function executeStatement(db: Kysely<any>, stmt: Statement): Promise<void> {
+  if (stmt.type === 'assertTableEmpty') {
+    const res = await sql.raw(rawSql(stmt)!).execute(db);
+    if (res.rows.length) throw new Error(emptyTableMessage(stmt));
+    return;
+  }
   await build(db, stmt).run();
 }
 
@@ -182,6 +195,8 @@ export function printStatement(stmt: Statement, indent = '  '): string {
       return `${indent}await db.schema\n${i2}.createIndex(${q(stmt.index.name)})\n${i2}.on(${q(stmt.index.table)})\n${i2}.columns([${stmt.index.columns.map(q).join(', ')}])${stmt.index.unique ? `\n${i2}.unique()` : ''}\n${i2}.execute();`;
     case 'dropIndex':
       return `${indent}await db.schema.dropIndex(${q(stmt.name)}).execute();`;
+    case 'assertTableEmpty':
+      return `${indent}{\n${i2}const { rows } = await sql.raw(${q(rawSql(stmt)!)}).execute(db);\n${i2}if (rows.length) throw new Error(${q(emptyTableMessage(stmt))});\n${indent}}`;
     case 'renameIndex':
     case 'alterColumnType':
       return `${indent}await sql.raw(${q(rawSql(stmt)!)}).execute(db);`;

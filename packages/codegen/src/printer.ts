@@ -28,6 +28,7 @@ function printField(field: FieldDefinition): string {
   if (field.localizable) arg.localizable = true;
   if (field.unique) arg.unique = true;
   else if (field.indexed) arg.indexed = true;
+  if (field.readOnly) arg.readOnly = true;
   for (const [k, v] of Object.entries(field.options ?? {})) {
     if (v !== undefined && v !== null && v !== '') arg[k] = v;
   }
@@ -47,6 +48,7 @@ export function printSchemaFile(def: ContentTypeDefinition): string {
     ...(def.group ? [`  group: ${lit(def.group, '')},`] : []),
     ...(def.description ? [`  description: ${lit(def.description, '')},`] : []),
     ...(def.review ? ['  review: true,'] : []),
+    ...(def.private ? ['  private: true,'] : []),
     '  fields: {',
     ...def.fields.map(printField),
     '  },',

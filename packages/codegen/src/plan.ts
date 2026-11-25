@@ -215,6 +215,11 @@ export function planMigration(operations: Operation[], stamp: string): Migration
 
   for (const op of operations) {
     switch (op.op) {
+      case 'setPrivate':
+        summary.push(`set private=${op.to} on content type "${op.def.apiId}"`);
+        warnings.push(`Switching "private" on ${op.def.apiId} aborts the migration if the type has entries.`);
+        steps.push({ up: [{ type: 'assertTableEmpty', table: mainTable(op.def), apiId: op.def.apiId, option: 'private' }], down: [] });
+        break;
       case 'createType':
         summary.push(`create content type "${op.def.apiId}"`);
         steps.push(createType(op.def));
