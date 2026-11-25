@@ -1,4 +1,4 @@
-# Base pages, overlays (modal / drawer) and button actions — design
+# Base pages, overlays (modal / drawer), button actions and private content types — design
 
 Date: 2026-11-25 · Status: draft for approval · Branch: `feat/base-page-overlays` (from `main` 6dfa9bc)
 
@@ -13,6 +13,10 @@ Enrich the block builder flow so a site's shared frame and its interactive layer
    anywhere on the page.
 3. **Actions.** A button opens / closes / toggles an overlay by name, chosen in the builder; code does the same with
    a small client API.
+4. **Private content types.** Data the admin must see but the public must never reach (orders, customers, CVs):
+   `private: true` types that no public API, builder picker or reference exposes, with server-only (`readOnly`)
+   fields, a server API for project modules, and private files (asset fields of private types) downloadable only by
+   signed-in users with permission.
 
 Why: today the header/footer must be dropped on every page, and nothing interactive (contact popup, mobile menu)
 can be built without hand-written client code.
@@ -20,7 +24,9 @@ can be built without hand-written client code.
 Test target: in `examples/my-store`, a base page "Store" (StoreHeader in `header`, StoreFooter in `footer`) used by
 `/`, `/shop`, `/about`; a contact modal `lien-he` opened from a header button and a footer link; a mobile menu
 drawer `menu-mobile` opened by a ☰ button that is hidden on desktop; a landing page `/landing` that replaces the
-header and hides the footer.
+header and hides the footer; a private `order` type (readOnly `total` and `items`, an `invoice` PDF in private storage)
+seeded through the server API and managed in the admin, and absent from `/api/content`, the builders' type pickers
+and `/media`.
 
 ## Goals
 
@@ -32,6 +38,8 @@ header and hides the footer.
 - Button action field in the block builder and on the library Button block: open / close / toggle overlay, link,
   scroll to section.
 - Client API for code: `openOverlay`, `closeOverlay`, `toggleOverlay`, `useOverlay`, `<OverlayTrigger>`.
+- Private content types: never served publicly, no draft/publish/review/locales, `readOnly` fields, server API,
+  private files with permission-checked download.
 - All markup styled with literal Tailwind classes (same rule as the style system), CSS variables for theme colors.
 
 ## Non-goals (code-side or a later phase, agreed)
@@ -41,6 +49,8 @@ header and hides the footer.
   the client API for its own triggers.
 - Base page rules by slug pattern; nested base pages; per-region data binding beyond what blocks already do.
 - Forms, menus/navigation data, page templates per content type (separate specs).
+- A public submission endpoint (anonymous create into a private type, spam protection) — comes with the Form element.
+- Retention / auto-delete policies and download audit log for private data (later phase).
 
 ## Anti-goals
 
@@ -48,6 +58,8 @@ header and hides the footer.
 - An overlay that traps the user (no way to close) or leaves the page scroll-locked.
 - A base page change silently breaking pages: publishing a base page shows how many pages use it.
 - New JS on pages that use no overlay or action (they stay JS-free as today).
+- Any path (public API, CORS, builder pickers, reference expansion, media URL, page data binding) through which a
+  private entry or private file reaches an unauthenticated request.
 
 ## Approaches
 
@@ -65,6 +77,13 @@ header and hides the footer.
 - B. Popover API only: no JS, but no inert background or focus containment (not a proper modal), hard to drive from
   code, no scroll lock.
 - C. React portal modals: client-rendered content, heavier, unlike how every other block renders.
+
+**Private data**
+- **A (picked).** A `private` flag on content types and private storage for asset fields of those types, enforced in
+  the core (registry, controllers, binding pickers, reference expansion) and in the assets package (separate storage
+  area, no static serving, streamed download after a permission check).
+- B. Keep private data in project-specific Nest modules and tables: full control, but every project rebuilds admin
+  lists, filters, permissions and file handling.
 
 ## Design
 
@@ -180,6 +199,65 @@ layout: null                                     // absent/null = use the defaul
   are resolved (`resolvePage` on both).
 - A missing or unpublished base renders the page without a frame and logs one warning (never a 500).
 
+### 7. Private content types
+
+**Definition**
+
+```ts
+defineContentType({
+  apiId: 'order',
+  private: true,                       // stored in the snapshot; default false (omitted)
+  fields: {
+    code:    f.text({ required: true, unique: true }),
+    status:  f.select({ options: ['pending', 'paid', 'shipped', 'cancelled'] }),
+    items:   f.json({ readOnly: true }),       // readOnly: only the server API writes it
+    total:   f.money({ readOnly: true }),
+    invoice: f.asset({ accept: ['application/pdf'] }), // asset fields of a private type store private files
+  },
+});
+```
+
+- Validation: a private type cannot have `review: true` or localizable fields (all fields are document-level); a
+  public type cannot reference a private type (`reference` target check); `readOnly` is allowed on any type.
+- Switching a type to private is a breaking schema change: the generated migration deletes its published rows (the
+  draft row stays the working copy). Switching back to public is allowed; entries then need publishing.
+
+**Storage and API**
+
+- A private entry has exactly one row, `status = 'draft'` (the working copy); it is never published. Publish,
+  approve, unpublish and version-publish endpoints answer 409 for private types.
+- `GET /api/content/:apiId[/...]` answers 404 for private types (as if the type did not exist), including CORS
+  preflight; reference expansion on public reads never includes private entries (the id is kept, no data).
+- Admin API (`/api/admin/content/:apiId`) works as for other types with the usual permissions; writes to `readOnly`
+  fields through it are rejected (422 with the field path); the UI shows them disabled.
+- Server API for project modules, exported from `@opencloudcms/core`:
+  `PrivateEntries.create(apiId, data)`, `.update(apiId, documentId, data)`, `.get`, `.list`, `.remove` — may write
+  `readOnly` fields, runs the same field validation and hooks, never publishes, and accepts files as
+  `{ buffer, filename, contentType }` for asset fields (stored privately).
+- Builders: private types are absent from `b.entry`/`b.entries` type lists, the block builder's binding type list and
+  any page data binding; a stored binding to a private type resolves to nothing (and the editor shows a warning).
+
+**Private files (`@opencloudcms/assets`)**
+
+- `assets` table gains `visibility varchar(16) not null default 'public'` (core migration `0008_private_assets`).
+- Private files live under a separate storage area (local: a directory outside the static root, never served by the
+  local-static middleware; S3/GCS: a `private/` key prefix without public ACL), so no `/media/...` URL exists.
+  `StorageProvider` gains `get(key): Promise<Readable>`.
+- Download: `GET /api/admin/assets/:id/file` streams the file after checking the user may read an entry of the type
+  that references it (`content.read` on that type); `Content-Disposition: attachment`, `X-Content-Type-Options:
+  nosniff`, `Cache-Control: private, no-store`. For links that cannot send headers, the admin gets a short-lived
+  signed URL (`?token=`, HMAC, 5 minutes, bound to asset id and user).
+- Upload into a private asset field (admin or server API): size limit (assets `maxBytes`), type checked by content
+  sniffing against the field's `accept` (extension and declared type alone are not trusted).
+- Private files never appear in the media library, folders or the public asset pickers; deleting the entry deletes
+  its private files.
+
+**Admin**
+
+- Private types are listed under their content group with a lock icon; their entry screen has no publish, review,
+  locale or version-publish controls; `readOnly` fields are shown but disabled; private asset fields show filename,
+  size and a Download button.
+
 ## Decisions settled during review (builder's calls)
 
 1. **Editor frame:** Puck root config takes `fields` (incl. `slot`) and `render`. The page editor's root `render`
@@ -223,6 +301,10 @@ layout: null                                     // absent/null = use the defaul
 3. Two overlays with the same name on page + base → editor warning, runtime opens the first; no crash.
 4. Overlay open, user navigates (link inside the overlay) → overlay closed, scroll unlocked.
 5. Button with `action` inside a collection item and inside a base region → works; without `action` → unchanged HTML.
+6. Private type: `/api/content/order`, `/api/content/order/:id`, a public type's reference expansion, a page block
+   binding and a guessed `/media/private/...` URL all return nothing to an anonymous request.
+7. Private file download by a signed-in user without `content.read` on the type → 403; expired or tampered token →
+   403.
 
 ## Left to the builder
 
