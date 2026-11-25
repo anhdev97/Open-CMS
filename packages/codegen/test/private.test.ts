@@ -46,6 +46,19 @@ describe('diff / plan for private and readOnly', () => {
     expect(planMigration(r.operations, '1').up).toEqual([]);
   });
 
+  it('a rename and a private flip in one diff: the guard checks the OLD table first, the rename comes after', () => {
+    const plain = order();
+    const renamed = defineContentType({
+      id: 'ct_order', apiId: 'purchase', displayName: 'Purchase', private: true,
+      fields: { code: f.text({ id: 'fld_code', required: true, unique: true }) },
+    } as any);
+    const { operations } = diffSchemas([plain], [renamed]);
+    const plan = planMigration(operations, '20260101000000');
+    expect(plan.up[0]).toMatchObject({ type: 'assertTableEmpty', table: 'ct_order', apiId: 'order' });
+    const rest = plan.up.slice(1).map(compileStatement).join('\n');
+    expect(rest).toMatch(/alter table "ct_order" rename to "ct_purchase"/);
+  });
+
   it('creating a private type needs no guard', () => {
     expect(diffSchemas([], [order({ private: true })]).operations.map((o) => o.op)).toEqual(['createType']);
   });
