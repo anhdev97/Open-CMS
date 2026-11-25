@@ -323,8 +323,9 @@ workflow and locales are unchanged; only routes and screens change.
 10. **Switching `private` on a type with entries is refused:** the generated migration aborts with a clear message
     if the table has rows (empty the type or export first). No file moves, no row promotion; new types and empty types
     switch freely.
-11. **Versions:** private entries keep recording versions like drafts do today (admin-only history of edits); there is
-    no publish of versions. Retention/purge is a later phase (non-goal).
+11. **Versions:** only publishing writes version history today, and private entries are never published, so they have
+    no version history (amended during implementation: the earlier premise that drafts record versions was wrong).
+    Draft history and retention/purge are a later phase (non-goal).
 12. **`readOnly` in the admin API:** on update, a readOnly field whose value equals the stored one is ignored, a
     changed value is rejected (422 with the path); on create, any non-null readOnly value is rejected. The admin hides
     "Create" for a type that has a required readOnly field (only the server API can create those). `readOnly` is new
