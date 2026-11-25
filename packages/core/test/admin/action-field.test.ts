@@ -7,7 +7,7 @@ import { defineComposedBlock, defineBlocks, type BlockDefinition } from '@opencl
 import { ActionEditor, overlayNamesInData, treeAnchorIds } from '../../admin/src/block-builder/ActionField';
 import { PAGE_CUSTOM_FIELDS } from '../../admin/src/page-editor/custom-fields';
 import { BuilderContext, type BuilderModel } from '../../admin/src/block-builder/context';
-import { PatternField } from '../../admin/src/block-builder/ElementPanel';
+import { PatternField, RegionLabelField } from '../../admin/src/block-builder/ElementPanel';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -59,8 +59,10 @@ describe('ActionEditor', () => {
     draw({ onChange });
     pick('Open overlay');
     expect(onChange).not.toHaveBeenCalled(); // open needs a target first
+    expect(q('[data-action-pending]')!.textContent).toMatch(/not saved/i);
     type(q<HTMLInputElement>('input[data-action-target]')!, 'lien-he');
     expect(onChange).toHaveBeenLastCalledWith({ type: 'overlay', op: 'open', target: 'lien-he' });
+    expect(q('[data-action-pending]')).toBeNull();
   });
 
   it('rejects target "Bad Name" with an inline error and writes nothing', () => {
@@ -72,6 +74,7 @@ describe('ActionEditor', () => {
     expect(onChange).not.toHaveBeenCalled();
     expect(input.getAttribute('aria-invalid')).toBe('true');
     expect(q('[data-action-error]')!.textContent).toMatch(/lowercase/i);
+    expect(q('[data-action-pending]')).not.toBeNull();
   });
 
   it('close without a target is valid (the containing overlay); Link writes null', () => {
@@ -143,9 +146,11 @@ describe('action targets', () => {
       content: [
         { type: 'ContactForm', props: { id: 'a' } },
         { type: 'Holder', props: { id: 'b', slot: [{ type: 'ContactForm', props: { id: 'c', name: 'lien-he' } }, { type: 'ContactForm', props: { id: 'd', name: 'Bad Name' } }] } },
+        // A slot inside a list-field row (rows are plain objects without `type`).
+        { type: 'Tabs', props: { id: 'e', items: [{ title: 'A', content: [{ type: 'ContactForm', props: { id: 'f', name: 'in-row' } }] }] } },
       ],
     };
-    expect(overlayNamesInData(data, registry)).toEqual(['contact-form', 'lien-he']);
+    expect(overlayNamesInData(data, registry)).toEqual(['contact-form', 'lien-he', 'in-row']);
     expect(overlayNamesInData(null, registry)).toEqual([]);
   });
 
@@ -191,7 +196,42 @@ describe('PatternField (anchorId, Region name)', () => {
     expect(container.textContent).toContain('Required');
     type(input, 'footer');
     expect(container.textContent).toContain('Another region is already named footer');
+    expect(onChange).not.toHaveBeenCalled();
     type(input, 'main');
     expect(onChange).toHaveBeenLastCalledWith('main');
+  });
+});
+
+describe('RegionLabelField', () => {
+  const drawLabel = (value: unknown, onChange: (v: unknown) => void) =>
+    act(() =>
+      root.render(
+        createElement(
+          BuilderContext.Provider,
+          { value: { readOnly: false } as unknown as BuilderModel },
+          createElement(RegionLabelField as never, { field: { type: 'custom', label: 'Label' }, name: 'label', id: 'rl', value, onChange }),
+        ),
+      ),
+    );
+
+  it('a plain label is edited as text (empty clears it)', () => {
+    const onChange = vi.fn();
+    drawLabel('Header', onChange);
+    const input = q<HTMLInputElement>('input')!;
+    expect(input.value).toBe('Header');
+    type(input, 'Top bar');
+    expect(onChange).toHaveBeenLastCalledWith('Top bar');
+    type(input, '');
+    expect(onChange).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it('a localized label (set in code) is shown read-only in the current locale, never overwritten', () => {
+    const onChange = vi.fn();
+    drawLabel({ 'en-US': 'Header', 'vi-VN': 'Đầu trang' }, onChange);
+    const input = q<HTMLInputElement>('input')!;
+    expect(input.value).toBe('Header');
+    expect(input.readOnly).toBe(true);
+    expect(container.textContent).not.toContain('[object Object]');
+    expect(container.textContent).toMatch(/code/i);
   });
 });

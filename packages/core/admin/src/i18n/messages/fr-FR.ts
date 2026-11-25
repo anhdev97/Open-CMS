@@ -755,6 +755,7 @@ const frFR: Messages = {
     sources: "Contenu",
     sourcesHint: "Choisissez d'où vient chaque valeur.",
     slotAllowHint: "Blocs que les éditeurs peuvent déposer ici. Aucun coché : tous.",
+    regionLabelLocalized: "Libellé localisé défini dans le code : modifiez-le dans le fichier du bloc.",
     kindNames: {
       block: "bloc",
       layout: "bloc de mise en page",
@@ -787,6 +788,7 @@ const frFR: Messages = {
       scrollRequired: "Saisissez l'id de l'élément vers lequel défiler",
       closeHint: "Vide : ferme la superposition qui contient ce bouton.",
       perPage: "Les superpositions sont nommées sur chaque page : saisissez le nom utilisé là-bas.",
+      pending: "Pas encore enregistré : saisissez une cible valide.",
       overlayNotFound: "Aucune superposition nommée {name} sur cette page.",
       anchorNotFound: "Aucun élément d'id {name} dans ce bloc : vérifiez que la page en contient un.",
     },

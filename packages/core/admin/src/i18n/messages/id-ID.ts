@@ -755,6 +755,7 @@ const idID: Messages = {
     sources: "Konten",
     sourcesHint: "Pilih asal setiap nilai.",
     slotAllowHint: "Blok yang boleh diletakkan editor di sini. Tidak ada yang dicentang: semua blok.",
+    regionLabelLocalized: "Label terlokalisasi diatur di kode: ubah di berkas blok.",
     kindNames: {
       block: "blok",
       layout: "blok tata letak",
@@ -787,6 +788,7 @@ const idID: Messages = {
       scrollRequired: "Masukkan id elemen tujuan gulir",
       closeHint: "Kosong: menutup overlay tempat tombol ini berada.",
       perPage: "Overlay diberi nama di setiap halaman: ketik nama yang dipakai di sana.",
+      pending: "Belum disimpan: masukkan tujuan yang valid.",
       overlayNotFound: "Tidak ada overlay bernama {name} di halaman ini.",
       anchorNotFound: "Tidak ada elemen dengan id {name} di blok ini: pastikan halaman memilikinya.",
     },

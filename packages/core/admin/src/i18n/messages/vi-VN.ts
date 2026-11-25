@@ -755,6 +755,7 @@ const viVN: Messages = {
     sources: "Nội dung",
     sourcesHint: "Chọn nơi lấy từng giá trị.",
     slotAllowHint: "Các block người dựng trang được thả vào đây. Không chọn: mọi block.",
+    regionLabelLocalized: "Nhãn đa ngôn ngữ được đặt trong mã: hãy sửa trong tệp khối.",
     kindNames: {
       block: "khối",
       layout: "khối bố cục",
@@ -787,6 +788,7 @@ const viVN: Messages = {
       scrollRequired: "Nhập mã của phần tử cần cuộn đến",
       closeHint: "Để trống: đóng lớp phủ chứa nút này.",
       perPage: "Lớp phủ được đặt tên trên từng trang: nhập tên dùng ở đó.",
+      pending: "Chưa lưu: hãy nhập đích hợp lệ.",
       overlayNotFound: "Không có lớp phủ tên {name} trên trang này.",
       anchorNotFound: "Không có phần tử mã {name} trong khối này: hãy chắc rằng trang có phần tử đó.",
     },

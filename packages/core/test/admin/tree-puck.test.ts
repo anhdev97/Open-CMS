@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ComposedBlockSpec } from '@opencloudcms/schema';
-import { CONTAINER_ELEMENTS, RESERVED_ITEM_KEYS, hoistOverlay, isEmptyTree, puckToTree, treeToPuck, uniqueRegionName } from '../../admin/src/block-builder/tree-puck';
+import { CONTAINER_ELEMENTS, RESERVED_ITEM_KEYS, hoistOverlay, isEmptyTree, keepOverlayRoot, puckToTree, treeToPuck, uniqueRegionName } from '../../admin/src/block-builder/tree-puck';
 
 const base = (over: Partial<ComposedBlockSpec>): ComposedBlockSpec => ({
   id: 'blk_test01',
@@ -205,5 +205,25 @@ describe('layout and overlay elements in the canvas data', () => {
     const full = { root: { props: {} }, content: [{ type: 'Card', props: { id: 'Card-1', children: [{ type: 'Heading', props: { id: 'h' } }] } }, ov] };
     expect(hoistOverlay(full as never)).toBeNull();
     expect(hoistOverlay({ root: { props: {} }, content: [ov] } as never)).toBeNull();
+  });
+});
+
+describe('an Overlay root stays the root', () => {
+  const ov = (children: unknown[]) => ({ type: 'Overlay', props: { id: 'Overlay-1', variant: 'modal', children } });
+  const h = { type: 'Heading', props: { id: 'Heading-2' } };
+  const txt = { type: 'Text', props: { id: 'Text-3' } };
+  const btn = { type: 'Button', props: { id: 'Button-4' } };
+
+  it('elements dropped next to it at root level move inside it (before → first, after → last)', () => {
+    const prev = { root: { props: {} }, content: [ov([h])] };
+    const next = { root: { props: {} }, content: [txt, ov([h]), btn] };
+    expect(keepOverlayRoot(prev as never, next as never)).toEqual({ root: { props: {} }, content: [ov([txt, h, btn])] });
+  });
+
+  it('nothing to do when the Overlay is alone, or was not the root before', () => {
+    const alone = { root: { props: {} }, content: [ov([h])] };
+    expect(keepOverlayRoot(alone as never, alone as never)).toBeNull();
+    const card = { root: { props: {} }, content: [{ type: 'Card', props: { id: 'Card-1', children: [h] } }] };
+    expect(keepOverlayRoot(card as never, { root: { props: {} }, content: [card.content[0], txt] } as never)).toBeNull();
   });
 });

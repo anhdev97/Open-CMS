@@ -10,7 +10,7 @@ import { hasLegacyProps, migrateLegacyProps } from './style/migrate';
 import { isContainer, uniqueRegionName } from './tree-puck';
 
 export type PropKind =
-  | 'color' | 'spacing' | 'select' | 'boolean' | 'text' | 'number' | 'allow' | 'tracks' | 'length' | 'responsiveSelect' | 'pattern' | 'action';
+  | 'color' | 'spacing' | 'select' | 'boolean' | 'text' | 'number' | 'allow' | 'tracks' | 'length' | 'responsiveSelect' | 'pattern' | 'action' | 'regionLabel';
 export interface PropDef {
   name: string;
   kind: PropKind;
@@ -59,7 +59,7 @@ export const ELEMENT_PROPS: Record<ComposedElement, readonly PropDef[]> = {
   Date: [select('format', ['short', 'long']), { name: 'timeZone', kind: 'text' }],
   Divider: [],
   Spacer: [spacing('size')],
-  Region: [{ name: 'name', kind: 'pattern', pattern: 'name' }, { name: 'label', kind: 'text', labelKey: 'regionLabel' }, { name: 'allow', kind: 'allow' }],
+  Region: [{ name: 'name', kind: 'pattern', pattern: 'name' }, { name: 'label', kind: 'regionLabel', labelKey: 'regionLabel' }, { name: 'allow', kind: 'allow' }],
   PageContent: [],
   Overlay: [
     { ...select('variant', ['modal', 'drawer']), labelKey: 'overlayVariant' }, select('side', ['left', 'right', 'top', 'bottom']),
@@ -153,6 +153,8 @@ export interface BuilderConfigOptions {
   action: CustomFieldRender<unknown>;
   /** A text checked against a name pattern (`metadata.pattern`: `name` or `anchor`). */
   pattern: CustomFieldRender<unknown>;
+  /** Region `label`: text, or a localized label written in code (shown read-only). */
+  regionLabel: CustomFieldRender<unknown>;
   /** Region names in the canvas, but item `exceptId`'s (a new Region gets a free name). */
   regionNames?: (exceptId: string) => string[];
   /** Palette state at mount (later changes go through `paletteCategories` and Puck's `setUi`). */
@@ -201,6 +203,8 @@ function propField(p: PropDef, opts: BuilderConfigOptions): Field {
       return { type: 'custom', label, render: opts.pattern, metadata: { pattern: p.pattern ?? 'anchor', required: p.pattern === 'name' } } as Field;
     case 'action':
       return { type: 'custom', label, render: opts.action } as Field;
+    case 'regionLabel':
+      return { type: 'custom', label, render: opts.regionLabel } as Field;
   }
 }
 

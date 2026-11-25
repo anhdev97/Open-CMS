@@ -602,6 +602,7 @@ describe('layout and overlay elements in the builder', () => {
   it('fields: Region name/label/allow; Overlay side only for a drawer; Button action; anchorId on content elements', () => {
     expect(Object.keys(comp('Region').fields)).toEqual(['name', 'label', 'allow']);
     expect(comp('Region').fields.name!.metadata).toMatchObject({ pattern: 'name' });
+    expect(comp('Region').fields.label!.type).toBe('custom'); // a localized label from code is shown read-only
     expect(Object.keys(comp('PageContent').fields)).toEqual([]);
     const ov = comp('Overlay');
     expect(Object.keys(ov.fields)).toEqual(expect.arrayContaining(['variant', 'side', 'size', 'closeOnBackdrop', 'showClose', 'anchorId', 'style', 'children']));

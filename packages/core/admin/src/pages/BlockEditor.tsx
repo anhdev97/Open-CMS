@@ -30,7 +30,7 @@ import { elementRender, RootPreview } from '../block-builder/Canvas';
 import { BuilderContext, CanvasContext, type BuilderModel, type CanvasModel } from '../block-builder/context';
 import { ComposedActionField, treeAnchorIds } from '../block-builder/ActionField';
 import { REGION_ELEMENTS, buildBuilderConfig, paletteCategories } from '../block-builder/element-config';
-import { AllowField, PatternField, ShowIfField, SourcesField } from '../block-builder/ElementPanel';
+import { AllowField, PatternField, RegionLabelField, ShowIfField, SourcesField } from '../block-builder/ElementPanel';
 import { StyleField } from '../block-builder/style/StylePanel';
 import { LengthPuckField, ResponsiveSelectPuckField, TracksPuckField } from '../block-builder/style/puck-fields';
 import { DeviceMemory, ViewportBreakpoint, deviceUi, deviceViewports } from '../block-builder/style/DeviceToggle';
@@ -50,7 +50,7 @@ import {
   type ResetNote,
 } from '../block-builder/logic';
 import { canvasFieldValues, imageEntryPaths, loadSamples, placeholderEntry } from '../block-builder/sample-data';
-import { hoistOverlay, isEmptyTree, puckRegionNames, puckToTree, treeToPuck, type BuilderPuckData } from '../block-builder/tree-puck';
+import { hoistOverlay, isEmptyTree, keepOverlayRoot, puckRegionNames, puckToTree, treeToPuck, type BuilderPuckData } from '../block-builder/tree-puck';
 
 const READ_ONLY = { drag: false, duplicate: false, delete: false, edit: false, insert: false };
 const SAMPLE_DEBOUNCE_MS = 300;
@@ -208,6 +208,7 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
         length: LengthPuckField,
         action: ComposedActionField,
         pattern: PatternField,
+        regionLabel: RegionLabelField,
         regionNames: (exceptId) => puckRegionNames(latest.current, exceptId),
         palette: { overlayRoot, emptyRoot },
         render: elementRender,
@@ -252,11 +253,14 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
   if (mount.collection !== collection) setMount({ key: mount.key + 1, data: latest.current, collection });
   const ui = useMemo(() => deviceUi(device.current), [mount.key]); // eslint-disable-line react-hooks/exhaustive-deps
   const onChange = useCallback((data: Data) => {
-    latest.current = data as unknown as BuilderPuckData;
+    const prev = latest.current;
+    const next = data as unknown as BuilderPuckData;
+    // An Overlay dropped next to an empty root becomes the root (it is only allowed there); elements dropped next to
+    // an Overlay root go inside it.
+    const fixed = hoistOverlay(next) ?? keepOverlayRoot(prev, next);
+    latest.current = fixed ?? next;
     setTree(puckToTree(latest.current));
-    // An Overlay dropped next to an empty root becomes the root (it is only allowed there).
-    const hoisted = hoistOverlay(latest.current);
-    if (hoisted) queueMicrotask(() => getPuck.current?.().dispatch({ type: 'setData', data: hoisted as unknown as Data }));
+    if (fixed) queueMicrotask(() => getPuck.current?.().dispatch({ type: 'setData', data: fixed as unknown as Data }));
   }, []);
 
   // The palette follows the tree: the layout regions hide in an overlay block; Overlay is offered on an empty root.

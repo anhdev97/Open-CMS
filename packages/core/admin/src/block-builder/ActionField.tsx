@@ -4,7 +4,7 @@
 // known names as suggestions. Invalid targets show an inline error and are not written; a valid name that is not
 // known is written with a warning (overlays are named per page). Used by the composed Button of the block builder
 // and, as the page editor's custom field, by `b.action()` (library Button / ButtonGroup).
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createUsePuck, type CustomFieldRender } from '@puckeditor/core';
 import type { BlockRegistry } from '@opencloudcms/core/blocks';
 import { ANCHOR_ID_RE, OVERLAY_NAME_RE, type ButtonAction, type ComposedNode } from '@opencloudcms/schema';
@@ -105,6 +105,11 @@ export function ActionEditor({ id, label, value, onChange, overlays, anchors, re
             ))}
           </SelectContent>
         </Select>
+        {error && (
+          <p data-action-pending className="text-xs text-muted-foreground">
+            {t('blockBuilder.action.pending')}
+          </p>
+        )}
         {choice !== 'link' && (
           <div className="space-y-1">
             <Input
@@ -177,6 +182,8 @@ export function overlayNamesInData(data: unknown, registry: Pick<BlockRegistry, 
       for (const p of Object.values(v.props)) if (Array.isArray(p)) visit(p);
       return;
     }
+    // A list-field row (no `type`): its slots and nested lists.
+    for (const p of Object.values(v)) if (Array.isArray(p)) visit(p);
   };
   if (!isObj(data)) return out;
   visit(data.content);
@@ -209,7 +216,7 @@ const NO_BLOCKS: Pick<BlockRegistry, 'get'> = { get: () => undefined };
 export const PageActionField: CustomFieldRender<ButtonAction | null> = ({ field, name, id, value, onChange, readOnly }) => {
   const registry = useContext(BlocksContext) ?? NO_BLOCKS;
   const data = usePuck((s) => s.appState.data);
-  const overlays = overlayNamesInData(data, registry);
+  const overlays = useMemo(() => overlayNamesInData(data, registry), [data, registry]);
   return (
     <ActionEditor id={id} label={fieldLabel(field, name)} value={asAction(value)} onChange={onChange} overlays={overlays} anchors={null} readOnly={readOnly} />
   );

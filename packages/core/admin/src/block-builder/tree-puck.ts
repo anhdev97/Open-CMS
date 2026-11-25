@@ -101,6 +101,23 @@ export function hoistOverlay(data: BuilderPuckData): BuilderPuckData | null {
   return empty ? { ...data, content: [overlays[0]!] } : null;
 }
 
+/**
+ * Keeps an Overlay root the root: items dropped next to it at the top level (Puck's root zone accepts any element)
+ * move inside it, before its children when dropped before it, after them otherwise. Null when `prev` was not a lone
+ * Overlay or nothing was dropped next to it.
+ */
+export function keepOverlayRoot(prev: BuilderPuckData | null | undefined, next: BuilderPuckData): BuilderPuckData | null {
+  const before = Array.isArray(prev?.content) ? prev.content : [];
+  const items = Array.isArray(next.content) ? next.content : [];
+  if (before.length !== 1 || before[0]!.type !== 'Overlay' || items.length < 2) return null;
+  const at = items.findIndex((i) => i.type === 'Overlay' && i.props?.id === before[0]!.props.id);
+  if (at < 0) return null;
+  const ov = items[at]!;
+  const kids = Array.isArray(ov.props.children) ? (ov.props.children as PuckItem[]) : [];
+  const children = [...items.slice(0, at), ...kids, ...items.slice(at + 1)];
+  return { ...next, content: [{ ...ov, props: { ...ov.props, children } }] };
+}
+
 /** Region names of the Puck data (every Region item, nested ones included), skipping item `exceptId`. */
 export function puckRegionNames(data: BuilderPuckData | null | undefined, exceptId?: string): string[] {
   const out: string[] = [];

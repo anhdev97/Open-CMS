@@ -813,6 +813,7 @@ export const enUS = {
     sources: "Content",
     sourcesHint: "Choose where each value comes from.",
     slotAllowHint: "Blocks page editors may drop here. None checked: any block.",
+    regionLabelLocalized: "Localized label set in code: change it in the block file.",
     kindNames: {
       block: "block",
       layout: "layout block",
@@ -845,6 +846,7 @@ export const enUS = {
       scrollRequired: "Enter the id of the element to scroll to",
       closeHint: "Empty: closes the overlay this button is in.",
       perPage: "Overlays are named on each page: type the name used there.",
+      pending: "Not saved yet: enter a valid target.",
       overlayNotFound: "No overlay named {name} on this page.",
       anchorNotFound: "No element with id {name} in this block: make sure the page has one.",
     },

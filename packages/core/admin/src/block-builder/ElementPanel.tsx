@@ -8,6 +8,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from '../components/ui/select';
 import { t } from '../i18n';
+import { useLocale } from '../i18n/hooks';
 import { FieldShell, fieldLabel } from '../page-editor/FieldShell';
 import { useBuilder } from './context';
 import { isListy } from './logic';
@@ -180,6 +181,7 @@ export const PatternField: CustomFieldRender<unknown> = ({ field, name, id, valu
           setText(next);
           const n = next.trim();
           if (n ? !re.test(n) : meta.required) return;
+          if (kind === 'name' && n && m.regionCount(n) > (n === stored ? 1 : 0)) return; // duplicate Region name
           const out = n || undefined;
           last.current = n;
           onChange(out);
@@ -188,6 +190,38 @@ export const PatternField: CustomFieldRender<unknown> = ({ field, name, id, valu
       <div id={msgId}>
         {(error || duplicate) && <p className="text-xs text-destructive">{error ?? duplicate}</p>}
       </div>
+    </FieldShell>
+  );
+};
+
+/**
+ * Region `label`: a plain text, edited here; a localized label (written in code) is shown read-only in the admin
+ * language, so editing never overwrites its other locales.
+ */
+export const RegionLabelField: CustomFieldRender<unknown> = ({ field, name, id, value, onChange, readOnly }) => {
+  const m = useBuilder();
+  const locale = useLocale();
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const l = value as Record<string, unknown>;
+    const pickText = (k: string) => (typeof l[k] === 'string' && l[k] ? (l[k] as string) : undefined);
+    const shown = pickText(locale) ?? pickText('en-US') ?? Object.values(l).find((v): v is string => typeof v === 'string' && !!v) ?? '';
+    return (
+      <FieldShell id={id} label={fieldLabel(field, name)}>
+        <Input id={id} value={shown} readOnly aria-describedby={`${id}-msg`} />
+        <p id={`${id}-msg`} className="text-xs text-muted-foreground">
+          {t('blockBuilder.regionLabelLocalized')}
+        </p>
+      </FieldShell>
+    );
+  }
+  return (
+    <FieldShell id={id} label={fieldLabel(field, name)}>
+      <Input
+        id={id}
+        value={typeof value === 'string' ? value : ''}
+        disabled={readOnly || m.readOnly}
+        onChange={(e) => onChange(e.target.value === '' ? undefined : e.target.value)}
+      />
     </FieldShell>
   );
 };
