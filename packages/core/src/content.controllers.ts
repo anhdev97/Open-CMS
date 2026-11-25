@@ -139,8 +139,13 @@ export class AdminContentController {
 
   @Post(':apiId/:documentId/unpublish')
   @HttpCode(200)
-  unpublish(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string, @CurrentUser() user: RequestUser) {
-    return this.entries.unpublish(apiId, documentId, user);
+  unpublish(
+    @Param('apiId') apiId: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @CurrentUser() user: RequestUser,
+    @Query('force') force?: string,
+  ) {
+    return this.entries.unpublish(apiId, documentId, user, { force: force === 'true' });
   }
 
   @RequirePermission('content.submit')

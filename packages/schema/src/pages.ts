@@ -1,4 +1,5 @@
 // Pure, runtime-agnostic page helpers. Must not import from `node:*` (bundled for the browser and shared with Nest).
+import { OVERLAY_NAME_RE } from './actions';
 
 /** apiId of the core-owned page content type. Projects may not define a type with this id. */
 export const PAGE_API_ID = 'opencloudcmsPage';
@@ -116,4 +117,39 @@ export function collectBlockNames(c: StoredPageContent | null | undefined): Map<
   const rootProps = (data.root as { props?: unknown } | null | undefined)?.props;
   if (isPlainObject(rootProps)) for (const v of Object.values(rootProps)) visitValue(v, out);
   return out;
+}
+
+/** Kinds of page documents: `page` is served at its path; `base` frames pages (never served on its own). */
+export type PageKind = 'page' | 'base';
+export const PAGE_KINDS: readonly PageKind[] = ['page', 'base'];
+
+export type RegionMode = 'default' | 'replace' | 'hide';
+export const REGION_MODES: readonly RegionMode[] = ['default', 'replace', 'hide'];
+
+/**
+ * A page's base choice (page-level, same for every locale). `null` = framed by the default base page;
+ * `baseId: null` = no frame. An absent region is `default`.
+ */
+export type PageLayout = { baseId: string | null; regions?: Record<string, RegionMode> } | null;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Shape check of a stored `layout` value (whether `baseId` names a base page is checked by the server). */
+export function validatePageLayout(value: unknown): { ok: true } | { ok: false; message: string } {
+  if (value == null) return { ok: true };
+  if (!isPlainObject(value)) return { ok: false, message: 'layout must be null or an object' };
+  const extra = Object.keys(value).filter((k) => k !== 'baseId' && k !== 'regions');
+  if (extra.length) return { ok: false, message: `layout has unknown keys: ${extra.join(', ')}` };
+  if (!('baseId' in value)) return { ok: false, message: 'layout.baseId is required (null = no base page)' };
+  if (value.baseId !== null && (typeof value.baseId !== 'string' || !UUID_RE.test(value.baseId))) {
+    return { ok: false, message: 'layout.baseId must be a document id or null' };
+  }
+  if (value.regions !== undefined) {
+    if (!isPlainObject(value.regions)) return { ok: false, message: 'layout.regions must be an object' };
+    for (const [name, mode] of Object.entries(value.regions)) {
+      if (!OVERLAY_NAME_RE.test(name)) return { ok: false, message: `layout.regions: invalid region name "${name}"` };
+      if (!REGION_MODES.includes(mode as RegionMode)) return { ok: false, message: `layout.regions.${name} must be default, replace or hide` };
+    }
+  }
+  return { ok: true };
 }

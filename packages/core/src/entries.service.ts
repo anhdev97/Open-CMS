@@ -174,9 +174,11 @@ export class EntriesService {
     return this.get(apiId, documentId, 'published');
   }
 
-  async unpublish(apiId: string, documentId: string, user: Pick<RequestUser, 'permissions'>) {
+  async unpublish(apiId: string, documentId: string, user: Pick<RequestUser, 'permissions'>, opts: { force?: boolean } = {}) {
     const def = this.registry.get(apiId);
     this.assertCanPublish(def, user);
+    const ctx = { ...this.ctx(apiId, this.options.config.defaultLocale), force: opts.force === true };
+    for (const h of this.registry.hooksFor(apiId)) await h.beforeUnpublish?.(documentId, ctx);
     const removed = await this.repo.unpublish(def, documentId);
     if (!removed) throw new NotFoundException(`${apiId} ${documentId} is not published`);
     for (const h of this.registry.hooksFor(apiId)) await h.afterUnpublish?.(documentId, this.ctx(apiId, this.options.config.defaultLocale));
@@ -185,6 +187,7 @@ export class EntriesService {
 
   async remove(apiId: string, documentId: string) {
     const def = this.registry.get(apiId);
+    for (const h of this.registry.hooksFor(apiId)) await h.beforeDelete?.(documentId, this.ctx(apiId, this.options.config.defaultLocale));
     if (!(await this.repo.delete(def, documentId, (trx) => this.workflow.guardDelete(trx, def, documentId)))) throw new NotFoundException(`${apiId} ${documentId} not found`);
     for (const h of this.registry.hooksFor(apiId)) await h.afterDelete?.(documentId, this.ctx(apiId, this.options.config.defaultLocale));
     return { ok: true };

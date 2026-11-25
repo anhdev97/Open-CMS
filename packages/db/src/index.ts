@@ -210,6 +210,23 @@ export const coreMigrations: Record<string, Migration> = {
       await db.schema.dropTable('ct_opencloudcms_page').execute();
     },
   },
+  '0007_page_kind': {
+    /**
+     * Base pages: document-level `kind` ('page' | 'base'), the default-base flag and a page's base choice. Matches the
+     * codegen DDL for the `kind` / `isDefault` / `layout` fields of page.type.ts plus `not null` and defaults.
+     */
+    async up(db) {
+      await db.schema
+        .alterTable('ct_opencloudcms_page')
+        .addColumn('kind', sql`varchar(16)`, (col) => col.notNull().defaultTo('page'))
+        .addColumn('is_default', sql`boolean`, (col) => col.notNull().defaultTo(false))
+        .addColumn('layout', sql`jsonb`)
+        .execute();
+    },
+    async down(db) {
+      await db.schema.alterTable('ct_opencloudcms_page').dropColumn('layout').dropColumn('is_default').dropColumn('kind').execute();
+    },
+  },
 };
 
 /* ----------------------------- project ---------------------------- */
