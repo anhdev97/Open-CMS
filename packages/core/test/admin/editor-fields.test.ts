@@ -206,7 +206,7 @@ describe('toEditorData / fromEditorData', () => {
   it('puts title, path and SEO in the root props and takes them out again on save', () => {
     const content = writePageContent({ root: { props: {} }, content: [item('Head', 'h1', { text: 'Hi', color: 'primary' })] } as PuckData, registry);
     const data = toEditorData({ title: 'About', path: '/about', seo: { title: 'T', description: 'D', noindex: true } }, content.data);
-    expect(data.root.props).toEqual({ title: 'About', path: '/about', seoTitle: 'T', seoDescription: 'D', seoNoindex: true });
+    expect(data.root.props).toEqual({ title: 'About', path: '/about', seoTitle: 'T', seoDescription: 'D', seoNoindex: true, basePage: '__default' });
     const body = fromEditorData(data, registry);
     expect(body.title).toBe('About');
     expect(body.path).toBe('/about');

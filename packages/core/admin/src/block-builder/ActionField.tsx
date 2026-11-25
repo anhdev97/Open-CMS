@@ -12,6 +12,8 @@ import { Input } from '../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { t } from '../i18n';
 import { BlocksContext } from '../page-editor/blocks-context';
+import { BaseContext, type BaseState } from '../page-editor/editor-context';
+import { rootPropsToLayout } from '../page-editor/field-logic';
 import { FieldShell, fieldLabel } from '../page-editor/FieldShell';
 import { useBuilder } from './context';
 
@@ -162,32 +164,75 @@ export function treeAnchorIds(tree: ComposedNode): string[] {
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
+/** One overlay block placed on a page: its own `name` (`valid` when it is a valid overlay name) or the default name. */
+export interface OverlayNameEntry {
+  name: string;
+  valid: boolean;
+}
+
+type Placement = { own: unknown; fallback: unknown };
+
 /**
- * Names of the overlay blocks placed in Puck page data (content, zones and nested slot or list props): the item's
- * `name` when it is a valid overlay name, else the block's default name. First seen, in page order.
+ * Overlay blocks in Puck page data or a block list, in page order: content, zones, nested slot or list props, and the
+ * root `region__<name>` blocks of regions the page replaces (root prop `regionMode__<name>` = `replace`).
  */
-export function overlayNamesInData(data: unknown, registry: Pick<BlockRegistry, 'get'>): string[] {
-  const out: string[] = [];
+function overlayPlacements(data: unknown, registry: Pick<BlockRegistry, 'get'>): Placement[] {
+  const out: Placement[] = [];
   const visit = (v: unknown) => {
     if (Array.isArray(v)) return v.forEach(visit);
     if (!isObj(v)) return;
     if (typeof v.type === 'string' && isObj(v.props)) {
       const def = registry.get(v.type);
-      if (def?.kind === 'overlay') {
-        const own = v.props.name;
-        const fallback = (def.fields as Record<string, { default?: unknown }>).name?.default;
-        const name = typeof own === 'string' && OVERLAY_NAME_RE.test(own) ? own : typeof fallback === 'string' ? fallback : '';
-        if (name && !out.includes(name)) out.push(name);
-      }
+      if (def?.kind === 'overlay') out.push({ own: v.props.name, fallback: (def.fields as Record<string, { default?: unknown }>).name?.default });
       for (const p of Object.values(v.props)) if (Array.isArray(p)) visit(p);
       return;
     }
     // A list-field row (no `type`): its slots and nested lists.
     for (const p of Object.values(v)) if (Array.isArray(p)) visit(p);
   };
+  if (Array.isArray(data)) visit(data);
   if (!isObj(data)) return out;
   visit(data.content);
   if (isObj(data.zones)) for (const z of Object.values(data.zones)) visit(z);
+  const rootProps = isObj(data.root) && isObj(data.root.props) ? data.root.props : {};
+  for (const [k, v] of Object.entries(rootProps)) {
+    if (k.startsWith('region__') && rootProps[`regionMode__${k.slice('region__'.length)}`] === 'replace') visit(v);
+  }
+  return out;
+}
+
+/** Each overlay placement's own `name` (`valid: false` when it is not a valid overlay name) or, when unset, its default. */
+export function overlayNameEntries(data: unknown, registry: Pick<BlockRegistry, 'get'>): OverlayNameEntry[] {
+  const out: OverlayNameEntry[] = [];
+  for (const { own, fallback } of overlayPlacements(data, registry)) {
+    const name = typeof own === 'string' && own ? own : typeof fallback === 'string' ? fallback : '';
+    if (name) out.push({ name, valid: OVERLAY_NAME_RE.test(name) });
+  }
+  return out;
+}
+
+/**
+ * Names of the overlay blocks placed in Puck page data (see `overlayPlacements`): the item's `name` when it is a
+ * valid overlay name, else the block's default name. First seen, in page order.
+ */
+export function overlayNamesInData(data: unknown, registry: Pick<BlockRegistry, 'get'>): string[] {
+  const out: string[] = [];
+  for (const { own, fallback } of overlayPlacements(data, registry)) {
+    const name = typeof own === 'string' && OVERLAY_NAME_RE.test(own) ? own : typeof fallback === 'string' ? fallback : '';
+    if (name && !out.includes(name)) out.push(name);
+  }
+  return out;
+}
+
+/**
+ * Overlays the base page adds to this page: those in the base's regions the page shows as they are (`default`), from
+ * the editor root props (base choice and region modes).
+ */
+export function baseOverlayEntries(base: BaseState, rootProps: Record<string, unknown> | undefined): OverlayNameEntry[] {
+  if (base.status !== 'ok' || !base.frame || !base.registry) return [];
+  const regions = rootPropsToLayout(rootProps ?? {})?.regions ?? {};
+  const out: OverlayNameEntry[] = [];
+  for (const r of base.regions) if ((regions[r] ?? 'default') === 'default') out.push(...overlayNameEntries(base.frame.props[`region__${r}`], base.registry));
   return out;
 }
 
@@ -212,11 +257,18 @@ export const ComposedActionField: CustomFieldRender<unknown> = ({ field, name, i
 const usePuck = createUsePuck();
 const NO_BLOCKS: Pick<BlockRegistry, 'get'> = { get: () => undefined };
 
-/** `b.action()` in the page editor (`null` = link): the overlays placed on this page are suggested. */
+/** `b.action()` in the page editor (`null` = link): the overlays placed on this page and on its base page are suggested. */
 export const PageActionField: CustomFieldRender<ButtonAction | null> = ({ field, name, id, value, onChange, readOnly }) => {
   const registry = useContext(BlocksContext) ?? NO_BLOCKS;
+  const base = useContext(BaseContext);
   const data = usePuck((s) => s.appState.data);
-  const overlays = useMemo(() => overlayNamesInData(data, registry), [data, registry]);
+  const overlays = useMemo(() => {
+    const own = overlayNamesInData(data, registry);
+    const fromBase = baseOverlayEntries(base, data.root?.props as Record<string, unknown> | undefined)
+      .filter((e) => e.valid)
+      .map((e) => e.name);
+    return [...new Set([...own, ...fromBase])];
+  }, [data, registry, base]);
   return (
     <ActionEditor id={id} label={fieldLabel(field, name)} value={asAction(value)} onChange={onChange} overlays={overlays} anchors={null} readOnly={readOnly} />
   );
