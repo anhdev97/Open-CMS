@@ -20,7 +20,7 @@ import { OAUTH2_CONFIG } from '@opencloudcms/oauth2';
 import { SYSTEM_TABLES } from '@opencloudcms/schema';
 import { ASSETS_DB, ASSETS_OPTIONS, DEFAULT_IMAGE_SIZES, DEFAULT_MAX_BYTES, STORAGE_PROVIDER } from '../constants';
 import { ImageTooLargeError, InvalidImageError, processUpload } from '../pipeline/image-pipeline';
-import { PRIVATE_KEY_PREFIX, type StorageProvider } from '../provider/storage-provider';
+import { PRIVATE_KEY_PREFIX, type AssetVisibility, type StorageProvider } from '../provider/storage-provider';
 import { missingAlt } from '../seo/missing-alt';
 import { resolveUploadMime } from '../sniff';
 import type { AssetVariants, AssetsModuleOptions } from '../types';
@@ -424,6 +424,7 @@ export class AssetsService implements OnApplicationBootstrap, OnModuleDestroy {
     return { data: { id } };
   }
 
+  /** Media library removal (public rows): storage first, then the row, so a storage failure keeps the row. */
   private async removeRow(row: any): Promise<void> {
     const id = row.id as string;
     const keys = collectKeys(row);
@@ -432,7 +433,7 @@ export class AssetsService implements OnApplicationBootstrap, OnModuleDestroy {
         throw new ConflictException(`Asset is stored with provider "${row.provider ?? 'unknown'}" which is not configured`);
       }
       try {
-        for (const key of keys) await this.provider.delete(key);
+        for (const key of keys) await this.provider.delete(key, 'public');
       } catch (err) {
         this.logger.error(`Storage delete failed for asset ${id}: ${err instanceof Error ? err.message : String(err)}`);
         throw new BadGatewayException('Failed to delete asset from storage');
@@ -464,10 +465,10 @@ export class AssetsService implements OnApplicationBootstrap, OnModuleDestroy {
     }
     const key = `${PRIVATE_KEY_PREFIX}${opts.ownerApiId}/${randomUUID()}`;
     try {
-      await provider.put(key, file.buffer, mime);
+      await provider.put(key, file.buffer, mime, 'private');
     } catch (err) {
       this.logger.error(`Storage put failed: ${err instanceof Error ? err.message : String(err)}`);
-      await this.cleanup(provider, [key]);
+      await this.cleanup(provider, [key], 'private');
       throw new BadGatewayException('Failed to store asset');
     }
     try {
@@ -491,7 +492,7 @@ export class AssetsService implements OnApplicationBootstrap, OnModuleDestroy {
         .executeTakeFirstOrThrow();
       return toPrivateApi(row);
     } catch (err) {
-      await this.cleanup(provider, [key]);
+      await this.cleanup(provider, [key], 'private');
       throw err;
     }
   }
@@ -512,7 +513,7 @@ export class AssetsService implements OnApplicationBootstrap, OnModuleDestroy {
       throw new ConflictException(`Asset is stored with provider "${asset.provider ?? 'unknown'}" which is not configured`);
     }
     try {
-      return { asset, stream: await provider.get(asset.storageKey) };
+      return { asset, stream: await provider.get(asset.storageKey, 'private') };
     } catch (err) {
       const e = err as { code?: unknown; name?: unknown } | null;
       if (e && (e.code === 'ENOENT' || e.code === 404 || e.name === 'NoSuchKey' || e.name === 'NotFound')) {
@@ -523,36 +524,51 @@ export class AssetsService implements OnApplicationBootstrap, OnModuleDestroy {
     }
   }
 
-  /** Deletes a private file (storage, then row). Unknown ids are ignored. */
-  async deletePrivate(id: string): Promise<void> {
-    if (!UUID_RE.test(id)) return;
-    const row = await this.db.selectFrom(SYSTEM_TABLES.assets).selectAll().where('id', '=', id).where('visibility', '=', 'private').executeTakeFirst();
-    if (row) await this.removeRow(row);
+  /**
+   * Deletes a private file only while it is still owned as the caller saw it (`ownerDocumentId`; null = unattached).
+   * The row goes first, in one conditional statement, so a file that an entry attached meanwhile is never deleted;
+   * then the storage object (a failure there is logged: the object is orphaned, the row is gone). Returns whether
+   * the row was deleted.
+   */
+  async deletePrivate(id: string, expected: { ownerDocumentId: string | null }): Promise<boolean> {
+    if (!UUID_RE.test(id)) return false;
+    let q = this.db.deleteFrom(SYSTEM_TABLES.assets).where('id', '=', id).where('visibility', '=', 'private');
+    q = expected.ownerDocumentId === null ? q.where('owner_document_id', 'is', null) : q.where('owner_document_id', '=', expected.ownerDocumentId);
+    const rows = await q.returningAll().execute();
+    await this.deleteStoredPrivate(rows);
+    return rows.length > 0;
   }
 
   /**
-   * Deletes private uploads that no entry attached (`owner_document_id is null`) and that are older than 24 h.
-   * Returns the deleted ids; a file that cannot be deleted is logged and left for the next sweep.
+   * Deletes private uploads that no entry attached (`owner_document_id is null`) and that are older than 24 h:
+   * rows first, in one conditional statement (an upload attached meanwhile no longer matches), then their files.
+   * Returns the deleted ids.
    */
   async sweepUnattachedPrivateAssets(now: Date = new Date()): Promise<string[]> {
     const cutoff = new Date(now.getTime() - UNATTACHED_PRIVATE_TTL_MS);
     const rows = await this.db
-      .selectFrom(SYSTEM_TABLES.assets)
-      .selectAll()
+      .deleteFrom(SYSTEM_TABLES.assets)
       .where('visibility', '=', 'private')
       .where('owner_document_id', 'is', null)
       .where('created_at', '<', cutoff)
+      .returningAll()
       .execute();
-    const deleted: string[] = [];
+    await this.deleteStoredPrivate(rows);
+    return rows.map((r: any) => r.id as string);
+  }
+
+  /** Storage cleanup for already deleted private rows; failures are logged with the orphaned keys. */
+  private async deleteStoredPrivate(rows: any[]): Promise<void> {
     for (const row of rows) {
-      try {
-        await this.removeRow(row);
-        deleted.push(row.id);
-      } catch (err) {
-        this.logger.warn(`Could not sweep private asset ${row.id}: ${err instanceof Error ? err.message : String(err)}`);
+      const keys = collectKeys(row);
+      if (!keys.length) continue;
+      if (!this.provider || (row.provider && row.provider !== this.provider.kind)) {
+        this.logger.error(`Private asset ${row.id} deleted; its file stays in unconfigured provider "${row.provider ?? 'unknown'}": ${keys.join(', ')}`);
+        continue;
       }
+      const leftover = await this.cleanup(this.provider, keys, 'private');
+      if (leftover.length) this.logger.error(`Private asset ${row.id} deleted; orphaned storage keys: ${leftover.join(', ')}`);
     }
-    return deleted;
   }
 
   /** A 5-minute signed download link for a private asset, bound to `userId` (decision 15). */
@@ -568,11 +584,11 @@ export class AssetsService implements OnApplicationBootstrap, OnModuleDestroy {
     return !!this.linkKey && verifyAssetLink(this.linkKey, token, id) !== null;
   }
 
-  private async cleanup(provider: StorageProvider, keys: string[]): Promise<string[]> {
+  private async cleanup(provider: StorageProvider, keys: string[], visibility: AssetVisibility = 'public'): Promise<string[]> {
     const leftover: string[] = [];
     for (const key of keys) {
       try {
-        await provider.delete(key);
+        await provider.delete(key, visibility);
       } catch {
         leftover.push(key);
       }

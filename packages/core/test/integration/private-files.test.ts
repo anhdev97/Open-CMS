@@ -205,6 +205,28 @@ describe('private files (spec §7, decisions 9 and 15)', () => {
     }
   });
 
+  it('concurrent replaces of the same file keep the file the entry ends up with', async () => {
+    const svc = t.app.get(PrivateEntriesService);
+    const file = (name: string) => ({ buffer: PDF, filename: name, contentType: 'application/pdf' });
+    const created = await svc.create('invoice', { code: 'C-1', file: file('start.pdf') });
+    const docId = created.data.documentId as string;
+    for (let round = 0; round < 12; round++) {
+      // Uploads first, so that both saves race on the entry row only.
+      const ups = await Promise.all([1, 2, 3].map((n) => upload('invoice', 'file', PDF, `r${round}-${n}.pdf`, 'application/pdf')));
+      const results = await Promise.all(ups.map((u) => admin(`/api/admin/content/invoice/${docId}`, json('PATCH', { file: u.body.data.id }))));
+      expect(results.map((r) => r.status)).toEqual([200, 200, 200]);
+      const live = (await admin(`/api/admin/content/invoice/${docId}`)).body.data.file as string;
+      const row = await assetRow(live);
+      expect(row, `round ${round}: live file row`).toMatchObject({ owner_document_id: docId });
+      expect(fs.existsSync(fileOf(row.storage_key)), `round ${round}: live file on disk`).toBe(true);
+      for (const u of ups) {
+        if (u.body.data.id === live) continue;
+        expect(await assetRow(u.body.data.id), `round ${round}: replaced row`).toBeUndefined();
+        expect(fs.existsSync(fileOf(u.body.data.storageKey))).toBe(false);
+      }
+    }
+  });
+
   it('PrivateEntriesService accepts { buffer, filename, contentType } and stores the file privately, owned at once', async () => {
     const svc = t.app.get(PrivateEntriesService);
     const r = await svc.create('invoice', { code: 'S-1', file: { buffer: PDF, filename: 'server.pdf', contentType: 'application/pdf' } });

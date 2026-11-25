@@ -82,27 +82,51 @@ afterEach(async () => {
 });
 
 describe('storage providers: private keys and get()', () => {
-  it('local: private/ keys live in <root>/../private-assets, outside the static root; get() streams', async () => {
+  it('local: private files live in <root>/../private-assets, outside the static root; get() streams', async () => {
     const d = fs.mkdtempSync(path.join(os.tmpdir(), 'assets-local-'));
     const root = path.join(d, 'public');
     const p = createLocalServerProvider({ root, publicBaseUrl: '/media' });
-    await p.put('private/order/abc', Buffer.from('secret'), 'application/pdf');
+    await p.put('private/order/abc', Buffer.from('secret'), 'application/pdf', 'private');
     await p.put('2026/01/a.txt', Buffer.from('hello'), 'text/plain');
     expect(fs.existsSync(path.join(d, 'private-assets', 'order', 'abc'))).toBe(true);
     expect(fs.existsSync(path.join(root, 'private'))).toBe(false);
-    expect(await read(await p.get('private/order/abc'))).toBe('secret');
+    expect(await read(await p.get('private/order/abc', 'private'))).toBe('secret');
     expect(await read(await p.get('2026/01/a.txt'))).toBe('hello');
-    await expect(p.get('private/order/missing')).rejects.toMatchObject({ code: 'ENOENT' });
-    await p.delete('private/order/abc');
+    await expect(p.get('private/order/missing', 'private')).rejects.toMatchObject({ code: 'ENOENT' });
+    await p.delete('private/order/abc', 'private');
     expect(fs.existsSync(path.join(d, 'private-assets', 'order', 'abc'))).toBe(false);
     fs.rmSync(d, { recursive: true, force: true });
   });
 
-  it('local: privateRoot overrides the default directory', async () => {
+  it('local: storage follows the explicit visibility, not the key (a public key may start with private/)', async () => {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'assets-local-'));
+    const root = path.join(d, 'public');
+    const p = createLocalServerProvider({ root, publicBaseUrl: '/media' });
+    await p.put('private/legacy.webp', Buffer.from('pub'), 'image/webp');
+    expect(fs.readFileSync(path.join(root, 'private', 'legacy.webp')).toString()).toBe('pub');
+    expect(fs.existsSync(path.join(d, 'private-assets', 'legacy.webp'))).toBe(false);
+    expect(await read(await p.get('private/legacy.webp'))).toBe('pub');
+    await p.delete('private/legacy.webp');
+    expect(fs.existsSync(path.join(root, 'private', 'legacy.webp'))).toBe(false);
+    fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  it('local: privateRoot overrides the default directory and may not overlap root, also through symlinks', async () => {
     const d = fs.mkdtempSync(path.join(os.tmpdir(), 'assets-local-'));
     const p = createLocalServerProvider({ root: path.join(d, 'pub'), publicBaseUrl: '/media', privateRoot: path.join(d, 'vault') });
-    await p.put('private/x/y', Buffer.from('1'), 'text/plain');
+    await p.put('private/x/y', Buffer.from('1'), 'text/plain', 'private');
     expect(fs.existsSync(path.join(d, 'vault', 'x', 'y'))).toBe(true);
+
+    const make = (root: string, privateRoot: string) => () => createLocalServerProvider({ root, publicBaseUrl: '/media', privateRoot });
+    expect(make(path.join(d, 'pub'), path.join(d, 'pub', 'secret'))).toThrow(/must not contain each other/);
+    expect(make(path.join(d, 'vault', 'pub'), path.join(d, 'vault'))).toThrow(/must not contain each other/);
+    expect(make(path.join(d, 'pub'), path.join(d, 'pub'))).toThrow(/must not contain each other/);
+    // A symlink that points into the static root.
+    fs.mkdirSync(path.join(d, 'pub'), { recursive: true });
+    fs.symlinkSync(path.join(d, 'pub'), path.join(d, 'link-to-pub'));
+    expect(make(path.join(d, 'pub'), path.join(d, 'link-to-pub', 'private'))).toThrow(/must not contain each other/);
+    fs.symlinkSync(path.join(d, 'vault'), path.join(d, 'link-to-vault'));
+    expect(make(path.join(d, 'link-to-vault', 'pub'), path.join(d, 'vault'))).toThrow(/must not contain each other/);
     fs.rmSync(d, { recursive: true, force: true });
   });
 
@@ -175,6 +199,7 @@ describe('private assets over HTTP', () => {
     expect(ok.headers['content-disposition']).toBe(`attachment; filename*=UTF-8''Rechnung%20%C3%A4.pdf`);
     expect(ok.headers['x-content-type-options']).toBe('nosniff');
     expect(ok.headers['cache-control']).toBe('private, no-store');
+    expect(ok.headers['content-security-policy']).toBe("default-src 'none'; sandbox");
     // Public assets and unknown ids have no download route.
     const png = await sharp({ create: { width: 4, height: 4, channels: 3, background: '#f00' } }).png().toBuffer();
     const pub = await request(server).post('/api/admin/assets/upload').attach('file', png, { filename: 'p.png', contentType: 'image/png' });
@@ -214,6 +239,32 @@ describe('private assets over HTTP', () => {
     }
   });
 
+  it('never stores active types: HTML, SVG and XML are kept as text/plain', async () => {
+    const { service } = await boot();
+    const html = Buffer.from('<!doctype html><script>alert(1)</script>');
+    for (const type of ['text/html', 'image/svg+xml', 'application/xhtml+xml', 'text/xml', 'application/xml']) {
+      expect((await service.uploadPrivate({ buffer: html, filename: 'x', contentType: type }, { ownerApiId: 'order' })).mimeType, type).toBe('text/plain');
+    }
+    expect((await service.uploadPrivate({ buffer: html, filename: 'x.html', contentType: 'text/html' }, { ownerApiId: 'order', accept: ['text/html'] })).mimeType).toBe('text/plain');
+    expect((await service.uploadPrivate({ buffer: Buffer.from('a,b\n'), filename: 'x.csv', contentType: 'text/csv' }, { ownerApiId: 'order' })).mimeType).toBe('text/csv');
+  });
+
+  it('deletePrivate only deletes a row still owned as expected (row first, then the file)', async () => {
+    const { db, service } = await boot();
+    const DOC = '0a4c5d64-73b2-4d55-8b3c-8bb4b0f7f0a2';
+    const a = await service.uploadPrivate({ buffer: PDF, filename: 'a.pdf', contentType: 'application/pdf' }, { ownerApiId: 'order' });
+    const file = path.join(dir!, 'private-assets', a.storageKey!.slice('private/'.length));
+    // Attached meanwhile: a delete that expected it unattached is a no-op and the file stays.
+    db.rows.find((r) => r.id === a.id)!.owner_document_id = DOC;
+    expect(await service.deletePrivate(a.id, { ownerDocumentId: null })).toBe(false);
+    expect(fs.existsSync(file)).toBe(true);
+    expect(await service.deletePrivate(a.id, { ownerDocumentId: '7d1b6c1e-0f43-4c39-9d0e-2b9a3f3b8f11' })).toBe(false);
+    expect(fs.existsSync(file)).toBe(true);
+    expect(await service.deletePrivate(a.id, { ownerDocumentId: DOC })).toBe(true);
+    expect(db.rows.some((r) => r.id === a.id)).toBe(false);
+    expect(fs.existsSync(file)).toBe(false);
+  });
+
   it('sweeper deletes unattached private uploads older than 24 h (file and row) and keeps the rest', async () => {
     const { db, service } = await boot();
     const old = await service.uploadPrivate({ buffer: PDF, filename: 'old.pdf', contentType: 'application/pdf' }, { ownerApiId: 'order' });
@@ -225,8 +276,15 @@ describe('private assets over HTTP', () => {
     const oldFile = path.join(dir!, 'private-assets', old.storageKey!.slice('private/'.length));
     expect(fs.existsSync(oldFile)).toBe(true);
 
+    // An upload attached between listing and deleting is kept: the sweep is one conditional delete.
+    const raced = await service.uploadPrivate({ buffer: PDF, filename: 'raced.pdf', contentType: 'application/pdf' }, { ownerApiId: 'order' });
+    const racedRow = db.rows.find((r) => r.id === raced.id)!;
+    racedRow.created_at = new Date(now.getTime() - 25 * 3600_000);
+    racedRow.owner_document_id = '0a4c5d64-73b2-4d55-8b3c-8bb4b0f7f0a2';
+
     expect(await service.sweepUnattachedPrivateAssets(now)).toEqual([old.id]);
-    expect(db.rows.map((r) => r.id).sort()).toEqual([fresh.id, owned.id].sort());
+    expect(db.rows.map((r) => r.id).sort()).toEqual([fresh.id, owned.id, raced.id].sort());
     expect(fs.existsSync(oldFile)).toBe(false);
+    expect(fs.existsSync(path.join(dir!, 'private-assets', raced.storageKey!.slice('private/'.length)))).toBe(true);
   });
 });

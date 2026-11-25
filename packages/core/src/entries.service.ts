@@ -201,23 +201,26 @@ export class EntriesService {
       if (r && typeof r === 'object') data = r as Row;
     }
     await this.assetOwnership.assertNoPrivate(def, data);
+    // Decision 9: files this save replaced are detached inside its transaction and deleted after commit.
+    const touchesAssets = def.private && def.fields.some((f) => f.kind === 'asset' && f.name in data);
+    let replaced: string[] = [];
     await this.repo.update(
       def,
       documentId,
       data,
       loc,
-      async (trx) => {
-        await this.workflow.guardUpdate(trx, def, documentId, user);
-        await this.assetOwnership.attach(trx, def, documentId, data);
-      },
+      (trx) => this.workflow.guardUpdate(trx, def, documentId, user),
       opts?.expectedUpdatedAt,
+      // After the write, with the draft row locked: every lock on asset rows is taken after the entry's, in one order.
+      touchesAssets
+        ? async (trx, rowId) => {
+            await this.assetOwnership.attach(trx, def, documentId, data);
+            replaced = await this.assetOwnership.detachReplaced(trx, def, documentId, rowId);
+          }
+        : undefined,
     );
-    const saved = await this.get(apiId, documentId, 'draft', loc);
-    // Decision 9: a replaced private file is deleted once the save has committed.
-    if (def.private && def.fields.some((f) => f.kind === 'asset' && f.name in data)) {
-      await this.assetOwnership.deleteUnreferenced(def, documentId, saved.data);
-    }
-    return saved;
+    if (replaced.length) await this.assetOwnership.deleteDetached(replaced);
+    return this.get(apiId, documentId, 'draft', loc);
   }
 
   /**

@@ -22,6 +22,7 @@ import {
   type NestInterceptor,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { pipeline } from 'node:stream';
 import type { Request, Response } from 'express';
 import { CurrentUser, Public, RequirePermission, SessionAuthenticator, type RequestUser } from '@opencloudcms/oauth2';
 import { ASSETS_OPTIONS, DEFAULT_MAX_BYTES } from '../constants';
@@ -137,9 +138,10 @@ export class AssetsController {
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeRFC5987(asset.filename)}`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
     if (asset.size != null) res.setHeader('Content-Length', String(asset.size));
-    stream.on('error', () => res.destroy());
-    stream.pipe(res);
+    // pipeline destroys the file stream when the client aborts (no leaked handle) and the response on a read error.
+    pipeline(stream, res, () => {});
   }
 
   /** A 5-minute signed download URL for links that cannot send headers (decision 15). */

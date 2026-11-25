@@ -167,14 +167,17 @@ export class FakeDb {
       where: (col: string, op: string, v: unknown) => {
         if (op === '=' || op === '==') preds.push((r) => r[col] === v);
         else if (op === 'in') preds.push((r) => Array.isArray(v) && v.includes(r[col]));
+        else if (op === 'is') preds.push((r) => r[col] == null);
+        else if (op === '<') preds.push((r) => r[col] != null && (r[col] as any) < (v as any));
         else throw new Error(`FakeDb: unsupported delete op ${op}`);
         return q;
       },
+      returningAll: () => q,
       execute: async () => {
         const t = this.table(table);
-        const keep = t.filter((r) => !preds.every((p) => p(r)));
-        this.tables.set(table, keep);
-        return [];
+        const hit = t.filter((r) => preds.every((p) => p(r)));
+        this.tables.set(table, t.filter((r) => !preds.every((p) => p(r))));
+        return hit.map((r) => this.clone(r));
       },
     };
     return q;

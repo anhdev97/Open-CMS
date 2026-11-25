@@ -2,7 +2,7 @@ export type * from './types';
 export { ASSETS_OPTIONS, ASSETS_DB, STORAGE_PROVIDER, DEFAULT_MAX_BYTES, DEFAULT_IMAGE_SIZES, MAX_IMAGE_PIXELS } from './constants';
 export { slugifyFilename } from './seo/slug';
 export { missingAlt } from './seo/missing-alt';
-export { PRIVATE_KEY_PREFIX, isPrivateKey, type StorageProvider } from './provider/storage-provider';
+export { PRIVATE_KEY_PREFIX, isPrivateKey, type AssetVisibility, type StorageProvider } from './provider/storage-provider';
 export { sniffMime, acceptsMime, resolveUploadMime } from './sniff';
 export { ASSET_LINK_TTL_MS, deriveAssetLinkKey, signAssetLink, verifyAssetLink } from './nest/signed-link';
 export { createLocalServerProvider, localPrivateRoot } from './provider/local.provider';

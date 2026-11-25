@@ -90,18 +90,23 @@ export function acceptsMime(accept: readonly string[] | undefined | null, mime: 
 /** Text formats that sniff as `text/plain`; a declared one of these is kept when the field accepts it. */
 const TEXT_LIKE = /^(text\/[\w.+-]+|application\/(json|xml|csv))$/;
 
+/** Types a browser would render or run (markup, scripts in SVG/XML): private files are never stored with these. */
+const ACTIVE = new Set(['text/html', 'application/xhtml+xml', 'image/svg+xml', 'text/xml', 'application/xml', 'text/javascript', 'application/javascript']);
+
 /**
  * The stored type of an upload into a field with `accept`, or null when it is not acceptable. Binary formats must
  * sniff to an accepted type. Plain text cannot be told apart further, so a declared text-like type (`text/csv`,
- * `application/json`, …) is used when the field accepts it.
+ * `application/json`, …) is used when the field accepts it. Active types (HTML, XHTML, SVG, XML, JavaScript) are
+ * always stored as `text/plain`.
  */
 export function resolveUploadMime(buf: Buffer, declared: string | null | undefined, accept?: readonly string[] | null): string | null {
   const sniffed = sniffMime(buf);
+  let out: string | null = null;
   if (sniffed === 'text/plain') {
     const d = (declared ?? '').split(';')[0]!.trim().toLowerCase();
-    if (d && d !== 'text/plain' && TEXT_LIKE.test(d) && acceptsMime(accept, d)) return d;
+    if (d && d !== 'text/plain' && (TEXT_LIKE.test(d) || ACTIVE.has(d)) && acceptsMime(accept, d)) out = d;
   }
-  if (sniffed && acceptsMime(accept, sniffed)) return sniffed;
-  if (!sniffed && (!accept?.length || accept.some((a) => a.trim() === '*/*'))) return 'application/octet-stream';
-  return null;
+  if (!out && sniffed && acceptsMime(accept, sniffed)) out = sniffed;
+  if (!out && !sniffed && (!accept?.length || accept.some((a) => a.trim() === '*/*'))) out = 'application/octet-stream';
+  return out && ACTIVE.has(out) ? 'text/plain' : out;
 }

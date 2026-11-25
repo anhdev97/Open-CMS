@@ -89,7 +89,8 @@ export class PrivateEntriesService {
     try {
       return await write(await this.mapAssetValues(def, data, uploaded));
     } catch (e) {
-      for (const id of uploaded) await this.assets.deletePrivate(id).catch(() => {});
+      // Still unattached (the save rolled back); conditional, so nothing attached elsewhere is touched.
+      for (const id of uploaded) await this.assets.deletePrivate(id, { ownerDocumentId: null }).catch(() => {});
       throw e;
     }
   }

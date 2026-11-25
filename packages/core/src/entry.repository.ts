@@ -170,6 +170,7 @@ export class EntryRepository {
     locale: string,
     inTrx?: InTransaction,
     expectedUpdatedAt?: string,
+    afterWrite?: (trx: Kysely<any>, rowId: string) => Promise<void>,
   ): Promise<void> {
     const { main, l10n, rels } = this.split(def, data);
     await this.writeTx(def, async (trx) => {
@@ -195,6 +196,8 @@ export class EntryRepository {
           .execute();
       }
       await this.writeRelations(trx, def, id, rels);
+      // Still in the transaction, with the draft row locked: sees exactly what this save stored.
+      await afterWrite?.(trx, id);
     });
   }
 

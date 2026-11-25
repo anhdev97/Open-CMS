@@ -33,6 +33,14 @@
 
 ### Breaking changes
 
+- **`StorageProvider` gains `get(key, visibility?)`, and `put`/`delete` take an optional `visibility`**
+  (`'public'` default, `'private'` for private files). Custom providers must implement `get`. The local provider
+  stores private files in `assets.local.privateRoot` (default: `private-assets` next to `assets.local.root`; the two
+  may not contain each other, symlinks included). **The local `/media` middleware now answers 404 for any path with
+  a `private` or `private-assets` segment**: public files uploaded earlier into a media folder whose slug is
+  `private` (key `private/…`) are no longer served there; upload them again (moving a file does not change its key;
+  new uploads into such a folder get the key segment `private-folder`).
+
 - **Publishing a page without a path answers 422 `path_required`** (was 400 with a validation issue on `path`):
   `path` is now required by the page hooks for `kind: 'page'` only, since base pages have none.
 
