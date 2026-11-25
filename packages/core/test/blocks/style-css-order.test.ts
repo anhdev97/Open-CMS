@@ -185,9 +185,17 @@ describe('style classes win over token classes in the compiled CSS', () => {
   }
 
   it('Stack wrap:false keeps flex-nowrap the only flex-wrap class at every breakpoint', () => {
-    for (const direction of ['horizontal', { base: 'vertical', md: 'horizontal' }, { md: 'horizontal', lg: 'vertical' }]) {
+    const cases: [unknown, string[]][] = [
+      ['horizontal', ['flex-nowrap']],
+      [{ base: 'vertical', md: 'horizontal' }, ['flex-nowrap', 'md:flex-nowrap', 'lg:flex-nowrap']],
+      [{ md: 'horizontal', lg: 'vertical' }, ['flex-nowrap', 'md:flex-nowrap', 'lg:flex-nowrap']],
+    ];
+    for (const [direction, nowrap] of cases) {
       const cls = rootClass(renderToString(h(ui.Stack, { direction, wrap: false } as any, 'x'))).split(' ');
       expect(cls.filter((c) => /flex-wrap$/.test(c))).toEqual([]);
+      expect(cls.filter((c) => /flex-nowrap$/.test(c))).toEqual(nowrap);
+      // Compiled: no flex-wrap rule at all, so nowrap holds at every width.
+      expect(declarations(tw.build(cls), cls).filter((d) => d.prop === 'flex-wrap').map((d) => d.cls)).toEqual(nowrap);
     }
   });
 });

@@ -277,7 +277,8 @@ panel and validated on save (422 `invalid_block` with the path of a bad value):
 - **`ThemeStyle`:** render `<ThemeStyle theme={theme} />` (from `@opencloudcms/core/blocks`, server-safe) in the
   website `<head>`; it writes `:root{--ocms-color-<name>:<hex>;…}` for `activePalette`, or for `palette="night"`. An
   invalid theme renders nothing (one console warning).
-- **Hand-written and ejected TSX blocks:** every `ui` primitive takes `style`. For your own elements,
+- **Hand-written and ejected TSX blocks:** every `ui` primitive takes `style`; Export as TSX prints each node's `style`
+  and its layout props (`tracks`, responsive `direction`, `justify`, `wrap`, `fit`, `aspect`, …) as literals. For your own elements,
   `ui.styleProps(style, display?)` returns `{ className, style }`; put your token classes first and its classes last
   through tailwind-merge (`cn`/`twMerge`), since Tailwind emits `h-(--ocms-h)` before `h-9` and a plain string join
   lets the token class win:

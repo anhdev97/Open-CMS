@@ -252,6 +252,115 @@ describe('printEjectedBlockTsx', () => {
   });
 });
 
+const styledSpec: ComposedBlockSpec = {
+  id: 'blk_styled01',
+  name: 'StyledBand',
+  label: L('Styled band'),
+  category: 'Marketing',
+  version: 1,
+  fields: {},
+  tree: {
+    el: 'Box',
+    style: { padding: { base: { t: '8', b: '8' }, md: { t: '24px' } }, background: 'brand:surface', hidden: { lg: true } },
+    children: [
+      {
+        el: 'Columns',
+        props: { tracks: { base: ['1fr'], md: ['2fr', 'auto', '240px'] }, alignY: 'center', gapX: '24px', gapY: '4' },
+        style: { borderWidth: '1', borderSides: ['b'], borderColor: '#cfcab9', radius: 'none' },
+        children: [
+          {
+            el: 'Stack',
+            props: { direction: { base: 'vertical', md: 'horizontal' }, align: { base: 'start', lg: 'center' }, justify: 'between', wrap: false, gap: '2' },
+            style: { span: { md: 2 }, maxWidth: '640px' },
+            children: [
+              { el: 'Heading', props: { level: 1, text: 'Hi' }, style: { color: 'brand:ink', margin: { b: '-4px' } } },
+              { el: 'Text', props: { text: 'Body', size: 'lg' }, style: { color: '#123' } },
+              { el: 'Button', props: { label: 'Go', href: '/go', variant: 'link', size: 'sm' }, style: { background: 'brand:accent', color: 'brand:accent-ink', radius: '0px', height: '12' } },
+              { el: 'Badge', props: { text: 'New' }, style: { color: 'primary', width: 'auto' } },
+              { el: 'Stack', props: { direction: 'horizontal', wrap: true } },
+            ],
+          },
+          { el: 'Image', props: { src: '/a.png', alt: 'A', fit: 'contain', aspect: { base: 'square', md: '3/2' }, rounded: true }, style: { height: { md: '100%' } } },
+          { el: 'Grid', props: { columns: 2 }, style: { minHeight: '320px' } },
+          { el: 'Card', props: { bordered: false }, style: { padding: { l: '4' } } },
+        ],
+      },
+      { el: 'Divider', style: { margin: { t: '0', b: '0' } } },
+      { el: 'Spacer', props: { size: '4' }, style: { hidden: { base: true } } },
+      { el: 'Price', props: { value: 5 }, style: { color: 'muted' } },
+      { el: 'Date', props: { value: '2026-01-02' }, style: { color: 'muted' } },
+    ],
+  },
+};
+
+describe('printEjectedBlockTsx: style and layout props', () => {
+  it('prints style on every element and the new props; renders identically', () => {
+    const { source } = same(styledSpec, [{ _locale: 'en-US' }, { _locale: 'vi-VN', _editor: true }]);
+    expect(source).toContain("direction={{ base: 'vertical', md: 'horizontal' }}");
+    expect(source).toContain('justify="between" wrap={false}');
+    expect(source).toContain("tracks={{ base: ['1fr'], md: ['2fr', 'auto', '240px'] }}");
+    expect(source).toContain('alignY="center" gapX="24px" gapY="4"');
+    expect(source).toContain("fit=\"contain\" aspect={{ base: 'square', md: '3/2' }}");
+    expect(source).toContain("<ui.Divider style={{ margin: { t: '0', b: '0' } }} />");
+    expect((source.match(/ style=\{\{/g) ?? []).length).toBe(14);
+    const out = html(loadEjected(source), {});
+    expect(out).toContain('--ocms-cols-md:minmax(0,2fr) auto 240px');
+    expect(out).toContain('flex-nowrap md:flex-nowrap lg:flex-nowrap');
+  });
+
+  it('leaves out invalid style properties (the renderer skips them too)', () => {
+    const spec: ComposedBlockSpec = {
+      ...styledSpec,
+      tree: { el: 'Box', style: { background: 'red;x:url(y)', color: 'brand:ink', width: '1e9px' } as never, children: [] },
+    };
+    // A saved block is validated, so this only happens to a hand-edited spec: print, do not define.
+    const source = printEjectedBlockTsx(spec);
+    expect(source).toContain("<ui.Box style={{ color: 'brand:ink' }}></ui.Box>");
+    expect(source).not.toContain('url(');
+  });
+});
+
+describe('printEjectedBlockTsx: my-store composed blocks', () => {
+  const storeBlocks = path.resolve(__dirname, '../../../examples/my-store/src/blocks');
+  const loadSpec = (name: string): ComposedBlockSpec => {
+    const jiti = createJiti(path.join(storeBlocks, name), { moduleCache: false, fsCache: false, interopDefault: false, virtualModules: { '@opencloudcms/core/blocks': blocks } });
+    const def = (jiti(path.join(storeBlocks, name, `${name}.block.ts`)) as { default: blocks.ComposedBlockDefinition }).default;
+    expect(def.composed, name).toBe(true);
+    return def.spec;
+  };
+  /** Field defaults, with a sample for image fields and slots. */
+  const sampleProps = (spec: ComposedBlockSpec): Record<string, unknown> => {
+    const def = blocks.defineComposedBlock(spec);
+    const props: Record<string, unknown> = {};
+    for (const [k, f] of Object.entries(def.fields) as [string, { type?: string; default?: unknown }][]) {
+      if (f.type === 'image') props[k] = { src: 'https://cdn.example/hero.webp', alt: 'Hero' };
+      else if (f.type === 'slot') props[k] = '[slot]';
+      else if (f.default !== undefined) props[k] = f.default;
+    }
+    return props;
+  };
+  const products = [
+    entry('p1', { image: { id: 'a', url: 'https://cdn.example/1.webp', alt: 'One' } }),
+    entry('p2', { price: { amount: 150000, currency: 'VND' } }),
+    entry('p3'),
+  ];
+  for (const name of ['store-header', 'store-hero', 'section-head', 'story-band', 'store-footer', 'featured-products']) {
+    it(`${name} renders the same HTML ejected as composed`, () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const spec = loadSpec(name);
+      const base = { ...sampleProps(spec), ...(spec.binding?.mode === 'collection' ? { entries: products } : {}) };
+      const { source } = same(spec, [
+        { ...base, _locale: 'en-US' },
+        { ...base, _locale: 'vi-VN', _editor: true },
+        ...(spec.binding?.mode === 'collection' ? [{ ...base, entries: [], _locale: 'en-US', _editor: true }] : []),
+      ]);
+      // Every styled node of the spec keeps its style in the ejected source.
+      const styled = (n: ComposedBlockSpec['tree']): number => (n.style && Object.keys(n.style).length ? 1 : 0) + (n.children ?? []).reduce((a, c) => a + styled(c), 0);
+      expect((source.match(/ style=\{/g) ?? []).length).toBe(styled(spec.tree));
+    });
+  }
+});
+
 describe('ejectComposedBlock', () => {
   const cfg = (root: string) => resolveConfig({ database: { url: 'x' } } as any, root);
 

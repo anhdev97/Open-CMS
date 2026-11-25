@@ -8,7 +8,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { BindSource, ComposedBlockSpec, ComposedField, ComposedNode, LocalizedText, ResolvedConfig } from '@opencloudcms/schema';
+import { validateNodeStyle, type BindSource, type ComposedBlockSpec, type ComposedField, type ComposedNode, type LocalizedText, type ResolvedConfig } from '@opencloudcms/schema';
 import { blocksDir, printLiteral, writeComposedBlocks } from './blocks';
 
 const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -151,6 +151,24 @@ function tokens(p: Record<string, unknown>, keys: string[]): string[] {
   return keys.filter((k) => p[k] !== undefined).map((k) => attrLit(k, p[k]));
 }
 
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * `style={…}` of a node: its `style` as a literal, without the top-level properties that fail validation (the renderer
+ * skips invalid values too). Nothing when there is no valid property.
+ */
+function styleAttr(n: ComposedNode): string[] {
+  if (!isObj(n.style)) return [];
+  const bad = new Set(validateNodeStyle(n.style, []).map((i) => String(i.path[0])));
+  const ok = Object.fromEntries(Object.entries(n.style).filter(([k, v]) => v !== undefined && !bad.has(k)));
+  return Object.keys(ok).length ? [attrExpr('style', printLiteral(ok))] : [];
+}
+
+/** Non-empty string props (Columns `gapX` / `gapY`), as the renderer's `str`. */
+function strings(p: Record<string, unknown>, keys: string[]): string[] {
+  return keys.filter((k) => typeof p[k] === 'string' && p[k] !== '').map((k) => attrLit(k, p[k]));
+}
+
 function element(tag: string, attrs: string[], children: Out[] | null, indent: string): string {
   const open = `<${tag}${attrs.length ? ' ' + attrs.join(' ') : ''}`;
   if (!children) return `${open} />`;
@@ -162,43 +180,49 @@ function element(tag: string, attrs: string[], children: Out[] | null, indent: s
 
 function body(g: Gen, n: ComposedNode, indent: string): Out {
   const p = n.props ?? {};
+  const st = styleAttr(n);
   const kids = (): Out[] => (n.children ?? []).map((c) => node(g, c, indent + '  '));
   const jsx = (code: string): Out => ({ jsx: true, code });
+  // Same props as the composed renderer (composed/render.tsx), in the same order, then `style`.
   switch (n.el) {
     case 'Box':
-      return jsx(element('ui.Box', tokens(p, ['padding', 'background']), kids(), indent));
-    case 'Stack':
-      return jsx(element('ui.Stack', [attrLit('direction', p.direction === 'horizontal' ? 'horizontal' : 'vertical'), ...tokens(p, ['gap', 'align'])], kids(), indent));
+      return jsx(element('ui.Box', [...tokens(p, ['padding', 'background']), ...st], kids(), indent));
+    case 'Stack': {
+      const direction = isObj(p.direction) ? p.direction : p.direction === 'horizontal' ? 'horizontal' : 'vertical';
+      const wrap = typeof p.wrap === 'boolean' ? [attrLit('wrap', p.wrap)] : [];
+      return jsx(element('ui.Stack', [attrLit('direction', direction), ...tokens(p, ['gap', 'align', 'justify']), ...wrap, ...st], kids(), indent));
+    }
     case 'Columns':
-      return jsx(element('ui.Columns', tokens(p, ['count', 'gap']), kids(), indent));
+      return jsx(element('ui.Columns', [...tokens(p, ['count', 'gap', 'tracks', 'alignY']), ...strings(p, ['gapX', 'gapY']), ...st], kids(), indent));
     case 'Grid':
-      return jsx(element('ui.Grid', tokens(p, ['columns', 'gap']), kids(), indent));
+      return jsx(element('ui.Grid', [...tokens(p, ['columns', 'gap']), ...st], kids(), indent));
     case 'Card':
-      return jsx(element('ui.Card', [...tokens(p, ['padding', 'background']), ...(p.bordered === false ? ['bordered={false}'] : [])], kids(), indent));
+      return jsx(element('ui.Card', [...tokens(p, ['padding', 'background']), ...(p.bordered === false ? ['bordered={false}'] : []), ...st], kids(), indent));
     case 'Slot': {
       const name = g.slots.get(n);
       return { jsx: false, code: name ? `${propExpr(name)} ?? null` : 'null' };
     }
     case 'Heading':
-      return jsx(element('ui.Heading', [attrLit('level', p.level ?? 2), textAttr('text', val(g, n, 'text')), ...tokens(p, ['align'])], null, indent));
+      return jsx(element('ui.Heading', [attrLit('level', p.level ?? 2), textAttr('text', val(g, n, 'text')), ...tokens(p, ['align']), ...st], null, indent));
     case 'Text': {
       const html = val(g, n, 'html');
       const htmlAttr = 'expr' in html ? [attrExpr('html', `${html.expr} ?? undefined`)] : html.lit === undefined || html.lit === null ? [] : [attrLit('html', html.lit)];
-      return jsx(element('ui.Text', [textAttr('text', val(g, n, 'text')), ...htmlAttr, ...tokens(p, ['size', 'color'])], null, indent));
+      return jsx(element('ui.Text', [textAttr('text', val(g, n, 'text')), ...htmlAttr, ...tokens(p, ['size', 'color']), ...st], null, indent));
     }
     case 'Image': {
       const explicitAlt = !!n.bind?.alt || p.alt !== undefined;
       const args = [code(val(g, n, 'src')), ...(explicitAlt ? [code(val(g, n, 'alt'))] : [])];
-      const img = element('ui.Image', ['src={img.src}', 'alt={img.alt}', ...tokens(p, ['ratio']), ...(p.rounded === true ? ['rounded'] : [])], null, indent);
+      const attrs = ['src={img.src}', 'alt={img.alt}', ...tokens(p, ['ratio']), ...(p.rounded === true ? ['rounded'] : []), ...tokens(p, ['fit', 'aspect']), ...st];
+      const img = element('ui.Image', attrs, null, indent);
       return { jsx: false, code: `h.when(h.image(${args.join(', ')}), (img) => ${img})` };
     }
     case 'Button':
-      return jsx(element('ui.Button', [textAttr('label', val(g, n, 'label')), attrExpr('href', `h.href(${code(val(g, n, 'href'))})`), ...tokens(p, ['variant', 'size'])], null, indent));
+      return jsx(element('ui.Button', [textAttr('label', val(g, n, 'label')), attrExpr('href', `h.href(${code(val(g, n, 'href'))})`), ...tokens(p, ['variant', 'size']), ...st], null, indent));
     case 'Badge':
-      return jsx(element('ui.Badge', [textAttr('text', val(g, n, 'text')), ...tokens(p, ['variant'])], null, indent));
+      return jsx(element('ui.Badge', [textAttr('text', val(g, n, 'text')), ...tokens(p, ['variant']), ...st], null, indent));
     case 'Price': {
       g.usesLocale = true;
-      const attrs = ['value={m.value}', 'locale={locale}', ...(p.showCurrency === false ? [] : ['currency={m.currency}'])];
+      const attrs = ['value={m.value}', 'locale={locale}', ...(p.showCurrency === false ? [] : ['currency={m.currency}']), ...st];
       return { jsx: false, code: `h.when(h.money(${code(val(g, n, 'value'))}), (m) => ${element('ui.Price', attrs, null, indent)})` };
     }
     case 'Date': {
@@ -208,13 +232,14 @@ function body(g: Gen, n: ComposedNode, indent: string): Out {
         'locale={locale}',
         attrLit('format', p.format === 'long' ? 'long' : 'short'),
         ...(typeof p.timeZone === 'string' && p.timeZone ? [attrLit('timeZone', p.timeZone)] : []),
+        ...st,
       ];
       return jsx(element('ui.DateText', attrs, null, indent));
     }
     case 'Divider':
-      return jsx('<ui.Divider />');
+      return jsx(element('ui.Divider', st, null, indent));
     case 'Spacer':
-      return jsx(element('ui.Spacer', [attrLit('size', p.size ?? '8')], null, indent));
+      return jsx(element('ui.Spacer', [attrLit('size', p.size ?? '8'), ...st], null, indent));
     default:
       return { jsx: false, code: 'null' };
   }

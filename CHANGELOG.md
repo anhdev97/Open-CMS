@@ -142,7 +142,8 @@
     rendering byte-identical classes.
   - **For ejected and hand-written TSX blocks:** `ui.styleProps(style, display?)` (`{ className, style }`),
     `ui.cssLength`, `ui.cssColor`, `ui.cssTracks`, `ui.resolveTracks` and `ui.layoutStyle`; every `ui` primitive takes
-    `style`.
+    `style`. **Export as TSX** prints each node's `style` (valid properties only) as a `style={…}` literal and the new
+    props (responsive values as object literals), so the ejected block renders the same HTML.
   - **Library `Columns`:** a `tracks` field (column-width presets per breakpoint, up to 6) and slots 5–6; stored
     `columns` still renders as before.
 - **Brand themes.** `src/theme.ts` exports `defineTheme({ colors, palettes, activePalette })` (from
