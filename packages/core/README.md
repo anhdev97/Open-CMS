@@ -463,7 +463,7 @@ A type with `private: true` (and fields with `readOnly: true`) holds data the ad
   preflight (404, no CORS headers). There is no public reference expansion.
 - An entry has one row (`status = 'draft'`) and is never published: `publish`, `approve`, `unpublish`, `submit`,
   `withdraw` and `reject` answer 409 `private_type`.
-- The admin API never writes `readOnly` fields: on create a non-null value is 422 `read_only` (with the paths); on
+- The admin API never writes `readOnly` fields: on create a non-empty value (not null, `''` or `[]`) is 422 `read_only` (with the paths); on
   update an unchanged value is ignored and a changed one is 422 `read_only`. This holds for every type.
 - Page and block builder pickers leave private types out; a block bound to one resolves to nothing
   (`ContentFetcher.privateApiIds`) and the editor shows a warning.

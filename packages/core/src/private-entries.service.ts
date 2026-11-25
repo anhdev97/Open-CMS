@@ -2,7 +2,7 @@
  * Server API for private content types (spec §7, decision 13): project modules inject this to create and change
  * entries that the public never sees, including `readOnly` fields that the admin API refuses to write.
  */
-import { Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import type { ContentTypeDefinition } from '@opencloudcms/schema';
 import type { RequestUser } from '@opencloudcms/oauth2';
 import { EntriesService, type ListParams } from './entries.service';
@@ -25,7 +25,7 @@ export type PrivateListParams = Omit<ListParams, 'status' | 'workflow' | 'mainWh
 /**
  * Same field validation and registered entry hooks as the admin API, may write `readOnly` fields, never publishes.
  * Each call runs in its own transaction (the repository's write transaction). Private types have no localizable
- * fields, so every call works in the default locale. Calls for a type that is not private throw.
+ * fields, so every call works in the default locale. Calls for a type that is not private throw 400 `not_private`.
  */
 @Injectable()
 export class PrivateEntriesService {
@@ -37,7 +37,9 @@ export class PrivateEntriesService {
 
   private def(apiId: string): ContentTypeDefinition {
     const def = this.registry.get(apiId);
-    if (!def.private) throw new Error(`"${apiId}" is not a private content type: use EntriesService for public types`);
+    if (!def.private) {
+      throw new BadRequestException({ code: 'not_private', message: `"${apiId}" is not a private content type: use EntriesService for public types` });
+    }
     return def;
   }
 

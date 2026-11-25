@@ -23,13 +23,17 @@ export interface ListParams {
   mainWhere?: Record<string, string | boolean>;
 }
 
-/**
- * Write options for trusted server-side callers. `writeReadOnly`: may write `readOnly` fields (only the server API,
- * `PrivateEntriesService`, sets it; the admin API never does).
- */
+/** Write options for trusted server-side callers. */
 export interface EntryWriteOptions {
+  /**
+   * @internal Bypasses the admin API's `readOnly` rule. Only `PrivateEntriesService` sets it; request handlers must
+   * never pass it.
+   */
   writeReadOnly?: boolean;
 }
+
+/** Same as the schema validator's emptiness: null, undefined, '' and [] all mean "no value". */
+const isEmpty = (v: unknown): boolean => v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0);
 
 /** JSON with sorted object keys, so that `{ a, b }` and `{ b, a }` compare equal. */
 function canonical(v: unknown): string {
@@ -40,7 +44,7 @@ function canonical(v: unknown): string {
 
 /** Whether a submitted (validated) value equals the stored one, the way the repository reads it back. */
 function sameValue(field: FieldDefinition, sent: unknown, stored: unknown): boolean {
-  if (sent == null || stored == null) return sent == null && stored == null;
+  if (isEmpty(sent) || isEmpty(stored)) return isEmpty(sent) && isEmpty(stored);
   if (field.kind === 'money') {
     const a = sent as { amount?: unknown; currency?: unknown };
     const b = stored as { amount?: unknown; currency?: unknown };
@@ -106,9 +110,9 @@ export class EntriesService {
     }
   }
 
-  /** Decision 12, create: any non-null readOnly value is rejected. */
+  /** Decision 12, create: any non-empty readOnly value is rejected. */
   private checkReadOnlyCreate(def: ContentTypeDefinition, data: Row): void {
-    const paths = def.fields.filter((f) => f.readOnly && data[f.name] != null).map((f) => f.name);
+    const paths = def.fields.filter((f) => f.readOnly && !isEmpty(data[f.name])).map((f) => f.name);
     if (paths.length) throw readOnlyError(paths);
   }
 

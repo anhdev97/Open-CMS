@@ -153,6 +153,11 @@ describe('private content types (spec §7)', () => {
       const ok = await post('/api/admin/content/order', { code: 'B-1', items: null });
       expect(ok.status).toBe(201);
       expect(ok.body.data).toMatchObject({ code: 'B-1', items: null, total: null, state: 'pending' });
+      // Empty values ('' and [] like null, as the schema validator treats them) are not writes.
+      const empty = await post('/api/admin/content/order', { code: 'B-2', items: [] });
+      expect(empty.status).toBe(201);
+      const emptyText = await post('/api/admin/content/ticket', { subject: 'x', secret: '' });
+      expect(emptyText.status).toBe(201);
       // A type with a required readOnly field: only the server API can fill it.
       const tick = await post('/api/admin/content/ticket', { subject: 'Hi', secret: 's' });
       expect(tick.status).toBe(422);
@@ -170,6 +175,10 @@ describe('private content types (spec §7)', () => {
       const changed = await patch(`/api/admin/content/order/${orderId}`, { state: 'shipped', total: { amount: 1, currency: 'EUR' } });
       expect(changed.status).toBe(422);
       expect(changed.body.error).toMatchObject({ code: 'read_only', issues: [{ path: 'total' }] });
+      const b1 = (await call('/api/admin/content/order?filter[code]=B-1')).body.data[0].documentId;
+      const sameEmpty = await patch(`/api/admin/content/order/${b1}`, { state: 'x', items: [], total: null });
+      expect(sameEmpty.status).toBe(200);
+      expect(sameEmpty.body.data).toMatchObject({ state: 'x', items: null, total: null });
       const cleared = await patch(`/api/admin/content/order/${orderId}`, { items: null });
       expect(cleared.status).toBe(422);
       expect(cleared.body.error.issues[0].path).toBe('items');
@@ -221,7 +230,8 @@ describe('private content types (spec §7)', () => {
     });
 
     it('refuses types that are not private', async () => {
-      await expect(service().create('product', { title: 'x' })).rejects.toThrow(/not a private content type/);
+      await expect(service().create('product', { title: 'x' })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/not a private content type/) });
+      await expect(service().list('product')).rejects.toMatchObject({ status: 400 });
       await expect(service().list('nope', {})).rejects.toMatchObject({ status: 404 });
     });
   });
