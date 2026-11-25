@@ -285,6 +285,33 @@ defineContentType({
    warning (not a publish blocker) and the runtime opens the first. Overlay blocks cannot be placed inside a
    collection item template (they are blocks, not elements).
 
+9. **Private file ownership:** `assets` also gains `owner_api_id` and `owner_document_id` (in `0008_private_assets`).
+   A private file belongs to exactly one private entry (no sharing); asset fields of public types reject private
+   asset ids. Server API uploads happen inside the create/update call, so the owner is set at once. Admin uploads into
+   a private field go to `POST /api/admin/content/:apiId/assets` and are owned by the uploader until the entry saves;
+   unattached uploads are deleted after 24 h. Replacing a file deletes the old one on save; deleting the entry deletes
+   its files. The download check is `content.read` on `owner_api_id`.
+10. **Switching `private` on a type with entries is refused:** the generated migration aborts with a clear message
+    if the table has rows (empty the type or export first). No file moves, no row promotion; new types and empty types
+    switch freely.
+11. **Versions:** private entries keep recording versions like drafts do today (admin-only history of edits); there is
+    no publish of versions. Retention/purge is a later phase (non-goal).
+12. **`readOnly` in the admin API:** on update, a readOnly field whose value equals the stored one is ignored, a
+    changed value is rejected (422 with the path); on create, any non-null readOnly value is rejected. The admin hides
+    "Create" for a type that has a required readOnly field (only the server API can create those). `readOnly` is new
+    in the field schema and snapshot; adding or removing it is not a breaking change (no DDL).
+13. **`PrivateEntriesService`:** an injectable Nest service exported from `@opencloudcms/core` (project modules inject
+    it). Same field validation and registered entry hooks as the admin API; actor `system` (no `createdBy`) unless the
+    caller passes `{ user }`; each call runs in its own transaction (sharing the caller's transaction is a later
+    addition).
+14. **Other exposure paths checked:** public content controllers and CORS, page/block data binding and the editor
+    pickers, reference expansion, static media. Admin-only endpoints (`/api/admin/meta`, schema builder) may list
+    private types. Core has no webhooks, search or sitemap today; whoever adds them must skip private types (noted in
+    the core README).
+15. **Signed links:** `POST /api/admin/assets/:id/link` (same permission as download) returns `{ url, expiresAt }`;
+    the token is an HMAC over asset id, expiry and user id, keyed by a key derived from the existing auth secret; it is
+    checked without a session and expires after 5 minutes.
+
 ## Constraints
 
 - Puck 0.24.1 pinned; Tailwind v4 literal classes only; `@opencloudcms/schema` has no `node:*`; blocks `ui` stays
