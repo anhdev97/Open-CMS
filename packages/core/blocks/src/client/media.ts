@@ -35,3 +35,32 @@ export function perBreakpoint<T>(v: Responsive<T> | undefined, fallback: T, ok: 
   const lg = ok(r.lg) ? r.lg : md;
   return { base, md, lg };
 }
+
+const EDGE = 8;
+/** Far enough left that the measured box never reaches the right edge (overflow to the left is not scrollable). */
+const PARK = 100000;
+
+/** Horizontal shift that brings [left, right] inside [8, vw - 8] (the left edge wins when it does not fit). */
+export function clampShift(left: number, right: number, vw: number): number {
+  let dx = Math.min(0, vw - EDGE - right);
+  if (left + dx < EDGE) dx = EDGE - left;
+  return dx;
+}
+
+/**
+ * Shifts a shown, absolutely positioned box horizontally into the viewport with an inline `transform: translateX()`
+ * (which adds to Tailwind's `translate` centring). Its unshifted box is measured while parked far to the left, so the
+ * page never lays out with it past the right edge: that would add scrollable overflow and, on mobile browsers, widen
+ * the layout viewport for as long as the box stays shown. Returns false when the box is not displayed (no change).
+ */
+export function shiftIntoViewport(el: HTMLElement): boolean {
+  el.style.transform = `translateX(-${PARK}px)`;
+  const r = el.getBoundingClientRect();
+  if (r.width === 0 && r.height === 0) {
+    el.style.transform = '';
+    return false;
+  }
+  const dx = clampShift(r.left + PARK, r.right + PARK, el.ownerDocument.documentElement.clientWidth);
+  el.style.transform = dx ? `translateX(${dx}px)` : '';
+  return true;
+}

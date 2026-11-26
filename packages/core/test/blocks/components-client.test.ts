@@ -58,6 +58,13 @@ const key = (el: Element, k: string) =>
     el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
   });
 const click = (el: HTMLElement) => act(() => el.click());
+/** Layout stub: `el` is a box at [left, left + width] before its inline `translateX` (which moves it, as in a browser). */
+const boxAt = (el: HTMLElement, left: number, width: number) =>
+  vi.spyOn(el, 'getBoundingClientRect').mockImplementation(() => {
+    const dx = Number(/translateX\((-?[\d.]+)px\)/.exec(el.style.transform)?.[1] ?? 0);
+    const l = left + dx;
+    return { left: l, right: l + width, width, height: 20, top: 0, bottom: 20, x: l, y: 0, toJSON: () => ({}) } as DOMRect;
+  });
 
 // ---- Dropdown
 
@@ -229,7 +236,7 @@ describe('Dropdown', () => {
     Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 375 });
     try {
       mount(menu({ openOn: 'click' }));
-      vi.spyOn(panel(), 'getBoundingClientRect').mockReturnValue({ left: 254, right: 446, width: 192, height: 80, top: 40, bottom: 120, x: 254, y: 40, toJSON: () => ({}) } as DOMRect);
+      boxAt(panel(), 254, 192);
       pointer('pointerdown', toggle(), 'touch');
       click(toggle());
       expect(toggle().getAttribute('aria-expanded')).toBe('true');
@@ -246,7 +253,7 @@ describe('Dropdown', () => {
     Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 375 });
     try {
       mount(menu({ display: 'inline' }));
-      vi.spyOn(panel(), 'getBoundingClientRect').mockReturnValue({ left: 254, right: 446, width: 192, height: 80, top: 40, bottom: 120, x: 254, y: 40, toJSON: () => ({}) } as DOMRect);
+      boxAt(panel(), 254, 192);
       click(toggle());
       expect(toggle().getAttribute('aria-expanded')).toBe('true');
       expect(panel().style.transform).toBe('');
@@ -569,8 +576,7 @@ describe('Tooltip bubble', () => {
   const tip = () =>
     h(Tooltip, { text: 'Free delivery', side: 'top', children: (tid: string) => h('button', { type: 'button', 'aria-describedby': tid }, 'Badge') });
   const bubble = () => $('[role="tooltip"]');
-  const rect = (left: number, width: number) =>
-    vi.spyOn(bubble(), 'getBoundingClientRect').mockReturnValue({ left, right: left + width, width, height: 20, top: 0, bottom: 20, x: left, y: 0, toJSON: () => ({}) } as DOMRect);
+  const rect = (left: number, width: number) => boxAt(bubble(), left, width);
   beforeEach(() => {
     Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 375 });
   });
@@ -594,12 +600,28 @@ describe('Tooltip bubble', () => {
   it('pointerenter and focusin move an overflowing bubble into the viewport with translateX; a fitting one gets none', () => {
     mount(tip());
     const wrap = $('.group\\/tooltip');
-    rect(150, 320);
+    const spy = rect(150, 320);
     pointer('pointerenter', wrap, 'mouse');
     expect(bubble().style.transform).toBe('translateX(-103px)');
+    // Measured parked far left: the page never lays it out past the right edge.
+    for (const r of spy.mock.results) expect((r.value as DOMRect).right).toBeLessThanOrEqual(367);
     rect(100, 100);
     act(() => $('button').focus());
     expect(bubble().style.transform).toBe('');
+  });
+
+  it('a touch pointerenter (before CSS shows the bubble) positions it already, with display forced only while measuring', () => {
+    mount(tip());
+    const b = bubble();
+    // CSS-hidden: no box unless display is forced inline.
+    vi.spyOn(b, 'getBoundingClientRect').mockImplementation(() => {
+      if (b.style.display !== 'block') return { left: 0, right: 0, width: 0, height: 0, top: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+      const dx = Number(/translateX\((-?[\d.]+)px\)/.exec(b.style.transform)?.[1] ?? 0);
+      return { left: 150 + dx, right: 470 + dx, width: 320, height: 20, top: 0, bottom: 20, x: 150 + dx, y: 0, toJSON: () => ({}) } as DOMRect;
+    });
+    pointer('pointerenter', $('.group\\/tooltip'), 'touch');
+    expect(b.style.transform).toBe('translateX(-103px)');
+    expect(b.style.display).toBe('');
   });
 
   it('Esc hides a shown bubble until the pointer has left and focus has left', () => {

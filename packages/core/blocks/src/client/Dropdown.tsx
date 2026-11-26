@@ -12,8 +12,7 @@ import { BUTTON_BASE, BUTTON_SIZE, BUTTON_VARIANT, cn, type ButtonVariant } from
 import { styleAttr, styleProps } from '../ui/style';
 import { subscribeOverlays } from './overlay-store';
 import { registerDropdown } from './dropdown-store';
-import { currentBreakpoint, perBreakpoint } from './media';
-import { clampShift } from './TooltipBubble';
+import { currentBreakpoint, perBreakpoint, shiftIntoViewport } from './media';
 
 export type DropdownDisplay = 'popover' | 'inline';
 export type DropdownPlacement = 'bottom-start' | 'bottom-end' | 'bottom';
@@ -173,9 +172,7 @@ export function Dropdown({
     if (!panel) return;
     panel.style.transform = '';
     if (!open || editor?.open || !popoverNow()) return;
-    const r = panel.getBoundingClientRect();
-    const dx = clampShift(r.left, r.right, panel.ownerDocument.documentElement.clientWidth);
-    if (dx) panel.style.transform = `translateX(${dx}px)`;
+    shiftIntoViewport(panel);
   }, [open]);
 
   const onPointerEnter = (e: PointerEvent) => {

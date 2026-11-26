@@ -2,12 +2,14 @@
 // The bubble of a Tooltip: the same `<span role="tooltip">` as the server HTML (shown with CSS `group-hover/tooltip:` /
 // `group-focus-within/tooltip:`), plus two client behaviours on its wrapper (the parent element):
 // - when shown (pointerenter / focusin) it is moved horizontally into the viewport with an 8 px margin, using an inline
-//   `transform: translateX()` so Tailwind's `translate` centring stays;
+//   `transform: translateX()` so Tailwind's `translate` centring stays (`shiftIntoViewport`: measured parked off to the
+//   left, so the page is never laid out with the bubble past the right edge);
 // - while shown, Esc hides it (`display: none`) until the pointer has left and focus has left the wrapper (WCAG 1.4.13).
 // No browser globals at import time.
 import { useEffect, useRef } from 'react';
+import { shiftIntoViewport } from './media';
 
-const MARGIN = 8;
+export { clampShift } from './media';
 
 export type TooltipBubbleProps = {
   id: string;
@@ -16,13 +18,6 @@ export type TooltipBubbleProps = {
   /** Builder canvas: the bubble is forced open; no Esc handling. */
   forced?: boolean;
 };
-
-/** Horizontal shift that brings [left, right] inside [MARGIN, vw - MARGIN] (left edge wins when it does not fit). */
-export function clampShift(left: number, right: number, vw: number): number {
-  let dx = Math.min(0, vw - MARGIN - right);
-  if (left + dx < MARGIN) dx = MARGIN - left;
-  return dx;
-}
 
 export function TooltipBubble({ id, className, text, forced }: TooltipBubbleProps) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -41,23 +36,16 @@ export function TooltipBubble({ id, className, text, forced }: TooltipBubbleProp
     }
     let focused = host.contains(doc.activeElement);
     let dismissed = false;
-    let frame = 0;
 
-    const clamp = () => {
-      bubble.style.transform = '';
-      const r = bubble.getBoundingClientRect();
-      if (r.width === 0 && r.height === 0) return false; // not displayed (yet)
-      const dx = clampShift(r.left, r.right, doc.documentElement.clientWidth);
-      bubble.style.transform = dx ? `translateX(${dx}px)` : '';
-      return true;
-    };
+    // Positioned before CSS shows it: a touch's pointerenter comes before `:hover` applies, and the browser lays the
+    // page out for the tap's hit test before any later event, so the bubble is measured with `display` forced for the
+    // duration of this call (no paint in between) and is already in place when hover or focus reveals it.
     const show = () => {
       if (dismissed) return;
-      const win = doc.defaultView;
-      if (!clamp() && win) {
-        win.cancelAnimationFrame(frame);
-        frame = win.requestAnimationFrame(() => void clamp());
-      }
+      const display = bubble.style.display;
+      bubble.style.display = 'block';
+      shiftIntoViewport(bubble);
+      bubble.style.display = display;
     };
     const maybeRestore = () => {
       if (hovered || focused || !dismissed) return;
@@ -94,7 +82,6 @@ export function TooltipBubble({ id, className, text, forced }: TooltipBubbleProp
     doc.addEventListener('keydown', onKey);
     if (forced) show();
     return () => {
-      doc.defaultView?.cancelAnimationFrame(frame);
       host.removeEventListener('pointerenter', onEnter);
       host.removeEventListener('pointerleave', onLeave);
       host.removeEventListener('focusin', onFocusIn);
