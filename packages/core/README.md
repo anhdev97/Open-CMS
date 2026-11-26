@@ -213,6 +213,8 @@ export default defineBlocks([...coreBlocks, ...composedBlocks, ProductGrid]);
   collection item), `Heading`, `Text`, `Image`, `Button`, `Badge`, `Price`, `Date`, `Divider`, `Spacer`. `props` take
   design tokens only (colors `primary`, `muted`, …; spacing `0`–`24`; sizes and variants such as `level: 1–4`,
   Button `variant`/`size`, Badge `variant`, Image `ratio`/`rounded`, Price `showCurrency`, Date `format`/`timeZone`).
+  Interactive and form elements (`Dropdown`, `Tooltip`, `Accordion`, `Tabs`, `Carousel`, `Icon`, `Input`, …), hover
+  colors and clickable images and cards: see [Builder components](#builder-components).
 - **Bind sources** (`bind: { <prop>: source }`): `{ from: 'entry', path }`, `{ from: 'entryUrl' }` (from
   `binding.urlPattern`, e.g. `/products/{slug}`), `{ from: 'field', name }` (a manual field), `{ from: 'const', value }`.
   Kinds must match: text props ← text/longText/slug/email, `Text.html` ← richText, `Image.src` ← asset/url, `Price` ←
@@ -229,7 +231,9 @@ export default defineBlocks([...coreBlocks, ...composedBlocks, ProductGrid]);
   (`GET /api/content/assets?ids=`, public, at most 100 ids, `{ id, url, alt, width, height, mimeType }`).
 - **Export as TSX** (eject) turns a composed block into an ordinary `<name>.block.tsx` built on the public `ui`
   primitives (`ui.Box`, `ui.Stack`, `ui.Columns`, `ui.Grid`, `ui.Card`, `ui.Heading`, `ui.Text`, `ui.Image`, `ui.Button`,
-  `ui.Badge`, `ui.Price`, `ui.DateText`, `ui.Divider`, `ui.Spacer`, `ui.layoutClass`, `ui.safeHref`) and
+  `ui.Badge`, `ui.Price`, `ui.DateText`, `ui.Divider`, `ui.Spacer`, `ui.layoutClass`, `ui.safeHref`, and for the
+  builder components `ui.Icon`, `ui.Tooltip`, `ui.Accordion`, `ui.AccordionItem`, `ui.Dropdown`, `ui.Tabs`,
+  `ui.Carousel`, `ui.Input`, `ui.Textarea`, `ui.Select`, `ui.Combobox`, `ui.Radio`, `ui.Checkbox`, `ui.Switch`) and
   `composedHelpers`; both are exported from `@opencloudcms/core/blocks` for hand-written blocks too. The block leaves
   `composed.ts`: add the printed import and list entry to `src/blocks/index.ts`.
 
@@ -386,6 +390,100 @@ export function HeaderButtons() {
     </>
   );
 }
+```
+
+### Builder components
+
+The Block Builder palette has an **Interactive** category (`Dropdown`, `Tooltip`, `Accordion`, `Tabs`, `Carousel`,
+`Icon`) and a **Form** category (`Input`, `Textarea`, `Select`, `Combobox`, `Radio`, `Checkbox`, `Switch`). They are
+ordinary composed nodes (`el`, `props`, `bind`, `showIf`, `children`, `style`); structure comes from the child
+elements. Text props (labels, titles, placeholders, help, tooltip text) are bindable like Button labels, so page
+editors can change them through block fields. Unknown props on these elements are rejected on save
+(422 `invalid_block`).
+
+| Element | Children | Props | Bindable |
+|---|---|---|---|
+| `Dropdown` | the panel content (no `Dropdown` at any depth, no `Overlay`, `Region`, `PageContent`) | `openOn`: `hover` \| `click` (default `hover`; touch always toggles on tap); `placement`: `bottom-start` \| `bottom-end` \| `bottom`; `display`: responsive `popover` \| `inline` (default `popover`; `inline` expands in the flow, for drawers); `triggerVariant`: a Button variant (default `ghost`); `chevron` (default `true`) | `label`, `href` (the label becomes a link and only the chevron toggles, so `href` needs `chevron: true`) |
+| `Tooltip` | exactly one target (not a `Tooltip`, `Dropdown` or form control) | `side`: `top` \| `bottom` \| `left` \| `right` | `text` (plain, ≤ 200 characters) |
+| `Accordion` | 1–30 `AccordionItem` | `single` (one open at a time), `defaultOpen`: `none` \| `first` | — |
+| `AccordionItem` | content | — | `title` |
+| `Tabs` | 1–12 `TabPanel` | `variant`: `underline` \| `pills`; `align`: `start` \| `center` \| `stretch` | — |
+| `TabPanel` | content | — | `label` |
+| `Carousel` | 1–20 slides (each child is a slide; not in a collection item) | `perView`: responsive 1–6; `gap`: spacing token; `arrows`, `dots` (default `true`); `loop`; `autoplay`: `'off'` or 3–10 seconds | — |
+| `Icon` | none | `name`: one of `ICON_NAMES` (70 lucide names, from `@opencloudcms/schema`); `size`: `sm` \| `md` \| `lg` \| `xl` | `label` (empty = decorative) |
+| `Input` | none | `name`; `type`: `text` \| `email` \| `tel` \| `number` \| `url` \| `password` \| `date`; `required`, `disabled`; `autocomplete` (an allow-listed token) | `label`, `placeholder`, `help` |
+| `Textarea` | none | `name`; `rows` 2–12 (default 4); `required`, `disabled` | `label`, `placeholder`, `help` |
+| `Select`, `Combobox` | none | `name`; `options`; `required`, `disabled`; `defaultValue` (one of the option values) | `label`, `placeholder`, `help` |
+| `Radio` | none | `name`; `options`; `orientation`: `vertical` \| `horizontal`; `required`, `disabled`; `defaultValue` | `label` (the legend), `help` |
+| `Checkbox` | none | `name`; `value` (default `on`); `defaultChecked`, `required`, `disabled` | `label`, `help` |
+| `Switch` | none | `name`; `defaultChecked`, `disabled` | `label`, `help` |
+
+- **Form controls are UI only: they do not submit.** There is no form element, action or server endpoint yet; the
+  controls render native, labelled HTML with their `name` attributes so a later form phase can use them. `name`
+  matches `^[A-Za-z][A-Za-z0-9_-]{0,63}$` (names may repeat). `options` is a static list of 1–100
+  `{ value, label }` (`value` non-empty, ≤ 100 characters and unique; `label` a string or localized text).
+- **Button icons:** a Button takes `icon` (an `ICON_NAMES` entry), `iconPosition: 'start' | 'end'` (default
+  `start`) and `iconOnly` (the label becomes the `aria-label`; the label stays required).
+- **Hover style:** `style.hover: { background?, color?, borderColor? }` (color values as in [Style](#style)) on `Box`,
+  `Card` and `Button` only. The Style panel's "On hover" section edits it ("Show hover" previews it). A node without
+  `hover` renders no new class or variable.
+- **Clickable images and containers:** `Image`, `Box` and `Card` take a bindable `href` and an `action` (as on
+  Button; `action` wins). With `href` the element renders as `<a>`, with `action` as `<button type="button">`, keeping
+  its classes plus a focus ring. A clickable Box or Card may not contain interactive content at any depth (Button,
+  clickable Image/Box/Card, Dropdown, Tooltip, Tabs, Accordion, Carousel, form controls, Slot); its accessible name
+  is its text, or the optional `ariaLabel` prop. A clickable Image needs an alt (a constant empty alt is an issue; a
+  missing one falls back to the block label). In a collection item, `href: { from: 'entryUrl' }` turns a whole card
+  into one link to its entry.
+- **Carousel collections:** `binding.layout: { kind: 'carousel', columns: 1–6 }` shows a list as a carousel
+  (`columns` in view on desktop, 2 or 3 on tablet, 1.25 on mobile so the next card peeks); the page-editor layout
+  field (`options.editorLayout`) then offers `carousel-<n>` besides `list` and `grid-<n>`.
+
+**Rendering and no-JS behaviour.** Everything is in the server HTML (all tab panels, accordion bodies, slides and
+dropdown panels), so content is indexed and readable before JavaScript loads.
+
+| Element | HTML | Without JavaScript | With JavaScript (`@opencloudcms/core/blocks/client`) |
+|---|---|---|---|
+| Dropdown | trigger `<button aria-expanded aria-controls>` (plus `<a>` with `href`), panel `role="group"` | a `popover` panel opens on hover and keyboard focus (CSS); an `inline` one stays closed | tap/click toggles, Esc closes and returns focus, ↑/↓/Home/End move in the panel, outside click, panel link click and navigation close it, closes with its overlay |
+| Tooltip | wrapper + bubble `role="tooltip"`; `aria-describedby` on the target's first focusable element (or the wrapper gets `tabindex="0"`) | shows on hover and focus (CSS) | — |
+| Accordion | `<details>` / `<summary>` per item | native; `single` uses the `name` attribute where supported | `single` closes the other items |
+| Tabs | `role="tablist"` of `role="tab"` buttons, every `role="tabpanel"` (all but the first `hidden`) | the first tab shows | ←/→/Home/End switch tabs (roving focus) |
+| Carousel | `<section aria-roledescription="carousel">`, scroll-snap track, slides `role="group" aria-label="n of N"` | swipe and scroll | arrows, dots, autoplay (paused on hover, focus, a hidden tab and `prefers-reduced-motion`, with a Pause button) |
+| Icon | inline `<svg>` (only the curated set is bundled) | — | — |
+| Input, Textarea, Select, Radio, Checkbox, Switch | `<label for>` + native control + help (`aria-describedby`); Radio is a `<fieldset>`/`<legend>`; Switch is a checkbox with `role="switch"` | native | — |
+| Combobox | a native `<select>` with the same name and options | native select | input `role="combobox"` + `role="listbox"`, filtered as you type (accent-insensitive) |
+
+**Accessibility notes.** Every interactive element works with the keyboard (Tab, Enter/Space, Esc, arrows per the
+ARIA pattern) and on touch, with the theme's focus ring. Give Icons that carry meaning a `label`, Switches a
+`label`, and clickable Images a real `alt`. A hover Dropdown also opens on keyboard focus and on tap; with a bound
+`href` its label navigates and the chevron button opens the panel. Autoplaying carousels pause themselves; keep
+autoplay off when slides carry long text. A Tooltip holds help text, not essential content (it is hidden until hover
+or focus). An `inline` Dropdown (drawers) needs JavaScript to open, as the drawer itself does.
+
+**Client components.** `@opencloudcms/core/blocks/client` (`'use client'`, ESM and CJS, no browser globals at
+import) exports the runtimes the renderer hydrates: `Dropdown`, `Tabs`, `Carousel`, `Combobox`, `AccordionSingle`,
+`closeAllDropdowns()` (the route watcher calls it on navigation) and `filterOptions`. The same `Dropdown`, `Tabs`,
+`Carousel` and `Combobox` are re-exported from `ui` as server-rendered shells for hand-written and ejected blocks.
+
+**Builder.** Hidden parts are editable in the Block Builder canvas: a selected Dropdown or Tooltip shows its panel or
+bubble, the selected TabPanel shows, accordion items render open and carousel slides sit side by side. `Accordion`
+and `Tabs` get "Add item" / "Add tab" buttons (items and panels are not in the palette and reorder by drag inside
+their parent). A **Templates** palette section inserts ready subtrees: *Nav menu (2 levels)*, *Mobile nav*
+(`display: inline`), *FAQ*, *Product tabs*, *Banner carousel* (`autoplay: 5`) and *Contact form*, with constant
+placeholder text in the admin's locale; bind any of it to block fields afterwards (a template adds no fields).
+**Palette search** (Block Builder palette and Page builder block list) filters by translated label and English name,
+ignoring case and accents; Enter inserts the first match, `/` or Ctrl/Cmd+K focuses the box, Esc clears it.
+
+```ts
+// examples/my-store/src/blocks/store-header/store-header.block.ts (excerpt): the Shop menu of the header
+{ el: 'Dropdown',
+  props: { openOn: 'hover', placement: 'bottom-start', display: { base: 'popover' }, triggerVariant: 'ghost', chevron: true },
+  bind: { label: { from: 'field', name: 'nav2Label' }, href: { from: 'field', name: 'nav2Link' } },
+  children: [{ el: 'Stack', props: { direction: 'vertical', gap: '1' }, children: [
+    { el: 'Button', props: { variant: 'link', size: 'sm' },
+      bind: { label: { from: 'field', name: 'shop1Label' }, href: { from: 'field', name: 'shop1Link' } },
+      style: { color: 'brand:ink', hover: { color: 'brand:accent' } } },
+    // … shop2, shop3
+  ] }] }
 ```
 
 ### Wiring (written by `opencloudcms init`)

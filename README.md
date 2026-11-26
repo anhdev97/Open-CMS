@@ -270,8 +270,10 @@ conflict.
 Until a page is published at `/`, the home shows a welcome page. Field kinds, preview, API and limits:
 [`packages/core/README.md`](packages/core/README.md#page-builder). `examples/my-store` has a `ProductGrid` block
 and `pnpm --filter my-store seed:pages` publishes `/` (the storefront below, its featured products with photos uploaded
-to the media library, English with a vi-VN translation), `/shop` (the two composed blocks below; three sample products first when the catalogue is empty)
-and `/about`, all framed by the base page below, plus `/landing`. Existing pages are skipped;
+to the media library, a banner carousel and an FAQ, English with a vi-VN translation), `/shop` (the composed blocks
+below; three sample products first when the catalogue is empty), the category pages `/shop/ao`, `/shop/quan` and
+`/shop/phu-kien` of the header's Shop menu, a page per product at `/products/<slug>` (tabs and a tooltip badge) and
+`/about`, all framed by the base page below, plus `/landing`. Existing pages are skipped;
 `pnpm --filter my-store seed:pages -- --force` replaces their content.
 
 ### Base pages, overlays and actions
@@ -289,8 +291,9 @@ extra JavaScript. Code uses the client API of `@opencloudcms/core/blocks/client`
 `examples/my-store` shows all of it: the base page **Store** (the default) puts `StoreHeader` in the `header` region
 of the `StoreFrame` layout and `StoreFooter` in `footer`, so `/`, `/shop` and `/about` no longer contain them; the
 header's Contact button and the footer's "Write to us" link open the `ContactModal` named `lien-he` (a medium modal
-with email and phone links and a close button), and a ☰ button, hidden on desktop, toggles the `MobileMenu` drawer
-`menu-mobile` (left, small) that holds the nav links hidden on mobile. `/landing` replaces the header with a simple
+with a contact form layout, email and phone links and a close button), and a ☰ button, hidden on desktop, toggles
+the `MobileMenu` drawer `menu-mobile` (left, small) that holds the nav links hidden on mobile, its Shop submenu
+expanding in place. `/landing` replaces the header with a simple
 one (and its own contact popup) and hides the footer. Details:
 [`packages/core/README.md`](packages/core/README.md#base-pages).
 
@@ -334,6 +337,24 @@ the builders (`StoreHeader`, `StoreHero`, `SectionHead`, `StoryBand`, `StoreFoot
 `2fr 3fr`, per-side spacing, borders, brand colors) themed by `src/theme.ts` (palettes `olive`, `clay`, `night`; the
 site layout renders `<ThemeStyle theme={theme} />`). Details:
 [`packages/core/README.md`](packages/core/README.md#composed-blocks-block-builder).
+
+**Builder components.** The palette also has interactive elements (`Dropdown` for two-level menus, `Tooltip`,
+`Accordion` with `AccordionItem`, `Tabs` with `TabPanel`, `Carousel`, `Icon`) and form controls (`Input`, `Textarea`,
+`Select`, `Combobox`, `Radio`, `Checkbox`, `Switch`). Form controls are **UI only for now: they render labelled
+native controls with `name` attributes but do not submit** (no form action or endpoint yet). Box, Card and Button
+take **hover colors** (`style.hover`: background, text, border), Buttons take an icon (`icon`, `iconPosition`,
+`iconOnly`), and Image, Box and Card can be **clickable** (a bound `href`, e.g. `entryUrl` for a whole product card,
+or a button `action`); a list block can use a **carousel layout**. A **Templates** palette section inserts a two-level
+nav menu, a mobile nav, an FAQ, product tabs, a banner carousel and a contact form layout, and a **search box**
+(`/` or Ctrl/Cmd+K) filters the Block Builder palette and the Page builder block list. All content (tabs,
+accordion bodies, slides, menu panels) is in the server HTML and usable before JavaScript loads (hover/focus menus,
+native `<details>`, scroll-snap slides, native selects); the client runtimes come from
+`@opencloudcms/core/blocks/client`. Every element works with the keyboard and on touch, with ARIA roles and states.
+`examples/my-store` uses them: a logo linking to `/` and a "Shop" menu (Tops / Trousers / Accessories, in vi-VN
+Áo / Quần / Phụ kiện) in `StoreHeader` and, expanding inline, in `MobileMenu`; the contact form layout in
+`ContactModal`; `HomeBanner` (carousel) and `Faq` (accordion) on the home page; `ProductTabs` (Description / Specs /
+Shipping, a tooltip on the delivery badge) and `ProductStrip` (clickable product cards in a carousel) on the product
+pages. Details: [`packages/core/README.md`](packages/core/README.md#builder-components).
 
 ## Users, groups and review
 
