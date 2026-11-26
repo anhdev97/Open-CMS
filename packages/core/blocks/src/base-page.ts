@@ -61,11 +61,13 @@ export function composeWithBase(base: StoredPageContent | null, page: StoredPage
 }
 
 const isAction = (v: unknown) => isObj(v);
+/** A node with an overlay/scroll action (Button, Image, Box, Card) or a Dropdown (closed on route change), at any depth. */
 const specHasAction = (n: unknown): boolean =>
-  isObj(n) && ((n.el === 'Button' && isObj(n.props) && isAction(n.props.action)) || (Array.isArray(n.children) && n.children.some(specHasAction)));
+  isObj(n) &&
+  (n.el === 'Dropdown' || (isObj(n.props) && isAction(n.props.action)) || (Array.isArray(n.children) && n.children.some(specHasAction)));
 
 /**
- * Whether page data (stored content or Puck data) holds an overlay block or a button with an action, anywhere in
+ * Whether page data (stored content or Puck data) holds an overlay block, an element with an action or a Dropdown, anywhere in
  * content, zones, root props and slot props (also list rows). Used to mount the client overlay route watcher only
  * where it is needed. Over-approximates: any item with an object `action` prop counts.
  */

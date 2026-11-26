@@ -1,9 +1,10 @@
 // Accordion on native `<details>`/`<summary>`: works without JS, all content in the server HTML. `single` gives every
 // item one shared `name` (from `useId`, unique per rendered accordion), so browsers that support exclusive details
-// keep one item open; the client closes siblings elsewhere. Isomorphic: no state, no browser globals.
+// keep one item open; the client wrapper (`AccordionSingle`) closes siblings elsewhere. Isomorphic: no state, no browser globals.
 import { Children, cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from 'react';
 import { ChevronDownIcon } from 'lucide-react';
 import type { NodeStyle } from '@opencloudcms/schema';
+import { AccordionSingle } from '../client/AccordionSingle';
 import { cn } from './tokens';
 import { styleAttr, styleProps } from './style';
 
@@ -65,8 +66,16 @@ export function Accordion({ single, defaultOpen, children, id, style, editor }: 
       editor: editor?.open ? { open: true } : p.editor,
     });
   });
+  const cls = cn(ACCORDION, sp.className);
+  if (single) {
+    return (
+      <AccordionSingle id={id} className={cls} style={styleAttr(sp)} disabled={editor?.open === true}>
+        {items}
+      </AccordionSingle>
+    );
+  }
   return (
-    <div id={id} data-ocms-accordion={single ? 'single' : undefined} className={cn(ACCORDION, sp.className)} style={styleAttr(sp)}>
+    <div id={id} className={cls} style={styleAttr(sp)}>
       {items}
     </div>
   );

@@ -1,6 +1,7 @@
 // Generic renderer of a composed block spec: walks `tree`, reads `bind` sources and renders the public `ui`
 // primitives. Isomorphic (server components, editor canvas, CJS): no hooks, no browser or Node globals.
 import { Fragment, type ReactNode } from 'react';
+import type { ButtonVariant } from '../ui/tokens';
 import { localizedText, type BindSource, type Locale, type ComposedBlockSpec, type ComposedNode, type ControlOption as SpecOption, type Responsive, type Track } from '@opencloudcms/schema';
 import type { ColorToken, SpacingToken } from '../types';
 import { Badge, Button, DateText, Divider, Heading, Image, Price, Spacer, Text, validAction } from '../ui/content';
@@ -11,6 +12,10 @@ import { Tooltip } from '../ui/tooltip';
 import { Accordion, AccordionItem } from '../ui/accordion';
 import { Checkbox, Input, Radio, Select, Switch, Textarea, type ControlOption, type InputType } from '../ui/form';
 import { safeHref } from '../ui/href';
+import { Dropdown, type DropdownDisplay } from '../client/Dropdown';
+import { Tabs } from '../client/Tabs';
+import { Carousel } from '../client/Carousel';
+import { Combobox } from '../client/Combobox';
 import { composedHelpers } from './helpers';
 
 type Props = Record<string, unknown>;
@@ -275,6 +280,69 @@ function renderNode(ctx: Ctx, n: ComposedNode, key?: number): ReactNode {
       );
     case 'AccordionItem':
       return <AccordionItem key={key} id={id} title={h.text(val(ctx, n, 'title'))}>{kids()}</AccordionItem>;
+    case 'Dropdown':
+      return (
+        <Dropdown
+          key={key}
+          id={id}
+          label={h.text(val(ctx, n, 'label'))}
+          href={boundHref(ctx, n)}
+          openOn={p.openOn === 'click' ? 'click' : 'hover'}
+          placement={tok<'bottom-start'>(p.placement)}
+          display={tok<Responsive<DropdownDisplay>>(p.display)}
+          triggerVariant={tok<ButtonVariant>(p.triggerVariant)}
+          chevron={p.chevron !== false}
+          locale={ctx.locale}
+          style={st}
+        >
+          {kids()}
+        </Dropdown>
+      );
+    case 'Tabs': {
+      const panels = (n.children ?? [])
+        .filter((c) => c.el === 'TabPanel' && visible(ctx, c))
+        .map((c) => ({
+          label: h.text(val(ctx, c, 'label')),
+          id: str(c.props?.anchorId),
+          content: (c.children ?? []).map((g, i) => renderNode(ctx, g, i)),
+        }));
+      return <Tabs key={key} id={id} panels={panels} variant={tok<'underline'>(p.variant)} align={tok<'start'>(p.align)} style={st} />;
+    }
+    case 'Carousel':
+      return (
+        <Carousel
+          key={key}
+          id={id}
+          perView={tok<Responsive<number>>(p.perView)}
+          gap={tok<SpacingToken>(p.gap)}
+          arrows={p.arrows !== false}
+          dots={p.dots !== false}
+          loop={p.loop === true}
+          autoplay={typeof p.autoplay === 'number' ? p.autoplay : 'off'}
+          label={ctx.blockLabel}
+          locale={ctx.locale}
+          style={st}
+        >
+          {kids()}
+        </Carousel>
+      );
+    case 'Combobox':
+      return (
+        <Combobox
+          key={key}
+          id={id}
+          name={str(p.name) ?? ''}
+          options={options(ctx, p.options)}
+          defaultValue={str(p.defaultValue)}
+          label={h.text(val(ctx, n, 'label'))}
+          placeholder={h.text(val(ctx, n, 'placeholder'))}
+          help={h.text(val(ctx, n, 'help'))}
+          required={bool(p.required)}
+          disabled={bool(p.disabled)}
+          locale={ctx.locale}
+          style={st}
+        />
+      );
     case 'Input':
       return (
         <Input

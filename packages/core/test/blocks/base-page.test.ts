@@ -42,7 +42,17 @@ const promo = defineComposedBlock(
   }),
 );
 const plain = defineComposedBlock(spec({ id: 'blk_plain01', name: 'Plain', tree: { el: 'Text', props: { text: 'x' } } }));
-const registry = defineBlocks([...coreBlocks, frame, modal, promo, plain]);
+const nav = defineComposedBlock(
+  spec({
+    id: 'blk_nav001',
+    name: 'Nav',
+    tree: { el: 'Stack', children: [{ el: 'Dropdown', bind: { label: { from: 'const', value: 'Menu' } }, children: [{ el: 'Text', props: { text: 'x' } }] }] },
+  }),
+);
+const logo = defineComposedBlock(
+  spec({ id: 'blk_logo01', name: 'Logo', tree: { el: 'Box', props: { action: { type: 'overlay', op: 'open', target: 'lien-he' } } } }),
+);
+const registry = defineBlocks([...coreBlocks, frame, modal, promo, plain, nav, logo]);
 const manifest = blockManifest(registry);
 
 const heading = (text: string, id = text) => ({ type: 'Heading', props: { id, _v: 1, text, level: 1, align: 'left' } });
@@ -133,6 +143,11 @@ describe('containsInteractive', () => {
     expect(containsInteractive(inFrame({ type: 'Promo', props: { id: 'p' } }), registry)).toBe(true);
     // Puck data (not stored) works too.
     expect(containsInteractive(inFrame(button).data as never, registry)).toBe(true);
+  });
+
+  it('true for a composed block with a Dropdown, or with an action on another element (Box)', () => {
+    expect(containsInteractive(inFrame({ type: 'Nav', props: { id: 'n' } }), registry)).toBe(true);
+    expect(containsInteractive(inFrame({ type: 'Logo', props: { id: 'l' } }), registry)).toBe(true);
   });
 
   it('false otherwise', () => {

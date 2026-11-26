@@ -38,7 +38,7 @@ type Base = {
   style?: NodeStyle;
 };
 
-const nonEmpty = (s: string | undefined): string | undefined => (typeof s === 'string' && s.trim() ? s : undefined);
+export const nonEmpty = (s: string | undefined): string | undefined => (typeof s === 'string' && s.trim() ? s : undefined);
 
 /** Ids of one control: the control, and its help text when there is one. */
 function useControlIds(help: string | undefined) {
@@ -46,7 +46,7 @@ function useControlIds(help: string | undefined) {
   return { id, helpId: nonEmpty(help) ? `${id}-help` : undefined };
 }
 
-function Label({ htmlFor, text, required }: { htmlFor: string; text?: string; required?: boolean }) {
+export function Label({ htmlFor, text, required }: { htmlFor: string; text?: string; required?: boolean }) {
   if (!nonEmpty(text)) return null;
   return (
     <label htmlFor={htmlFor} className={FIELD_LABEL}>
@@ -56,9 +56,9 @@ function Label({ htmlFor, text, required }: { htmlFor: string; text?: string; re
   );
 }
 
-const Help = ({ id, text }: { id?: string; text?: string }) => (id ? <p id={id} className={FIELD_HELP}>{text}</p> : null);
+export const Help = ({ id, text }: { id?: string; text?: string }) => (id ? <p id={id} className={FIELD_HELP}>{text}</p> : null);
 
-function Field({ id, style, children }: { id?: string; style?: NodeStyle; children: ReactNode }) {
+export function Field({ id, style, children }: { id?: string; style?: NodeStyle; children: ReactNode }) {
   const sp = styleProps(style, 'grid');
   return <div id={id} className={cn(FIELD, sp.className)} style={styleAttr(sp)}>{children}</div>;
 }
