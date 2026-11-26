@@ -292,7 +292,7 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme, base
   }, [registry, adminLocale, locale, unknownTypes, kind, baseOptions, regionsOf]);
 
   // Palette search above the block list (spec §3).
-  const palette = useMemo(() => pageBuilderPalette(config, registry), [config, registry]);
+  const palette = useMemo(() => pageBuilderPalette(config, registry, kind), [config, registry, kind]);
   const overrides = useMemo(
     () => ({ header: () => createElement(EditorHeader), puck: ViewportBreakpoint, iframe: CanvasFrame, fieldTypes, drawer: PaletteDrawer }),
     [],

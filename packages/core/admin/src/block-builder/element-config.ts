@@ -4,15 +4,15 @@
 import type { ComponentConfig, Config, CustomFieldRender, Field } from '@puckeditor/core';
 import { COLOR_TOKENS, SPACING_TOKENS } from '@opencloudcms/core/blocks';
 import {
-  AUTOCOMPLETE_TOKENS, COMPOSED_ELEMENTS, ELEMENT_BINDABLE, FORM_CONTROL_ELEMENTS, INPUT_TYPES, INTERACTIVE_CONTAINERS, optionValues,
+  AUTOCOMPLETE_TOKENS, COMPOSED_ELEMENTS, ELEMENT_BINDABLE, FORM_CONTROL_ELEMENTS, INPUT_TYPES, INTERACTIVE_CONTAINERS, INTERACTIVE_ELEMENTS, isClickable, optionValues,
   type ComposedElement, type NodeStyle,
 } from '@opencloudcms/schema';
 import type { ReactElement, ReactNode } from 'react';
 import { getActiveLocale, t, tEnglish } from '../i18n';
-import { insertAndSelect, type PaletteCategory as SearchCategory, type PaletteModel } from '../components/PaletteSearch';
+import { type PaletteCategory as SearchCategory, type PaletteModel } from '../components/PaletteSearch';
 import { BUILDER_TEMPLATES, templateName, templateOf, templatePuckProps, templateRootEl, templatesRefused } from './templates';
 import { hasLegacyProps, migrateLegacyProps } from './style/migrate';
-import { indexPuck, isContainer, pathOf, uniqueRegionName, type BuilderPuckData } from './tree-puck';
+import { indexPuck, isContainer, itemToNode, pathOf, uniqueRegionName, type BuilderPuckData } from './tree-puck';
 
 export type PropKind =
   | 'color' | 'spacing' | 'select' | 'boolean' | 'text' | 'number' | 'allow' | 'tracks' | 'length' | 'responsiveSelect' | 'pattern' | 'action' | 'regionLabel'
@@ -485,29 +485,38 @@ export function buildBuilderConfig(opts: BuilderConfigOptions): Config {
 
 const ROOT_ZONE = 'root:default-zone';
 
-/** Whether the slot of container `el` takes component `name` (an element or a template). */
-function slotTakes(el: ComposedElement, name: string, collection: boolean): boolean {
+/**
+ * Whether the slot of item `it` (a container) takes component `name` (an element or a template): its slot rules and,
+ * for a clickable Box/Card, no interactive elements (what the canvas passes to the slot, see `Canvas.tsx`).
+ */
+function slotTakes(it: { type: string; props: Record<string, unknown> }, name: string, collection: boolean): boolean {
+  const el = (templateRootEl(it.type) ?? it.type) as ComposedElement;
   const r = slotRules(el, collection);
-  return r.allow ? r.allow.includes(name) : !(r.disallow ?? []).includes(name);
+  if (r.allow ? !r.allow.includes(name) : (r.disallow ?? []).includes(name)) return false;
+  if (isClickable(itemToNode({ type: el, props: { ...it.props, id: String(it.props.id), children: [] } }))) {
+    return !INTERACTIVE_ELEMENTS.includes(name as ComposedElement) && !templatesRefused([], INTERACTIVE_ELEMENTS).includes(name);
+  }
+  return true;
 }
 
 /**
  * Where Enter in the palette search inserts `name`: the end of the selected container, or of the nearest container
- * around the selection that takes it; with nothing selected (or none taking it) the end of the root container, else
- * next to the root at the top level.
+ * around the selection that takes it; with nothing selected, the end of the root container. Null when no container
+ * takes it (a root that is a container keeps every element inside it), or the end of the top level when the root is
+ * not a container.
  */
-export function paletteInsertTarget(data: BuilderPuckData, selectedId: string | null, name: string, collection: boolean): { zone: string; index: number } {
+export function paletteInsertTarget(data: BuilderPuckData, selectedId: string | null, name: string, collection: boolean): { zone: string; index: number } | null {
   const index = indexPuck(data);
   const top = Array.isArray(data.content) ? data.content : [];
   const candidates = pathOf(index, selectedId);
   if (top.length === 1 && !candidates.includes(String(top[0]!.props.id))) candidates.push(String(top[0]!.props.id));
   for (const id of candidates) {
     const it = index.get(id)!.item;
-    const el = (templateRootEl(it.type) ?? it.type) as ComposedElement;
-    if (!isContainer(el) || !slotTakes(el, name, collection)) continue;
+    if (!isContainer(templateRootEl(it.type) ?? it.type) || !slotTakes(it, name, collection)) continue;
     const kids = Array.isArray(it.props.children) ? it.props.children : [];
     return { zone: `${id}:children`, index: kids.length };
   }
+  if (top.length === 1 && isContainer(templateRootEl(top[0]!.type) ?? top[0]!.type)) return null;
   return { zone: ROOT_ZONE, index: top.length };
 }
 
@@ -522,10 +531,10 @@ export function blockBuilderPalette(categories: Record<string, SearchCategory>, 
       const key = `blockBuilder.elements.${name}`;
       return { label: elementLabel(name), english: tEnglish(key) === key ? name : tEnglish(key) };
     },
-    insert: (name, get) => {
+    target: (name, get) => {
       const api = get();
       const selected = (api.selectedItem?.props as { id?: string } | undefined)?.id ?? null;
-      insertAndSelect(get, name, paletteInsertTarget(api.appState.data as unknown as BuilderPuckData, selected, name, collection));
+      return paletteInsertTarget(api.appState.data as unknown as BuilderPuckData, selected, name, collection);
     },
   };
 }

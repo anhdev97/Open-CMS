@@ -10,6 +10,7 @@ import { t } from '../i18n';
 import { Input } from './ui/input';
 
 export type GetPuck = ReturnType<typeof useGetPuck>;
+export type InsertTarget = { zone: string; index: number };
 export type PaletteCategory = { title?: string; components?: string[]; visible?: boolean; expanded?: boolean };
 
 export interface PaletteModel {
@@ -17,8 +18,11 @@ export interface PaletteModel {
   categories: Record<string, PaletteCategory>;
   /** The label shown for a component and its English name (both searched). */
   describe(name: string): { label: string; english: string };
-  /** Inserts component `name` (Enter on the first match). */
-  insert(name: string, get: GetPuck): void;
+  /**
+   * Where Enter inserts component `name` (the zone rules of the builder), or null where it may not go. Puck's own
+   * insert permissions are checked by the search itself (`canInsert`).
+   */
+  target(name: string, get: GetPuck): InsertTarget | null;
   /** Accessible name of the search box. */
   label: string;
 }
@@ -70,6 +74,21 @@ export function isTextField(target: EventTarget | null): boolean {
   return false;
 }
 
+/**
+ * Whether Puck lets component `name` be inserted: the global permissions (a read-only builder passes `insert: false`)
+ * and the component's own `permissions.insert`, as Puck's drawer decides whether an item can be dragged.
+ * `dispatch({ type: 'insert' })` checks neither, so Enter must.
+ */
+export function canInsert(get: GetPuck, name: string): boolean {
+  const api = get() as unknown as { getPermissions?: (p: { type: string }) => { insert?: boolean } | undefined };
+  return api.getPermissions?.({ type: name })?.insert !== false;
+}
+
+/** The first match's insert target, or null when Puck's permissions or the builder's zone rules refuse it. */
+export function enterTarget(get: GetPuck, name: string, target: PaletteModel['target']): InsertTarget | null {
+  return canInsert(get, name) ? target(name, get) : null;
+}
+
 let seq = 0;
 /**
  * Dispatches a Puck insert of `componentType` at `target`, then selects the new item. `getPuck()` returns a state
@@ -83,9 +102,11 @@ export function insertAndSelect(get: GetPuck, componentType: string, target: { z
   return id;
 }
 
-export function PaletteSearch({ categories, describe, insert, label }: PaletteModel) {
+export function PaletteSearch({ categories, describe, target, label }: PaletteModel) {
   const getPuck = useGetPuck();
   const [query, setQuery] = useState('');
+  // The match Enter could not insert (read-only builder, not insertable, or no zone takes it here).
+  const [refused, setRefused] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const id = useId();
   const filtered = useMemo(() => filterPalette(categories, query, describe), [categories, query, describe]);
@@ -150,13 +171,20 @@ export function PaletteSearch({ categories, describe, insert, label }: PaletteMo
       e.preventDefault();
       const first = searching ? filtered.matches[0] : undefined;
       if (!first) return;
-      insert(first, getPuck);
+      // Only the first match: when it may not be inserted nothing happens (no other item is inserted instead).
+      const at = enterTarget(getPuck, first, target);
+      if (!at) {
+        setRefused(first);
+        return;
+      }
+      insertAndSelect(getPuck, first, at);
       setQuery('');
     } else if (e.key === 'Escape') {
       if (!query) return;
       e.preventDefault();
       e.stopPropagation();
       setQuery('');
+      setRefused(null);
     }
   };
 
@@ -171,7 +199,10 @@ export function PaletteSearch({ categories, describe, insert, label }: PaletteMo
           aria-describedby={`${id}-hint`}
           placeholder={t('paletteSearch.placeholder')}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setRefused(null);
+          }}
           onKeyDown={onKeyDown}
           className="h-8 pl-8"
           autoComplete="off"
@@ -180,6 +211,11 @@ export function PaletteSearch({ categories, describe, insert, label }: PaletteMo
       <p id={`${id}-hint`} className="sr-only">
         {t('paletteSearch.hint')}
       </p>
+      {refused && (
+        <p role="status" data-palette-refused="" className="px-1 py-2 text-sm text-muted-foreground">
+          {t('paletteSearch.notInsertable', { name: describe(refused).label })}
+        </p>
+      )}
       {searching && filtered.matches.length === 0 && (
         <p role="status" data-palette-empty="" className="px-1 py-2 text-sm text-muted-foreground">
           {t('paletteSearch.noMatches')}

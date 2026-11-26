@@ -1571,6 +1571,7 @@ const frFR: Messages = {
     labelBlockBuilder: "Rechercher des éléments et modèles",
     labelPageBuilder: "Rechercher des blocs",
     placeholder: "Rechercher (/ ou Ctrl+K)",
+    notInsertable: "Impossible d’ajouter {name} ici.",
     noMatches: "Aucun résultat",
     hint: "Entrée ajoute le premier résultat ; Échap efface.",
   },

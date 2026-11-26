@@ -1571,6 +1571,7 @@ const viVN: Messages = {
     labelBlockBuilder: "Tìm thành phần và mẫu",
     labelPageBuilder: "Tìm block",
     placeholder: "Tìm (/ hoặc Ctrl+K)",
+    notInsertable: "Không thể thêm {name} ở đây.",
     noMatches: "Không có kết quả",
     hint: "Enter thêm kết quả đầu tiên; Esc để xóa.",
   },

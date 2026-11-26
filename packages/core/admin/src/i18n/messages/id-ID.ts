@@ -1571,6 +1571,7 @@ const idID: Messages = {
     labelBlockBuilder: "Cari elemen dan templat",
     labelPageBuilder: "Cari blok",
     placeholder: "Cari (/ atau Ctrl+K)",
+    notInsertable: "{name} tidak dapat ditambahkan di sini.",
     noMatches: "Tidak ada hasil",
     hint: "Enter menambahkan hasil pertama; Esc menghapus.",
   },

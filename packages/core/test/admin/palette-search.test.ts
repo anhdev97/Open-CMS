@@ -14,6 +14,8 @@ const puck = vi.hoisted(() => ({
   componentList: {} as Record<string, Record<string, unknown>>,
   selectedId: null as string | null,
   actions: [] as Record<string, unknown>[],
+  /** Puck permissions: the global ones (`<Puck permissions>`) and each component's `permissions`. */
+  perms: { global: {} as Record<string, boolean>, components: {} as Record<string, Record<string, boolean>> },
 }));
 
 /** Every item by id, with the zone it is in (`root:default-zone` or `<parent>:children`) and its index. */
@@ -34,6 +36,8 @@ function snapshot() {
   return {
     appState: { data, ui: { componentList: structuredClone(puck.componentList) } },
     selectedItem: puck.selectedId ? (idx.get(puck.selectedId)?.item ?? null) : null,
+    // As Puck's permissions slice for `{ type }`: global permissions, then the component's.
+    getPermissions: ({ type }: { type: string }) => ({ insert: true, ...puck.perms.global, ...(puck.perms.components[type] ?? {}) }),
     getSelectorForId: (id: string) => {
       const e = idx.get(id);
       return e ? { zone: e.zone, index: e.index } : undefined;
@@ -61,7 +65,7 @@ vi.mock('@puckeditor/core', async (orig) => ({
   useGetPuck: () => snapshot,
 }));
 
-import { PaletteSearch, filterPalette, insertAndSelect, isTextField, type PaletteModel } from '../../admin/src/components/PaletteSearch';
+import { PaletteSearch, canInsert, filterPalette, insertAndSelect, isTextField, type PaletteModel } from '../../admin/src/components/PaletteSearch';
 import { blockBuilderPalette, paletteCategories, paletteInsertTarget } from '../../admin/src/block-builder/element-config';
 import { templateName } from '../../admin/src/block-builder/templates';
 import { pageBuilderPalette } from '../../admin/src/page-editor/editor-config';
@@ -81,6 +85,7 @@ beforeEach(() => {
   puck.componentList = {};
   puck.selectedId = null;
   puck.actions = [];
+  puck.perms = { global: {}, components: {} };
 });
 afterEach(() => {
   act(() => root.unmount());
@@ -109,11 +114,12 @@ const shown = () =>
     .flatMap((c) => (c.components as string[] | undefined) ?? []);
 const visibleCategories = () => Object.entries(puck.componentList).filter(([, c]) => c.visible !== false).map(([k]) => k);
 
-function builderModel(onInsert = vi.fn()): PaletteModel {
+function builderModel(target: PaletteModel['target'] = vi.fn(() => ({ zone: 'root:default-zone', index: 0 }))): PaletteModel {
   const cats = paletteCategories({ collection: false, overlayRoot: false, emptyRoot: false });
   const m = blockBuilderPalette(cats, false);
-  return { ...m, insert: onInsert };
+  return { ...m, target };
 }
+const inserts = () => puck.actions.filter((a) => a.type === 'insert');
 const mount = (m: PaletteModel) => act(() => root.render(createElement(PaletteSearch, m)));
 
 describe('foldSearch', () => {
@@ -166,11 +172,12 @@ describe('Block builder palette search', () => {
   });
 
   it('Enter inserts the first match ("faq" → the FAQ template) and clears the box; Esc clears', () => {
-    const insert = vi.fn();
-    mount(builderModel(insert));
+    const target = vi.fn(() => ({ zone: 'root:default-zone', index: 0 }));
+    mount(builderModel(target));
     type('faq');
     key(input(), 'Enter');
-    expect(insert).toHaveBeenCalledWith(templateName('faq'), snapshot);
+    expect(target).toHaveBeenCalledWith(templateName('faq'), snapshot);
+    expect(inserts()).toEqual([expect.objectContaining({ componentType: templateName('faq') })]);
     expect(input().value).toBe('');
     type('head');
     key(input(), 'Escape');
@@ -178,7 +185,7 @@ describe('Block builder palette search', () => {
     // Nothing matches: Enter does nothing.
     type('zzz');
     key(input(), 'Enter');
-    expect(insert).toHaveBeenCalledTimes(1);
+    expect(inserts()).toHaveLength(1);
   });
 
   it('`/` and Ctrl/Cmd+K focus the box from the canvas, but not while typing in a text field', () => {
@@ -244,9 +251,18 @@ describe('Block builder palette search', () => {
     expect(paletteInsertTarget(puck.data as Data, 'dd-1', 'Button', false)).toEqual({ zone: 'dd-1:children', index: 0 });
     // A root that is not a container: next to it at the top level.
     expect(paletteInsertTarget({ root: { props: {} }, content: [{ type: 'Heading', props: { id: 'h' } }] }, null, 'Text', false)).toEqual({ zone: 'root:default-zone', index: 1 });
+    // A root container keeps everything inside it: nothing takes the element → no target (not next to the root).
+    const overlay = { root: { props: {} }, content: [{ type: 'Overlay', props: { id: 'ov', children: [] } }] };
+    expect(paletteInsertTarget(overlay, 'ov', 'Tabs', false)).toBeNull();
+    expect(paletteInsertTarget(overlay, 'ov', templateName('product-tabs'), false)).toBeNull();
+    // A clickable Box refuses interactive elements and templates (as its canvas slot does).
+    const clickable = { root: { props: {} }, content: [{ type: 'Stack', props: { id: 's', children: [{ type: 'Box', props: { id: 'cb', bind: { href: { from: 'const', value: '/' } }, children: [] } }] } }] };
+    expect(paletteInsertTarget(clickable, 'cb', 'Button', false)).toEqual({ zone: 's:children', index: 1 });
+    expect(paletteInsertTarget(clickable, 'cb', templateName('faq'), false)).toEqual({ zone: 's:children', index: 1 });
+    expect(paletteInsertTarget(clickable, 'cb', 'Text', false)).toEqual({ zone: 'cb:children', index: 0 });
 
     puck.selectedId = 'dd-1';
-    const id = insertAndSelect(snapshot, 'Button', paletteInsertTarget(puck.data as Data, 'dd-1', 'Button', false));
+    const id = insertAndSelect(snapshot, 'Button', paletteInsertTarget(puck.data as Data, 'dd-1', 'Button', false)!);
     expect(puck.actions[0]).toMatchObject({ type: 'insert', componentType: 'Button', destinationZone: 'dd-1:children', destinationIndex: 0, id });
     expect(puck.actions[1]).toEqual({ type: 'setUi', ui: { itemSelector: { zone: 'dd-1:children', index: 0 } } });
   });
@@ -259,6 +275,53 @@ describe('Block builder palette search', () => {
     key(input(), 'Enter');
     expect(puck.actions.find((a) => a.type === 'insert')).toMatchObject({ componentType: templateName('faq'), destinationZone: 'root-1:children', destinationIndex: 0 });
     expect(puck.actions.find((a) => (a.ui as { itemSelector?: unknown } | undefined)?.itemSelector)).toEqual({ type: 'setUi', ui: { itemSelector: { zone: 'root-1:children', index: 0 } } });
+  });
+});
+
+describe('Enter respects Puck permissions and zone rules', () => {
+  const cats = (collection: boolean) => paletteCategories({ collection, overlayRoot: false, emptyRoot: false });
+
+  it('read-only Block builder (permissions insert: false): Enter inserts nothing', () => {
+    puck.data = { root: { props: {} }, content: [{ type: 'Stack', props: { id: 'root-1', children: [] } }] };
+    puck.perms.global = { drag: false, duplicate: false, delete: false, edit: false, insert: false };
+    expect(canInsert(snapshot, templateName('faq'))).toBe(false);
+    mount(blockBuilderPalette(cats(false), false));
+    type('faq');
+    key(input(), 'Enter');
+    expect(inserts()).toEqual([]);
+    expect(puck.data.content[0]!.props.children).toEqual([]);
+    expect(container.querySelector('[data-palette-refused]')?.textContent).toBe('FAQ cannot be added here.');
+    // The box keeps the query; typing clears the message.
+    expect(input().value).toBe('faq');
+    type('fa');
+    expect(container.querySelector('[data-palette-refused]')).toBeNull();
+  });
+
+  it('collection mode: Region (insert: false there) is not inserted by Enter, not even at the top level', () => {
+    puck.data = { root: { props: {} }, content: [{ type: 'Card', props: { id: 'card-1', children: [] } }] };
+    puck.perms.components = { Region: { insert: false }, PageContent: { insert: false } };
+    mount(blockBuilderPalette(cats(true), true));
+    type('region');
+    expect(shown()).toContain('Region');
+    key(input(), 'Enter');
+    expect(inserts()).toEqual([]);
+    // Without the permission, the zone rules alone refuse it too (a collection item template has no regions).
+    expect(paletteInsertTarget(puck.data as Data, null, 'Region', true)).toBeNull();
+  });
+
+  it("an item the selected container's slot refuses, with no container around taking it: nothing is inserted", () => {
+    puck.data = { root: { props: {} }, content: [{ type: 'Overlay', props: { id: 'ov-1', children: [] } }] };
+    puck.selectedId = 'ov-1';
+    mount(blockBuilderPalette(cats(false), false));
+    type('product tabs');
+    expect(shown()).toEqual([templateName('product-tabs')]);
+    key(input(), 'Enter');
+    expect(inserts()).toEqual([]);
+    expect(container.querySelector('[data-palette-refused]')).not.toBeNull();
+    // An allowed one still goes in.
+    type('heading');
+    key(input(), 'Enter');
+    expect(inserts()).toEqual([expect.objectContaining({ componentType: 'Heading', destinationZone: 'ov-1:children', destinationIndex: 0 })]);
   });
 });
 
@@ -289,5 +352,22 @@ describe('Page builder block list search', () => {
     expect(puck.actions.find((a) => (a.ui as { itemSelector?: unknown } | undefined)?.itemSelector)).toEqual({ type: 'setUi', ui: { itemSelector: { zone: 'root:default-zone', index: 1 } } });
     type('zzz');
     expect(container.querySelector('[data-palette-empty]')).not.toBeNull();
+  });
+
+  it('read-only Page editor (permissions insert: false): Enter adds nothing', () => {
+    puck.data = { root: { props: {} }, content: [] };
+    puck.perms.global = { drag: false, duplicate: false, delete: false, edit: false, insert: false };
+    mount(pageBuilderPalette(config as never, registry));
+    type('questions');
+    key(input(), 'Enter');
+    expect(inserts()).toEqual([]);
+    expect(puck.data.content).toEqual([]);
+  });
+
+  it('a base page root takes layout blocks only; a page root takes no layout block', () => {
+    const get = snapshot;
+    expect(pageBuilderPalette(config as never, registry, 'base').target('Faq', get)).toBeNull();
+    expect(pageBuilderPalette(config as never, registry, 'page').target('Faq', get)).toEqual({ zone: 'root:default-zone', index: 0 });
+    expect(pageBuilderPalette(config as never, registry, 'page').target('Gone', get)).toBeNull();
   });
 });

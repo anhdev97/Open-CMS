@@ -1638,6 +1638,7 @@ export const enUS = {
     labelBlockBuilder: "Search elements and templates",
     labelPageBuilder: "Search blocks",
     placeholder: "Search (/ or Ctrl+K)",
+    notInsertable: "{name} cannot be added here.",
     noMatches: "No matches",
     hint: "Enter adds the first match; Esc clears.",
   },
