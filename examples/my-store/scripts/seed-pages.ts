@@ -6,6 +6,10 @@
 // translation), `/shop` (the Block Builder examples: ProductCard for one product, ActiveProducts for the products with
 // active = true), `/about`, and `/landing`, which replaces the base's header with a simple one (and its own contact
 // popup) and hides the footer.
+// Builder components (spec 2026-11-26): the header has a two-level "Shop" menu (Dropdown) whose links go to the
+// category pages `/shop/ao`, `/shop/quan`, `/shop/phu-kien`; the home page adds a banner carousel (HomeBanner) and an
+// FAQ (Faq); every published product gets a page `/products/<slug>` (ProductTabs: tabs and a tooltip on a badge, then
+// ProductStrip: clickable product cards in a carousel, linking to these pages). Placeholder copy only.
 // Without any product yet it first publishes three sample products (two on sale, one not), each with a photo uploaded to
 // the media library (scripts/seed-assets/*.webp, crops of public/files/store-editorial.webp). With --force, sample
 // products (by slug) that have no image yet get theirs too.
@@ -118,13 +122,18 @@ async function main() {
 
     // The base page "Store": the frame every page below sits in (none sets `layout.baseId`, so the default base).
     const pagesService = app.get(PagesService);
-    const frame = (header: { nav: [string, string, string]; contact: string; menu: string }, modal: Record<string, unknown>, menu: string, footer: Record<string, unknown>) =>
+    type Nav = { nav: [string, string, string]; shop: [string, string, string]; contact: string; menu: string };
+    /** Labels of the two-level menu, the same in the header and in the drawer (links: the block defaults). */
+    const navLabels = (h: Nav) => ({
+      nav1Label: h.nav[0], nav2Label: h.nav[1], nav3Label: h.nav[2], shop1Label: h.shop[0], shop2Label: h.shop[1], shop3Label: h.shop[2],
+    });
+    const frame = (header: Nav, modal: Record<string, unknown>, menu: string, footer: Record<string, unknown>) =>
       content(
         item('StoreFrame', {
           region__header: [
-            item('StoreHeader', { nav1Label: header.nav[0], nav2Label: header.nav[1], nav3Label: header.nav[2], contactLabel: header.contact, menuLabel: header.menu }),
+            item('StoreHeader', { ...navLabels(header), contactLabel: header.contact, menuLabel: header.menu }),
             // Overlays take no space: the ☰ button toggles the drawer, the Contact buttons open the popup.
-            item('MobileMenu', { name: 'menu-mobile', title: menu, nav1Label: header.nav[0], nav2Label: header.nav[1], nav3Label: header.nav[2] }),
+            item('MobileMenu', { name: 'menu-mobile', title: menu, ...navLabels(header) }),
             item('ContactModal', { name: 'lien-he', ...modal }),
           ],
           pageContent: [],
@@ -136,16 +145,26 @@ async function main() {
       body: 'Có câu hỏi về đơn hàng, kích cỡ hay đổi trả? Hãy viết hoặc gọi cho chúng mình, chúng mình trả lời trong một ngày.',
       phone: '028 1234 5678',
       closeLabel: 'Đóng',
+      // The contact form layout (UI only: it does not send yet).
+      nameLabel: 'Họ tên',
+      emailLabel: 'Email',
+      phoneLabel: 'Số điện thoại',
+      topicLabel: 'Chủ đề',
+      topicPlaceholder: 'Chọn chủ đề',
+      messageLabel: 'Lời nhắn',
+      messagePlaceholder: 'Chúng mình có thể giúp gì?',
+      newsletterLabel: 'Gửi bản tin cho tôi',
+      sendLabel: 'Gửi',
     };
     const base = {
       kind: 'base',
       title: 'Store',
-      content: frame({ nav: ['Home', 'Shop', 'About'], contact: 'Contact', menu: '☰ Menu' }, {}, 'Menu', {}),
+      content: frame({ nav: ['Home', 'Shop', 'About'], shop: ['Tops', 'Trousers', 'Accessories'], contact: 'Contact', menu: '☰ Menu' }, {}, 'Menu', {}),
       translations: {
         'vi-VN': {
           title: 'Cửa hàng',
           content: frame(
-            { nav: ['Trang chủ', 'Cửa hàng', 'Giới thiệu'], contact: 'Liên hệ', menu: '☰ Danh mục' },
+            { nav: ['Trang chủ', 'Cửa hàng', 'Giới thiệu'], shop: ['Áo', 'Quần', 'Phụ kiện'], contact: 'Liên hệ', menu: '☰ Danh mục' },
             viModal,
             'Danh mục',
             {
@@ -189,6 +208,97 @@ async function main() {
       }
     }
 
+    // Vietnamese placeholder copy of the builder-component blocks (the English copy is their field defaults).
+    const viBanner = {
+      slide1Heading: 'Linen mùa mới',
+      slide1Text: 'Áo linen giặt mềm, nhẹ và thoáng cho những ngày nắng.',
+      slide1CtaLabel: 'Xem áo',
+      slide2Heading: 'Túi tote cho mỗi ngày',
+      slide2Text: 'Túi canvas chắc tay, vừa laptop và cả giỏ đi chợ.',
+      slide2CtaLabel: 'Xem phụ kiện',
+      slide3Heading: 'Miễn phí giao hàng từ 500.000 ₫',
+      slide3Text: 'Đơn từ 500.000 ₫ được giao miễn phí trên toàn Việt Nam.',
+      slide3CtaLabel: 'Xem bộ sưu tập',
+    };
+    const viFaq = {
+      heading: 'Câu hỏi thường gặp',
+      q1: 'Bao lâu thì nhận được hàng?',
+      a1: 'Tại TP. Hồ Chí Minh và Hà Nội hàng đến trong 1 đến 2 ngày, các tỉnh khác trong 3 đến 5 ngày làm việc.',
+      q2: 'Tôi có thể đổi hoặc trả hàng không?',
+      a2: 'Có. Sản phẩm chưa mặc, còn nhãn có thể đổi hoặc trả trong vòng 30 ngày kể từ khi nhận.',
+      q3: 'Làm sao chọn đúng kích cỡ?',
+      a3: 'Mỗi trang sản phẩm có bảng số đo trong thẻ Thông số. Nếu phân vân giữa hai cỡ, hãy chọn cỡ lớn hơn với đồ linen.',
+      q4: 'Giặt và bảo quản đồ linen thế nào?',
+      a4: 'Giặt ở 30 °C, phơi trong bóng râm và ủi khi vải còn hơi ẩm.',
+    };
+    const viTabs = {
+      badge: 'Miễn phí giao hàng',
+      badgeTip: 'Miễn phí giao hàng toàn Việt Nam cho đơn từ 500.000 ₫.',
+      descriptionTab: 'Mô tả',
+      descriptionFallback: 'Một món đồ đơn giản để mặc mỗi ngày. Mô tả đầy đủ sẽ sớm có.',
+      specsTab: 'Thông số',
+      specs: 'Chất liệu: 100% linen giặt mềm. Dáng: rộng thoải mái. Cỡ: S đến XL. Giặt máy ở 30 °C.',
+      shippingTab: 'Giao hàng',
+      shipping: 'Giao trong 1 đến 5 ngày làm việc. Đổi trả miễn phí trong 30 ngày.',
+    };
+
+    // Category pages behind the header's Shop menu (placeholder: every one lists the products on sale).
+    const categories: [string, string, string, string][] = [
+      ['/shop/ao', 'Tops', 'Áo', 'Shirts and tops in linen and cotton.'],
+      ['/shop/quan', 'Trousers', 'Quần', 'Relaxed trousers and shorts for warm days.'],
+      ['/shop/phu-kien', 'Accessories', 'Phụ kiện', 'Totes, scarves and small things to carry.'],
+    ];
+    const viCategoryIntro: Record<string, string> = {
+      '/shop/ao': 'Áo sơ mi và áo thun bằng linen và cotton.',
+      '/shop/quan': 'Quần dài và quần short thoải mái cho ngày nắng.',
+      '/shop/phu-kien': 'Túi tote, khăn và những món nhỏ mang theo mỗi ngày.',
+    };
+    const categoryPages = categories.map(([path, title, viTitle, intro]) => ({
+      title,
+      path,
+      seo: { title: `${title} - my-store` },
+      content: content(
+        item('Heading', { text: title, level: 1 }),
+        item('Text', { content: `<p>${intro}</p>` }),
+        item('ProductStrip'),
+      ),
+      translations: {
+        'vi-VN': {
+          title: viTitle,
+          seo: { title: `${viTitle} - my-store` },
+          content: content(
+            item('Heading', { text: viTitle, level: 1 }),
+            item('Text', { content: `<p>${viCategoryIntro[path]}</p>` }),
+            item('ProductStrip'),
+          ),
+        },
+      },
+    }));
+
+    // A page per published product at /products/<slug> (the ProductStrip cards link there: its urlPattern).
+    const published = await entries.list('product', { status: 'published', locale, sort: 'createdAt:asc', limit: 50 });
+    const productPages = published.data
+      .filter((p) => typeof p.slug === 'string' && /^[a-z0-9-]+$/.test(p.slug))
+      .map((p) => ({
+        title: String(p.name ?? p.slug),
+        path: `/products/${p.slug as string}`,
+        seo: { title: `${String(p.name ?? p.slug)} - my-store` },
+        content: content(
+          item('ProductTabs', { entry: { documentId: p.documentId } }),
+          item('SectionHead', { heading: 'You may also like', linkLabel: 'All products →', slot: [item('ProductStrip')] }),
+        ),
+        translations: {
+          'vi-VN': {
+            title: String(p.name ?? p.slug),
+            seo: { title: `${String(p.name ?? p.slug)} - my-store` },
+            content: content(
+              item('ProductTabs', { entry: { documentId: p.documentId }, ...viTabs }),
+              item('SectionHead', { heading: 'Có thể bạn cũng thích', linkLabel: 'Tất cả sản phẩm →', slot: [item('ProductStrip')] }),
+            ),
+          },
+        },
+      }));
+
     const pages = [
       {
         title: 'Home',
@@ -196,7 +306,7 @@ async function main() {
         seo: { title: 'my-store', description: 'Clothing and accessories for every day.' },
         // Copy = the blocks' field defaults (English); the vi-VN translation below uses the mockup's Vietnamese copy.
         // StoreHeader and StoreFooter come from the base page "Store".
-        content: content(item('StoreHero'), item('SectionHead', { slot: [item('FeaturedProducts')] }), item('StoryBand')),
+        content: content(item('StoreHero'), item('SectionHead', { slot: [item('FeaturedProducts')] }), item('HomeBanner'), item('StoryBand'), item('Faq')),
         translations: {
           'vi-VN': {
             title: 'Trang chủ',
@@ -209,11 +319,13 @@ async function main() {
                 image: { src: '/files/store-editorial.webp', alt: 'Áo linen ô liu, túi canvas và khăn màu đất trên ghế gỗ' },
               }),
               item('SectionHead', { heading: 'Sản phẩm nổi bật', linkLabel: 'Xem tất cả →', slot: [item('FeaturedProducts')] }),
+              item('HomeBanner', viBanner),
               item('StoryBand', {
                 heading: 'Về my-store',
                 body: 'Chúng mình chọn những chất liệu dễ chăm sóc và kiểu dáng dễ phối để mỗi món bạn mua đều có chỗ trong tủ đồ.',
                 linkLabel: 'Đọc câu chuyện của cửa hàng →',
               }),
+              item('Faq', viFaq),
             ),
           },
         },
@@ -228,6 +340,9 @@ async function main() {
           ...(pick ? [item('ProductCard', { badge: 'Staff pick', entry: { documentId: pick } })] : []),
           item('Heading', { text: 'On sale', level: 2 }),
           item('ActiveProducts'),
+          // Clickable product cards in a carousel (a collection with layout kind carousel), linking to /products/<slug>.
+          item('Heading', { text: 'Browse', level: 2 }),
+          item('ProductStrip'),
         ),
       },
       {
@@ -277,7 +392,7 @@ async function main() {
       },
     ];
 
-    for (const { translations, ...page } of pages as (Omit<(typeof pages)[number], 'translations' | 'layout'> & {
+    for (const { translations, ...page } of [...pages, ...categoryPages, ...productPages] as (Omit<(typeof pages)[number], 'translations' | 'layout'> & {
       layout?: Record<string, unknown>;
       translations?: Record<string, { title: string; seo: Record<string, string>; content: unknown }>;
     })[]) {
