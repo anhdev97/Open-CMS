@@ -205,6 +205,11 @@ when the overlay closes; navigation from a dropdown link closes it and any overl
   6. *Contact form:* Stack with Input name, Input email, Input tel, Select topic, Textarea message, Checkbox
      newsletter, Button "Send" (no action).
   Template text is placeholder copy, localized in the 4 admin locales.
+- **Palette search (added after approval, user's choice):** a search box at the top of the Block builder palette
+  (elements and templates) and of the Page builder block list. It filters as you type, matching the translated label
+  and the English name, case- and accent-insensitive ("tab", "menu", "anh" finds "Ảnh"); empty categories hide; an
+  empty result shows "No matches". Enter inserts the first match at the end of the selected container (Block builder)
+  or of the page (Page builder); `/` or Ctrl/Cmd+K focuses the box when focus is not in a text field; Esc clears it.
 - **i18n:** all new element, prop, value and template labels in en-US, vi-VN (accented), fr-FR and id-ID.
 
 ### 4. Page builder and code
@@ -238,6 +243,8 @@ when the overlay closes; navigation from a dropdown link closes it and any overl
 6. Templates are a new palette mechanism (nothing to reuse).
 7. Clickable images and cards (added after review, user's example: logo → home page, then "add it" for cards):
    Image, Box and Card get Button's `href` and `action`; clickable containers refuse interactive descendants.
+
+8. Palette search in both builders (user picked it over a website "Search box" element).
 
 ## Constraints
 

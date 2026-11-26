@@ -148,17 +148,18 @@
 - [ ] **Step 4: Run** — PASS; `pnpm -r typecheck`.
 - [ ] **Step 5: Commit** `feat(admin): block builder component elements, field kinds, hover section`
 
-### Task 6: Block builder — Templates palette section; page-editor carousel layout
+### Task 6: Builders — Templates palette section, palette search, page-editor carousel layout
 
 **Files:**
-- Create: `packages/core/admin/src/block-builder/templates.ts`
-- Modify: `packages/core/admin/src/block-builder/element-config.ts` (palette), `BlockEditor.tsx`, the page-editor layout field (`editorLayout` options), admin locale files
-- Test: `packages/core/test/admin/builder-templates.test.ts`, `packages/core/test/admin/editor-fields.test.ts`
+- Create: `packages/core/admin/src/block-builder/templates.ts`, `packages/core/admin/src/components/PaletteSearch.tsx`, `packages/core/admin/src/lib/fold-search.ts`
+- Modify: `packages/core/admin/src/block-builder/element-config.ts` (palette), `BlockEditor.tsx`, `PageEditor.tsx` / the page-editor drawer override (block list), the page-editor layout field (`editorLayout` options), admin locale files
+- Test: `packages/core/test/admin/builder-templates.test.ts`, `packages/core/test/admin/palette-search.test.ts`, `packages/core/test/admin/editor-fields.test.ts`
 
 **Interfaces:**
 - Consumes: Task 5 configs.
 - Produces: `BUILDER_TEMPLATES: { id: 'nav-menu' | 'mobile-nav' | 'faq' | 'product-tabs' | 'banner-carousel' | 'contact-form'; label: key; tree(locale): ComposedNode }` per spec §3 (constant text in the admin's current locale, no block fields); a "Templates" palette section inserting the subtree at the drop position; the page-editor layout field offers `carousel-<n>` (n = 1–6) only when the spec's binding layout kind is `carousel`.
-- [ ] **Step 1: Failing tests:** each template's tree passes `validateComposedSpec` when wrapped in a block spec; inserting "faq" adds a Heading and an Accordion with 3 items; template text follows the admin locale (vi-VN gives Vietnamese copy); "mobile-nav" Dropdowns use `display: { base: 'inline' }`; the layout field shows carousel options only for a carousel binding.
+  - `foldSearch(s: string): string` (lowercase, NFD, strip combining marks, `đ`→`d`); `PaletteSearch` filters palette items by `foldSearch(translatedLabel)` or `foldSearch(englishName)` containing the folded query; empty categories hidden; "No matches" empty state; Enter inserts the first match (Block builder: end of the selected container, else root; Page builder: end of the page content); `/` and Ctrl/Cmd+K focus it unless focus is in an input/textarea/contenteditable; Esc clears. Used in both the Block builder palette (elements + templates) and the Page builder block list.
+- [ ] **Step 1: Failing tests:** `foldSearch('Ảnh đẹp')` = `'anh dep'`; typing "anh" in the vi-VN Block builder palette leaves Image; "tab" leaves Tabs and the Product tabs template; "zzz" shows "No matches"; Enter with "faq" inserts the FAQ template; `/` focuses the box from the canvas but not while typing in a text field; the Page builder list filters blocks by label; each template's tree passes `validateComposedSpec` when wrapped in a block spec; inserting "faq" adds a Heading and an Accordion with 3 items; template text follows the admin locale (vi-VN gives Vietnamese copy); "mobile-nav" Dropdowns use `display: { base: 'inline' }`; the layout field shows carousel options only for a carousel binding.
 - [ ] **Step 2: Run** — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** — PASS; `pnpm -r typecheck`.
