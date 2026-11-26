@@ -19,6 +19,9 @@
   copying the draft's `isDefault` cannot interleave with a default change. The lock is taken by the new entry hook
   `inPublishTransaction(documentId, ctx)`, which runs inside the publish transaction (`ctx.db`) before the published
   rows are written. `base?id=default` picks the most recently updated default row should two ever be marked.
+- `by-path` filters `kind = 'page'` in the query instead of after taking one row, so a base row can never take
+  the page's place. Rolling back `0008_private_assets` deletes the private asset rows first (their stored objects
+  are left in private storage), so a rollback never lists private files as public assets.
 - **Publishing no longer changes the draft's `updatedAt`.** Only its `publishedAt` moves (`hasUnpublishedChanges`
   stays `updatedAt > publishedAt`), so a save sent with the `If-Match` the editor saw before Publish succeeds
   instead of answering 409 `stale_draft`. The page editor also re-reads the draft version after publishing.

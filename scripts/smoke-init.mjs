@@ -704,7 +704,7 @@ export default defineContentType({
     return { status: res.status, body: text ? JSON.parse(text) : null, text };
   };
   const notPdf = await upload(Buffer.from('not a pdf'), 'fake.pdf', 'application/pdf');
-  assert(notPdf.status >= 400 && notPdf.status < 500, `upload of a non-PDF into invoice -> ${notPdf.status} ${notPdf.text}`);
+  assert(notPdf.status === 415 && notPdf.body?.error?.code === 'unsupported_file_type', `upload of a non-PDF into invoice -> ${notPdf.status} ${notPdf.text}`);
   const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n');
   const up = await upload(pdf, 'invoice-SMK-1.pdf', 'application/pdf');
   assert(up.status === 201 || up.status === 200, `private upload -> ${up.status} ${up.text}`);

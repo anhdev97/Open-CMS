@@ -322,8 +322,8 @@ layout: null                                    // the default base page, every 
 - The website (`createCmsPage`) loads the base (published, or the draft in draft mode, in the page's locale with the
   default-locale fallback), composes it with `composeWithBase` (exported from `@opencloudcms/core/blocks`) and
   resolves the data blocks of both. A missing or unpublished base renders the page without a frame and logs one
-  warning. When there is no default base page, the site remembers that for 30 s: a base page made the default
-  frames already-visited pages within 30 s.
+  warning. When there is no default base page, the site remembers that for up to 30 s, so a base page newly made
+  the default can take up to 30 s to appear on pages that were already visited.
 
 ```ts
 // examples/my-store/src/blocks/store-frame/store-frame.block.ts (tree)
@@ -652,6 +652,8 @@ migration `0008_private_assets`):
   (`Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`). For a
   link that cannot send the session, `POST /api/admin/assets/:id/link` returns a signed URL (`?token=`, HMAC, 5
   minutes, bound to the asset and the user).
+  Using the link checks no session or permission: the user id in the token only tells who made the link (for
+  audit), so a link stays valid for up to 5 minutes after that user is removed or loses `content.read`.
 - `AssetsService` (server code): `uploadPrivate(file, { ownerApiId, accept, uploadedBy? })`, `openPrivate(id)`
   (`{ asset, stream }`), `deletePrivate(id, { ownerDocumentId })` (deletes only while the file is still owned as the
   caller saw it; `null` = unattached; returns whether the row was deleted).

@@ -242,6 +242,9 @@ export const coreMigrations: Record<string, Migration> = {
       await db.schema.createIndex('opencms_assets_owner_idx').on(SYSTEM_TABLES.assets).columns(['owner_api_id', 'owner_document_id']).execute();
     },
     async down(db) {
+      // Without `visibility` every row would read as a public asset: drop the private rows first. Their stored
+      // objects stay where they are (private storage), unreferenced.
+      await db.deleteFrom(SYSTEM_TABLES.assets).where('visibility', '=', 'private').execute();
       await db.schema.dropIndex('opencms_assets_owner_idx').execute();
       await db.schema.alterTable(SYSTEM_TABLES.assets).dropColumn('owner_document_id').dropColumn('owner_api_id').dropColumn('visibility').execute();
     },

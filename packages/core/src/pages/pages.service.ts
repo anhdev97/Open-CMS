@@ -44,10 +44,10 @@ export class PagesService implements OnModuleInit {
   async byPath(status: 'draft' | 'published', path: string | undefined, locale: string | undefined) {
     if (!path) throw new BadRequestException('Query parameter "path" is required');
     const loc = locale || this.options.config.defaultLocale;
-    const { data } = await this.entries.list(PAGE_API_ID, { status, locale: loc, filter: { path }, limit: 1 });
+    // Base pages are never served at a path: filtered in the query, so a base row can never take the one result.
+    const { data } = await this.entries.list(PAGE_API_ID, { status, locale: loc, filter: { path }, mainWhere: { kind: 'page' }, limit: 1 });
     // The list falls back to the default locale for display; by-path must match the requested locale only.
-    // Base pages are never served at a path.
-    const hit = data.find((d) => d.locale === loc && d.kind !== 'base');
+    const hit = data.find((d) => d.locale === loc);
     if (!hit) throw new NotFoundException(`No page at ${path}`);
     return { data: hit };
   }

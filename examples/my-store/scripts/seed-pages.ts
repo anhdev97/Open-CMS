@@ -30,7 +30,7 @@ async function main() {
   const { EntriesService, OpenCloudCmsModule, PagesService } = await import('@opencloudcms/core');
   const { AssetsService } = await import('@opencloudcms/assets');
   const { blockManifest, writePageContent } = await import('@opencloudcms/core/blocks');
-  const { PAGE_API_ID } = await import('@opencloudcms/schema');
+  const { collectBlockNames, PAGE_API_ID } = await import('@opencloudcms/schema');
   const { default: config } = await import('../opencloudcms.config');
   const { default: blocks } = await import('../src/blocks');
   const { contentTypes } = await import('../src/generated');
@@ -293,6 +293,11 @@ async function main() {
         await entries.update(PAGE_API_ID, documentId, p, locale);
       } else {
         console.log(`skip ${p.path}: a page already exists there (--force replaces it)`);
+        // Pages seeded before the Store base page carry their own header / footer: with the frame they show twice.
+        const own = [...collectBlockNames(found.content as Parameters<typeof collectBlockNames>[0]).keys()].filter((n) => n === 'StoreHeader' || n === 'StoreFooter');
+        if (own.length) {
+          console.log(`  hint: ${p.path} still contains ${own.join(' and ')}, which the Store base page now provides; rerun with --force (\`pnpm seed:pages -- --force\`) to replace it`);
+        }
         continue;
       }
       // Translations of the same page (same documentId), only for locales the project enables.
