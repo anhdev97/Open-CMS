@@ -19,3 +19,4 @@ export type { Breakpoint, Responsive, Length, ColorValue, Track, Sides, NodeStyl
 export * from './icons';
 export * from './form-controls';
 export * from './theme';
+export * from './search';
