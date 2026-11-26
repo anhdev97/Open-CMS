@@ -41,9 +41,11 @@ export const ChildItemsField: CustomFieldRender<unknown> = ({ field, name, id, r
     const kids = Array.isArray(sel.props.children) ? (sel.props.children as PuckItem[]) : [];
     const next = newChildItem(item, kids.length, newId(item));
     api.dispatch({ type: 'replace', destinationIndex: at.index, destinationZone: at.zone, data: { ...sel, props: { ...sel.props, children: [...kids, next] } } as never });
-    // Select the new item so the canvas shows it (a new tab becomes the shown one).
-    const added = api.getSelectorForId(next.props.id);
-    if (added) api.dispatch({ type: 'setUi', ui: { itemSelector: added } });
+    // Select the new item so the canvas shows it (a new tab becomes the shown one). `getPuck()` returns a snapshot
+    // of the state at the call: read a fresh one, taken after the replace, to find the new item.
+    const fresh = getPuck();
+    const added = fresh.getSelectorForId(next.props.id);
+    if (added) fresh.dispatch({ type: 'setUi', ui: { itemSelector: added } });
   };
 
   return (

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FORM_CONTROL_ELEMENTS, INTERACTIVE_ELEMENTS, validateComposedSpec } from '@opencloudcms/schema';
 
 const puck = vi.hoisted(() => ({
+  snapshot: null as null | (() => unknown),
   state: {
     appState: { ui: { viewports: { current: { width: 1280 as number | '100%', height: 'auto' }, controlsVisible: true, options: [] } } },
     dispatch: (() => {}) as (a: unknown) => void,
@@ -17,7 +18,7 @@ const puck = vi.hoisted(() => ({
 vi.mock('@puckeditor/core', async (orig) => ({
   ...(await orig<object>()),
   createUsePuck: () => (sel: (s: unknown) => unknown) => sel(puck.state),
-  useGetPuck: () => () => puck.state,
+  useGetPuck: () => () => (puck.snapshot ? puck.snapshot() : puck.state),
 }));
 
 import { CanvasSelection, HoverPreview, type CanvasSelectionModel } from '../../admin/src/block-builder/context';
@@ -39,6 +40,7 @@ beforeEach(() => {
   root = createRoot(container);
   puck.state.dispatch = vi.fn();
   puck.state.selectedItem = null;
+  puck.snapshot = null;
 });
 afterEach(() => {
   act(() => root.unmount());
@@ -205,8 +207,21 @@ describe('Add item / Add tab', () => {
 
   it('"Add tab" appends a TabPanel to the selected Tabs and selects it', () => {
     const tabs = { type: 'Tabs', props: { id: 'Tabs-1', children: [{ type: 'TabPanel', props: { id: 'TabPanel-1', bind: { label: { from: 'const', value: 'Tab 1' } } } }] } };
+    // Like Puck's `getPuck()`, each call returns a snapshot whose `getSelectorForId` only knows the ids of the data at
+    // that moment: the new TabPanel is found only through a snapshot taken after the `replace` was applied.
+    let known = ['Tabs-1', 'TabPanel-1'];
+    const snapshot = () => {
+      const ids = [...known];
+      return {
+        ...puck.state,
+        getSelectorForId: (id: string) => (!ids.includes(id) ? undefined : id === 'Tabs-1' ? { index: 0, zone: 'root:default-zone' } : { index: ids.indexOf(id) - 1, zone: 'Tabs-1:children' }),
+      };
+    };
+    puck.snapshot = snapshot;
     puck.state.selectedItem = tabs;
-    puck.state.getSelectorForId = (id) => (id === 'Tabs-1' ? { index: 0, zone: 'root:default-zone' } : { index: 1, zone: 'Tabs-1:children' });
+    puck.state.dispatch = vi.fn((a: { type: string; data?: { props: { children: { props: { id: string } }[] } } }) => {
+      if (a.type === 'replace') known = ['Tabs-1', ...a.data!.props.children.map((c) => c.props.id)];
+    }) as never;
     const Field = ChildItemsField as unknown as (p: object) => ReactNode;
     render(createElement(Field, { field: { type: 'custom', label: 'Tabs', metadata: { item: 'TabPanel' } }, name: 'childItems', id: 'f', value: undefined, onChange: vi.fn() }));
     expect(container.textContent).toContain('1 tab');

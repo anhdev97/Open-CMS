@@ -11,5 +11,6 @@ export { Overlay, type OverlayProps } from './overlay';
 export { Dropdown, type DropdownProps } from '../client/Dropdown';
 export { Tabs, type TabsProps, type TabsPanel } from '../client/Tabs';
 // The track / slide classes are also drawn by the block builder canvas (slides are its own drop zone items).
-export { Carousel, CAROUSEL, CAROUSEL_GAP, CAROUSEL_SLIDE, CAROUSEL_TRACK, type CarouselProps } from '../client/Carousel';
+export { Carousel, type CarouselProps } from '../client/Carousel';
+export { CAROUSEL, CAROUSEL_GAP, CAROUSEL_SLIDE, CAROUSEL_TRACK } from './carousel-classes';
 export { Combobox, type ComboboxProps } from '../client/Combobox';
