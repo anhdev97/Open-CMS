@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FORM_CONTROL_ELEMENTS, INTERACTIVE_ELEMENTS, validateComposedSpec } from '@opencloudcms/schema';
 
 const puck = vi.hoisted(() => ({
+  portal: (() => undefined) as (el: unknown) => (() => void) | undefined,
   snapshot: null as null | (() => unknown),
   state: {
     appState: { ui: { viewports: { current: { width: 1280 as number | '100%', height: 'auto' }, controlsVisible: true, options: [] } } },
@@ -19,6 +20,7 @@ vi.mock('@puckeditor/core', async (orig) => ({
   ...(await orig<object>()),
   createUsePuck: () => (sel: (s: unknown) => unknown) => sel(puck.state),
   useGetPuck: () => () => (puck.snapshot ? puck.snapshot() : puck.state),
+  registerOverlayPortal: (el: unknown) => puck.portal(el),
 }));
 
 import { CanvasSelection, HoverPreview, type CanvasSelectionModel } from '../../admin/src/block-builder/context';
@@ -339,6 +341,27 @@ describe('canvas visibility (block builder only)', () => {
 
     act(() => byText('[role="tab"]', 'Specs')!.click());
     expect(select).toHaveBeenCalledWith('TabPanel-2');
+  });
+
+  it('the tab list is a Puck overlay portal, so a real click reaches the tab (not the Tabs wrapper); unregistered on unmount', () => {
+    const unregister = vi.fn();
+    const portal = vi.fn(() => unregister);
+    puck.portal = portal;
+    try {
+      render(withSel(sel({ selectedId: 'TabPanel-1', path: ['TabPanel-1', 'Tabs-1'], items: { 'Tabs-1': panels } }), tabs()));
+      const list = q('[role="tablist"]');
+      expect(list).not.toBeNull();
+      expect(portal).toHaveBeenCalledWith(list);
+      // The click on a tab stops there: an enclosing (Puck) click handler does not see it.
+      const outer = vi.fn();
+      container.addEventListener('click', outer);
+      act(() => byText('[role="tab"]', 'Specs')!.click());
+      expect(outer).not.toHaveBeenCalled();
+      act(() => root.render(null));
+      expect(unregister).toHaveBeenCalled();
+    } finally {
+      puck.portal = () => undefined;
+    }
   });
 
   it('removing the last TabPanel / AccordionItem shows an empty state and the validation message, no throw', () => {

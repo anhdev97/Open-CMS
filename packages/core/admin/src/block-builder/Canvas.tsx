@@ -10,10 +10,10 @@
 // while it or something inside is selected, Tabs showing the selected TabPanel, Accordion items open and a static
 // Carousel whose slides (the slot's items) sit side by side. The page builder and the website never set them.
 import {
-  createContext, createElement, useContext, useEffect, useMemo, useState,
+  createContext, createElement, useContext, useEffect, useMemo, useRef, useState,
   type CSSProperties, type MouseEvent, type ReactElement, type ReactNode,
 } from 'react';
-import { createUsePuck, useGetPuck, type SlotComponent } from '@puckeditor/core';
+import { createUsePuck, registerOverlayPortal, useGetPuck, type SlotComponent } from '@puckeditor/core';
 import { composedHelpers, defineComposedBlock, ui, type ComposedBlockDefinition } from '@opencloudcms/core/blocks';
 import {
   INTERACTIVE_ELEMENTS, isClickable, resolveResponsive, validateComposedSpec,
@@ -491,6 +491,10 @@ function TabsPreview({ props }: { props: Props }) {
     label: boundText(c, itemToNode(it as PuckItem), 'label') || elementLabel('TabPanel'),
     content: i === active ? slot : null,
   }));
+  // Puck's component overlay sits above the canvas and takes real pointer clicks; registering the tab list as an
+  // overlay portal lets them reach the tab buttons, and `onTab` stops the click before Puck selects the Tabs.
+  const frame = useRef<HTMLDivElement>(null);
+  useEffect(() => registerOverlayPortal(frame.current?.querySelector<HTMLElement>('[role="tablist"]')), [items.length]);
   // A click on a tab selects its TabPanel (before Puck selects the Tabs).
   const onTab = (e: MouseEvent) => {
     const tab = (e.target as Element).closest?.('[role="tab"]');
@@ -505,7 +509,7 @@ function TabsPreview({ props }: { props: Props }) {
   return (
     <ComponentDim node={node} hidden={cs.hidden}>
       <ActiveTab.Provider value={items[active] ? String(items[active]!.props.id) : undefined}>
-        <div onClickCapture={onTab}>
+        <div ref={frame} onClickCapture={onTab}>
           <ui.Tabs
             panels={panels}
             variant={node.props?.variant as never}
