@@ -1,6 +1,6 @@
 # Block builder: common website components (dropdown, tooltip, accordion, tabs, carousel, icon, form controls, hover styles) — design
 
-Date: 2026-11-26 · Status: draft for approval · Branch: `feat/builder-components` (from `feat/base-page-overlays`
+Date: 2026-11-26 · Status: approved 2026-11-26 · Branch: `feat/builder-components` (from `feat/base-page-overlays`
 37be4d7; rebased onto `main` once PR #14 is merged)
 
 ## Intent
@@ -26,7 +26,8 @@ renders correctly but does not submit.
   - Form controls, UI only: `Input`, `Textarea`, `Select`, `Combobox`, `Radio`, `Checkbox`, `Switch`.
 - **Hover styles:** a "On hover" style group (background, text color, border color) on Box, Card and Button.
 - **Icons in buttons:** Button gets an optional icon (start or end) and an icon-only mode.
-- **Clickable images:** Image can link or run a button action (e.g. the logo links to the home page).
+- **Clickable images and cards:** Image, Box and Card can link or run a button action (e.g. the logo links to the
+  home page; a whole product card is one link).
 - **Starter templates in the palette:** two-level nav menu, FAQ, product tabs, banner carousel, contact form layout.
 - **Usable everywhere:** keyboard and touch work for every element; screen readers get correct roles and states.
 - **Editable in the builder:** hidden parts (dropdown panel, tooltip, non-selected tab, folded item, other slides) can
@@ -41,7 +42,6 @@ renders correctly but does not submit.
   controls only render native, correctly labelled HTML with `name` attributes.
 - A menu data model or admin "Menu" page. Menus are built in blocks.
 - Breadcrumb, Rating, Alert, Avatar, Countdown, Embed / Video.
-- Clickable Box/Card containers (a whole card as one link).
 - Third menu level (Dropdown inside a Dropdown panel is refused).
 - A code-side "custom element" registry.
 
@@ -103,6 +103,15 @@ type="button">` (the existing `ActionButton` client runtime); both get the theme
 styling. `href` and `action` together: `action` wins, as on Button today. A clickable image needs a non-empty `alt`
 (it is the link's name): an issue when `alt` is bound to a constant empty string; at render a missing alt falls back
 to the block name. An Image without `href`/`action` renders exactly as today.
+
+Box and Card gain the same `href` (bindable; `ELEMENT_BINDABLE.Box` and `.Card` become `['href']`) and `action`.
+A clickable Box/Card renders its element as `<a>` (href) or `<button type="button">` (action) with the same classes,
+`block`/`flex` display kept, focus ring, and no default link or button styling (text color inherits). Because HTML
+does not allow interactive content inside a link or button, a clickable Box/Card may not contain (at any depth)
+Button, clickable Image/Box/Card, Dropdown, Tooltip, Tabs, Accordion, Carousel, form controls or Slot (an issue).
+Its accessible name is its text content; an optional `ariaLabel` prop (plain text) overrides it. A Box/Card without
+`href`/`action` renders exactly as today. In a collection item template `href` can bind `entryUrl`, so a whole
+product card links to its entry.
 
 Rules added to `validateComposedSpec`:
 
@@ -227,8 +236,8 @@ when the overlay closes; navigation from a dropdown link closes it and any overl
 5. Collection carousel layout: `kind: 'carousel'`, `columns` 1–6, page-editor value `carousel-<n>`, fixed 1.25 cards
    on mobile.
 6. Templates are a new palette mechanism (nothing to reuse).
-7. Clickable images (added after review, user's example: logo → home page): Image gets Button's `href` and `action`.
-   Clickable Box/Card (a whole card as one link) is not in this sprint.
+7. Clickable images and cards (added after review, user's example: logo → home page, then "add it" for cards):
+   Image, Box and Card get Button's `href` and `action`; clickable containers refuse interactive descendants.
 
 ## Constraints
 
