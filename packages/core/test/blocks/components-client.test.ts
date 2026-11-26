@@ -225,6 +225,36 @@ describe('Dropdown', () => {
     expect(toggle().getAttribute('aria-expanded')).toBe('true');
   });
 
+  it('an open popover panel past the right edge is shifted into the viewport (8 px); closing clears the shift', () => {
+    Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 375 });
+    try {
+      mount(menu({ openOn: 'click' }));
+      vi.spyOn(panel(), 'getBoundingClientRect').mockReturnValue({ left: 254, right: 446, width: 192, height: 80, top: 40, bottom: 120, x: 254, y: 40, toJSON: () => ({}) } as DOMRect);
+      pointer('pointerdown', toggle(), 'touch');
+      click(toggle());
+      expect(toggle().getAttribute('aria-expanded')).toBe('true');
+      expect(panel().style.transform).toBe('translateX(-79px)');
+      pointer('pointerdown', toggle(), 'touch');
+      click(toggle());
+      expect(panel().style.transform).toBe('');
+    } finally {
+      delete (document.documentElement as unknown as Record<string, unknown>).clientWidth;
+    }
+  });
+
+  it('an inline panel is never shifted', () => {
+    Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 375 });
+    try {
+      mount(menu({ display: 'inline' }));
+      vi.spyOn(panel(), 'getBoundingClientRect').mockReturnValue({ left: 254, right: 446, width: 192, height: 80, top: 40, bottom: 120, x: 254, y: 40, toJSON: () => ({}) } as DOMRect);
+      click(toggle());
+      expect(toggle().getAttribute('aria-expanded')).toBe('true');
+      expect(panel().style.transform).toBe('');
+    } finally {
+      delete (document.documentElement as unknown as Record<string, unknown>).clientWidth;
+    }
+  });
+
   it('editor.open forces the panel open', () => {
     const html = renderToString(menu({ editor: { open: true } }));
     expect(html).toContain('aria-expanded="true"');

@@ -5,7 +5,7 @@
 // closing and route changes (`closeAllDropdowns`) close it. The hover classes are dropped once hydrated, so a tap never
 // leaves a "sticky hover" panel. Responsive `display` uses one markup: per breakpoint `popover` positions the panel,
 // `inline` keeps it in the flow (drawers). No browser globals at import time.
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { ChevronDownIcon } from 'lucide-react';
 import type { Breakpoint, NodeStyle, Responsive } from '@opencloudcms/schema';
 import { BUTTON_BASE, BUTTON_SIZE, BUTTON_VARIANT, cn, type ButtonVariant } from '../ui/tokens';
@@ -13,6 +13,7 @@ import { styleAttr, styleProps } from '../ui/style';
 import { subscribeOverlays } from './overlay-store';
 import { registerDropdown } from './dropdown-store';
 import { currentBreakpoint, perBreakpoint } from './media';
+import { clampShift } from './TooltipBubble';
 
 export type DropdownDisplay = 'popover' | 'inline';
 export type DropdownPlacement = 'bottom-start' | 'bottom-end' | 'bottom';
@@ -164,6 +165,18 @@ export function Dropdown({
   }, [open]);
 
   const popoverNow = () => modes[currentBreakpoint()] === 'popover';
+
+  // An open popover panel is shifted horizontally into the viewport (8 px margin) with an inline `translateX`, which adds
+  // to Tailwind's `translate` (the `bottom` centring). Measured from its unshifted box each time it opens.
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    panel.style.transform = '';
+    if (!open || editor?.open || !popoverNow()) return;
+    const r = panel.getBoundingClientRect();
+    const dx = clampShift(r.left, r.right, panel.ownerDocument.documentElement.clientWidth);
+    if (dx) panel.style.transform = `translateX(${dx}px)`;
+  }, [open]);
 
   const onPointerEnter = (e: PointerEvent) => {
     if (e.pointerType !== 'mouse' || openOn !== 'hover' || !popoverNow()) return;
