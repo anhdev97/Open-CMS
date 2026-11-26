@@ -9,3 +9,4 @@ export { Tabs, type TabsProps, type TabsPanel, type TabsVariant, type TabsAlign 
 export { Carousel, type CarouselProps } from './Carousel';
 export { Combobox, filterOptions, type ComboboxProps } from './Combobox';
 export { AccordionSingle } from './AccordionSingle';
+export { TooltipBubble, clampShift, type TooltipBubbleProps } from './TooltipBubble';

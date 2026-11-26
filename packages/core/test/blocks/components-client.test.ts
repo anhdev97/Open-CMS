@@ -5,7 +5,8 @@ import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { foldSearch } from '@opencloudcms/schema';
 import { Carousel, Combobox, Dropdown, Tabs, closeAllDropdowns, closeAllOverlays, filterOptions, openOverlay, closeOverlay } from '../../blocks/src/client';
-import { Accordion, AccordionItem } from '../../blocks/src/ui';
+import { Accordion, AccordionItem, Tooltip } from '../../blocks/src/ui';
+import { clampShift } from '../../blocks/src/client/TooltipBubble';
 import { defineComposedBlock, type ComposedBlockSpec } from '../../blocks/src';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -513,6 +514,73 @@ describe('Accordion single', () => {
       await new Promise((r) => setTimeout(r, 10));
     });
     expect(a.open && b.open).toBe(true);
+  });
+});
+
+// ---- Tooltip bubble (client)
+
+describe('Tooltip bubble', () => {
+  const tip = () =>
+    h(Tooltip, { text: 'Free delivery', side: 'top', children: (tid: string) => h('button', { type: 'button', 'aria-describedby': tid }, 'Badge') });
+  const bubble = () => $('[role="tooltip"]');
+  const rect = (left: number, width: number) =>
+    vi.spyOn(bubble(), 'getBoundingClientRect').mockReturnValue({ left, right: left + width, width, height: 20, top: 0, bottom: 20, x: left, y: 0, toJSON: () => ({}) } as DOMRect);
+  beforeEach(() => {
+    Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 375 });
+  });
+  afterEach(() => {
+    delete (document.documentElement as unknown as Record<string, unknown>).clientWidth;
+  });
+
+  it('server HTML is unchanged: one <span role="tooltip"> with the bubble classes and the text, no inline style', () => {
+    const html = mount(tip());
+    expect(html).toMatch(/<span role="tooltip" id="[^"]+" class="[^"]*group-hover\/tooltip:block[^"]*">Free delivery<\/span>/);
+    expect(html).not.toContain('style=');
+  });
+
+  it('clampShift keeps 8 px from both edges; the left edge wins when the bubble is wider than the viewport', () => {
+    expect(clampShift(150, 470, 375)).toBe(-103);
+    expect(clampShift(100, 200, 375)).toBe(0);
+    expect(clampShift(-40, 100, 375)).toBe(48);
+    expect(clampShift(-40, 500, 375)).toBe(48);
+  });
+
+  it('pointerenter and focusin move an overflowing bubble into the viewport with translateX; a fitting one gets none', () => {
+    mount(tip());
+    const wrap = $('.group\\/tooltip');
+    rect(150, 320);
+    pointer('pointerenter', wrap, 'mouse');
+    expect(bubble().style.transform).toBe('translateX(-103px)');
+    rect(100, 100);
+    act(() => $('button').focus());
+    expect(bubble().style.transform).toBe('');
+  });
+
+  it('Esc hides a shown bubble until the pointer has left and focus has left', () => {
+    mount(h('div', null, tip(), h('button', { id: 'out' }, 'out')));
+    const wrap = $('.group\\/tooltip');
+    rect(100, 100);
+    // Not shown: Esc does nothing.
+    key(document.body, 'Escape');
+    expect(bubble().style.display).toBe('');
+    pointer('pointerenter', wrap, 'mouse');
+    act(() => $('button').focus());
+    key(document.body, 'Escape');
+    expect(bubble().style.display).toBe('none');
+    pointer('pointerleave', wrap, 'mouse');
+    expect(bubble().style.display).toBe('none'); // still focused
+    pointer('pointerenter', wrap, 'mouse');
+    act(() => $<HTMLButtonElement>('#out').focus());
+    expect(bubble().style.display).toBe('none'); // still hovered
+    pointer('pointerleave', wrap, 'mouse');
+    expect(bubble().style.display).toBe('');
+  });
+
+  it('editor.open (forced): Esc does not hide it', () => {
+    mount(h(Tooltip, { text: 'x', editor: { open: true }, children: h('span', null, 't') }));
+    act(() => $('.group\\/tooltip').focus());
+    key(document.body, 'Escape');
+    expect(bubble().style.display).toBe('');
   });
 });
 

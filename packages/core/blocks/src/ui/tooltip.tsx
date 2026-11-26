@@ -1,9 +1,11 @@
 // Tooltip shown with CSS only (`group-hover/tooltip:` / `group-focus-within/tooltip:`, a named group so an enclosing
 // `group` such as an AccordionItem does not open it): the bubble is in the server HTML, named by
 // `useId` so every rendered copy (collection items) has its own id. Isomorphic: `useId` is allowed in server
-// components; no state, no browser globals. Esc-to-dismiss is client behaviour (blocks/client).
+// components; no state, no browser globals. The bubble itself is the client `TooltipBubble` (same server HTML), which
+// keeps it inside the viewport and dismisses it on Esc.
 import { useId, type ReactNode } from 'react';
 import type { NodeStyle } from '@opencloudcms/schema';
+import { TooltipBubble } from '../client/TooltipBubble';
 import { cn } from './tokens';
 import { styleAttr, styleProps } from './style';
 
@@ -58,9 +60,12 @@ export function Tooltip({ text, side, children, focusWrapper, id, style, editor 
       aria-describedby={own ? tipId : undefined}
     >
       {fn ? (children as (tooltipId: string) => ReactNode)(tipId) : children}
-      <span role="tooltip" id={tipId} className={cn(TOOLTIP_BUBBLE, TOOLTIP_SIDE[side as TooltipSide] ?? TOOLTIP_SIDE.top, editor?.open ? TOOLTIP_OPEN : undefined)}>
-        {text}
-      </span>
+      <TooltipBubble
+        id={tipId}
+        className={cn(TOOLTIP_BUBBLE, TOOLTIP_SIDE[side as TooltipSide] ?? TOOLTIP_SIDE.top, editor?.open ? TOOLTIP_OPEN : undefined)}
+        text={text}
+        forced={editor?.open === true}
+      />
     </div>
   );
 }
