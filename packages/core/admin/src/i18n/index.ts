@@ -24,3 +24,9 @@ export function getActiveLocale(): Locale {
 export function t(key: string, vars?: Record<string, string | number>): string {
   return translate(key, vars);
 }
+
+const english = createTranslator({ 'en-US': enUS }, 'en-US');
+/** `key` in English whatever the admin language (palette search also matches English names). */
+export function tEnglish(key: string, vars?: Record<string, string | number>): string {
+  return english(key, vars);
+}

@@ -8,10 +8,11 @@ import {
   type ComposedElement, type NodeStyle,
 } from '@opencloudcms/schema';
 import type { ReactElement, ReactNode } from 'react';
-import { getActiveLocale, t } from '../i18n';
-import { BUILDER_TEMPLATES, templateName, templatePuckProps, templatesRefused } from './templates';
+import { getActiveLocale, t, tEnglish } from '../i18n';
+import { insertAndSelect, type PaletteCategory as SearchCategory, type PaletteModel } from '../components/PaletteSearch';
+import { BUILDER_TEMPLATES, templateName, templateOf, templatePuckProps, templateRootEl, templatesRefused } from './templates';
 import { hasLegacyProps, migrateLegacyProps } from './style/migrate';
-import { isContainer, uniqueRegionName } from './tree-puck';
+import { indexPuck, isContainer, pathOf, uniqueRegionName, type BuilderPuckData } from './tree-puck';
 
 export type PropKind =
   | 'color' | 'spacing' | 'select' | 'boolean' | 'text' | 'number' | 'allow' | 'tracks' | 'length' | 'responsiveSelect' | 'pattern' | 'action' | 'regionLabel'
@@ -480,4 +481,51 @@ export function buildBuilderConfig(opts: BuilderConfigOptions): Config {
     categories: paletteCategories({ collection: opts.collection, overlayRoot: false, emptyRoot: false, ...opts.palette }),
     root: { fields: {}, render: opts.root as never },
   } as Config;
+}
+
+const ROOT_ZONE = 'root:default-zone';
+
+/** Whether the slot of container `el` takes component `name` (an element or a template). */
+function slotTakes(el: ComposedElement, name: string, collection: boolean): boolean {
+  const r = slotRules(el, collection);
+  return r.allow ? r.allow.includes(name) : !(r.disallow ?? []).includes(name);
+}
+
+/**
+ * Where Enter in the palette search inserts `name`: the end of the selected container, or of the nearest container
+ * around the selection that takes it; with nothing selected (or none taking it) the end of the root container, else
+ * next to the root at the top level.
+ */
+export function paletteInsertTarget(data: BuilderPuckData, selectedId: string | null, name: string, collection: boolean): { zone: string; index: number } {
+  const index = indexPuck(data);
+  const top = Array.isArray(data.content) ? data.content : [];
+  const candidates = pathOf(index, selectedId);
+  if (top.length === 1 && !candidates.includes(String(top[0]!.props.id))) candidates.push(String(top[0]!.props.id));
+  for (const id of candidates) {
+    const it = index.get(id)!.item;
+    const el = (templateRootEl(it.type) ?? it.type) as ComposedElement;
+    if (!isContainer(el) || !slotTakes(el, name, collection)) continue;
+    const kids = Array.isArray(it.props.children) ? it.props.children : [];
+    return { zone: `${id}:children`, index: kids.length };
+  }
+  return { zone: ROOT_ZONE, index: top.length };
+}
+
+/** The palette search model of the Block builder: elements and templates, Enter inserts as `paletteInsertTarget`. */
+export function blockBuilderPalette(categories: Record<string, SearchCategory>, collection: boolean): PaletteModel {
+  return {
+    categories,
+    label: t('paletteSearch.labelBlockBuilder'),
+    describe: (name) => {
+      const tpl = templateOf(name);
+      if (tpl) return { label: t(tpl.label), english: tEnglish(tpl.label) };
+      const key = `blockBuilder.elements.${name}`;
+      return { label: elementLabel(name), english: tEnglish(key) === key ? name : tEnglish(key) };
+    },
+    insert: (name, get) => {
+      const api = get();
+      const selected = (api.selectedItem?.props as { id?: string } | undefined)?.id ?? null;
+      insertAndSelect(get, name, paletteInsertTarget(api.appState.data as unknown as BuilderPuckData, selected, name, collection));
+    },
+  };
 }
