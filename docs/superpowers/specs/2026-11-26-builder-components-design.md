@@ -26,6 +26,7 @@ renders correctly but does not submit.
   - Form controls, UI only: `Input`, `Textarea`, `Select`, `Combobox`, `Radio`, `Checkbox`, `Switch`.
 - **Hover styles:** a "On hover" style group (background, text color, border color) on Box, Card and Button.
 - **Icons in buttons:** Button gets an optional icon (start or end) and an icon-only mode.
+- **Clickable images:** Image can link or run a button action (e.g. the logo links to the home page).
 - **Starter templates in the palette:** two-level nav menu, FAQ, product tabs, banner carousel, contact form layout.
 - **Usable everywhere:** keyboard and touch work for every element; screen readers get correct roles and states.
 - **Editable in the builder:** hidden parts (dropdown panel, tooltip, non-selected tab, folded item, other slides) can
@@ -40,6 +41,7 @@ renders correctly but does not submit.
   controls only render native, correctly labelled HTML with `name` attributes.
 - A menu data model or admin "Menu" page. Menus are built in blocks.
 - Breadcrumb, Rating, Alert, Avatar, Countdown, Embed / Video.
+- Clickable Box/Card containers (a whole card as one link).
 - Third menu level (Dropdown inside a Dropdown panel is refused).
 - A code-side "custom element" registry.
 
@@ -93,6 +95,14 @@ element types.
 
 Button gains `icon` (an `ICON_NAMES` entry), `iconPosition`: `start` \| `end` (default `start`) and `iconOnly`: boolean
 (the label becomes the `aria-label`; the label is still required).
+
+Image gains the same click behaviour as Button: a bindable `href` (`ELEMENT_BINDABLE.Image` becomes
+`src`, `alt`, `href`) and the `action` prop (`ButtonAction`: overlay open/close/toggle, scroll), validated by the
+existing `validateButtonAction`. With `href` the image renders inside `<a>`; with `action` inside `<button
+type="button">` (the existing `ActionButton` client runtime); both get the theme focus ring and no default button
+styling. `href` and `action` together: `action` wins, as on Button today. A clickable image needs a non-empty `alt`
+(it is the link's name): an issue when `alt` is bound to a constant empty string; at render a missing alt falls back
+to the block name. An Image without `href`/`action` renders exactly as today.
 
 Rules added to `validateComposedSpec`:
 
@@ -217,6 +227,8 @@ when the overlay closes; navigation from a dropdown link closes it and any overl
 5. Collection carousel layout: `kind: 'carousel'`, `columns` 1–6, page-editor value `carousel-<n>`, fixed 1.25 cards
    on mobile.
 6. Templates are a new palette mechanism (nothing to reuse).
+7. Clickable images (added after review, user's example: logo → home page): Image gets Button's `href` and `action`.
+   Clickable Box/Card (a whole card as one link) is not in this sprint.
 
 ## Constraints
 
