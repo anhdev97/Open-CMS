@@ -1328,6 +1328,8 @@ const frFR: Messages = {
       list: "Liste",
       columns: "Colonnes",
       columnsN: "{count} colonnes",
+      carousel: "Carrousel",
+      perViewN: "{count} visibles",
       editorOptions: "Les éditeurs de pages peuvent",
       editorFilter: "ajouter leurs propres conditions",
       editorSort: "changer l'ordre",

@@ -1328,6 +1328,8 @@ const viVN: Messages = {
       list: "Danh sách",
       columns: "Số cột",
       columnsN: "{count} cột",
+      carousel: "Băng chuyền",
+      perViewN: "{count} thẻ mỗi khung",
       editorOptions: "Người dựng trang được",
       editorFilter: "thêm điều kiện lọc riêng",
       editorSort: "đổi thứ tự",

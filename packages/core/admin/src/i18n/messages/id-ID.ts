@@ -1328,6 +1328,8 @@ const idID: Messages = {
       list: "Daftar",
       columns: "Kolom",
       columnsN: "{count} kolom",
+      carousel: "Karosel",
+      perViewN: "{count} terlihat",
       editorOptions: "Editor halaman boleh",
       editorFilter: "menambah syarat sendiri",
       editorSort: "mengubah urutan",

@@ -362,6 +362,16 @@ describe('buildSpec', () => {
       options: { editorSort: true },
     });
   });
+
+  it('a carousel collection layout is kept (spec §1.3)', () => {
+    const draft = {
+      id: 'blk_abcdef', name: 'Strip', label: { 'en-US': 'Strip' }, category: 'data', version: 1, fields: {},
+      binding: { apiId: 'product', mode: 'collection' as const, layout: { kind: 'carousel' as const, columns: 1 } },
+    };
+    const s = buildSpec(draft, { el: 'Card' });
+    expect(s.binding?.layout).toEqual({ kind: 'carousel', columns: 1 });
+    expect(validateComposedSpec(s)).toEqual([]);
+  });
 });
 
 describe('fieldUsage', () => {

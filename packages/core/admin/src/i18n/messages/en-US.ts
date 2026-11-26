@@ -1386,6 +1386,8 @@ export const enUS = {
       list: "List",
       columns: "Columns",
       columnsN: "{count} columns",
+      carousel: "Carousel",
+      perViewN: "{count} in view",
       editorOptions: "Page editors may",
       editorFilter: "add their own conditions",
       editorSort: "change the order",

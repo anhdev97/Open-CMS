@@ -646,6 +646,21 @@ export function RootPreview({ children }: { children?: ReactNode }) {
   const c = useContext(CanvasContext);
   if (c.binding?.mode !== 'collection') return <>{children}</>;
   const l = c.binding.layout;
+  if (l?.kind === 'carousel') {
+    // Collection carousel (spec §1.3): 1.25 cards on mobile, 2 (3 from 5) on tablet, `columns` on desktop, as on the site.
+    const n = l.columns ?? 3;
+    const vars = perViewVars({ base: Math.min(1.25, n), md: Math.min(n, n >= 5 ? 3 : 2), lg: n }, '6');
+    return (
+      <div className={ui.CAROUSEL_TRACK} style={vars} data-collection-carousel="">
+        <div className={ui.CAROUSEL_SLIDE}>{children}</div>
+        {c.repeats.map((e, i) => (
+          <div key={String((e as Props).documentId ?? i)} className={ui.CAROUSEL_SLIDE}>
+            <Repeat entry={e} />
+          </div>
+        ))}
+      </div>
+    );
+  }
   const cls = l?.kind === 'list' ? ui.layoutClass.Stack({ direction: 'vertical', gap: '6' }) : ui.layoutClass.Grid({ columns: (l?.columns ?? 3) as 3, gap: '6' });
   return (
     <div className={cls}>

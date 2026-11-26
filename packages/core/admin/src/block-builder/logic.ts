@@ -265,7 +265,10 @@ export function cleanBinding(b: ComposedBinding): ComposedBinding {
   if (b.filter?.length) out.filter = b.filter.map((f) => ({ field: f.field, value: f.value }));
   if (b.sort?.field) out.sort = { field: b.sort.field, direction: b.sort.direction };
   if (b.limit !== undefined) out.limit = b.limit;
-  if (b.layout) out.layout = b.layout.kind === 'list' ? { kind: 'list' } : { kind: 'grid', ...(b.layout.columns ? { columns: b.layout.columns } : {}) };
+  if (b.layout) {
+    const kind = b.layout.kind === 'carousel' ? 'carousel' : 'grid';
+    out.layout = b.layout.kind === 'list' ? { kind: 'list' } : { kind, ...(b.layout.columns ? { columns: b.layout.columns } : {}) };
+  }
   const o = b.options ?? {};
   const options: NonNullable<ComposedBinding['options']> = {};
   for (const k of ['editorFilter', 'editorSort', 'editorLimit', 'editorLayout'] as const) if (o[k] === true) options[k] = true;

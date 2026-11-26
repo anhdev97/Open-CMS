@@ -495,7 +495,15 @@ function Binding({ binding }: { binding: ComposedBinding }) {
                 <Select
                   value={binding.layout?.kind ?? 'grid'}
                   disabled={m.readOnly}
-                  onValueChange={(k) => set({ layout: k === 'list' ? { kind: 'list' } : { kind: 'grid', columns: binding.layout?.columns ?? 3 } })}
+                  onValueChange={(k) =>
+                    set({
+                      layout:
+                        k === 'list'
+                          ? { kind: 'list' }
+                          : // Grid takes 2-6 columns, a carousel 1-6 slides in view on desktop (spec §1.3).
+                            { kind: k as 'grid' | 'carousel', columns: Math.max(k === 'grid' ? 2 : 1, binding.layout?.columns ?? 3) },
+                    })
+                  }
                 >
                   <SelectTrigger id={id} className="w-full">
                     <SelectValue />
@@ -503,17 +511,22 @@ function Binding({ binding }: { binding: ComposedBinding }) {
                   <SelectContent>
                     <SelectItem value="grid">{t('blockBuilder.binding.grid')}</SelectItem>
                     <SelectItem value="list">{t('blockBuilder.binding.list')}</SelectItem>
+                    <SelectItem value="carousel">{t('blockBuilder.binding.carousel')}</SelectItem>
                   </SelectContent>
                 </Select>
                 {binding.layout?.kind !== 'list' && (
-                  <Select value={String(binding.layout?.columns ?? 3)} disabled={m.readOnly} onValueChange={(c) => set({ layout: { kind: 'grid', columns: Number(c) } })}>
+                  <Select
+                    value={String(binding.layout?.columns ?? 3)}
+                    disabled={m.readOnly}
+                    onValueChange={(c) => set({ layout: { kind: binding.layout?.kind === 'carousel' ? 'carousel' : 'grid', columns: Number(c) } })}
+                  >
                     <SelectTrigger className="w-32 shrink-0" aria-label={t('blockBuilder.binding.columns')}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {[2, 3, 4, 5, 6].map((n) => (
+                      {(binding.layout?.kind === 'carousel' ? [1, 2, 3, 4, 5, 6] : [2, 3, 4, 5, 6]).map((n) => (
                         <SelectItem key={n} value={String(n)}>
-                          {t('blockBuilder.binding.columnsN', { count: n })}
+                          {t(binding.layout?.kind === 'carousel' ? 'blockBuilder.binding.perViewN' : 'blockBuilder.binding.columnsN', { count: n })}
                         </SelectItem>
                       ))}
                     </SelectContent>
