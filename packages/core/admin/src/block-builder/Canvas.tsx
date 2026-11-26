@@ -24,6 +24,7 @@ import { CanvasContext, CanvasSelection, HoverPreview, type CanvasItem, type Can
 import { useBreakpoint } from './style/breakpoint';
 import { bpLabel } from './style/shared';
 import { CHILD_ITEM, elementLabel, slotRules } from './element-config';
+import { templatesRefused } from './templates';
 import { indexPuck, itemToNode, pathOf, type BuilderPuckData, type PuckItem } from './tree-puck';
 
 type Props = Record<string, unknown>;
@@ -194,7 +195,7 @@ function ContainerPreview({ el, props }: { el: LayoutEl; props: Props }) {
   const style = (ui.layoutStyle[el] as (p: Props) => CSSProperties | undefined)(p);
   // A clickable Box/Card (bound href or an action) refuses interactive elements while it is one (spec §1).
   const clickable = isClickable(node)
-    ? { disallow: [...(slotRules(el, c.binding?.mode === 'collection').disallow ?? []), ...INTERACTIVE_ELEMENTS] }
+    ? { disallow: [...(slotRules(el, c.binding?.mode === 'collection').disallow ?? []), ...INTERACTIVE_ELEMENTS, ...templatesRefused([], INTERACTIVE_ELEMENTS)] }
     : {};
   const zone = Slot ? createElement(Slot, { className: cls, style, minEmptyHeight: 64, ...clickable } as never) : <div className={cls} style={style} />;
   return (

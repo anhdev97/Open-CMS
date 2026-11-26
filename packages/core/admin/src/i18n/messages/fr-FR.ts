@@ -934,8 +934,17 @@ const frFR: Messages = {
       single: "Une entrée",
       collection: "Une liste",
     },
+    templates: {
+      navMenu: "Menu de navigation (2 niveaux)",
+      mobileNav: "Menu mobile",
+      faq: "FAQ",
+      productTabs: "Onglets produit",
+      bannerCarousel: "Carrousel de bannières",
+      contactForm: "Formulaire de contact",
+    },
     categories: {
       interactive: "Interactif",
+      templates: "Modèles",
       form: "Formulaire",
       layout: "Mise en page",
       content: "Contenu",
@@ -1555,6 +1564,13 @@ const frFR: Messages = {
     issueTaken: 'Déjà pris',
     issuePlain: 'Erreur sous forme de chaîne simple',
     layoutNote: "AppLayout dans un memory router. Sans API, la liste des types de contenu affiche son état d'erreur.",
+  },
+  paletteSearch: {
+    labelBlockBuilder: "Rechercher des éléments et modèles",
+    labelPageBuilder: "Rechercher des blocs",
+    placeholder: "Rechercher (/ ou Ctrl+K)",
+    noMatches: "Aucun résultat",
+    hint: "Entrée ajoute le premier résultat ; Échap efface.",
   },
   ui: {
     title: 'Kit UI',

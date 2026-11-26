@@ -8,7 +8,8 @@ import {
   type ComposedElement, type NodeStyle,
 } from '@opencloudcms/schema';
 import type { ReactElement, ReactNode } from 'react';
-import { t } from '../i18n';
+import { getActiveLocale, t } from '../i18n';
+import { BUILDER_TEMPLATES, templateName, templatePuckProps, templatesRefused } from './templates';
 import { hasLegacyProps, migrateLegacyProps } from './style/migrate';
 import { isContainer, uniqueRegionName } from './tree-puck';
 
@@ -348,6 +349,9 @@ export function slotRules(el: ComposedElement, collection: boolean): { allow?: s
   if (el === 'Overlay') add([...REGION_ELEMENTS, ...INTERACTIVE_CONTAINERS]);
   if (el === 'Dropdown') add(['Dropdown', ...REGION_ELEMENTS]);
   if (el === 'Tooltip') add(['Tooltip', 'Dropdown', ...FORM_CONTROL_ELEMENTS]);
+  // Templates: refused when their root breaks a direct-child rule or they contain an element refused at any depth.
+  const deep: string[] = [...(collection ? ['Slot', ...REGION_ELEMENTS, 'Carousel'] : []), ...(el === 'Dropdown' ? ['Dropdown'] : [])];
+  add(templatesRefused(out, deep));
   return { disallow: out };
 }
 
@@ -362,10 +366,16 @@ export interface PaletteState {
 
 type PaletteCategory = { title?: string; components: string[]; visible?: boolean };
 
+/** Template component names offered in the palette. */
+function templateNames(collection: boolean): string[] {
+  const refused = collection ? templatesRefused([], ['Slot', ...REGION_ELEMENTS, 'Carousel']) : [];
+  return BUILDER_TEMPLATES.map((tpl) => templateName(tpl.id)).filter((n) => !refused.includes(n));
+}
+
 /** The palette (Puck categories) for the block's current state. */
 export function paletteCategories(
   s: PaletteState,
-): Record<'layout' | 'content' | 'interactive' | 'form' | 'regions' | 'overlay', PaletteCategory> & { other: { visible: false } } {
+): Record<'layout' | 'content' | 'interactive' | 'form' | 'templates' | 'regions' | 'overlay', PaletteCategory> & { other: { visible: false } } {
   const layout = s.collection ? LAYOUT_ELEMENTS.filter((e) => e !== 'Slot') : LAYOUT_ELEMENTS;
   // No Carousel in a collection item template (spec §1 rules).
   const interactive = s.collection ? INTERACTIVE_PALETTE.filter((e) => e !== 'Carousel') : INTERACTIVE_PALETTE;
@@ -374,6 +384,8 @@ export function paletteCategories(
     content: { title: t('blockBuilder.categories.content'), components: [...CONTENT_ELEMENTS] },
     interactive: { title: t('blockBuilder.categories.interactive'), components: [...interactive] },
     form: { title: t('blockBuilder.categories.form'), components: [...FORM_PALETTE] },
+    // Starter templates (spec §3); no banner carousel in a collection item template.
+    templates: { title: t('blockBuilder.categories.templates'), components: templateNames(s.collection) },
     regions: { title: t('blockBuilder.categories.regions'), components: [...REGION_ELEMENTS], visible: !s.overlayRoot },
     overlay: { title: t('blockBuilder.categories.overlay'), components: ['Overlay'], visible: s.emptyRoot && !s.overlayRoot },
     other: { visible: false },
@@ -455,6 +467,13 @@ export function buildBuilderConfig(opts: BuilderConfigOptions): Config {
         return props === data.props ? data : { ...data, props };
       },
     } as ComponentConfig;
+  }
+  // Starter templates: the root element's config with the template (text in the admin locale) as default props. The
+  // inserted item becomes that element in the builder's onChange (`expandTemplates`).
+  const locale = getActiveLocale();
+  for (const tpl of BUILDER_TEMPLATES) {
+    const tree = tpl.tree(locale);
+    components[templateName(tpl.id)] = { ...components[tree.el]!, label: t(tpl.label), defaultProps: templatePuckProps(tree) } as ComponentConfig;
   }
   return {
     components,

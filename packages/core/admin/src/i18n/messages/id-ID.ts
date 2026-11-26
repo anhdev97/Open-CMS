@@ -934,8 +934,17 @@ const idID: Messages = {
       single: "Satu entri",
       collection: "Daftar",
     },
+    templates: {
+      navMenu: "Menu navigasi (2 tingkat)",
+      mobileNav: "Menu seluler",
+      faq: "FAQ",
+      productTabs: "Tab produk",
+      bannerCarousel: "Karosel banner",
+      contactForm: "Formulir kontak",
+    },
     categories: {
       interactive: "Interaktif",
+      templates: "Templat",
       form: "Formulir",
       layout: "Tata letak",
       content: "Konten",
@@ -1555,6 +1564,13 @@ const idID: Messages = {
     issueTaken: 'Sudah dipakai',
     issuePlain: 'Kesalahan berupa string biasa',
     layoutNote: 'AppLayout di dalam memory router. Tanpa API, daftar tipe konten menampilkan status galat.',
+  },
+  paletteSearch: {
+    labelBlockBuilder: "Cari elemen dan templat",
+    labelPageBuilder: "Cari blok",
+    placeholder: "Cari (/ atau Ctrl+K)",
+    noMatches: "Tidak ada hasil",
+    hint: "Enter menambahkan hasil pertama; Esc menghapus.",
   },
   ui: {
     title: 'UI kit',

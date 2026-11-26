@@ -992,8 +992,17 @@ export const enUS = {
       single: "One entry",
       collection: "A list",
     },
+    templates: {
+      navMenu: "Nav menu (2 levels)",
+      mobileNav: "Mobile nav",
+      faq: "FAQ",
+      productTabs: "Product tabs",
+      bannerCarousel: "Banner carousel",
+      contactForm: "Contact form",
+    },
     categories: {
       interactive: "Interactive",
+      templates: "Templates",
       form: "Form",
       layout: "Layout",
       content: "Content",
@@ -1622,6 +1631,13 @@ export const enUS = {
     issuePlain: "Plain string issue",
     layoutNote:
       "AppLayout inside a memory router. Without an API the content types list shows its error state.",
+  },
+  paletteSearch: {
+    labelBlockBuilder: "Search elements and templates",
+    labelPageBuilder: "Search blocks",
+    placeholder: "Search (/ or Ctrl+K)",
+    noMatches: "No matches",
+    hint: "Enter adds the first match; Esc clears.",
   },
   ui: {
     title: "UI kit",

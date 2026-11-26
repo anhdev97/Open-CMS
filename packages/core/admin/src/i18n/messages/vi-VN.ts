@@ -934,8 +934,17 @@ const viVN: Messages = {
       single: "Một mục",
       collection: "Danh sách",
     },
+    templates: {
+      navMenu: "Menu điều hướng (2 cấp)",
+      mobileNav: "Menu di động",
+      faq: "Câu hỏi thường gặp",
+      productTabs: "Thẻ sản phẩm",
+      bannerCarousel: "Băng chuyền banner",
+      contactForm: "Biểu mẫu liên hệ",
+    },
     categories: {
       interactive: "Tương tác",
+      templates: "Mẫu dựng sẵn",
       form: "Biểu mẫu",
       layout: "Bố cục",
       content: "Nội dung",
@@ -1555,6 +1564,13 @@ const viVN: Messages = {
     issueTaken: 'Đã được sử dụng',
     issuePlain: 'Lỗi dạng chuỗi thường',
     layoutNote: 'AppLayout trong một memory router. Khi không có API, danh sách loại nội dung hiển thị trạng thái lỗi.',
+  },
+  paletteSearch: {
+    labelBlockBuilder: "Tìm thành phần và mẫu",
+    labelPageBuilder: "Tìm block",
+    placeholder: "Tìm (/ hoặc Ctrl+K)",
+    noMatches: "Không có kết quả",
+    hint: "Enter thêm kết quả đầu tiên; Esc để xóa.",
   },
   ui: {
     title: 'Bộ UI',

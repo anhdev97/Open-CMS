@@ -54,6 +54,7 @@ import {
   type ResetNote,
 } from '../block-builder/logic';
 import { canvasFieldValues, imageEntryPaths, loadSamples, placeholderEntry } from '../block-builder/sample-data';
+import { expandTemplates } from '../block-builder/templates';
 import { hoistOverlay, isEmptyTree, keepOverlayRoot, puckRegionNames, puckToTree, treeToPuck, type BuilderPuckData } from '../block-builder/tree-puck';
 
 const READ_ONLY = { drag: false, duplicate: false, delete: false, edit: false, insert: false };
@@ -270,7 +271,9 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
     const next = data as unknown as BuilderPuckData;
     // An Overlay dropped next to an empty root becomes the root (it is only allowed there); elements dropped next to
     // an Overlay root go inside it.
-    const fixed = hoistOverlay(next) ?? keepOverlayRoot(prev, next);
+    // A template dropped from the palette becomes its root element (same id and position).
+    const expanded = expandTemplates(next);
+    const fixed = (expanded ? (hoistOverlay(expanded) ?? keepOverlayRoot(prev, expanded) ?? expanded) : null) ?? hoistOverlay(next) ?? keepOverlayRoot(prev, next);
     latest.current = fixed ?? next;
     setTree(puckToTree(latest.current));
     if (fixed) queueMicrotask(() => getPuck.current?.().dispatch({ type: 'setData', data: fixed as unknown as Data }));
