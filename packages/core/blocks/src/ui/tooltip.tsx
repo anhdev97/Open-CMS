@@ -12,10 +12,13 @@ export const TOOLTIP_WRAPPER = 'relative inline-flex group';
 /** Wrapper focus ring, when the wrapper itself takes focus (a target with nothing focusable). */
 export const TOOLTIP_WRAPPER_FOCUS =
   'rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background';
-/** Wraps and is capped to the viewport so a bubble near an edge never adds horizontal scroll. */
+/**
+ * Hidden with `display: none` (not `invisible`/`opacity-0`), so a closed bubble near an edge takes no layout and adds
+ * no scrollable overflow; shown on hover/focus-within. Width-capped to the viewport and wrapping.
+ */
 export const TOOLTIP_BUBBLE =
-  'pointer-events-none absolute z-50 w-max max-w-[min(20rem,calc(100vw-2rem))] rounded-md bg-foreground px-3 py-1.5 text-xs leading-snug font-normal whitespace-normal break-words text-background shadow-md transition-opacity invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100';
-export const TOOLTIP_OPEN = 'visible opacity-100';
+  'pointer-events-none absolute z-50 hidden w-max max-w-[min(20rem,calc(100vw-2rem))] rounded-md bg-foreground px-3 py-1.5 text-xs leading-snug font-normal whitespace-normal break-words text-background shadow-md group-hover:block group-focus-within:block';
+export const TOOLTIP_OPEN = 'block';
 export const TOOLTIP_SIDE: Record<TooltipSide, string> = {
   top: 'bottom-full left-1/2 mb-2 -translate-x-1/2',
   bottom: 'top-full left-1/2 mt-2 -translate-x-1/2',
@@ -46,7 +49,7 @@ export function Tooltip({ text, side, children, focusWrapper, id, style, editor 
   // A plain child cannot receive `aria-describedby`, so the wrapper describes itself and takes focus.
   const own = !fn || focusWrapper === true;
   return (
-    <span
+    <div
       id={id}
       className={cn(TOOLTIP_WRAPPER, own ? TOOLTIP_WRAPPER_FOCUS : undefined, sp.className)}
       style={styleAttr(sp)}
@@ -57,6 +60,6 @@ export function Tooltip({ text, side, children, focusWrapper, id, style, editor 
       <span role="tooltip" id={tipId} className={cn(TOOLTIP_BUBBLE, TOOLTIP_SIDE[side as TooltipSide] ?? TOOLTIP_SIDE.top, editor?.open ? TOOLTIP_OPEN : undefined)}>
         {text}
       </span>
-    </span>
+    </div>
   );
 }

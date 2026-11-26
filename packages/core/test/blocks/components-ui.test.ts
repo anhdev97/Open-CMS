@@ -229,16 +229,19 @@ describe('Tooltip', () => {
     const bubbleId = /role="tooltip"[^>]*id="([^"]+)"|id="([^"]+)"[^>]*role="tooltip"/.exec(out)!;
     expect(out).toContain(`aria-describedby="${bubbleId[1] ?? bubbleId[2]}"`);
   });
-  it('the bubble wraps and is width-capped (no horizontal scroll on narrow screens)', () => {
+  const bubbleCls = (out: string) => /<span role="tooltip"[^>]*class="([^"]*)"/.exec(out)![1].split(' ');
+  it('the closed bubble is display:none (no layout, no scroll overflow), shown on hover/focus, wrapping and width-capped', () => {
     const out = markup(h(ui.Tooltip, { text: 'x', children: h('span', null, 't') }));
-    expect(out).toMatch(/role="tooltip"/);
-    expect(out).toContain('max-w-');
-    expect(out).toContain('group-hover:visible');
-    expect(out).toContain('group-focus-within:visible');
+    const cls = bubbleCls(out);
+    expect(cls).toEqual(expect.arrayContaining(['hidden', 'group-hover:block', 'group-focus-within:block', 'max-w-[min(20rem,calc(100vw-2rem))]', 'whitespace-normal']));
+    expect(cls).not.toContain('invisible');
+    expect(cls).not.toContain('opacity-0');
+    expect(out).toMatch(/^<div class="relative inline-flex group/);
   });
   it('editor.open forces the bubble visible', () => {
-    const out = markup(h(ui.Tooltip, { text: 'x', editor: { open: true }, children: h('span', null, 't') }));
-    expect(out).not.toMatch(/role="tooltip"[^>]*\binvisible\b|\binvisible\b[^>]*role="tooltip"/);
+    const cls = bubbleCls(markup(h(ui.Tooltip, { text: 'x', editor: { open: true }, children: h('span', null, 't') })));
+    expect(cls).toContain('block');
+    expect(cls).not.toContain('hidden');
   });
   it('ids are unique per rendered item', () => {
     const out = markup(h('div', null, h(ui.Tooltip, { text: 'a', children: h('span', null, '1') }), h(ui.Tooltip, { text: 'b', children: h('span', null, '2') })));
@@ -399,6 +402,35 @@ describe('clickable Image, Box and Card', () => {
     expect(out).toMatch(/^<a\b[^>]*href="\/"[^>]*><img\b[^>]*alt="Trang chủ"/);
     expect(out).toContain('focus-visible:ring-2');
     expect(out).toMatch(/<\/a>$/);
+  });
+  it('a clickable Image puts its layout style (span, height, width) on the link and fills it', () => {
+    const tree = (img: Record<string, unknown>) => ({
+      el: 'Columns' as const, props: { count: 2 },
+      children: [{ el: 'Image' as const, props: { src: '/a.png', alt: 'A', ...img }, style: { span: { base: 'full', md: 2 }, height: '100%', width: '50%', margin: { base: { t: '4' } } } }],
+    });
+    const link = tree({});
+    const cases = [
+      ['a', block({ ...link, children: [{ ...link.children[0], bind: { href: c('/') } }] })],
+      ['button', block(tree({ action: { type: 'scroll', target: 'top' } }))],
+    ] as const;
+    for (const [tag, linked] of cases) {
+      const wrapCls = attr(linked, tag, 'class')!.split(' ');
+      expect(wrapCls, tag).toEqual(expect.arrayContaining(['col-span-full', 'md:col-span-(--ocms-span-md)', 'h-(--ocms-h)', 'w-(--ocms-w)', 'mt-(--ocms-mt)']));
+      const wrapStyle = attr(linked, tag, 'style')!;
+      expect(wrapStyle, tag).toContain('--ocms-h:100%');
+      expect(wrapStyle, tag).toContain('--ocms-w:50%');
+      const imgTag = /<img\b[^>]*>/.exec(linked)![0];
+      expect(imgTag, tag).not.toContain('style=');
+      const imgCls = /class="([^"]*)"/.exec(imgTag)![1].split(' ');
+      expect(imgCls, tag).toEqual(expect.arrayContaining(['w-full', 'h-full', 'object-cover']));
+      expect(imgCls.some((k) => k.includes('--ocms')), tag).toBe(false);
+    }
+  });
+  it('a clickable Image keeps object-fit and aspect on the img and h-auto without a style height', () => {
+    const out = block({ el: 'Image', props: { src: '/a.png', alt: 'A', fit: 'contain', aspect: { base: 'square' } }, bind: { href: c('/') } });
+    const imgCls = attr(out, 'img', 'class')!.split(' ');
+    expect(imgCls).toEqual(expect.arrayContaining(['object-contain', 'aspect-square', 'w-full']));
+    expect(imgCls).not.toContain('h-full');
   });
   it('a clickable Image without alt falls back to the block label', () => {
     const out = block({ el: 'Image', props: { src: '/logo.svg' }, bind: { href: c('/') } }, { label: { 'en-US': 'Logo', 'vi-VN': 'Biểu trưng' } });

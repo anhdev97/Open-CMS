@@ -55,13 +55,17 @@ export function Image({ src, alt, ratio, rounded, fit, aspect, style, id, href, 
   const act = validAction(action);
   const safe = act ? null : safeHref(href);
   if (!act && !safe) return <img id={id} src={src} alt={alt ?? ''} loading="lazy" className={cls} style={styleAttr(sp)} />;
-  // Clickable: the wrapper takes the id and the image's `hidden` breakpoints (no empty focusable link left behind).
-  const img = <img src={src} alt={alt ?? ''} loading="lazy" className={cls} style={styleAttr(sp)} />;
-  const hide = styleProps(style?.hidden ? { hidden: style.hidden } : undefined, 'block').className;
-  const wrap = cn('block', CLICKABLE, rounded ? 'rounded-xl' : undefined, hide);
-  if (act) return <ActionButton action={act} id={id} className={cn(wrap, CLICKABLE_BUTTON)} aria-describedby={describedBy}>{img}</ActionButton>;
-  return <a id={id} href={safe!} className={wrap} aria-describedby={describedBy}>{img}</a>;
+  // Clickable: the link/button is the laid-out element (it takes the id and every style class and variable: span,
+  // width, height, margin, hidden, ...); the image fills it and keeps object-fit, aspect and rounding.
+  const fill = cn('w-full', OBJECT_FIT[fit as 'cover'] ?? OBJECT_FIT.cover, asp.length ? asp : RATIO[ratio as 'auto'] ?? RATIO.auto, rounded ? 'rounded-xl' : undefined, setsHeight(sp) ? 'h-full' : undefined);
+  const img = <img src={src} alt={alt ?? ''} loading="lazy" className={fill} />;
+  const wrap = (button: boolean) => cn('block overflow-hidden', CLICKABLE, button ? CLICKABLE_BUTTON : undefined, rounded ? 'rounded-xl' : undefined, sp.className);
+  if (act) return <ActionButton action={act} id={id} className={wrap(true)} style={styleAttr(sp)} aria-describedby={describedBy}>{img}</ActionButton>;
+  return <a id={id} href={safe!} className={wrap(false)} style={styleAttr(sp)} aria-describedby={describedBy}>{img}</a>;
 }
+
+/** Whether a style sets a height at any breakpoint. */
+const setsHeight = (sp: { style: object }) => Object.keys(sp.style).some((k) => /^--ocms-h(-md|-lg)?$/.test(k));
 
 /** `action` when it is a valid `ButtonAction`, else undefined (the button stays a link). */
 export function validAction(action: unknown): ButtonAction | undefined {

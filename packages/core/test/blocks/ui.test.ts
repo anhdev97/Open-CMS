@@ -377,7 +377,7 @@ describe('builder component additions to the primitives', () => {
     expect(r(h(ui.Image, { src: '/a.png', alt: 'A', href: 'javascript:x' }))).toBe(r(h(ui.Image, { src: '/a.png', alt: 'A' })));
     expect(r(h(ui.Box, { href: 'javascript:x' }, 'x'))).toBe(r(h(ui.Box, {}, 'x')));
   });
-  it('a clickable Image moves its hidden breakpoints to the link', () => {
+  it('a clickable Image puts its hidden breakpoints on the link', () => {
     const out = r(h(ui.Image, { src: '/a.png', alt: 'A', href: '/', style: { hidden: { base: true } } }));
     expect(/<a [^>]*class="([^"]*)"/.exec(out)![1].split(' ')).toEqual(expect.arrayContaining(['hidden', 'md:block', 'lg:block']));
   });
