@@ -264,10 +264,12 @@ function renderNode(ctx: Ctx, n: ComposedNode, key?: number): ReactNode {
       return <Icon key={key} id={id} name={str(p.name) ?? ''} size={tok<IconSize>(p.size)} label={h.text(val(ctx, n, 'label'))} style={st} />;
     case 'Tooltip': {
       const child = n.children?.[0];
-      const target = child ? firstFocusable(ctx, child) : undefined;
+      // No child, or one hidden by its showIf: no tooltip at all (not an empty focusable wrapper).
+      if (!child || !visible(ctx, child)) return null;
+      const target = firstFocusable(ctx, child);
       return (
         <Tooltip key={key} id={id} text={h.text(val(ctx, n, 'text'))} side={tok<'top'>(p.side)} focusWrapper={!target} style={st}>
-          {(tipId: string) => (child ? renderNode(target ? { ...ctx, describe: { node: target, id: tipId } } : ctx, child) : null)}
+          {(tipId: string) => renderNode(target ? { ...ctx, describe: { node: target, id: tipId } } : ctx, child)}
         </Tooltip>
       );
     }

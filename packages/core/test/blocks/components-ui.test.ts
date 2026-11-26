@@ -224,6 +224,26 @@ describe('Icon', () => {
 });
 
 describe('Tooltip', () => {
+  it('renders nothing (no empty focusable wrapper) when its child is hidden by showIf', () => {
+    const spec = (show: boolean) =>
+      markup(
+        defineComposedBlock(
+          base({
+            fields: { badge: { kind: 'text', default: show ? 'x' : '' } },
+            tree: {
+              el: 'Box',
+              children: [
+                { el: 'Tooltip', bind: { text: c('Tip') }, children: [{ el: 'Badge', props: { text: 'Free' }, showIf: { from: 'field', name: 'badge', is: 'present' } }] },
+              ],
+            },
+          }),
+        ).render({ _locale: 'en-US', badge: show ? 'x' : '' } as never),
+      );
+    expect(spec(true)).toContain('role="tooltip"');
+    expect(spec(true)).toContain('tabindex="0"');
+    expect(spec(false)).not.toContain('tooltip');
+    expect(spec(false)).not.toContain('tabindex');
+  });
   it('renders role="tooltip" and the target button gets aria-describedby = bubble id', () => {
     const out = block({
       el: 'Tooltip', props: { side: 'bottom' }, bind: { text: c('Free shipping') },

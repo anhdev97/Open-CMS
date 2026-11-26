@@ -184,7 +184,12 @@ export function Carousel({ children, perView, gap = '4', arrows = true, dots = t
       {showDots || canAutoplay ? (
         <div className={CAROUSEL_DOTS}>
           {canAutoplay ? (
-            <button type="button" aria-label={userPaused ? msg.play : msg.pause} className={CAROUSEL_PAUSE} onClick={() => setUserPaused((p) => !p)}>
+            <button type="button" aria-label={userPaused ? msg.play : msg.pause} className={CAROUSEL_PAUSE} onClick={() => {
+                // Play is an explicit request: focus staying on this button must not hold autoplay (it pauses again
+                // when focus next moves inside).
+                if (userPaused) setFocused(false);
+                setUserPaused((p) => !p);
+              }}>
               {userPaused ? <PlayIcon className="size-3.5" aria-hidden="true" /> : <PauseIcon className="size-3.5" aria-hidden="true" />}
             </button>
           ) : null}

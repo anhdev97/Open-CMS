@@ -389,6 +389,19 @@ describe('Carousel', () => {
     expect($$('button[aria-label="Play"]')).toHaveLength(1);
   });
 
+  it('Pause then Play with focus left on the button resumes autoplay (focus inside no longer holds it)', () => {
+    vi.useFakeTimers();
+    mount(h(Carousel, { autoplay: 5 }, ...slides(3)));
+    act(() => $('button[aria-label="Pause"]').focus());
+    click($('button[aria-label="Pause"]'));
+    act(() => vi.advanceTimersByTime(20000));
+    expect(current()).toBe(0);
+    click($('button[aria-label="Play"]'));
+    expect(document.activeElement).toBe($('button[aria-label="Pause"]'));
+    act(() => vi.advanceTimersByTime(5100));
+    expect(current()).toBe(1);
+  });
+
   it('autoplay pauses on mouse hover and while the page is hidden', () => {
     vi.useFakeTimers();
     mount(h(Carousel, { autoplay: 3 }, ...slides(3)));

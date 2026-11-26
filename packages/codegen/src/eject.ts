@@ -309,19 +309,24 @@ function focusCandidates(g: Gen, n: ComposedNode, conds: FocusCandidate['conds']
 function tooltip(g: Gen, n: ComposedNode, indent: string): Out {
   const p = n.props ?? {};
   const child = n.children?.[0];
-  const cands = child ? focusCandidates(g, child) : [];
+  // Same as the renderer: no child, or one hidden by its showIf, renders no tooltip at all.
+  if (!child) return { jsx: false, code: 'null' };
+  const shown = child.showIf ? condition(g, child.showIf) : undefined;
+  const ind = shown ? indent + '  ' : indent;
+  const cands = focusCandidates(g, child);
   const id = ++g.tooltips;
   const t = `target${id}`;
   const tip = `tip${id}`;
   cands.forEach((c, i) => g.describe.set(c.node, `${t} === ${i} ? ${tip} : undefined`));
-  const inner = indent + (cands.length ? '  ' : '');
-  const content: Out = child ? node(g, child, inner + '    ') : { jsx: false, code: 'null' };
+  const inner = ind + (cands.length ? '  ' : '');
+  const content: Out = shown ? body(g, child, inner + '    ') : node(g, child, inner + '    ');
   const attrs = [...idAttr(p), textAttr('text', val(g, n, 'text')), ...tokens(p, ['side']), cands.length ? attrExpr('focusWrapper', `${t} < 0`) : 'focusWrapper', ...styleAttr(n)];
   const render = `(${cands.length ? tip : ''}) => ${content.code.includes('\n') ? `(\n${inner}    ${content.code}\n${inner}  )` : content.code}`;
   const el = element('ui.Tooltip', attrs, [{ jsx: false, code: render }], inner);
-  if (!cands.length) return { jsx: true, code: el };
   const tests = cands.map((c) => [...c.conds.map((x) => condition(g, x)), c.test].join(' && '));
-  return { jsx: false, code: `((${t}) => (\n${inner}  ${el}\n${inner}))([${tests.join(', ')}].indexOf(true))` };
+  const out: Out = cands.length ? { jsx: false, code: `((${t}) => (\n${inner}  ${el}\n${inner}))([${tests.join(', ')}].indexOf(true))` } : { jsx: true, code: el };
+  if (!shown) return out;
+  return { jsx: false, code: `${shown} ? (\n${indent}  ${out.code}\n${indent}) : null` };
 }
 
 /** Attributes of a form control from its props, in the renderer's terms. */

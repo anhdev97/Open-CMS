@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { createJiti } from 'jiti';
 import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resolveConfig, type ComposedBlockSpec } from '@opencloudcms/schema';
+import { resolveConfig, type ComposedBlockSpec, type ComposedNode } from '@opencloudcms/schema';
 // The real blocks package (source) and React, both from @opencloudcms/core.
 import * as blocks from '../../core/blocks/src/index';
 import { clickableSpec, componentsSpec, tooltipSpec } from './fixtures/components';
@@ -560,10 +560,24 @@ describe('printEjectedBlockTsx: builder component elements', () => {
       { entry: e({ image: null }), _editor: true },
       { _editor: true, _locale: 'vi-VN' },
     ]);
-    expect(source).toContain('[');
+    expect(source).toContain('.indexOf(true)');
     expect(html(ejected, { entry: e() })).toContain('aria-describedby');
     // The unlinked tooltip child has no focusable node: the wrapper takes the focus.
     expect(html(ejected, { entry: e() })).toContain('tabindex="0"');
+  });
+});
+
+describe('printEjectedBlockTsx: tooltip with a hidden child', () => {
+  const spec = (children: ComposedNode[]): ComposedBlockSpec => ({
+    ...unboundSpec,
+    fields: { badge: { kind: 'text', default: '' } },
+    tree: { el: 'Box', children: [{ el: 'Tooltip', bind: { text: { from: 'const', value: 'Tip' } }, children }] },
+  });
+  it('renders nothing when the child is hidden by showIf, like the renderer', () => {
+    const { ejected } = same(spec([{ el: 'Badge', props: { text: 'Free' }, showIf: { from: 'field', name: 'badge', is: 'present' } }]), [{ badge: 'x' }, { badge: '' }, {}], { ids: 'renamed' });
+    expect(html(ejected, { badge: 'x' })).toContain('tabindex="0"');
+    expect(html(ejected, { badge: '' })).not.toContain('tooltip');
+    expect(html(ejected, { badge: '' })).not.toContain('tabindex');
   });
 });
 
