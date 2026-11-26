@@ -455,9 +455,11 @@ function renderNode(ctx: Ctx, n: ComposedNode, key?: number): ReactNode {
   }
 }
 
-/** `'list'` or `'grid-<2..6>'`: the stored value of the editor `layout` field. */
+/** `'list'`, `'grid-<2..6>'` or `'carousel-<1..6>'`: the stored value of the editor `layout` field. */
 export function layoutValue(l: NonNullable<ComposedBlockSpec['binding']>['layout']): string {
-  return l?.kind === 'list' ? 'list' : `grid-${l?.columns ?? 3}`;
+  if (l?.kind === 'list') return 'list';
+  if (l?.kind === 'carousel') return `carousel-${l.columns ?? 3}`;
+  return `grid-${l?.columns ?? 3}`;
 }
 
 /**

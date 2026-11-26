@@ -6,6 +6,7 @@ import { Fragment, type ReactNode } from 'react';
 import { localizedText, OVERLAY_NAME_RE, type Locale, type LocalizedText } from '@opencloudcms/schema';
 import { Grid, Stack } from '../ui/layout';
 import { Text } from '../ui/content';
+import { Carousel } from '../client/Carousel';
 import { entryUrl, isPresent, readDate, readEntryImage, readEntryMoney, readHref, readText } from './values';
 
 type Entry = Record<string, unknown>;
@@ -92,16 +93,26 @@ function single(props: object, block: Block, fn: (entry: Entry) => ReactNode): R
   return <Placeholder text={`${blockLabel(block, loc)} · ${SELECT_ENTRY[loc] ?? SELECT_ENTRY[DEFAULT_LOCALE]}`} />;
 }
 
-type Layout = { kind: 'grid'; columns: 2 | 3 | 4 | 5 | 6 } | { kind: 'list' };
+type Layout = { kind: 'grid'; columns: 2 | 3 | 4 | 5 | 6 } | { kind: 'list' } | { kind: 'carousel'; columns: number };
 
 function parseLayout(v: unknown): Layout | null {
   if (v === 'list') return { kind: 'list' };
-  const m = typeof v === 'string' ? /^grid-([2-6])$/.exec(v) : null;
-  return m ? { kind: 'grid', columns: Number(m[1]) as 2 } : null;
+  const m = typeof v === 'string' ? /^(grid-([2-6])|carousel-([1-6]))$/.exec(v) : null;
+  if (!m) return null;
+  return m[2] ? { kind: 'grid', columns: Number(m[2]) as 2 } : { kind: 'carousel', columns: Number(m[3]) };
 }
 
 /**
- * Collection block: `fn(entry)` per entry in a grid or list. `layout` is `'list'` or `'grid-<2..6>'`; with
+ * Slides in view of a collection carousel: `columns` on desktop, like the grid on tablet (2, or 3 from 5 columns),
+ * 1.25 on mobile (a peek of the next card); never more than `columns`.
+ */
+export function collectionPerView(columns: number): { base: number; md: number; lg: number } {
+  return { base: Math.min(1.25, columns), md: Math.min(columns, columns >= 5 ? 3 : 2), lg: columns };
+}
+
+/**
+ * Collection block: `fn(entry)` per entry in a grid, list or carousel. `layout` is `'list'`, `'grid-<2..6>'` or
+ * `'carousel-<1..6>'`; with
  * `editorLayout` the page builder's `layout` prop wins. No entries → `emptyText` (in `_locale`), else an editor
  * placeholder / nothing.
  */
@@ -121,6 +132,13 @@ function collection(
   const layout =
     (block.editorLayout ? parseLayout((props as { layout?: unknown }).layout) : null) ?? parseLayout(block.layout) ?? { kind: 'grid', columns: 3 };
   const items = entries.map((e, i) => <Fragment key={typeof e.documentId === 'string' ? e.documentId : i}>{fn(e)}</Fragment>);
+  if (layout.kind === 'carousel') {
+    return (
+      <Carousel perView={collectionPerView(layout.columns)} gap="6" dots={false} label={blockLabel(block, loc)} locale={loc}>
+        {items}
+      </Carousel>
+    );
+  }
   return layout.kind === 'list' ? (
     <Stack direction="vertical" gap="6">{items}</Stack>
   ) : (

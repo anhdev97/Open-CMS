@@ -24,6 +24,8 @@ import { composedKind, validateComposedSpec, validateTheme } from '@opencloudcms
 import { loadComposedBlocks, loadConfig, loadTheme, printComposedBlockFile, printThemeFile } from '@opencloudcms/codegen';
 import { readEntryImage, readEntryMoney } from '../../blocks/src/composed/values';
 import { GRID_N } from '../../blocks/src/ui/tokens';
+import { layoutValue } from '../../blocks/src/composed/render';
+import { collectionPerView } from '../../blocks/src/composed/helpers';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -224,6 +226,37 @@ describe('defineComposedBlock: render', () => {
     expect(list).not.toContain(GRID_N[4]);
     expect(list).toContain('flex-col');
     expect(render(def, { entries: [product('a')], layout: 'grid-2' })).toContain(GRID_N[2]);
+  });
+
+  it('collection carousel layout: entries in a carousel track (1.25 per view on mobile, columns on desktop)', () => {
+    const def = defineComposedBlock(productGrid({ layout: { kind: 'carousel', columns: 4 } }, 'Strip'));
+    const out = render(def, { entries: [product('a'), product('b'), product('c'), product('d'), product('e')] });
+    expect(out).toContain('aria-roledescription="carousel"');
+    expect(out).toContain('data-ocms-carousel-track');
+    expect(out).toContain('--ocms-pv:1.25;--ocms-pv-md:2;--ocms-pv-lg:4');
+    for (const id of ['a', 'b', 'c', 'd', 'e']) expect(out).toContain(`Name ${id}`);
+    expect(out.match(/aria-roledescription="slide"/g)).toHaveLength(5);
+    expect(out).not.toContain(GRID_N[4]);
+    expect(layoutValue({ kind: 'carousel', columns: 4 })).toBe('carousel-4');
+    expect(collectionPerView(1)).toEqual({ base: 1, md: 1, lg: 1 });
+    expect(collectionPerView(6)).toEqual({ base: 1.25, md: 3, lg: 6 });
+  });
+
+  it('collection layout field: carousel options only for a carousel spec; stored grid-3 / list render as before', () => {
+    const grid = defineComposedBlock(productGrid({ options: { editorLayout: true } }));
+    const values = (d: typeof grid) => (d.fields.layout as { options: { value: string }[] }).options.map((o) => o.value);
+    expect(values(grid)).toEqual(['list', 'grid-2', 'grid-3', 'grid-4', 'grid-5', 'grid-6']);
+    expect(render(grid, { entries: [product('a')], layout: 'grid-3' })).toContain(GRID_N[3]);
+    expect(render(grid, { entries: [product('a')], layout: 'list' })).toContain('flex-col');
+    // A stored carousel value on a grid spec is not one of its options, but still renders as a carousel.
+    expect(render(grid, { entries: [product('a')], layout: 'carousel-2' })).toContain('aria-roledescription="carousel"');
+
+    const strip = defineComposedBlock(productGrid({ layout: { kind: 'carousel', columns: 3 }, options: { editorLayout: true } }, 'Strip2'));
+    expect(values(strip)).toEqual(['list', 'grid-2', 'grid-3', 'grid-4', 'grid-5', 'grid-6', 'carousel-1', 'carousel-2', 'carousel-3', 'carousel-4', 'carousel-5', 'carousel-6']);
+    expect(strip.fields.layout).toMatchObject({ default: 'carousel-3' });
+    expect(render(strip, { entries: [product('a')], layout: 'grid-3' })).toContain(GRID_N[3]);
+    expect(render(strip, { entries: [product('a')] })).toContain('--ocms-pv-lg:3');
+    expect(render(strip, { entries: [product('a')], layout: 'carousel-5' })).toContain('--ocms-pv-lg:5');
   });
 
   it('unbound: manual field values and const, showIf present/absent', () => {

@@ -204,6 +204,23 @@ describe('printEjectedBlockTsx', () => {
     expect(source).toContain("h.single(props, { name, label }, (entry) =>");
   });
 
+  it('collection carousel layout: same fields (carousel options) and identical rendering', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const spec: ComposedBlockSpec = {
+      ...collectionSpec,
+      id: 'blk_strip001',
+      name: 'Strip',
+      binding: { ...collectionSpec.binding!, mode: 'collection', layout: { kind: 'carousel', columns: 4 } } as ComposedBlockSpec['binding'],
+    };
+    const { composed, ejected } = same(spec, [
+      { badge: 'new', entries: [entry('a'), entry('b')] },
+      { badge: 'new', entries: [entry('a')], layout: 'carousel-2' },
+      { badge: 'new', entries: [entry('a')], layout: 'grid-3' },
+    ]);
+    expect(ejected.fields).toEqual(composed.fields);
+    expect((ejected.fields.layout as { default?: string }).default).toBe('carousel-4');
+  });
+
   it('collection: renders identically (grid, editor layout, empty text, placeholder, missing field)', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { source } = same(collectionSpec, [

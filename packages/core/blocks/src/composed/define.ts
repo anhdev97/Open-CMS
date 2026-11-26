@@ -104,6 +104,13 @@ export function defineComposedBlock(spec: ComposedBlockSpec): ComposedBlockDefin
         options: [
           { value: 'list', label: L('List', 'Danh sách', 'Liste', 'Daftar') },
           ...([2, 3, 4, 5, 6] as const).map((n) => ({ value: `grid-${n}`, label: L(`Grid · ${n}`, `Lưới · ${n}`, `Grille · ${n}`, `Kisi · ${n}`) })),
+          // Carousel values only for a carousel spec (existing stored values keep their options).
+          ...(binding.layout?.kind === 'carousel'
+            ? ([1, 2, 3, 4, 5, 6] as const).map((n) => ({
+                value: `carousel-${n}`,
+                label: L(`Carousel · ${n}`, `Băng chuyền · ${n}`, `Carrousel · ${n}`, `Karosel · ${n}`),
+              }))
+            : []),
         ],
         default: layoutValue(binding.layout),
       });

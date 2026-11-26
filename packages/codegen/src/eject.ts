@@ -18,7 +18,8 @@ const q = (s: string) => printLiteral(s);
 const has = (o: object | undefined, k: string) => !!o && Object.prototype.hasOwnProperty.call(o, k);
 
 /** Same as `layoutValue` of the composed renderer. */
-const layoutValue = (l: NonNullable<ComposedBlockSpec['binding']>['layout']) => (l?.kind === 'list' ? 'list' : `grid-${l?.columns ?? 3}`);
+const layoutValue = (l: NonNullable<ComposedBlockSpec['binding']>['layout']) =>
+  l?.kind === 'list' ? 'list' : l?.kind === 'carousel' ? `carousel-${l.columns ?? 3}` : `grid-${l?.columns ?? 3}`;
 
 /** Nodes of the elements `els`, in tree order (depth first). */
 function nodesOf(n: ComposedNode, els: readonly string[], out: ComposedNode[] = []): ComposedNode[] {
@@ -117,6 +118,9 @@ function printFields(spec: ComposedBlockSpec, indent: string): string[] {
         options: [
           { value: 'list', label: L('List', 'Danh sách', 'Liste', 'Daftar') },
           ...[2, 3, 4, 5, 6].map((n) => ({ value: `grid-${n}`, label: L(`Grid · ${n}`, `Lưới · ${n}`, `Grille · ${n}`, `Kisi · ${n}`) })),
+          ...(binding.layout?.kind === 'carousel'
+            ? [1, 2, 3, 4, 5, 6].map((n) => ({ value: `carousel-${n}`, label: L(`Carousel · ${n}`, `Băng chuyền · ${n}`, `Carrousel · ${n}`, `Karosel · ${n}`) }))
+            : []),
         ],
         default: layoutValue(binding.layout),
       };
