@@ -23,6 +23,27 @@ export interface BrandL10nTable {
   status: string;
 }
 
+export interface OrderTable {
+  id: string;
+  document_id: string;
+  status: string;
+  created_at: Date;
+  updated_at: Date;
+  published_at: Date | null;
+  code: string | null;
+  order_status: string | null;
+  items: unknown | null;
+  total_amount: string | null;
+  total_currency: string | null;
+  invoice_id: string | null;
+}
+
+export interface OrderL10nTable {
+  entry_id: string;
+  locale: string;
+  status: string;
+}
+
 export interface ProductImagesRelTable {
   entry_id: string;
   target_id: string;
@@ -62,6 +83,8 @@ export interface ProductL10nTable {
 export interface ContentDatabase {
   ct_product: ProductTable;
   ct_product_l10n: ProductL10nTable;
+  ct_order: OrderTable;
+  ct_order_l10n: OrderL10nTable;
   ct_brand: BrandTable;
   ct_brand_l10n: BrandL10nTable;
   ct_product__rel__images: ProductImagesRelTable;

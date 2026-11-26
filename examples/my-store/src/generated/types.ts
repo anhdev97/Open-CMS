@@ -31,6 +31,28 @@ export interface BrandInput {
   logo?: string | null;
 }
 
+/** Order (order) */
+export interface Order extends EntryMeta {
+  /** text, required, unique */
+  code: string | null;
+  /** text, required */
+  orderStatus: string | null;
+  /** json */
+  items: unknown | null;
+  /** money */
+  total: Money | null;
+  /** asset */
+  invoice: string | null;
+}
+
+export interface OrderInput {
+  code?: string | null;
+  orderStatus?: string | null;
+  items?: unknown | null;
+  total?: Money | null;
+  invoice?: string | null;
+}
+
 /** Product (product) */
 export interface Product extends EntryMeta {
   /** text, required, localizable, indexed */
@@ -70,10 +92,12 @@ export interface ProductInput {
 
 export interface ContentTypeMap {
   brand: Brand;
+  order: Order;
   product: Product;
 }
 
 export interface ContentTypeInputMap {
   brand: BrandInput;
+  order: OrderInput;
   product: ProductInput;
 }

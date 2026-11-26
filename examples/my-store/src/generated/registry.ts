@@ -53,6 +53,75 @@ export const brandDefinition: ContentTypeDefinition = {
   "group": "shop"
 };
 
+export const orderDefinition: ContentTypeDefinition = {
+  "id": "ct_order01",
+  "apiId": "order",
+  "displayName": {
+    "en-US": "Order",
+    "vi-VN": "Đơn hàng"
+  },
+  "fields": [
+    {
+      "id": "fld_order_code",
+      "name": "code",
+      "kind": "text",
+      "required": true,
+      "localizable": false,
+      "indexed": true,
+      "unique": true,
+      "options": {}
+    },
+    {
+      "id": "fld_order_status",
+      "name": "orderStatus",
+      "kind": "text",
+      "required": true,
+      "localizable": false,
+      "indexed": false,
+      "unique": false,
+      "options": {}
+    },
+    {
+      "id": "fld_order_items",
+      "name": "items",
+      "kind": "json",
+      "required": false,
+      "localizable": false,
+      "indexed": false,
+      "unique": false,
+      "options": {},
+      "readOnly": true
+    },
+    {
+      "id": "fld_order_total",
+      "name": "total",
+      "kind": "money",
+      "required": false,
+      "localizable": false,
+      "indexed": false,
+      "unique": false,
+      "options": {},
+      "readOnly": true
+    },
+    {
+      "id": "fld_order_invoice",
+      "name": "invoice",
+      "kind": "asset",
+      "required": false,
+      "localizable": false,
+      "indexed": false,
+      "unique": false,
+      "options": {
+        "accept": [
+          "application/pdf"
+        ]
+      }
+    }
+  ],
+  "group": "shop",
+  "private": true
+};
+
 export const productDefinition: ContentTypeDefinition = {
   "id": "ct_product01",
   "apiId": "product",
@@ -180,4 +249,4 @@ export const productDefinition: ContentTypeDefinition = {
   "review": true
 };
 
-export const contentTypes: ContentTypeDefinition[] = [brandDefinition, productDefinition];
+export const contentTypes: ContentTypeDefinition[] = [brandDefinition, orderDefinition, productDefinition];
