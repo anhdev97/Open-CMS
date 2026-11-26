@@ -202,9 +202,33 @@ describe('StylePanel', () => {
   it('Button has the colors section (text color and radius); Badge has text color', () => {
     const onChange = vi.fn();
     render(createElement(StylePanel, { el: 'Button', value: { color: 'brand:ink' }, onChange, theme: null }));
-    expect([...container.querySelectorAll('[data-section]')].map((s) => s.getAttribute('data-section'))).toEqual(['margin', 'size', 'colors', 'visibility']);
+    expect([...container.querySelectorAll('[data-section]')].map((s) => s.getAttribute('data-section'))).toEqual(['margin', 'size', 'colors', 'hover', 'visibility']);
     render(createElement(StylePanel, { el: 'Badge', value: undefined, onChange, theme: null }));
     expect([...container.querySelectorAll('[data-section]')].map((s) => s.getAttribute('data-section'))).toEqual(['margin', 'size', 'textColor', 'visibility']);
+  });
+
+  it('the "On hover" section writes style.hover colours; "Show hover" toggles the canvas preview', () => {
+    const onChange = vi.fn();
+    const onToggle = vi.fn();
+    render(createElement(StylePanel, { el: 'Box', value: { padding: { t: '4' } }, onChange, theme: null, hoverPreview: { on: false, onToggle } }));
+    const hover = q('[data-section="hover"]')!;
+    expect(hover.querySelector('summary')?.textContent).toBe('On hover');
+    expect([...hover.querySelectorAll('label')].map((l) => l.textContent?.trim())).toEqual(expect.arrayContaining(['Background', 'Text colour', 'Border colour']));
+    pick(hover.querySelector('[data-hover="background"]')!, 'primary');
+    expect(onChange).toHaveBeenLastCalledWith({ padding: { t: '4' }, hover: { background: 'primary' } });
+    const toggle = hover.querySelector<HTMLButtonElement>('[data-show-hover]')!;
+    expect(toggle.textContent).toContain('Show hover');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    act(() => toggle.click());
+    expect(onToggle).toHaveBeenCalled();
+
+    // Clearing the last hover colour drops `hover`.
+    render(createElement(StylePanel, { el: 'Card', value: { hover: { color: 'primary' } }, onChange, theme: null }));
+    act(() => q<HTMLButtonElement>('[data-section="hover"] [data-hover="color"] [data-reset]')!.click());
+    expect(onChange).toHaveBeenLastCalledWith(undefined);
+    // Other elements have no hover section.
+    render(createElement(StylePanel, { el: 'Heading', value: undefined, onChange, theme: null }));
+    expect(q('[data-section="hover"]')).toBeNull();
   });
 
   it('hide toggles write the breakpoint flag', () => {

@@ -5,16 +5,26 @@
 // lays out, so it carries what the element's own box carries on the site toward its parent: `span`, margin (a
 // `margin-left: auto` pushing a nav to the right of a Stack) and width/max-width (percentages of the parent); the
 // element keeps its other style and fills the frame. Elements hidden at the edited breakpoint stay drawn, dimmed.
-import { createElement, useContext, useMemo, type CSSProperties, type ReactElement, type ReactNode } from 'react';
-import type { SlotComponent } from '@puckeditor/core';
+// The component elements (spec §3 "Canvas visibility", block builder only) draw the website's `ui` components with
+// their Puck slot inside and the `editor` overrides set from the selection: a Dropdown panel / Tooltip bubble open
+// while it or something inside is selected, Tabs showing the selected TabPanel, Accordion items open and a static
+// Carousel whose slides (the slot's items) sit side by side. The page builder and the website never set them.
+import {
+  createContext, createElement, useContext, useEffect, useMemo, useState,
+  type CSSProperties, type MouseEvent, type ReactElement, type ReactNode,
+} from 'react';
+import { createUsePuck, useGetPuck, type SlotComponent } from '@puckeditor/core';
 import { composedHelpers, defineComposedBlock, ui, type ComposedBlockDefinition } from '@opencloudcms/core/blocks';
-import { resolveResponsive, type Breakpoint, type ComposedBinding, type ComposedElement, type ComposedNode, type NodeStyle } from '@opencloudcms/schema';
+import {
+  INTERACTIVE_ELEMENTS, isClickable, resolveResponsive, validateComposedSpec,
+  type Breakpoint, type ComposedBinding, type ComposedElement, type ComposedNode, type HoverStyle, type NodeStyle, type Responsive,
+} from '@opencloudcms/schema';
 import { t } from '../i18n';
-import { CanvasContext, type CanvasModel } from './context';
+import { CanvasContext, CanvasSelection, HoverPreview, type CanvasItem, type CanvasModel, type CanvasSelectionModel } from './context';
 import { useBreakpoint } from './style/breakpoint';
 import { bpLabel } from './style/shared';
-import { elementLabel } from './element-config';
-import { itemToNode, type PuckItem } from './tree-puck';
+import { CHILD_ITEM, elementLabel, slotRules } from './element-config';
+import { indexPuck, itemToNode, pathOf, type BuilderPuckData, type PuckItem } from './tree-puck';
 
 type Props = Record<string, unknown>;
 const PUCK_RENDER_KEYS = new Set(['puck', 'editMode', 'children']);
@@ -121,10 +131,30 @@ function nodeOf(el: ComposedElement, props: Props): ComposedNode {
   return itemToNode({ type: el, props: clean } as PuckItem);
 }
 
+/** A style drawn with its hover colours as its colours ("Show hover" of the style panel). */
+export function withHover(style: NodeStyle | undefined): NodeStyle | undefined {
+  if (!isObj(style) || !isObj(style.hover)) return style;
+  const { hover, ...rest } = style;
+  const h = hover as HoverStyle;
+  return {
+    ...rest,
+    ...(h.background !== undefined ? { background: h.background } : {}),
+    ...(h.color !== undefined ? { color: h.color } : {}),
+    ...(h.borderColor !== undefined ? { borderColor: h.borderColor } : {}),
+  };
+}
+
+/** The node of a canvas item, with its hover colours drawn when "Show hover" is on for it. */
+function useNode(el: ComposedElement, props: Props): ComposedNode {
+  const hover = useContext(HoverPreview);
+  const node = nodeOf(el, props);
+  return hover.id !== null && hover.id === props.id && node.style ? { ...node, style: withHover(node.style) } : node;
+}
+
 function LeafPreview({ el, props }: { el: ComposedElement; props: Props }) {
   const c = useContext(CanvasContext);
   const bp = useBreakpoint();
-  const node = nodeOf(el, props);
+  const node = useNode(el, props);
   const { showIf, style, ...rest } = node;
   const cs = canvasStyle(style, bp);
   const bare: ComposedNode = cs.inner ? { ...rest, style: cs.inner } : rest;
@@ -157,12 +187,16 @@ function ContainerPreview({ el, props }: { el: LayoutEl; props: Props }) {
   const c = useContext(CanvasContext);
   const bp = useBreakpoint();
   const Slot = props.children as SlotComponent | undefined;
-  const cs = canvasStyle(props.style as NodeStyle | undefined, bp);
+  const node = useNode(el, props);
+  const cs = canvasStyle(node.style, bp);
   const p = { ...props, direction: props.direction ?? 'vertical', style: cs.inner };
   const cls = (ui.layoutClass[el] as (p: Props) => string)(p);
   const style = (ui.layoutStyle[el] as (p: Props) => CSSProperties | undefined)(p);
-  const node = nodeOf(el, props);
-  const zone = Slot ? createElement(Slot, { className: cls, style, minEmptyHeight: 64 } as never) : <div className={cls} style={style} />;
+  // A clickable Box/Card (bound href or an action) refuses interactive elements while it is one (spec §1).
+  const clickable = isClickable(node)
+    ? { disallow: [...(slotRules(el, c.binding?.mode === 'collection').disallow ?? []), ...INTERACTIVE_ELEMENTS] }
+    : {};
+  const zone = Slot ? createElement(Slot, { className: cls, style, minEmptyHeight: 64, ...clickable } as never) : <div className={cls} style={style} />;
   return (
     <Dim reasons={[cs.hidden && hiddenTitle(bp), !shown(c, node) && t('blockBuilder.canvas.hiddenBySample')]} fill={relativeHeight(props.style as NodeStyle | undefined)}>
       {zone}
@@ -189,11 +223,17 @@ export function frameAttrs(style: NodeStyle | undefined): { className?: string; 
   };
 }
 
-function Frame({ props, children }: { props: Props; children: ReactNode }) {
+/** Classes of a Carousel slide frame: set by the Carousel preview for the items of its slot only. */
+const SlideFrame = createContext<string | null>(null);
+
+function Frame({ props, hidden, children }: { props: Props; hidden?: boolean; children: ReactNode }) {
   const dragRef = (props.puck as { dragRef?: ((e: Element | null) => void) | null } | undefined)?.dragRef ?? undefined;
+  const slide = useContext(SlideFrame);
+  const attrs = frameAttrs(props.style as NodeStyle | undefined);
+  const className = [slide, attrs.className].filter(Boolean).join(' ') || undefined;
   return (
-    <div ref={dragRef} {...frameAttrs(props.style as NodeStyle | undefined)}>
-      {children}
+    <div ref={dragRef} {...attrs} className={className} hidden={hidden || undefined}>
+      <SlideFrame.Provider value={null}>{children}</SlideFrame.Provider>
     </div>
   );
 }
@@ -290,8 +330,280 @@ function OverlayPreview({ props }: { props: Props }) {
   );
 }
 
+// ---- component elements ----
+
+/** A bound (or fixed) prop of a node as the canvas shows it: constant, manual field preview value or sample entry. */
+function boundValue(c: CanvasModel, n: ComposedNode, prop: string): unknown {
+  const s = n.bind?.[prop];
+  if (!s) return n.props?.[prop];
+  switch (s.from) {
+    case 'const':
+      return s.value;
+    case 'field':
+      return c.fieldValues[s.name];
+    case 'entry':
+      return (c.entry as Props | null)?.[s.path];
+    case 'entryUrl':
+      return c.binding?.urlPattern ? composedHelpers.entryUrl(c.binding.urlPattern, c.entry, (e, path) => (e as Props | null)?.[path]) : null;
+  }
+}
+const boundText = (c: CanvasModel, n: ComposedNode, prop: string) => composedHelpers.text(boundValue(c, n, prop));
+const boundHref = (c: CanvasModel, n: ComposedNode): string | null => (n.bind?.href ? composedHelpers.href(boundValue(c, n, 'href')) : null);
+
+/** Whether item `id` or something inside it is selected. */
+const useInSelection = (id: unknown) => useContext(CanvasSelection).path.includes(String(id));
+
+/** The Puck slot of a container (a plain box outside Puck). */
+function zone(props: Props, dz: { className?: string; style?: CSSProperties; minEmptyHeight?: number; collisionAxis?: 'x' | 'y' }): ReactNode {
+  const Slot = props.children as SlotComponent | undefined;
+  return Slot ? createElement(Slot, dz as never) : <div className={dz.className} style={dz.style} />;
+}
+
+/** Takes the props `ui.Accordion` gives its items (`name`, `open`, `editor`) off the slot it wraps. */
+function ZoneHost({ children }: { children?: ReactNode }) {
+  return <>{children}</>;
+}
+
+/** The validation message of an Accordion / Tabs without items (the issue at its `children`). */
+export function itemsIssue(el: 'Accordion' | 'Tabs'): string {
+  const spec = { id: 'blk_preview', name: 'BuilderPreview', label: { 'en-US': 'Preview' }, category: 'preview', version: 1, fields: {}, tree: { el, children: [] } };
+  return validateComposedSpec(spec).find((i) => i.path.join('.') === 'tree.children')?.message ?? '';
+}
+
+/** Accordion / Tabs whose last item was removed: what to do, and the rule it breaks (spec Review focus 4). */
+function EmptyItems({ el }: { el: 'Accordion' | 'Tabs' }) {
+  const item = CHILD_ITEM[el]!;
+  return (
+    <div data-empty-items="" role="status" className="rounded-md border border-dashed border-warning px-3 py-2 text-center text-xs text-warning">
+      <p>{t(`blockBuilder.canvas.empty${item}`)}</p>
+      <p className="mt-1 font-mono">{itemsIssue(el)}</p>
+    </div>
+  );
+}
+
+/** Dimmed when hidden at the edited breakpoint or by the sample (show condition). */
+function ComponentDim({ node, hidden, children }: { node: ComposedNode; hidden: boolean; children: ReactNode }) {
+  const c = useContext(CanvasContext);
+  const bp = useBreakpoint();
+  return (
+    <Dim reasons={[hidden && hiddenTitle(bp), !shown(c, node) && t('blockBuilder.canvas.hiddenBySample')]} fill={relativeHeight(node.style)}>
+      {children}
+    </Dim>
+  );
+}
+
+function DropdownPreview({ props }: { props: Props }) {
+  const c = useContext(CanvasContext);
+  const node = useNode('Dropdown', props);
+  const cs = canvasStyle(node.style, useBreakpoint());
+  const p = node.props ?? {};
+  const open = useInSelection(props.id);
+  return (
+    <ComponentDim node={node} hidden={cs.hidden}>
+      <ui.Dropdown
+        label={boundText(c, node, 'label')}
+        href={boundHref(c, node)}
+        openOn={p.openOn === 'click' ? 'click' : 'hover'}
+        placement={p.placement as never}
+        display={p.display as never}
+        triggerVariant={p.triggerVariant as never}
+        chevron={p.chevron !== false}
+        locale={c.locale}
+        style={cs.inner}
+        editor={{ open }}
+      >
+        {zone(props, { className: 'flex flex-col gap-1', minEmptyHeight: 48 })}
+      </ui.Dropdown>
+    </ComponentDim>
+  );
+}
+
+function TooltipPreview({ props }: { props: Props }) {
+  const c = useContext(CanvasContext);
+  const node = useNode('Tooltip', props);
+  const cs = canvasStyle(node.style, useBreakpoint());
+  const open = useInSelection(props.id);
+  return (
+    <ComponentDim node={node} hidden={cs.hidden}>
+      <ui.Tooltip text={boundText(c, node, 'text')} side={(node.props?.side as never) ?? 'top'} style={cs.inner} editor={{ open }}>
+        {zone(props, { minEmptyHeight: 40 })}
+      </ui.Tooltip>
+    </ComponentDim>
+  );
+}
+
+function AccordionPreview({ props }: { props: Props }) {
+  const node = useNode('Accordion', props);
+  const cs = canvasStyle(node.style, useBreakpoint());
+  const items = useContext(CanvasSelection).children(String(props.id));
+  return (
+    <ComponentDim node={node} hidden={cs.hidden}>
+      <ui.Accordion single={node.props?.single === true} style={cs.inner} editor={{ open: true }}>
+        <ZoneHost>{zone(props, { minEmptyHeight: 48 })}</ZoneHost>
+      </ui.Accordion>
+      {items.length === 0 && <EmptyItems el="Accordion" />}
+    </ComponentDim>
+  );
+}
+
+/** A click on a summary would close the `<details>` the canvas keeps open. */
+const keepOpen = (e: MouseEvent) => {
+  if ((e.target as Element).closest?.('summary')) e.preventDefault();
+};
+
+function AccordionItemPreview({ props }: { props: Props }) {
+  const c = useContext(CanvasContext);
+  const node = nodeOf('AccordionItem', props);
+  return (
+    <ComponentDim node={node} hidden={false}>
+      <div onClickCapture={keepOpen}>
+        <ui.AccordionItem title={boundText(c, node, 'title')} editor={{ open: true }}>
+          {zone(props, { minEmptyHeight: 48 })}
+        </ui.AccordionItem>
+      </div>
+    </ComponentDim>
+  );
+}
+
+/** Id of the TabPanel the enclosing Tabs show (undefined outside Tabs). */
+const ActiveTab = createContext<string | undefined>(undefined);
+
+/** Index of the shown tab: the one selected or containing the selection, else the last one shown. */
+function useActiveTab(items: readonly CanvasItem[], sel: CanvasSelectionModel): number {
+  const inPath = items.findIndex((it) => sel.path.includes(String(it.props.id)));
+  const [last, setLast] = useState(0);
+  useEffect(() => {
+    if (inPath >= 0 && inPath !== last) setLast(inPath);
+  }, [inPath, last]);
+  return inPath >= 0 ? inPath : Math.min(last, Math.max(0, items.length - 1));
+}
+
+function TabsPreview({ props }: { props: Props }) {
+  const c = useContext(CanvasContext);
+  const sel = useContext(CanvasSelection);
+  const node = useNode('Tabs', props);
+  const cs = canvasStyle(node.style, useBreakpoint());
+  const items = sel.children(String(props.id)).filter((it) => it.type === 'TabPanel');
+  const active = useActiveTab(items, sel);
+  const slot = zone(props, { minEmptyHeight: 64 });
+  const panels = items.map((it, i) => ({
+    label: boundText(c, itemToNode(it as PuckItem), 'label') || elementLabel('TabPanel'),
+    content: i === active ? slot : null,
+  }));
+  // A click on a tab selects its TabPanel (before Puck selects the Tabs).
+  const onTab = (e: MouseEvent) => {
+    const tab = (e.target as Element).closest?.('[role="tab"]');
+    if (!tab?.parentElement) return;
+    const i = [...tab.parentElement.children].indexOf(tab);
+    const it = items[i];
+    if (!it) return;
+    e.stopPropagation();
+    e.preventDefault();
+    sel.select(String(it.props.id));
+  };
+  return (
+    <ComponentDim node={node} hidden={cs.hidden}>
+      <ActiveTab.Provider value={items[active] ? String(items[active]!.props.id) : undefined}>
+        <div onClickCapture={onTab}>
+          <ui.Tabs
+            panels={panels}
+            variant={node.props?.variant as never}
+            align={node.props?.align as never}
+            style={cs.inner}
+            editor={{ activeIndex: active, onSelect: (i) => items[i] && sel.select(String(items[i]!.props.id)) }}
+          />
+          {items.length === 0 && slot}
+        </div>
+      </ActiveTab.Provider>
+      {items.length === 0 && <EmptyItems el="Tabs" />}
+    </ComponentDim>
+  );
+}
+
+function TabPanelPreview({ props }: { props: Props }) {
+  return <ComponentDim node={nodeOf('TabPanel', props)} hidden={false}>{zone(props, { minEmptyHeight: 64 })}</ComponentDim>;
+}
+
+const PER_VIEW = (x: unknown): x is number => typeof x === 'number' && x >= 1 && x <= 6;
+/** Slides per view at each breakpoint (inherited upwards, 1 by default). */
+export function perViewVars(perView: unknown, gap: unknown): CSSProperties {
+  const r = resolveResponsive(perView as Responsive<number> | undefined);
+  const base = PER_VIEW(r.base) ? r.base : 1;
+  const md = PER_VIEW(r.md) ? r.md : base;
+  const lg = PER_VIEW(r.lg) ? r.lg : md;
+  const g = ui.CAROUSEL_GAP[(typeof gap === 'string' && gap in ui.CAROUSEL_GAP ? gap : '4') as keyof typeof ui.CAROUSEL_GAP];
+  return { '--ocms-pv': String(base), '--ocms-pv-md': String(md), '--ocms-pv-lg': String(lg), '--ocms-gap': g } as CSSProperties;
+}
+
+/** A static Carousel: its slot is the track, each item a slide side by side (no snapping, controls or autoplay). */
+function CarouselPreview({ props }: { props: Props }) {
+  const node = useNode('Carousel', props);
+  const cs = canvasStyle(node.style, useBreakpoint());
+  const sp = ui.styleProps(cs.inner);
+  return (
+    <ComponentDim node={node} hidden={cs.hidden}>
+      <section aria-roledescription="carousel" className={[ui.CAROUSEL, sp.className].filter(Boolean).join(' ')} style={sp.style}>
+        <SlideFrame.Provider value={ui.CAROUSEL_SLIDE}>
+          {zone(props, { className: ui.CAROUSEL_TRACK, style: perViewVars(node.props?.perView, node.props?.gap), minEmptyHeight: 96, collisionAxis: 'x' })}
+        </SlideFrame.Provider>
+      </section>
+    </ComponentDim>
+  );
+}
+
+const COMPONENT_PREVIEWS: Partial<Record<ComposedElement, (p: { props: Props }) => ReactElement>> = {
+  Dropdown: DropdownPreview,
+  Tooltip: TooltipPreview,
+  Accordion: AccordionPreview,
+  AccordionItem: AccordionItemPreview,
+  Tabs: TabsPreview,
+  TabPanel: TabPanelPreview,
+  Carousel: CarouselPreview,
+};
+
+/** A TabPanel frame: hidden unless its Tabs show it. */
+function TabPanelFrame({ props, children }: { props: Props; children: ReactNode }) {
+  const active = useContext(ActiveTab);
+  return (
+    <Frame props={props} hidden={active !== undefined && active !== String(props.id)}>
+      {children}
+    </Frame>
+  );
+}
+
+const usePuck = createUsePuck();
+
+/** Provides the canvas selection (`CanvasSelection`) from Puck's state: put inside `<Puck>` (`overrides.puck`). */
+export function CanvasSelectionProvider({ children }: { children?: ReactNode }) {
+  const selectedId = usePuck((s) => (s.selectedItem ? String(s.selectedItem.props.id) : null));
+  const data = usePuck((s) => s.appState.data);
+  const getPuck = useGetPuck();
+  const value = useMemo<CanvasSelectionModel>(() => {
+    const index = indexPuck(data as unknown as BuilderPuckData);
+    return {
+      selectedId,
+      path: pathOf(index, selectedId),
+      children: (id) => {
+        const kids = index.get(id)?.item.props.children;
+        return Array.isArray(kids) ? (kids as CanvasItem[]) : [];
+      },
+      select: (id) => {
+        const api = getPuck();
+        const at = api.getSelectorForId(id);
+        if (at) api.dispatch({ type: 'setUi', ui: { itemSelector: at } });
+      },
+    };
+  }, [data, selectedId, getPuck]);
+  return <CanvasSelection.Provider value={value}>{children}</CanvasSelection.Provider>;
+}
+
 /** Puck render of element `el`. */
 export function elementRender(el: ComposedElement): (props: Props) => ReactElement {
+  const Component = COMPONENT_PREVIEWS[el];
+  if (Component) {
+    if (el === 'TabPanel') return (props) => <TabPanelFrame props={props}><Component props={props} /></TabPanelFrame>;
+    return (props) => <Frame props={props}><Component props={props} /></Frame>;
+  }
   if (el === 'Overlay') {
     // The overlay is the root: its size is drawn by the preview, not by the item frame.
     return (props) => {

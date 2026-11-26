@@ -10,5 +10,6 @@ export { Overlay, type OverlayProps } from './overlay';
 // Interactive elements: server-rendered shells that hydrate in the client entry (`@opencloudcms/core/blocks/client`).
 export { Dropdown, type DropdownProps } from '../client/Dropdown';
 export { Tabs, type TabsProps, type TabsPanel } from '../client/Tabs';
-export { Carousel, type CarouselProps } from '../client/Carousel';
+// The track / slide classes are also drawn by the block builder canvas (slides are its own drop zone items).
+export { Carousel, CAROUSEL, CAROUSEL_GAP, CAROUSEL_SLIDE, CAROUSEL_TRACK, type CarouselProps } from '../client/Carousel';
 export { Combobox, type ComboboxProps } from '../client/Combobox';
