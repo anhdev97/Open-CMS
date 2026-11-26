@@ -81,6 +81,15 @@ export const BUTTON_SIZE: Record<ButtonSize, string> = {
   default: 'h-9 px-4 py-2',
   lg: 'h-10 px-6',
 };
+/** Square sizes of an icon-only button (replace `BUTTON_SIZE`). */
+export const BUTTON_ICON_SIZE: Record<ButtonSize, string> = { sm: 'size-8', default: 'size-9', lg: 'size-10' };
+
+/**
+ * Image, Box and Card rendered as a link or button: theme focus ring, no default link/button look (preflight resets
+ * color, background, border and padding). `CLICKABLE_BUTTON` adds what a `<button>` needs to lay out like a block.
+ */
+export const CLICKABLE = 'cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background';
+export const CLICKABLE_BUTTON = 'w-full text-left';
 
 export type BadgeVariant = 'default' | 'secondary' | 'outline' | 'destructive';
 export const BADGE_VARIANT: Record<BadgeVariant, string> = {
@@ -143,6 +152,12 @@ export const STYLE_SINGLE = {
   bg: 'bg-(--ocms-bg)', fg: 'text-(--ocms-fg)', bc: 'border-(--ocms-bc)', r: 'rounded-(--ocms-r)',
   gx: 'gap-x-(--ocms-gx)', gy: 'gap-y-(--ocms-gy)',
 };
+/** `style.hover` colors (Box, Card, Button): emitted only when set. */
+export const STYLE_HOVER = {
+  background: { cls: 'hover:bg-(--ocms-hover-bg)', v: '--ocms-hover-bg' },
+  color: { cls: 'hover:text-(--ocms-hover-fg)', v: '--ocms-hover-fg' },
+  borderColor: { cls: 'hover:border-(--ocms-hover-border)', v: '--ocms-hover-border' },
+} as const;
 export const BORDER_SIDE: Record<'t' | 'r' | 'b' | 'l', string> = {
   t: 'border-t-(length:--ocms-bw)', r: 'border-r-(length:--ocms-bw)', b: 'border-b-(length:--ocms-bw)', l: 'border-l-(length:--ocms-bw)',
 };

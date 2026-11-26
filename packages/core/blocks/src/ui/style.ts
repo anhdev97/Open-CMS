@@ -7,7 +7,7 @@ import {
   isColorValue, isLength, isTrack, resolveResponsive,
   type Breakpoint, type NodeStyle, type Responsive, type Track,
 } from '@opencloudcms/schema';
-import { BORDER_SIDE, HIDE, SHOW, STYLE_CLASS, STYLE_SINGLE, type Display, type StyleVar } from './tokens';
+import { BORDER_SIDE, HIDE, SHOW, STYLE_CLASS, STYLE_HOVER, STYLE_SINGLE, type Display, type StyleVar } from './tokens';
 
 export type StyleResult = { className: string; style: CSSProperties };
 
@@ -120,6 +120,16 @@ export function styleProps(style: NodeStyle | undefined, display: Display = 'blo
     if (x === 'full') cls.push(STYLE_CLASS.spanFull[bp]);
     else if (Number.isInteger(x) && (x as number) >= 1 && (x as number) <= 12) put('span', bp, String(x));
   });
+
+  // Hover colors (validated onto Box, Card and Button only); after the base colors so they win in `cn`.
+  if (isObj(s.hover)) {
+    for (const k of ['background', 'color', 'borderColor'] as const) {
+      const v = s.hover[k];
+      if (!isColorValue(v)) continue;
+      cls.push(STYLE_HOVER[k].cls);
+      vars[STYLE_HOVER[k].v] = cssColor(v as string);
+    }
+  }
 
   const hidden = s.hidden;
   if (isObj(hidden) && BREAKPOINTS.some((bp) => hidden[bp] === true)) {

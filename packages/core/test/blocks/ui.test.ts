@@ -354,3 +354,31 @@ describe('ui.Overlay', () => {
     expect(content).not.toContain('p-6');
   });
 });
+
+describe('builder component additions to the primitives', () => {
+  it('styleProps: hover colors become hover classes and --ocms-hover-* variables, only when set', () => {
+    const sp = styleProps({ hover: { background: 'muted', color: 'brand:ink', borderColor: '#abcdef' } } as never, 'block');
+    expect(sp.className.split(' ')).toEqual(['hover:bg-(--ocms-hover-bg)', 'hover:text-(--ocms-hover-fg)', 'hover:border-(--ocms-hover-border)']);
+    expect(sp.style).toEqual({ '--ocms-hover-bg': 'var(--color-muted)', '--ocms-hover-fg': 'var(--ocms-color-ink)', '--ocms-hover-border': '#abcdef' });
+    expect(styleProps({ hover: { color: 'not a color' } } as never)).toEqual({ className: '', style: {} });
+    expect(styleProps({ background: 'muted' } as never).className).not.toContain('hover');
+  });
+  it('Button: an unknown icon name or iconOnly without an icon renders as before', () => {
+    const plain = r(h(ui.Button, { label: 'Go', href: '/x' }));
+    expect(r(h(ui.Button, { label: 'Go', href: '/x', icon: 'nope', iconOnly: true }))).toBe(plain);
+    expect(r(h(ui.Button, { label: 'Go', href: '/x', iconOnly: true }))).toBe(plain);
+  });
+  it('Button iconOnly uses the square size', () => {
+    const out = r(h(ui.Button, { label: 'Cart', href: '/c', icon: 'shopping-cart', iconOnly: true, size: 'lg' }));
+    expect(out).toContain('size-10');
+    expect(out).not.toContain('h-10');
+  });
+  it('Image and Box ignore an unsafe href', () => {
+    expect(r(h(ui.Image, { src: '/a.png', alt: 'A', href: 'javascript:x' }))).toBe(r(h(ui.Image, { src: '/a.png', alt: 'A' })));
+    expect(r(h(ui.Box, { href: 'javascript:x' }, 'x'))).toBe(r(h(ui.Box, {}, 'x')));
+  });
+  it('a clickable Image moves its hidden breakpoints to the link', () => {
+    const out = r(h(ui.Image, { src: '/a.png', alt: 'A', href: '/', style: { hidden: { base: true } } }));
+    expect(/<a [^>]*class="([^"]*)"/.exec(out)![1].split(' ')).toEqual(expect.arrayContaining(['hidden', 'md:block', 'lg:block']));
+  });
+});
