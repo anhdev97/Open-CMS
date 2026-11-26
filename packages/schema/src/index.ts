@@ -12,8 +12,10 @@ export * from './pages';
 export * from './actions';
 export * from './composed-block';
 export {
-  BREAKPOINTS, STYLE_SPACING_TOKENS, STYLE_COLOR_TOKENS, RADIUS_TOKENS, BORDER_WIDTH_TOKENS, BORDER_SIDES,
+  BREAKPOINTS, HOVER_ELEMENTS, STYLE_SPACING_TOKENS, STYLE_COLOR_TOKENS, RADIUS_TOKENS, BORDER_WIDTH_TOKENS, BORDER_SIDES,
   isLength, isColorValue, isTrack, resolveResponsive, valueAt, setAt, validateNodeStyle,
 } from './style';
-export type { Breakpoint, Responsive, Length, ColorValue, Track, Sides, NodeStyle } from './style';
+export type { Breakpoint, Responsive, Length, ColorValue, Track, Sides, NodeStyle, HoverStyle } from './style';
+export * from './icons';
+export * from './form-controls';
 export * from './theme';

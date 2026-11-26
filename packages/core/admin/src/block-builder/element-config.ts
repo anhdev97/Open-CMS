@@ -64,7 +64,9 @@ export const ELEMENT_PROPS: Record<ComposedElement, readonly PropDef[]> = {
   Overlay: [
     { ...select('variant', ['modal', 'drawer']), labelKey: 'overlayVariant' }, select('side', ['left', 'right', 'top', 'bottom']),
     select('size', ['sm', 'md', 'lg', 'xl', 'full']), { name: 'closeOnBackdrop', kind: 'boolean' }, { name: 'showClose', kind: 'boolean' },
-  ],
+  ],  // Builder component elements: their props panels come with the builder task of the components sprint.
+  Dropdown: [], Tooltip: [], Accordion: [], AccordionItem: [], Tabs: [], TabPanel: [], Carousel: [], Icon: [],
+  Input: [], Textarea: [], Select: [], Combobox: [], Radio: [], Checkbox: [], Switch: [],
 };
 
 /** Elements with no `anchorId` (they render no element of their own). */
@@ -109,7 +111,9 @@ export const STYLE_SECTIONS: Record<ComposedElement, readonly StyleSection[]> = 
   Heading: TEXT, Text: TEXT, Price: TEXT, Date: TEXT,
   Divider: PLAIN, Spacer: PLAIN, Slot: PLAIN,
   // Regions render their page blocks only; the overlay frame has no visibility or span (size per variant/side).
-  Region: [], PageContent: [], Overlay: ['spacing', 'size', 'colors'],
+  Region: [], PageContent: [], Overlay: ['spacing', 'size', 'colors'],  // Builder component elements: their style sections come with the builder task of the components sprint.
+  Dropdown: PLAIN, Tooltip: PLAIN, Accordion: PLAIN, AccordionItem: PLAIN, Tabs: PLAIN, TabPanel: PLAIN, Carousel: PLAIN, Icon: PLAIN,
+  Input: PLAIN, Textarea: PLAIN, Select: PLAIN, Combobox: PLAIN, Radio: PLAIN, Checkbox: PLAIN, Switch: PLAIN,
 };
 
 export const LAYOUT_ELEMENTS: readonly ComposedElement[] = ['Box', 'Stack', 'Columns', 'Grid', 'Card', 'Slot'];

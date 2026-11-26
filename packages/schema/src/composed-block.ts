@@ -1,30 +1,67 @@
 // Pure spec types, validation and versioning for composed (builder-made) page blocks.
 // Must not import from `node:*` (bundled for the browser and shared with Nest and the blocks package).
 import { ANCHOR_ID_RE, OVERLAY_NAME_RE, validateButtonAction } from './actions';
+import { AUTOCOMPLETE_TOKENS, FORM_CONTROL_NAME_RE, INPUT_TYPES, MAX_OPTION_VALUE, optionValues, validateOptions } from './form-controls';
 import { validateLocalizedText } from './groups';
 import type { LocalizedText } from './i18n';
-import { checkResponsive, isLength, isTrack, MAX_TRACKS, validateNodeStyle, type NodeStyle } from './style';
+import { isIconName } from './icons';
+import { checkResponsive, isLength, isTrack, MAX_TRACKS, STYLE_SPACING_TOKENS, validateNodeStyle, type NodeStyle } from './style';
+
+export type FormControlElement = 'Input' | 'Textarea' | 'Select' | 'Combobox' | 'Radio' | 'Checkbox' | 'Switch';
 
 export type ComposedElement =
   | 'Box' | 'Stack' | 'Columns' | 'Grid' | 'Card' | 'Slot' | 'Heading' | 'Text'
-  | 'Image' | 'Button' | 'Badge' | 'Price' | 'Date' | 'Divider' | 'Spacer' | 'Region' | 'PageContent' | 'Overlay';
+  | 'Image' | 'Button' | 'Badge' | 'Price' | 'Date' | 'Divider' | 'Spacer' | 'Region' | 'PageContent' | 'Overlay'
+  | 'Dropdown' | 'Tooltip' | 'Accordion' | 'AccordionItem' | 'Tabs' | 'TabPanel' | 'Carousel' | 'Icon'
+  | FormControlElement;
+
+export const FORM_CONTROL_ELEMENTS: readonly FormControlElement[] = ['Input', 'Textarea', 'Select', 'Combobox', 'Radio', 'Checkbox', 'Switch'];
 
 export const COMPOSED_ELEMENTS: readonly ComposedElement[] = [
   'Box', 'Stack', 'Columns', 'Grid', 'Card', 'Slot', 'Heading', 'Text',
   'Image', 'Button', 'Badge', 'Price', 'Date', 'Divider', 'Spacer', 'Region', 'PageContent', 'Overlay',
+  'Dropdown', 'Tooltip', 'Accordion', 'AccordionItem', 'Tabs', 'TabPanel', 'Carousel', 'Icon',
+  ...FORM_CONTROL_ELEMENTS,
 ];
 
 /** Props of each element that may be bound to data (everything else takes design tokens only). */
 export const ELEMENT_BINDABLE: Record<ComposedElement, readonly string[]> = {
-  Box: [], Stack: [], Columns: [], Grid: [], Card: [], Slot: [], Divider: [], Spacer: [], Region: [], PageContent: [], Overlay: [],
+  Stack: [], Columns: [], Grid: [], Slot: [], Divider: [], Spacer: [], Region: [], PageContent: [], Overlay: [],
+  Accordion: [], Tabs: [], Carousel: [],
+  Box: ['href'],
+  Card: ['href'],
   Heading: ['text'],
   Text: ['text', 'html'],
-  Image: ['src', 'alt'],
+  Image: ['src', 'alt', 'href'],
   Button: ['label', 'href'],
   Badge: ['text'],
   Price: ['value'],
   Date: ['value'],
+  Dropdown: ['label', 'href'],
+  Tooltip: ['text'],
+  AccordionItem: ['title'],
+  TabPanel: ['label'],
+  Icon: ['label'],
+  Input: ['label', 'placeholder', 'help'],
+  Textarea: ['label', 'placeholder', 'help'],
+  Select: ['label', 'placeholder', 'help'],
+  Combobox: ['label', 'placeholder', 'help'],
+  Radio: ['label', 'help'],
+  Checkbox: ['label', 'help'],
+  Switch: ['label', 'help'],
 };
+
+/** Interactive containers: not the root of an overlay frame. */
+export const INTERACTIVE_CONTAINERS: readonly ComposedElement[] = ['Dropdown', 'Tooltip', 'Accordion', 'Tabs', 'Carousel'];
+
+/** Elements that render interactive content (not allowed inside a clickable Box/Card, at any depth). */
+export const INTERACTIVE_ELEMENTS: readonly ComposedElement[] = ['Button', ...INTERACTIVE_CONTAINERS, 'Slot', ...FORM_CONTROL_ELEMENTS];
+
+/** Elements that become a link or button with a bound `href` or a valid `action`. */
+export const CLICKABLE_ELEMENTS: readonly ComposedElement[] = ['Image', 'Box', 'Card'];
+
+/** Max length of a Tooltip `text` bound to a constant. */
+export const TOOLTIP_TEXT_MAX = 200;
 
 export const COMPOSED_FIELD_KINDS = ['text', 'longText', 'richText', 'number', 'boolean', 'select', 'image', 'link'] as const;
 export type ComposedFieldKind = (typeof COMPOSED_FIELD_KINDS)[number];
@@ -58,7 +95,8 @@ export interface ComposedBinding {
   filter?: { field: string; value: unknown }[];
   sort?: { field: string; direction: 'asc' | 'desc' };
   limit?: number;
-  layout?: { kind: 'grid' | 'list'; columns?: number };
+  /** `columns`: 2-6 for grid, the desktop per-view count 1-6 for carousel. */
+  layout?: { kind: 'grid' | 'list' | 'carousel'; columns?: number };
   urlPattern?: string;
   options?: {
     editorFilter?: boolean;
@@ -168,6 +206,108 @@ function checkLayoutProps(
   }
 }
 
+type Path = (string | number)[];
+type Add = (p: Path, m: string) => void;
+type PropCheck = (v: unknown, p: Path, add: Add) => void;
+
+const oneOf = (allowed: readonly string[]): PropCheck => (v, p, add) => enumLeaf(allowed, add)(v, p);
+const bool: PropCheck = (v, p, add) => { if (typeof v !== 'boolean') add(p, 'must be a boolean'); };
+const intIn = (min: number, max: number): PropCheck => (v, p, add) => {
+  if (!Number.isInteger(v) || (v as number) < min || (v as number) > max) add(p, `must be an integer between ${min} and ${max}`);
+};
+const responsive = (leaf: PropCheck): PropCheck => (v, p, add) => checkResponsive(v, p, (x, q) => leaf(x, q, add));
+const controlName: PropCheck = (v, p, add) => {
+  if (typeof v !== 'string' || !FORM_CONTROL_NAME_RE.test(v)) add(p, 'name must match ^[A-Za-z][A-Za-z0-9_-]{0,63}$');
+};
+const iconName: PropCheck = (v, p, add) => { if (!isIconName(v)) add(p, 'must be one of the icon names'); };
+const plainText: PropCheck = (v, p, add) => { if (typeof v !== 'string') add(p, 'must be a string'); };
+const options: PropCheck = (v, p, add) => { for (const i of validateOptions(v, p)) add(i.path, i.message); };
+const autoplay: PropCheck = (v, p, add) => {
+  if (v !== 'off' && !(Number.isInteger(v) && (v as number) >= 3 && (v as number) <= 10)) add(p, "autoplay must be 'off' or 3 to 10 seconds");
+};
+const checkboxValue: PropCheck = (v, p, add) => {
+  if (typeof v !== 'string' || !v || v.length > MAX_OPTION_VALUE) add(p, `value must be a non-empty string of at most ${MAX_OPTION_VALUE} characters`);
+};
+
+/** Same list as `ButtonVariant` in `@opencloudcms/blocks`. */
+const BUTTON_VARIANTS = ['default', 'secondary', 'outline', 'ghost', 'link'] as const;
+const CONTROL = { name: controlName, required: bool, disabled: bool };
+const CHOICE = { ...CONTROL, options, defaultValue: plainText };
+
+/**
+ * Props of the new elements (strict: any other prop is an issue, except `anchorId` and `action`, which are checked
+ * on every element).
+ */
+const COMPONENT_PROPS: Partial<Record<ComposedElement, Record<string, PropCheck>>> = {
+  Dropdown: {
+    openOn: oneOf(['hover', 'click']), placement: oneOf(['bottom-start', 'bottom-end', 'bottom']),
+    display: responsive(oneOf(['popover', 'inline'])), triggerVariant: oneOf(BUTTON_VARIANTS), chevron: bool,
+  },
+  Tooltip: { side: oneOf(['top', 'bottom', 'left', 'right']) },
+  Accordion: { single: bool, defaultOpen: oneOf(['none', 'first']) },
+  AccordionItem: {},
+  Tabs: { variant: oneOf(['underline', 'pills']), align: oneOf(['start', 'center', 'stretch']) },
+  TabPanel: {},
+  Carousel: {
+    perView: responsive(intIn(1, 6)), gap: oneOf(STYLE_SPACING_TOKENS), arrows: bool, dots: bool, loop: bool, autoplay,
+  },
+  Icon: { name: iconName, size: oneOf(['sm', 'md', 'lg', 'xl']) },
+  Input: { ...CONTROL, type: oneOf(INPUT_TYPES), autocomplete: oneOf(AUTOCOMPLETE_TOKENS) },
+  Textarea: { ...CONTROL, rows: intIn(2, 12) },
+  Select: CHOICE,
+  Combobox: CHOICE,
+  Radio: { ...CHOICE, orientation: oneOf(['vertical', 'horizontal']) },
+  Checkbox: { ...CONTROL, value: checkboxValue, defaultChecked: bool },
+  Switch: { name: controlName, defaultChecked: bool, disabled: bool },
+};
+const REQUIRED_PROPS: Partial<Record<ComposedElement, readonly string[]>> = {
+  Icon: ['name'], Input: ['name'], Textarea: ['name'], Select: ['name', 'options'], Combobox: ['name', 'options'],
+  Radio: ['name', 'options'], Checkbox: ['name'], Switch: ['name'],
+};
+/** New props of existing elements (checked when present; other props stay unchecked). */
+const EXTRA_PROPS: Partial<Record<ComposedElement, Record<string, PropCheck>>> = {
+  Button: { icon: iconName, iconPosition: oneOf(['start', 'end']), iconOnly: bool },
+  Box: { ariaLabel: plainText },
+  Card: { ariaLabel: plainText },
+};
+/** Elements that take no children. */
+const LEAF_ELEMENTS: readonly ComposedElement[] = ['Icon', ...FORM_CONTROL_ELEMENTS];
+const CHILD_COUNTS: Partial<Record<ComposedElement, [number, number, string]>> = {
+  Accordion: [1, 30, 'items'], Tabs: [1, 12, 'panels'], Carousel: [1, 20, 'slides'], Tooltip: [1, 1, 'child'],
+};
+/** Elements whose `action` prop is a `ButtonAction`. */
+const ACTION_ELEMENTS: readonly ComposedElement[] = ['Button', ...CLICKABLE_ELEMENTS];
+
+/** Checks the props of the new elements and the new props of Button, Box and Card. */
+function checkComponentProps(el: ComposedElement, props: Record<string, unknown>, path: Path, add: Add): void {
+  const strict = COMPONENT_PROPS[el];
+  const checks = strict ?? EXTRA_PROPS[el];
+  if (!checks) return;
+  for (const [k, v] of Object.entries(props)) {
+    if (v === undefined) continue;
+    if (has(checks, k)) checks[k](v, [...path, k], add);
+    else if (strict && k !== 'anchorId' && k !== 'action') add([...path, k], `${el} has no prop "${k}"`);
+  }
+  for (const k of REQUIRED_PROPS[el] ?? []) if (props[k] === undefined) add([...path, k], `${k} is required`);
+  if (has(props, 'defaultValue') && typeof props.defaultValue === 'string' && validateOptions(props.options, []).length === 0
+    && !optionValues(props.options).includes(props.defaultValue)) {
+    add([...path, 'defaultValue'], 'defaultValue must be one of the option values');
+  }
+}
+
+/** Image, Box or Card with a bound `href` or a valid `action` (renders as a link or button). */
+export function isClickable(node: unknown): boolean {
+  if (!isObj(node) || !CLICKABLE_ELEMENTS.includes(node.el as ComposedElement)) return false;
+  if (isObj(node.bind) && node.bind.href !== undefined) return true;
+  return isObj(node.props) && node.props.action !== undefined && validateButtonAction(node.props.action, []).length === 0;
+}
+
+const childEl = (c: unknown): unknown => (isObj(c) ? c.el : undefined);
+const constText = (s: unknown): string | undefined => (isObj(s) && s.from === 'const' && typeof s.value === 'string' ? s.value : undefined);
+
+/** Where a node sits, for the rules of the new elements. */
+type WalkCtx = { parent?: unknown; inDropdown: boolean; inClickable: boolean };
+
 export function validateComposedSpec(spec: unknown): ComposedIssue[] {
   const issues: ComposedIssue[] = [];
   const add = (path: (string | number)[], message: string) => issues.push({ path, message });
@@ -213,9 +353,13 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
         add(['binding', 'limit'], 'limit must be an integer between 1 and 100');
       }
       if (b.layout !== undefined) {
-        if (!isObj(b.layout) || (b.layout.kind !== 'grid' && b.layout.kind !== 'list')) add(['binding', 'layout', 'kind'], "layout kind must be 'grid' or 'list'");
-        else if (b.layout.columns !== undefined && (!Number.isInteger(b.layout.columns) || (b.layout.columns as number) < 2 || (b.layout.columns as number) > 6)) {
-          add(['binding', 'layout', 'columns'], 'columns must be an integer between 2 and 6');
+        if (!isObj(b.layout) || !['grid', 'list', 'carousel'].includes(b.layout.kind as string)) {
+          add(['binding', 'layout', 'kind'], "layout kind must be 'grid', 'list' or 'carousel'");
+        } else {
+          const min = b.layout.kind === 'carousel' ? 1 : 2;
+          if (b.layout.columns !== undefined && (!Number.isInteger(b.layout.columns) || (b.layout.columns as number) < min || (b.layout.columns as number) > 6)) {
+            add(['binding', 'layout', 'columns'], `columns must be an integer between ${min} and 6`);
+          }
         }
       }
       if (b.urlPattern !== undefined && (typeof b.urlPattern !== 'string' || !b.urlPattern)) add(['binding', 'urlPattern'], 'urlPattern must be a non-empty string');
@@ -303,13 +447,31 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
   const regionNamesSeen = new Set<string>();
   let pageContents = 0;
   let layoutNodes = 0;
-  const walk = (n: unknown, path: (string | number)[]) => {
+  const walk = (n: unknown, path: (string | number)[], ctx: WalkCtx) => {
     if (!isObj(n)) return add(path, 'node must be an object');
     const el = n.el as ComposedElement;
+    const at = (m: string) => add([...path, 'el'], m);
+    let flaggedInClickable = false;
     if (!COMPOSED_ELEMENTS.includes(el)) {
-      add([...path, 'el'], `unknown element "${String(n.el)}"`);
+      at(`unknown element "${String(n.el)}"`);
     } else if (el === 'Slot' && collection) {
-      add([...path, 'el'], 'Slot is not allowed inside a collection item template');
+      at('Slot is not allowed inside a collection item template');
+    } else if (el === 'Carousel' && collection) {
+      at('Carousel is not allowed inside a collection item template');
+    } else if (el === 'AccordionItem' && ctx.parent !== 'Accordion') {
+      at('AccordionItem is only allowed directly inside an Accordion');
+    } else if (el === 'TabPanel' && ctx.parent !== 'Tabs') {
+      at('TabPanel is only allowed directly inside Tabs');
+    } else if (el === 'Dropdown' && ctx.inDropdown) {
+      at('a Dropdown cannot contain a Dropdown');
+    } else if ((el === 'Region' || el === 'PageContent') && ctx.inDropdown) {
+      at(`${el} is not allowed inside a Dropdown`);
+    } else if (INTERACTIVE_CONTAINERS.includes(el) && ctx.parent === 'Overlay' && rootIsOverlay && path.length === 3) {
+      at(`${el} cannot be the root of an overlay frame (put it inside a Box or Stack)`);
+    }
+    if (ctx.inClickable && (INTERACTIVE_ELEMENTS.includes(el) || isClickable(n))) {
+      flaggedInClickable = true;
+      add([...path, 'el'], `${String(el)} is not allowed inside a clickable Box or Card`);
     }
     if (el === 'Region' || el === 'PageContent') {
       layoutNodes++;
@@ -340,7 +502,10 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
       }
       if (max !== undefined && !(Number.isInteger(max) && (max as number) > 0)) add([...path, 'props', 'max'], 'max must be a positive integer');
     }
-    for (const i of validateNodeStyle(n.style, [...path, 'style'])) add(i.path, i.message);
+    for (const i of validateNodeStyle(n.style, [...path, 'style'], COMPOSED_ELEMENTS.includes(el) ? el : undefined)) add(i.path, i.message);
+    if (isObj(n.props) || (n.props === undefined && REQUIRED_PROPS[el])) {
+      checkComponentProps(el, isObj(n.props) ? n.props : {}, [...path, 'props'], add);
+    }
     if (isObj(n.props)) {
       checkLayoutProps(el, n.props, [...path, 'props'], add);
       const pp = [...path, 'props'];
@@ -348,9 +513,19 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
         add([...pp, 'anchorId'], 'anchorId must match ^[A-Za-z][\\w-]{0,63}$');
       }
       if (n.props.action !== undefined) {
-        if (el === 'Button') for (const i of validateButtonAction(n.props.action, [...pp, 'action'])) add(i.path, i.message);
-        else add([...pp, 'action'], 'action is only allowed on Button');
+        if (ACTION_ELEMENTS.includes(el)) for (const i of validateButtonAction(n.props.action, [...pp, 'action'])) add(i.path, i.message);
+        else add([...pp, 'action'], 'action is only allowed on Button, Image, Box and Card');
       }
+      if (el === 'Dropdown' && n.props.chevron === false && isObj(n.bind) && n.bind.href !== undefined) {
+        add([...pp, 'chevron'], 'a Dropdown with a link must keep its chevron (it opens the panel)');
+      }
+    }
+    if (isObj(n.bind)) {
+      if (el === 'Image' && isClickable(n) && constText(n.bind.alt)?.trim() === '') {
+        add([...path, 'bind', 'alt'], 'a clickable image needs a non-empty alt (it names the link)');
+      }
+      const tip = el === 'Tooltip' ? constText(n.bind.text) : undefined;
+      if (tip !== undefined && tip.length > TOOLTIP_TEXT_MAX) add([...path, 'bind', 'text'], `text must be at most ${TOOLTIP_TEXT_MAX} characters`);
     }
     if (n.bind !== undefined) {
       if (!isObj(n.bind)) add([...path, 'bind'], 'bind must be an object');
@@ -375,13 +550,37 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
         } else add([...sp, 'from'], "from must be 'entry' or 'field'");
       }
     }
+    const kids = Array.isArray(n.children) ? n.children : [];
+    if (LEAF_ELEMENTS.includes(el) && kids.length > 0) add([...path, 'children'], `${el} cannot have children`);
+    const count = CHILD_COUNTS[el];
+    if (count && (n.children === undefined || Array.isArray(n.children)) && (kids.length < count[0] || kids.length > count[1])) {
+      add([...path, 'children'], count[0] === count[1] ? `${el} must have exactly ${count[0]} ${count[2]}` : `${el} must have ${count[0]} to ${count[1]} ${count[2]}`);
+    }
+    kids.forEach((c, i) => {
+      const ce = childEl(c);
+      const cp = [...path, 'children', i, 'el'];
+      // A misplaced AccordionItem/TabPanel is reported by its own rule.
+      if (ce === 'AccordionItem' || ce === 'TabPanel') return;
+      if (el === 'Accordion') add(cp, 'an Accordion accepts only AccordionItem children');
+      else if (el === 'Tabs') add(cp, 'Tabs accept only TabPanel children');
+      else if (el === 'Tooltip' && (ce === 'Tooltip' || ce === 'Dropdown' || FORM_CONTROL_ELEMENTS.includes(ce as FormControlElement))) {
+        add(cp, `a Tooltip cannot wrap a ${String(ce)}`);
+      }
+    });
     if (n.children !== undefined) {
       if (!Array.isArray(n.children)) add([...path, 'children'], 'children must be an array');
-      else n.children.forEach((c, i) => walk(c, [...path, 'children', i]));
+      else {
+        const next: WalkCtx = {
+          parent: el,
+          inDropdown: ctx.inDropdown || el === 'Dropdown',
+          inClickable: (ctx.inClickable && !flaggedInClickable) || ((el === 'Box' || el === 'Card') && isClickable(n)),
+        };
+        n.children.forEach((c, i) => walk(c, [...path, 'children', i], next));
+      }
     }
   };
   if (spec.tree === undefined) add(['tree'], 'tree is required');
-  else walk(spec.tree, ['tree']);
+  else walk(spec.tree, ['tree'], { inDropdown: false, inClickable: false });
   if (layoutNodes > 0 && pageContents === 0 && !rootIsOverlay && !collection) add(['tree'], 'a layout block requires exactly one PageContent');
 
   return issues;
