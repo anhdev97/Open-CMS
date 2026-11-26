@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resolveConfig, type ComposedBlockSpec } from '@opencloudcms/schema';
 // The real blocks package (source) and React, both from @opencloudcms/core.
 import * as blocks from '../../core/blocks/src/index';
+import { clickableSpec, componentsSpec, tooltipSpec } from './fixtures/components';
 import { composedBlockFile, ejectComposedBlock, EjectTargetExistsError, loadComposedBlocks, printComposedBlockFile, printEjectedBlockTsx, writeComposedBlocks } from '../src';
 
 const coreRequire = createRequire(path.resolve(__dirname, '../../core/package.json'));
@@ -502,6 +503,58 @@ describe('printEjectedBlockTsx: overlay label heading', () => {
     expect(a).toContain('aria-labelledby="lien-he-title"');
     expect(a.match(/id="lien-he-title"/g)).toHaveLength(1);
     expect(a).toMatch(/<h2 id="lien-he-title"[^>]*>Intro/);
+  });
+});
+
+describe('printEjectedBlockTsx: builder component elements', () => {
+  const locales = [{ _locale: 'en-US' }, { _locale: 'vi-VN' }, { _locale: 'fr-FR', _editor: true }, { _locale: 'en-US', showTab: 'x', menu: 'Menu "q"' }];
+
+  it('every new element, hover, button icons and clickable images render identically', () => {
+    const { source } = same(componentsSpec, locales);
+    for (const tag of ['Dropdown', 'Tooltip', 'Accordion', 'AccordionItem', 'Tabs', 'Carousel', 'Icon', 'Input', 'Textarea', 'Select', 'Combobox', 'Radio', 'Checkbox', 'Switch']) {
+      expect(source).toContain(`<ui.${tag}`);
+    }
+    expect(source).toContain("hover: { color: 'primary', borderColor: '#cfcab9' }");
+    expect(source).toContain('icon="arrow-right" iconPosition="end"');
+    expect(source).toContain('iconOnly');
+  });
+
+  it('the ejected tabs and tooltip react to showIf and locale', () => {
+    const { ejected } = same(componentsSpec, locales);
+    const shown = html(ejected, { _locale: 'en-US', showTab: 'x' });
+    expect(shown).toContain('Beta');
+    expect(html(ejected, { _locale: 'en-US' })).not.toContain('Beta');
+    expect(html(ejected, { _locale: 'vi-VN' })).toContain('Táo');
+  });
+
+  it('carousel collection with a clickable card: same fields and html', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { composed, ejected, source } = same(clickableSpec, [
+      { entries: [entry('a'), entry('b', { subtitle: 'Sub' })] },
+      { entries: [entry('a')], layout: 'carousel-2', _locale: 'fr-FR' },
+      { entries: [] },
+      { entries: [], _editor: true },
+    ]);
+    expect(ejected.fields).toEqual(composed.fields);
+    expect(source).toContain('href={h.href(h.entryUrl(');
+    expect(source).toContain('ariaLabel="Open product"');
+  });
+
+  it('clickable images fall back to the block label; the tooltip describes the first focusable node at run time', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const e = (extra: Record<string, unknown> = {}) => entry('a', extra);
+    const { source, ejected } = same(tooltipSpec, [
+      { entry: e() },
+      { entry: e({ subtitle: 'Sub' }) },
+      { entry: e({ link: '/to', subtitle: 'Sub' }) },
+      { entry: e({ link: '/to', image: null }) },
+      { entry: e({ image: null }), _editor: true },
+      { _editor: true, _locale: 'vi-VN' },
+    ]);
+    expect(source).toContain('[');
+    expect(html(ejected, { entry: e() })).toContain('aria-describedby');
+    // The unlinked tooltip child has no focusable node: the wrapper takes the focus.
+    expect(html(ejected, { entry: e() })).toContain('tabindex="0"');
   });
 });
 

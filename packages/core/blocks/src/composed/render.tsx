@@ -2,7 +2,7 @@
 // primitives. Isomorphic (server components, editor canvas, CJS): no hooks, no browser or Node globals.
 import { Fragment, type ReactNode } from 'react';
 import type { ButtonVariant } from '../ui/tokens';
-import { localizedText, type BindSource, type Locale, type ComposedBlockSpec, type ComposedNode, type ControlOption as SpecOption, type Responsive, type Track } from '@opencloudcms/schema';
+import { localizedText, type BindSource, type Locale, type ComposedBlockSpec, type ComposedNode, type Responsive, type Track } from '@opencloudcms/schema';
 import type { ColorToken, SpacingToken } from '../types';
 import { Badge, Button, DateText, Divider, Heading, Image, Price, Spacer, Text, validAction } from '../ui/content';
 import { Box, Card, Columns, Grid, Stack } from '../ui/layout';
@@ -99,8 +99,7 @@ function firstFocusable(ctx: Ctx, n: ComposedNode): ComposedNode | undefined {
 }
 
 const describedBy = (ctx: Ctx, n: ComposedNode): string | undefined => (ctx.describe?.node === n ? ctx.describe.id : undefined);
-const options = (ctx: Ctx, v: unknown): ControlOption[] =>
-  Array.isArray(v) ? (v as SpecOption[]).map((o) => ({ value: o.value, label: localizedText(o.label, ctx.locale as Locale) })) : [];
+const options = (ctx: Ctx, v: unknown): ControlOption[] => h.options(v, ctx.locale);
 const bool = (v: unknown): boolean | undefined => (typeof v === 'boolean' ? v : undefined);
 
 /** First `Heading` of `n` (depth first) that is rendered: it and every ancestor pass their `showIf`. */

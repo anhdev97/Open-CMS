@@ -84,6 +84,14 @@ function Placeholder({ text }: { text: string }) {
 
 const blockLabel = (block: Block, loc: string) => localizedText(block.label, loc as Locale, block.name);
 
+/** Block label in the locale, falling back to the block name (accessible name of carousels and clickable images). */
+const labelOf = (label: LocalizedText, name: string, loc: string): string => localizedText(label, loc as Locale, name) || name;
+
+/** Static select/radio/combobox options of a spec (`{ value, label }[]`) with the label in the locale. */
+function options(v: unknown, loc: string): { value: string; label: string }[] {
+  return Array.isArray(v) ? (v as { value: string; label: string | LocalizedText }[]).map((o) => ({ value: o.value, label: localizedText(o.label, loc as Locale) })) : [];
+}
+
 /** Single-entry block: `fn(entry)`, or (no entry) an editor placeholder / nothing. */
 function single(props: object, block: Block, fn: (entry: Entry) => ReactNode): ReactNode {
   const e = (props as { entry?: unknown }).entry;
@@ -166,6 +174,8 @@ export const composedHelpers = {
   entryUrl: (pattern: string, entry: object | null | undefined, get: (entry: object | null | undefined, path: string) => unknown): string | null =>
     entry ? entryUrl(pattern, (p) => get(entry, p)) : null,
   when,
+  blockLabel: labelOf,
+  options,
   single,
   collection,
   overlayName,

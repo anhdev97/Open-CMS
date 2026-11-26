@@ -1014,3 +1014,19 @@ describe('layout and overlay blocks, button actions', () => {
     expect(out).toContain('<h2 id="h1"');
   });
 });
+
+describe('composedHelpers: options and blockLabel (shared with ejected blocks)', () => {
+  it('options localizes labels and tolerates non-arrays', async () => {
+    const { composedHelpers: h } = await import('../../blocks/src/composed/helpers');
+    const o = [{ value: 'a', label: { 'en-US': 'Apple', 'vi-VN': 'Táo' } }, { value: 'b', label: 'Plain' }];
+    expect(h.options(o, 'vi-VN')).toEqual([{ value: 'a', label: 'Táo' }, { value: 'b', label: 'Plain' }]);
+    expect(h.options(o, 'fr-FR')[0].label).toBe('Apple');
+    expect(h.options(undefined, 'en-US')).toEqual([]);
+  });
+
+  it('blockLabel falls back to the block name', async () => {
+    const { composedHelpers: h } = await import('../../blocks/src/composed/helpers');
+    expect(h.blockLabel({ 'en-US': 'Strip' }, 'Strip2', 'en-US')).toBe('Strip');
+    expect(h.blockLabel({}, 'Strip2', 'en-US')).toBe('Strip2');
+  });
+});
