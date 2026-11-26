@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, React 19, Next.js 16, Puck 0.24.1 (pinned), Tailwind v4, lucide-react, vitest + happy-dom, pnpm.
 
-**Spec:** `docs/superpowers/specs/2026-11-26-builder-components-design.md` (sections 1–5 and decisions 1–7 are binding).
+**Spec:** `docs/superpowers/specs/2026-11-26-builder-components-design.md` (sections 1–5 and decisions 1–8 are binding).
 
 ## Global Constraints
 
