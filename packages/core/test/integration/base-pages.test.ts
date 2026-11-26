@@ -213,6 +213,59 @@ describe('base pages', () => {
       for (const id of [...extra, racer]) expect((await remove(id)).status).toBe(200);
     });
 
+    it('publishing a base takes the default-base lock; publishing a plain page does not', async () => {
+      const base = await createId({ kind: 'base', title: 'Locked', content: frame() });
+      const page = await createId({ title: 'Unlocked', path: '/unlocked-publish' });
+      let release!: () => void;
+      const held = new Promise<void>((r) => (release = r));
+      let locked!: () => void;
+      const acquired = new Promise<void>((r) => (locked = r));
+      const holder = t.db.transaction().execute(async (trx) => {
+        await sql`select pg_advisory_xact_lock(hashtext('opencloudcms.page.default'))`.execute(trx);
+        locked();
+        await held;
+      });
+      try {
+        await acquired;
+        const basePublish = publish(base);
+        // The base publish waits on the advisory lock ...
+        let waiting = 0;
+        for (let i = 0; i < 40 && !waiting; i++) {
+          await new Promise((r) => setTimeout(r, 50));
+          const w = await sql<{ n: number }>`select count(*)::int as n from pg_locks where locktype = 'advisory' and not granted`.execute(t.db);
+          waiting = w.rows[0].n;
+        }
+        expect(waiting).toBe(1);
+        // ... while a plain page publishes.
+        expect((await publish(page)).status).toBe(200);
+        release();
+        await holder;
+        expect((await basePublish).status).toBe(200);
+      } finally {
+        release();
+        await holder;
+      }
+      expect((await remove(base)).status).toBe(200);
+      expect((await unpublish(page)).status).toBe(200);
+      expect((await remove(page)).status).toBe(200);
+    });
+
+    it('with two default rows (written outside the API), id=default is the most recently updated', async () => {
+      const other = await publishedBase('Second default');
+      await sql`update ct_opencloudcms_page set is_default = true where document_id = ${other}`.execute(t.db);
+      const at = (id: string, when: string) =>
+        sql`update ct_opencloudcms_page set updated_at = ${when}::timestamptz where document_id = ${id} and status = 'published'`.execute(t.db);
+      const dflt = async () => (await call(`${PUBLIC}/base?id=default&locale=en-US`, {}, null)).body.data.documentId;
+      await at(b1, '2030-01-01T00:00:00Z');
+      await at(other, '2031-01-01T00:00:00Z');
+      expect(await dflt()).toBe(other);
+      await at(other, '2029-01-01T00:00:00Z');
+      expect(await dflt()).toBe(b1);
+      await at(b1, 'now()');
+      expect((await setDefault(b1)).status).toBe(200);
+      expect((await remove(other)).status).toBe(200);
+    });
+
     it('usage counts explicit pages and, for the default, pages with no layout', async () => {
       const u1 = await usage(b1);
       expect(u1.status).toBe(200);

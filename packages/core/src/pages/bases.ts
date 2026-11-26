@@ -26,6 +26,15 @@ export async function lockDefaultBase(trx: Kysely<any>): Promise<void> {
   await sql`select pg_advisory_xact_lock(hashtext('opencloudcms.page.default'))`.execute(trx);
 }
 
+/**
+ * Publishing a base copies its draft's `is_default` into the new published row: take the default-base lock first, so
+ * the copy cannot interleave with `setDefault` (which would leave a stale or second default). `db` must be the
+ * publish transaction. Other pages need no lock (`kind` never changes).
+ */
+export async function lockForBasePublish(db: Kysely<any>, documentId: string): Promise<void> {
+  if (await findBase(db, documentId)) await lockDefaultBase(db);
+}
+
 /** `{ isDefault }` of the base document (any row), or null when no base document has this id. */
 export async function findBase(db: Kysely<any>, documentId: string, status?: 'draft' | 'published'): Promise<{ isDefault: boolean } | null> {
   const r = await sql<{ is_default: boolean }>`

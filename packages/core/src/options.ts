@@ -26,6 +26,11 @@ export interface EntryHooks {
   beforeUpdate?(data: Record<string, unknown>, ctx: HookContext & { documentId: string }): unknown;
   /** Throw to block publishing (e.g. business validation). */
   beforePublish?(document: PublishedDocument, ctx: HookContext): unknown;
+  /**
+   * Runs inside the publish transaction, before the published rows are written (`ctx.db` is that transaction), so it
+   * can take locks and see what it guards. Throw to refuse.
+   */
+  inPublishTransaction?(documentId: string, ctx: HookContext): unknown;
   afterPublish?(document: PublishedDocument, ctx: HookContext): unknown;
   /**
    * Throw to refuse unpublishing. Runs inside the unpublish transaction (`ctx.db` is that transaction).

@@ -10,7 +10,7 @@ import {
   type StoredPageContent,
 } from '@opencloudcms/schema';
 import type { HookRegistration, PublishedDocument } from '../options';
-import { guardBaseRemoval, PAGE_MAIN } from './bases';
+import { guardBaseRemoval, lockForBasePublish, PAGE_MAIN } from './bases';
 import { normalizeStoredRichText } from './richtext';
 
 const unprocessable = (code: string, message: string) => new UnprocessableEntityException({ code, message });
@@ -155,6 +155,7 @@ export function createPageHooks(manifest: BlockManifest | undefined | (() => Blo
         issues: [...total].map(([name, n]) => ({ path: [name], message: String(n) })),
       });
     },
+    inPublishTransaction: (documentId, ctx) => lockForBasePublish(ctx.db, documentId),
     beforeUnpublish: (documentId, ctx) => guardBaseRemoval(ctx.db, documentId, 'unpublish', { force: ctx.force, defaultLocale: ctx.locale }),
     beforeDelete: (documentId, ctx) => guardBaseRemoval(ctx.db, documentId, 'delete', { defaultLocale: ctx.locale }),
   };

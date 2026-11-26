@@ -75,10 +75,14 @@ export class PagesService implements OnModuleInit {
     return { data: out };
   }
 
-  /** Document id of the default base page having a `status` row, or null. */
+  /**
+   * Document id of the default base page having a `status` row, or null. Should two rows ever be marked (written
+   * outside the API), the most recently updated wins, deterministically.
+   */
   async defaultBase(status: 'draft' | 'published'): Promise<string | null> {
     const r = await sql<{ document_id: string }>`
-      select document_id from ${sql.table(PAGE_MAIN)} where kind = 'base' and is_default and status = ${status} limit 1`.execute(this.db);
+      select document_id from ${sql.table(PAGE_MAIN)} where kind = 'base' and is_default and status = ${status}
+      order by updated_at desc, id limit 1`.execute(this.db);
     return r.rows[0]?.document_id ?? null;
   }
 

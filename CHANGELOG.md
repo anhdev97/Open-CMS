@@ -15,6 +15,10 @@
   (optional) receive every private file (`put`, `get` and `delete` with `visibility: 'private'`). Without it private
   files share the media bucket under `private/`, and the provider sets no ACL: a bucket that serves public reads must
   deny them on `private/*` (see "Private files" in the core README).
+- **Publishing a base page takes the default-base lock** (the one `setDefault`, unpublish and delete take), so
+  copying the draft's `isDefault` cannot interleave with a default change. The lock is taken by the new entry hook
+  `inPublishTransaction(documentId, ctx)`, which runs inside the publish transaction (`ctx.db`) before the published
+  rows are written. `base?id=default` picks the most recently updated default row should two ever be marked.
 - **Publishing no longer changes the draft's `updatedAt`.** Only its `publishedAt` moves (`hasUnpublishedChanges`
   stays `updatedAt > publishedAt`), so a save sent with the `If-Match` the editor saw before Publish succeeds
   instead of answering 409 `stale_draft`. The page editor also re-reads the draft version after publishing.

@@ -262,7 +262,11 @@ export class EntriesService {
 
     const ctx = { ...this.ctx(apiId, this.options.config.defaultLocale), force: opts.force === true };
     for (const h of this.registry.hooksFor(apiId)) await h.beforePublish?.(doc, ctx);
-    await this.repo.publish(def, documentId, doc, (trx) => this.workflow.guardPublish(trx, def, documentId, user, action));
+    await this.repo.publish(def, documentId, doc, async (trx) => {
+      const tctx = { ...ctx, db: trx };
+      for (const h of this.registry.hooksFor(apiId)) await h.inPublishTransaction?.(documentId, tctx);
+      await this.workflow.guardPublish(trx, def, documentId, user, action);
+    });
     for (const h of this.registry.hooksFor(apiId)) await h.afterPublish?.(doc, ctx);
     return this.get(apiId, documentId, 'published');
   }
