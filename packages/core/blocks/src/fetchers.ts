@@ -11,7 +11,15 @@ export class FetchError extends Error {
   }
 }
 
-type Mode = { prefix: string; draft: boolean; cookie?: string; credentials: boolean; assetsPath: string };
+type Mode = {
+  prefix: string;
+  draft: boolean;
+  cookie?: string;
+  credentials: boolean;
+  assetsPath: string;
+  /** Admin type list, read to know the private types (only where private entries are readable). */
+  typesPath?: string;
+};
 
 function createFetcher(baseUrl: string, mode: Mode): ContentFetcher {
   const root = baseUrl.replace(/\/+$/, '');
@@ -81,9 +89,23 @@ function createFetcher(baseUrl: string, mode: Mode): ContentFetcher {
     return out;
   }
 
+  let privateIds: Promise<ReadonlySet<string>> | null = null;
+  const typesPath = mode.typesPath;
+  const privateApiIds = typesPath
+    ? () =>
+        (privateIds ??= get<{ apiId?: unknown; private?: unknown }>(typesPath).then(
+          (types) => new Set(types.filter((t) => t.private === true && typeof t.apiId === 'string').map((t) => t.apiId as string)),
+          (e) => {
+            privateIds = null;
+            throw e;
+          },
+        ))
+    : undefined;
+
   return {
     byIds,
     assets,
+    ...(privateApiIds ? { privateApiIds } : {}),
     query(apiId, q, locale) {
       const params: [string, string][] = [['locale', locale], ['limit', String(q.limit)]];
       if (q.sort) params.push(['sort', q.sort]);
@@ -113,5 +135,12 @@ export function publicFetcher(baseUrl: string): ContentFetcher {
  * `credentials: 'include'`; on the server pass the incoming `cookie` header to forward it.
  */
 export function adminFetcher(baseUrl: string, init: { cookie?: string } = {}): ContentFetcher {
-  return createFetcher(baseUrl, { prefix: '/api/admin/content', draft: true, cookie: init.cookie, credentials: !init.cookie, assetsPath: '/api/admin/assets' });
+  return createFetcher(baseUrl, {
+    prefix: '/api/admin/content',
+    draft: true,
+    cookie: init.cookie,
+    credentials: !init.cookie,
+    assetsPath: '/api/admin/assets',
+    typesPath: '/api/admin/content-types',
+  });
 }

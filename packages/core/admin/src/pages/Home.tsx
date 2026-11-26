@@ -188,7 +188,7 @@ function HomeContent() {
                     {canEditTypes && (
                       <TableCell className="text-right">
                         <Button asChild variant="ghost" size="sm">
-                          <Link to={`/settings/content-types?type=${type.apiId}`}>{t('home.editSchema')}</Link>
+                          <Link to={`/settings/content-types/${type.apiId}`}>{t('home.editSchema')}</Link>
                         </Button>
                       </TableCell>
                     )}

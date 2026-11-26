@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ComposedBlockSpec } from '@opencloudcms/schema';
-import { CONTAINER_ELEMENTS, RESERVED_ITEM_KEYS, puckToTree, treeToPuck } from '../../admin/src/block-builder/tree-puck';
+import { CONTAINER_ELEMENTS, RESERVED_ITEM_KEYS, hoistOverlay, isEmptyTree, keepOverlayRoot, puckToTree, treeToPuck, uniqueRegionName } from '../../admin/src/block-builder/tree-puck';
 
 const base = (over: Partial<ComposedBlockSpec>): ComposedBlockSpec => ({
   id: 'blk_test01',
@@ -78,11 +78,40 @@ const landing = base({
   },
 });
 
+const siteLayout = base({
+  name: 'SiteLayout',
+  tree: {
+    el: 'Stack',
+    props: { direction: 'vertical' },
+    children: [
+      { el: 'Region', props: { name: 'header', label: 'Header', allow: ['Nav'] } },
+      { el: 'Box', props: { anchorId: 'main' }, children: [{ el: 'PageContent' }] },
+      { el: 'Region', props: { name: 'footer' } },
+    ],
+  },
+});
+
+const contactOverlay = base({
+  name: 'ContactOverlay',
+  tree: {
+    el: 'Overlay',
+    props: { variant: 'drawer', side: 'left', size: 'lg', closeOnBackdrop: false, showClose: true },
+    style: { padding: { t: '4' } },
+    children: [
+      { el: 'Heading', props: { level: 2, anchorId: 'contact-title' }, bind: { text: { from: 'const', value: 'Contact' } } },
+      { el: 'Button', props: { action: { type: 'overlay', op: 'close' } }, bind: { label: { from: 'const', value: 'Close' } } },
+      { el: 'Button', props: { action: { type: 'scroll', target: 'Features' } }, bind: { label: { from: 'const', value: 'Go' } } },
+    ],
+  },
+});
+
 describe('tree ⇄ Puck', () => {
   it.each([
     ['single', productCard],
     ['collection', productGrid],
     ['unbound with slots', landing],
+    ['layout (Region, PageContent)', siteLayout],
+    ['overlay with button actions', contactOverlay],
   ])('round-trips the %s fixture', (_n, spec) => {
     expect(puckToTree(treeToPuck(spec).data)).toEqual(spec.tree);
   });
@@ -102,7 +131,7 @@ describe('tree ⇄ Puck', () => {
     };
     walk(data.content as never);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(CONTAINER_ELEMENTS).toEqual(['Box', 'Stack', 'Columns', 'Grid', 'Card']);
+    expect(CONTAINER_ELEMENTS).toEqual(['Box', 'Stack', 'Columns', 'Grid', 'Card', 'Overlay']);
   });
 
   it('drops undefined props and empty children; several top-level items become a vertical Stack; none → empty Box', () => {
@@ -138,5 +167,63 @@ describe('tree ⇄ Puck', () => {
     expect(data.content[0]!.props).not.toHaveProperty('props');
     expect(puckToTree(data)).toEqual(tree);
     expect(puckToTree({ root: {}, content: [{ type: 'Box', props: { id: 'x', style: {} } }] } as never)).toEqual({ el: 'Box' });
+  });
+});
+
+describe('layout and overlay elements in the canvas data', () => {
+  it('Region and PageContent are leaves; Overlay holds its children in a slot', () => {
+    const layout = treeToPuck(siteLayout).data.content[0]!;
+    const kids = layout.props.children as { type: string; props: Record<string, unknown> }[];
+    expect(kids[0]!.props).not.toHaveProperty('children');
+    expect(kids[0]!.props).toMatchObject({ name: 'header', label: 'Header', allow: ['Nav'] });
+    const overlay = treeToPuck(contactOverlay).data.content[0]!;
+    expect(overlay.type).toBe('Overlay');
+    expect((overlay.props.children as unknown[]).length).toBe(3);
+    expect((overlay.props.children as { props: Record<string, unknown> }[])[1]!.props.action).toEqual({ type: 'overlay', op: 'close' });
+  });
+
+  it('a new region gets a free name: region, region-2, …', () => {
+    expect(uniqueRegionName('region', [])).toBe('region');
+    expect(uniqueRegionName('region', ['region'])).toBe('region-2');
+    expect(uniqueRegionName('region', ['region', 'region-2', 'region-3'])).toBe('region-4');
+    expect(uniqueRegionName('header', ['region'])).toBe('header');
+  });
+
+  it('an empty tree is an empty container root (or nothing); a root with children is not', () => {
+    expect(isEmptyTree({ el: 'Box' })).toBe(true);
+    expect(isEmptyTree({ el: 'Card', children: [] })).toBe(true);
+    expect(isEmptyTree({ el: 'Card', children: [{ el: 'Heading' }] })).toBe(false);
+    expect(isEmptyTree({ el: 'Heading' })).toBe(false);
+    expect(isEmptyTree({ el: 'Overlay' })).toBe(false);
+  });
+
+  it('an Overlay dropped next to an empty root becomes the root', () => {
+    const ov = { type: 'Overlay', props: { id: 'Overlay-9', variant: 'modal', children: [] } };
+    const data = { root: { props: {} }, content: [{ type: 'Card', props: { id: 'Card-1', children: [] } }, ov] };
+    expect(hoistOverlay(data as never)).toEqual({ root: { props: {} }, content: [ov] });
+    // Not when the other root has content, nor when the Overlay already is the only item.
+    const full = { root: { props: {} }, content: [{ type: 'Card', props: { id: 'Card-1', children: [{ type: 'Heading', props: { id: 'h' } }] } }, ov] };
+    expect(hoistOverlay(full as never)).toBeNull();
+    expect(hoistOverlay({ root: { props: {} }, content: [ov] } as never)).toBeNull();
+  });
+});
+
+describe('an Overlay root stays the root', () => {
+  const ov = (children: unknown[]) => ({ type: 'Overlay', props: { id: 'Overlay-1', variant: 'modal', children } });
+  const h = { type: 'Heading', props: { id: 'Heading-2' } };
+  const txt = { type: 'Text', props: { id: 'Text-3' } };
+  const btn = { type: 'Button', props: { id: 'Button-4' } };
+
+  it('elements dropped next to it at root level move inside it (before → first, after → last)', () => {
+    const prev = { root: { props: {} }, content: [ov([h])] };
+    const next = { root: { props: {} }, content: [txt, ov([h]), btn] };
+    expect(keepOverlayRoot(prev as never, next as never)).toEqual({ root: { props: {} }, content: [ov([txt, h, btn])] });
+  });
+
+  it('nothing to do when the Overlay is alone, or was not the root before', () => {
+    const alone = { root: { props: {} }, content: [ov([h])] };
+    expect(keepOverlayRoot(alone as never, alone as never)).toBeNull();
+    const card = { root: { props: {} }, content: [{ type: 'Card', props: { id: 'Card-1', children: [h] } }] };
+    expect(keepOverlayRoot(card as never, { root: { props: {} }, content: [card.content[0], txt] } as never)).toBeNull();
   });
 });

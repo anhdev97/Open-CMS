@@ -5,15 +5,23 @@ import {
   Get,
   HttpCode,
   Inject,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Headers,
   Patch,
   Post,
   Query,
+  BadRequestException,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { AssetsService, AssetUploadInterceptor, decodeMultipartFilename, type UploadedFileInput } from '@opencloudcms/assets';
 import { CurrentUser, RequirePermission, type RequestUser } from '@opencloudcms/oauth2';
+import { PAGE_API_ID } from '@opencloudcms/schema';
 import { EntriesService, type ListParams } from './entries.service';
+import { ContentRegistry } from './registry.service';
+import { PrivateAssetOwnership } from './private-assets';
 import { WorkflowService } from './workflow.service';
 
 /** Accepts both `filter[name]=x` flat keys (Express 5) and nested objects (qs). */
@@ -50,24 +58,36 @@ function ifMatchValue(header: string | undefined): string | undefined {
   return v ? v : undefined;
 }
 
-/** Storefront / delivery API: published content only, no auth. */
+/**
+ * Storefront / delivery API: published content only, no auth. Private types answer exactly like an unknown apiId
+ * (`ContentRegistry.getPublic`); `ContentCorsMiddleware` does the same for preflights.
+ */
 @Controller('api/content')
 export class ContentController {
-  constructor(@Inject(EntriesService) private readonly entries: EntriesService) {}
+  constructor(
+    @Inject(EntriesService) private readonly entries: EntriesService,
+    @Inject(ContentRegistry) private readonly registry: ContentRegistry,
+  ) {}
 
   @Get(':apiId')
   list(@Param('apiId') apiId: string, @Query() query: Record<string, unknown>) {
-    return this.entries.list(apiId, { ...parseListQuery(query), status: 'published' });
+    this.registry.getPublic(apiId);
+    // Base pages are read publicly only through `opencloudcmsPage/base`.
+    const mainWhere = apiId === PAGE_API_ID ? { kind: 'page' } : undefined;
+    return this.entries.list(apiId, { ...parseListQuery(query), status: 'published', mainWhere });
   }
 
   @Get(':apiId/:documentId')
-  get(
+  async get(
     @Param('apiId') apiId: string,
     @Param('documentId', ParseUUIDPipe) documentId: string,
     @Query('locale') locale?: string,
     @Query('fallback') fallback?: string,
   ) {
-    return this.entries.get(apiId, documentId, 'published', locale, fallback);
+    this.registry.getPublic(apiId);
+    const r = await this.entries.get(apiId, documentId, 'published', locale, fallback);
+    if (apiId === PAGE_API_ID && r.data.kind === 'base') throw new NotFoundException(`${apiId} ${documentId} not found`);
+    return r;
   }
 }
 
@@ -139,8 +159,13 @@ export class AdminContentController {
 
   @Post(':apiId/:documentId/unpublish')
   @HttpCode(200)
-  unpublish(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string, @CurrentUser() user: RequestUser) {
-    return this.entries.unpublish(apiId, documentId, user);
+  unpublish(
+    @Param('apiId') apiId: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @CurrentUser() user: RequestUser,
+    @Query('force') force?: string,
+  ) {
+    return this.entries.unpublish(apiId, documentId, user, { force: force === 'true' });
   }
 
   @RequirePermission('content.submit')
@@ -191,5 +216,64 @@ export class WorkflowController {
   @Get('pending-count')
   pendingCount() {
     return this.workflow.pendingCount();
+  }
+}
+
+/**
+ * Metadata (`{ id, filename, size, mime }[]`) of the private files an entry of a private type owns, for the admin
+ * entry pages. 404 for unknown and public types and for unknown entries.
+ */
+@Controller('api/admin/content')
+export class PrivateEntryFilesController {
+  constructor(
+    @Inject(ContentRegistry) private readonly registry: ContentRegistry,
+    @Inject(EntriesService) private readonly entries: EntriesService,
+    @Inject(PrivateAssetOwnership) private readonly ownership: PrivateAssetOwnership,
+  ) {}
+
+  @RequirePermission('content.read')
+  @Get(':apiId/:documentId/files')
+  async files(@Param('apiId') apiId: string, @Param('documentId', ParseUUIDPipe) documentId: string) {
+    const def = this.registry.get(apiId);
+    if (!def.private) throw new NotFoundException(`"${apiId}" has no entry files`);
+    await this.entries.get(apiId, documentId, 'draft');
+    return { data: await this.ownership.files(def, documentId) };
+  }
+}
+
+/**
+ * Upload into an asset field of a private type (spec §7, decision 9): multipart `file` + `field` (the asset field's
+ * name). The file is sniffed against the field's `accept`, limited by the assets `maxBytes`, stored privately and
+ * owned by the uploader until an entry save attaches it (unattached uploads are swept after 24 h). Registered only
+ * when asset uploads are configured.
+ */
+@Controller('api/admin/content')
+export class PrivateAssetUploadController {
+  constructor(
+    @Inject(ContentRegistry) private readonly registry: ContentRegistry,
+    @Inject(AssetsService) private readonly assets: AssetsService,
+  ) {}
+
+  @RequirePermission('content.update')
+  @Post(':apiId/assets')
+  @UseInterceptors(AssetUploadInterceptor)
+  async upload(
+    @Param('apiId') apiId: string,
+    @UploadedFile() file: UploadedFileInput | undefined,
+    @Body('field') fieldName: string | undefined,
+    @CurrentUser() user: RequestUser,
+  ) {
+    const def = this.registry.get(apiId);
+    if (!def.private) {
+      throw new BadRequestException({ code: 'not_private', message: `"${apiId}" is not a private content type: use the media library` });
+    }
+    const field = def.fields.find((f) => f.name === fieldName && f.kind === 'asset');
+    if (!field) throw new BadRequestException({ code: 'invalid_field', message: `"${String(fieldName)}" is not an asset field of ${apiId}` });
+    if (!file) throw new BadRequestException('file is required (multipart field "file")');
+    const data = await this.assets.uploadPrivate(
+      { buffer: file.buffer, filename: decodeMultipartFilename(file.originalname), contentType: file.mimetype },
+      { ownerApiId: apiId, accept: (field.options as { accept?: string[] }).accept, uploadedBy: user?.id ?? null },
+    );
+    return { data };
   }
 }

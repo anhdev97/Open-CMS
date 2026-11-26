@@ -59,6 +59,30 @@ describe('coreBlocks', () => {
     expect(html('Button', { label: 'Go', link: { href: '/x' } })).toContain('<a');
   });
 
+  it('Button with a valid action renders a <button type="button"> with the link classes; without one it is unchanged', () => {
+    const link = html('Button', { label: 'Go', link: { href: '/x' }, variant: 'outline' });
+    const act = html('Button', { label: 'Go', link: { href: '/x' }, variant: 'outline', action: { type: 'overlay', op: 'open', target: 'lien-he' } });
+    expect(act).toMatch(/^<button type="button"/);
+    expect(act).not.toContain('href');
+    expect(/class="([^"]*)"/.exec(act)![1]).toBe(/class="([^"]*)"/.exec(link)![1]);
+    expect(html('Button', { label: 'Go', link: { href: '/x' }, variant: 'outline', action: null })).toBe(link);
+    expect(html('Button', { label: 'Go', link: { href: '/x' }, variant: 'outline', action: { type: 'scroll', target: '1x' } })).toBe(link);
+    expect(registry.get('Button')!.fields.action).toMatchObject({ kind: 'action' });
+  });
+
+  it('ButtonGroup items take an action each', () => {
+    const out = html('ButtonGroup', {
+      buttons: [
+        { label: 'A', link: { href: '/a' }, variant: 'default', action: { type: 'scroll', target: 'lien-he' } },
+        { label: 'B', link: { href: '/b' }, variant: 'outline' },
+      ],
+    });
+    expect(out).toContain('<button type="button"');
+    expect(out).toContain('href="/b"');
+    expect(out).not.toContain('href="/a"');
+    expect((registry.get('ButtonGroup')!.fields.buttons as any).fields.action).toMatchObject({ kind: 'action' });
+  });
+
   it('Columns and Grid use literal grid classes', () => {
     expect(html('Columns', { columns: 3 })).toContain('md:grid-cols-3');
     expect(html('Grid', { columns: 4 })).toContain('lg:grid-cols-4');

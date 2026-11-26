@@ -31,11 +31,14 @@ export interface CoreTestAppOptions {
   web?: OpenCloudCmsModuleOptions['web'];
   cors?: OpenCloudCmsModuleOptions['cors'];
   pages?: OpenCloudCmsModuleOptions['pages'];
+  hooks?: OpenCloudCmsModuleOptions['hooks'];
   /** false: leave the database empty and without autoMigrate, so startup must refuse. Default true. */
   migrate?: boolean;
   env?: Record<string, string>;
   locales?: string[];
   defaultLocale?: string;
+  /** Asset storage; `(root) => options` to place files under the app's temp root. Default: none (uploads off). */
+  assets?: (root: string) => OpenCloudCmsModuleOptions['assets'];
 }
 
 async function freePort(): Promise<number> {
@@ -88,7 +91,9 @@ export async function createCoreTestApp(opts: CoreTestAppOptions = {}): Promise<
           web: opts.web ?? { enabled: false },
           cors: opts.cors,
           pages: opts.pages,
+          hooks: opts.hooks,
           contentGroups: opts.contentGroups,
+          assets: opts.assets?.(root),
           schemaEditable: opts.schemaEditable ?? true,
           autoMigrate: opts.migrate !== false,
         }),

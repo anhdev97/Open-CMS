@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import type { Readable } from 'node:stream';
 import {
   BadGatewayException,
   BadRequestException,
@@ -8,16 +10,22 @@ import {
   NotFoundException,
   Optional,
   PayloadTooLargeException,
+  ServiceUnavailableException,
   UnsupportedMediaTypeException,
+  type OnApplicationBootstrap,
+  type OnModuleDestroy,
 } from '@nestjs/common';
 import type { Kysely } from 'kysely';
+import { OAUTH2_CONFIG } from '@opencloudcms/oauth2';
 import { SYSTEM_TABLES } from '@opencloudcms/schema';
 import { ASSETS_DB, ASSETS_OPTIONS, DEFAULT_IMAGE_SIZES, DEFAULT_MAX_BYTES, STORAGE_PROVIDER } from '../constants';
 import { ImageTooLargeError, InvalidImageError, processUpload } from '../pipeline/image-pipeline';
-import type { StorageProvider } from '../provider/storage-provider';
+import { PRIVATE_KEY_PREFIX, type AssetVisibility, type StorageProvider } from '../provider/storage-provider';
 import { missingAlt } from '../seo/missing-alt';
+import { resolveUploadMime } from '../sniff';
 import type { AssetVariants, AssetsModuleOptions } from '../types';
 import { FoldersService } from './folders.service';
+import { deriveAssetLinkKey, signAssetLink, verifyAssetLink } from './signed-link';
 
 export interface UploadedFileInput {
   buffer: Buffer;
@@ -55,6 +63,37 @@ export interface AssetApiRow {
 
 export type PublicAssetRow = Pick<AssetApiRow, 'id' | 'url' | 'alt' | 'width' | 'height' | 'mimeType'>;
 
+/** A file for a private asset field (server API and admin upload). Its type is sniffed from `buffer`. */
+export interface PrivateFileInput {
+  buffer: Buffer;
+  filename: string;
+  /** Declared type: only used to tell text formats apart (binary types are always sniffed). */
+  contentType?: string | null;
+}
+
+export interface PrivateUploadOptions {
+  /** apiId of the private content type whose entry will own the file. */
+  ownerApiId: string;
+  /** Owning entry; null/absent = owned by the uploader until an entry save attaches it (decision 9). */
+  ownerDocumentId?: string | null;
+  /** The field's `accept` list (sniffed type must match). */
+  accept?: readonly string[] | null;
+  /** User id of the uploader, kept in `metadata.uploadedBy`. */
+  uploadedBy?: string | null;
+}
+
+/** A private asset: `url` is always '' (no public URL exists); downloads go through `GET /api/admin/assets/:id/file`. */
+export interface PrivateAssetApiRow extends AssetApiRow {
+  visibility: 'private';
+  ownerApiId: string;
+  ownerDocumentId: string | null;
+}
+
+/** Unattached private uploads older than this are deleted by the sweeper. */
+export const UNATTACHED_PRIVATE_TTL_MS = 24 * 3600_000;
+const SWEEP_INTERVAL_MS = 3600_000;
+const API_ID_RE = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_LIST = 200;
 const MAX_BULK = 100;
@@ -90,6 +129,31 @@ function toApi(row: any): AssetApiRow {
   };
 }
 
+function toPrivateApi(row: any): PrivateAssetApiRow {
+  return { ...toApi(row), visibility: 'private', ownerApiId: row.owner_api_id, ownerDocumentId: row.owner_document_id ?? null };
+}
+
+/** Display filename of a private upload: no path, no control characters, at most 255 characters. */
+function privateFilename(name: unknown): string {
+  const base = String(name ?? '').split(/[\\/]/).pop() ?? '';
+  // eslint-disable-next-line no-control-regex
+  const clean = base.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 255);
+  return clean || 'file';
+}
+
+/**
+ * Multer reads multipart filenames as latin1; a UTF-8 name arrives mis-decoded ("Ã©" for "é"). Re-decode when the
+ * latin1 bytes form valid UTF-8, else keep the name as it came.
+ */
+export function decodeMultipartFilename(name: string): string {
+  if (!/[\u0080-\u00ff]/.test(name) || /[^\u0000-\u00ff]/.test(name)) return name;
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.from(name, 'latin1'));
+  } catch {
+    return name;
+  }
+}
+
 function optString(v: unknown, field: string, max: number): string | null {
   if (v == null) return null;
   if (typeof v !== 'string') throw new BadRequestException(`${field} must be a string`);
@@ -104,15 +168,36 @@ function optInt(v: unknown, field: string): number | null {
 }
 
 @Injectable()
-export class AssetsService {
+export class AssetsService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(AssetsService.name);
+  private readonly linkKey: Buffer | null;
+  private sweepTimer?: ReturnType<typeof setInterval>;
 
   constructor(
     @Inject(ASSETS_DB) private readonly db: Kysely<any>,
     @Inject(FoldersService) private readonly folders: FoldersService,
     @Optional() @Inject(STORAGE_PROVIDER) private readonly provider: StorageProvider | null = null,
     @Optional() @Inject(ASSETS_OPTIONS) private readonly options: AssetsModuleOptions | null = null,
-  ) {}
+    @Optional() @Inject(OAUTH2_CONFIG) authConfig: { secret?: Buffer } | null = null,
+  ) {
+    this.linkKey = authConfig?.secret ? deriveAssetLinkKey(authConfig.secret) : null;
+  }
+
+  /** Sweeps unattached private uploads now and hourly (after every module's init, so migrations have run). */
+  onApplicationBootstrap(): void {
+    if (!this.provider) return;
+    const sweep = () => {
+      this.sweepUnattachedPrivateAssets().catch((e) => this.logger.error(`Private asset sweep failed: ${e instanceof Error ? e.message : String(e)}`));
+    };
+    sweep();
+    this.sweepTimer = setInterval(sweep, SWEEP_INTERVAL_MS);
+    this.sweepTimer.unref?.();
+  }
+
+  onModuleDestroy(): void {
+    if (this.sweepTimer) clearInterval(this.sweepTimer);
+    this.sweepTimer = undefined;
+  }
 
   /** `ids` query (`a,b,…`): 1–100 UUIDs, else 400. */
   static parseIds(raw: unknown): string[] {
@@ -125,7 +210,7 @@ export class AssetsService {
 
   /** Existing assets among `ids` (unordered; missing ids are omitted). */
   async byIds(ids: string[]): Promise<{ data: AssetApiRow[] }> {
-    const rows = await this.db.selectFrom(SYSTEM_TABLES.assets).selectAll().where('id', 'in', ids).execute();
+    const rows = await this.db.selectFrom(SYSTEM_TABLES.assets).selectAll().where('id', 'in', ids).where('visibility', '=', 'public').execute();
     return { data: rows.map(toApi) };
   }
 
@@ -144,7 +229,7 @@ export class AssetsService {
    */
   async list(limit: number, folderId?: string | null | undefined): Promise<{ data: AssetApiRow[] }> {
     const n = Math.min(Math.max(Math.trunc(limit) || 50, 1), MAX_LIST);
-    let q = this.db.selectFrom(SYSTEM_TABLES.assets).selectAll().orderBy('created_at', 'desc').limit(n);
+    let q = this.db.selectFrom(SYSTEM_TABLES.assets).selectAll().where('visibility', '=', 'public').orderBy('created_at', 'desc').limit(n);
     if (folderId === null) q = q.where('folder_id', 'is', null);
     else if (typeof folderId === 'string') {
       if (!UUID_RE.test(folderId)) throw new BadRequestException('Invalid folderId');
@@ -200,7 +285,11 @@ export class AssetsService {
     }
     const altText = optString(opts.alt, 'alt', 512);
     const folderId = await this.folders.assertExists(opts.folderId);
-    const keyPrefix = await this.folders.pathSlugs(folderId);
+    // A folder slug must never produce a key in private storage (`private/…`) or one the static middleware refuses.
+    const keyPrefix = (await this.folders.pathSlugs(folderId))
+      .split('/')
+      .map((seg) => (/^private(-assets)?$/i.test(seg) ? `${seg}-folder` : seg))
+      .join('/');
 
     let processed;
     try {
@@ -294,7 +383,13 @@ export class AssetsService {
     if ('folderId' in body) {
       patch.folder_id = await this.folders.assertExists(body.folderId);
     }
-    const row = await this.db.updateTable(SYSTEM_TABLES.assets).set(patch).where('id', '=', id).returningAll().executeTakeFirst();
+    const row = await this.db
+      .updateTable(SYSTEM_TABLES.assets)
+      .set(patch)
+      .where('id', '=', id)
+      .where('visibility', '=', 'public')
+      .returningAll()
+      .executeTakeFirst();
     if (!row) throw new NotFoundException('Asset not found');
     const data = toApi(row);
     return { data, seo: { missingAlt: missingAlt(data) } };
@@ -311,39 +406,189 @@ export class AssetsService {
     }
     if (action === 'move') {
       const folderId = await this.folders.assertExists(body.folderId);
-      await this.db.updateTable(SYSTEM_TABLES.assets).set({ folder_id: folderId }).where('id', 'in', ids).execute();
+      await this.db.updateTable(SYSTEM_TABLES.assets).set({ folder_id: folderId }).where('id', 'in', ids).where('visibility', '=', 'public').execute();
       return { data: { ids } };
     }
     throw new BadRequestException('action must be "move" or "delete"');
   }
 
-  /** Deletes storage objects first, then the row. A storage failure keeps the row (502). */
+  /**
+   * Media library delete (public assets only). Deletes storage objects first, then the row. A storage failure
+   * keeps the row (502). Private files are deleted with their entry (`deletePrivate`).
+   */
   async delete(id: string): Promise<{ data: { id: string } }> {
     if (!UUID_RE.test(id)) throw new NotFoundException('Asset not found');
-    const row = await this.db.selectFrom(SYSTEM_TABLES.assets).selectAll().where('id', '=', id).executeTakeFirst();
+    const row = await this.db.selectFrom(SYSTEM_TABLES.assets).selectAll().where('id', '=', id).where('visibility', '=', 'public').executeTakeFirst();
     if (!row) throw new NotFoundException('Asset not found');
+    await this.removeRow(row);
+    return { data: { id } };
+  }
 
+  /** Media library removal (public rows): storage first, then the row, so a storage failure keeps the row. */
+  private async removeRow(row: any): Promise<void> {
+    const id = row.id as string;
     const keys = collectKeys(row);
     if (keys.length) {
       if (!this.provider || (row.provider && row.provider !== this.provider.kind)) {
         throw new ConflictException(`Asset is stored with provider "${row.provider ?? 'unknown'}" which is not configured`);
       }
       try {
-        for (const key of keys) await this.provider.delete(key);
+        for (const key of keys) await this.provider.delete(key, 'public');
       } catch (err) {
         this.logger.error(`Storage delete failed for asset ${id}: ${err instanceof Error ? err.message : String(err)}`);
         throw new BadGatewayException('Failed to delete asset from storage');
       }
     }
     await this.db.deleteFrom(SYSTEM_TABLES.assets).where('id', '=', id).execute();
-    return { data: { id } };
   }
 
-  private async cleanup(provider: StorageProvider, keys: string[]): Promise<string[]> {
+  /* ------------------------------ private files (spec §7) ------------------------------ */
+
+  /**
+   * Stores a private file under `private/<apiId>/<uuid>` with `url = ''`. Size limit: the module's `maxBytes`
+   * (413). Type: sniffed from the bytes and checked against `accept` (415); the stored type is the sniffed one.
+   */
+  async uploadPrivate(file: PrivateFileInput, opts: PrivateUploadOptions): Promise<PrivateAssetApiRow> {
+    const provider = this.provider;
+    if (!provider || !this.options) throw new ServiceUnavailableException('Asset uploads are not configured');
+    if (!file || !Buffer.isBuffer(file.buffer)) throw new BadRequestException('file is required');
+    if (!API_ID_RE.test(opts.ownerApiId ?? '')) throw new BadRequestException('Invalid owner apiId');
+    if (opts.ownerDocumentId != null && !UUID_RE.test(opts.ownerDocumentId)) throw new BadRequestException('Invalid owner documentId');
+    const maxBytes = this.options.limits?.maxBytes ?? DEFAULT_MAX_BYTES;
+    if (file.buffer.length > maxBytes) throw new PayloadTooLargeException(`File exceeds maximum size of ${maxBytes} bytes`);
+    const mime = resolveUploadMime(file.buffer, file.contentType, opts.accept);
+    if (!mime) {
+      throw new UnsupportedMediaTypeException({
+        code: 'unsupported_file_type',
+        message: opts.accept?.length ? `File content is not one of: ${opts.accept.join(', ')}` : 'Unknown file type',
+      });
+    }
+    const key = `${PRIVATE_KEY_PREFIX}${opts.ownerApiId}/${randomUUID()}`;
+    try {
+      await provider.put(key, file.buffer, mime, 'private');
+    } catch (err) {
+      this.logger.error(`Storage put failed: ${err instanceof Error ? err.message : String(err)}`);
+      await this.cleanup(provider, [key], 'private');
+      throw new BadGatewayException('Failed to store asset');
+    }
+    try {
+      const row = await this.db
+        .insertInto(SYSTEM_TABLES.assets)
+        .values({
+          filename: privateFilename(file.filename),
+          url: '',
+          mime_type: mime,
+          size: file.buffer.length,
+          storage_key: key,
+          provider: provider.kind,
+          variants: null,
+          folder_id: null,
+          visibility: 'private',
+          owner_api_id: opts.ownerApiId,
+          owner_document_id: opts.ownerDocumentId ?? null,
+          metadata: opts.uploadedBy ? JSON.stringify({ uploadedBy: opts.uploadedBy }) : null,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      return toPrivateApi(row);
+    } catch (err) {
+      await this.cleanup(provider, [key], 'private');
+      throw err;
+    }
+  }
+
+  /** The private asset `id` (404 for unknown ids and public assets). */
+  async privateById(id: string): Promise<PrivateAssetApiRow> {
+    if (!UUID_RE.test(id)) throw new NotFoundException('Asset not found');
+    const row = await this.db.selectFrom(SYSTEM_TABLES.assets).selectAll().where('id', '=', id).where('visibility', '=', 'private').executeTakeFirst();
+    if (!row) throw new NotFoundException('Asset not found');
+    return toPrivateApi(row);
+  }
+
+  /** Opens a private file for download. */
+  async openPrivate(id: string): Promise<{ asset: PrivateAssetApiRow; stream: Readable }> {
+    const asset = await this.privateById(id);
+    const provider = this.provider;
+    if (!asset.storageKey || !provider || (asset.provider && asset.provider !== provider.kind)) {
+      throw new ConflictException(`Asset is stored with provider "${asset.provider ?? 'unknown'}" which is not configured`);
+    }
+    try {
+      return { asset, stream: await provider.get(asset.storageKey, 'private') };
+    } catch (err) {
+      const e = err as { code?: unknown; name?: unknown } | null;
+      if (e && (e.code === 'ENOENT' || e.code === 404 || e.name === 'NoSuchKey' || e.name === 'NotFound')) {
+        throw new NotFoundException('Asset file not found');
+      }
+      this.logger.error(`Storage get failed for asset ${id}: ${err instanceof Error ? err.message : String(err)}`);
+      throw new BadGatewayException('Failed to read asset from storage');
+    }
+  }
+
+  /**
+   * Deletes a private file only while it is still owned as the caller saw it (`ownerDocumentId`; null = unattached).
+   * The row goes first, in one conditional statement, so a file that an entry attached meanwhile is never deleted;
+   * then the storage object (a failure there is logged: the object is orphaned, the row is gone). Returns whether
+   * the row was deleted.
+   */
+  async deletePrivate(id: string, expected: { ownerDocumentId: string | null }): Promise<boolean> {
+    if (!UUID_RE.test(id)) return false;
+    let q = this.db.deleteFrom(SYSTEM_TABLES.assets).where('id', '=', id).where('visibility', '=', 'private');
+    q = expected.ownerDocumentId === null ? q.where('owner_document_id', 'is', null) : q.where('owner_document_id', '=', expected.ownerDocumentId);
+    const rows = await q.returningAll().execute();
+    await this.deleteStoredPrivate(rows);
+    return rows.length > 0;
+  }
+
+  /**
+   * Deletes private uploads that no entry attached (`owner_document_id is null`) and that are older than 24 h:
+   * rows first, in one conditional statement (an upload attached meanwhile no longer matches), then their files.
+   * Returns the deleted ids.
+   */
+  async sweepUnattachedPrivateAssets(now: Date = new Date()): Promise<string[]> {
+    const cutoff = new Date(now.getTime() - UNATTACHED_PRIVATE_TTL_MS);
+    const rows = await this.db
+      .deleteFrom(SYSTEM_TABLES.assets)
+      .where('visibility', '=', 'private')
+      .where('owner_document_id', 'is', null)
+      .where('created_at', '<', cutoff)
+      .returningAll()
+      .execute();
+    await this.deleteStoredPrivate(rows);
+    return rows.map((r: any) => r.id as string);
+  }
+
+  /** Storage cleanup for already deleted private rows; failures are logged with the orphaned keys. */
+  private async deleteStoredPrivate(rows: any[]): Promise<void> {
+    for (const row of rows) {
+      const keys = collectKeys(row);
+      if (!keys.length) continue;
+      if (!this.provider || (row.provider && row.provider !== this.provider.kind)) {
+        this.logger.error(`Private asset ${row.id} deleted; its file stays in unconfigured provider "${row.provider ?? 'unknown'}": ${keys.join(', ')}`);
+        continue;
+      }
+      const leftover = await this.cleanup(this.provider, keys, 'private');
+      if (leftover.length) this.logger.error(`Private asset ${row.id} deleted; orphaned storage keys: ${leftover.join(', ')}`);
+    }
+  }
+
+  /** A 5-minute signed download link for a private asset, bound to `userId` (decision 15). */
+  async createLink(id: string, userId: string): Promise<{ url: string; expiresAt: string }> {
+    if (!this.linkKey) throw new ServiceUnavailableException('Signed links need the auth secret');
+    const asset = await this.privateById(id);
+    const { token, expiresAt } = signAssetLink(this.linkKey, asset.id, userId);
+    return { url: `/api/admin/assets/${asset.id}/file?token=${token}`, expiresAt: expiresAt.toISOString() };
+  }
+
+  /** Whether `token` is a valid, unexpired link for asset `id`. */
+  verifyLink(id: string, token: string): boolean {
+    return !!this.linkKey && verifyAssetLink(this.linkKey, token, id) !== null;
+  }
+
+  private async cleanup(provider: StorageProvider, keys: string[], visibility: AssetVisibility = 'public'): Promise<string[]> {
     const leftover: string[] = [];
     for (const key of keys) {
       try {
-        await provider.delete(key);
+        await provider.delete(key, visibility);
       } catch {
         leftover.push(key);
       }

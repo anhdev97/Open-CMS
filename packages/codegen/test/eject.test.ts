@@ -344,7 +344,7 @@ describe('printEjectedBlockTsx: my-store composed blocks', () => {
     entry('p2', { price: { amount: 150000, currency: 'VND' } }),
     entry('p3'),
   ];
-  for (const name of ['store-header', 'store-hero', 'section-head', 'story-band', 'store-footer', 'featured-products']) {
+  for (const name of ['store-header', 'store-hero', 'section-head', 'story-band', 'store-footer', 'featured-products', 'store-frame', 'contact-modal', 'mobile-menu']) {
     it(`${name} renders the same HTML ejected as composed`, () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       const spec = loadSpec(name);
@@ -359,6 +359,133 @@ describe('printEjectedBlockTsx: my-store composed blocks', () => {
       expect((source.match(/ style=\{/g) ?? []).length).toBe(styled(spec.tree));
     });
   }
+});
+
+const layoutSpec: ComposedBlockSpec = {
+  id: 'blk_layout01',
+  name: 'SiteFrame',
+  label: L('Site frame'),
+  category: 'Layout',
+  version: 1,
+  fields: { tagline: { kind: 'text', default: 'Hi' } },
+  tree: {
+    el: 'Stack',
+    props: { gap: '0' },
+    children: [
+      { el: 'Region', props: { name: 'header', label: L('Header', 'Đầu trang'), allow: ['StoreHeader'] } },
+      { el: 'Box', props: { anchorId: 'main' }, children: [{ el: 'PageContent' }, { el: 'Slot' }] },
+      { el: 'Text', bind: { text: { from: 'field', name: 'tagline' } } },
+      { el: 'Region', props: { name: 'footer-bar' } },
+    ],
+  },
+};
+
+const overlaySpec = (props: Record<string, unknown>): ComposedBlockSpec => ({
+  id: 'blk_overlay01',
+  name: 'LienHe',
+  label: L('Contact'),
+  category: 'Overlay',
+  version: 1,
+  fields: { title: { kind: 'text', default: 'Contact us' } },
+  tree: {
+    el: 'Overlay',
+    props,
+    style: { padding: { t: '8' }, background: 'brand:surface', radius: 'none' },
+    children: [
+      { el: 'Stack', children: [{ el: 'Heading', props: { level: 3 }, bind: { text: { from: 'field', name: 'title' } } }] },
+      { el: 'Heading', props: { text: 'Second', anchorId: 'second' } },
+      { el: 'Button', props: { label: 'Done', action: { type: 'overlay', op: 'close' }, variant: 'outline' }, style: { background: 'brand:accent' } },
+      { el: 'Button', props: { label: 'Open', href: '/ignored', action: { type: 'overlay', op: 'open', target: 'menu' } } },
+      { el: 'Button', props: { label: 'Link', href: '/x' } },
+    ],
+  },
+});
+
+describe('printEjectedBlockTsx: layout and overlay blocks', () => {
+  it('layout: same fields and kind; slots and regions render from props', () => {
+    const { source, composed, ejected } = same(layoutSpec, [
+      { tagline: 'Yo', region__header: '[H]', pageContent: '[P]', 'region__footer-bar': '[F]', slot: '[S]', _locale: 'en-US' },
+      { tagline: '', region__header: null, pageContent: null, 'region__footer-bar': null, slot: null },
+    ]);
+    expect(ejected.kind).toBe('layout');
+    expect(ejected.fields).toEqual(composed.fields);
+    expect(Object.keys(ejected.fields)).toEqual(Object.keys(composed.fields));
+    expect(() => blocks.defineBlocks([ejected])).not.toThrow();
+    expect(source).toContain("props['region__footer-bar'] ?? null");
+    expect(source).toContain('props.pageContent ?? null');
+    expect(source).toContain('<ui.Box id="main">');
+    expect(source).toContain("kind: 'layout',");
+    expect(source).not.toContain('blocks/client');
+  });
+
+  it('overlay: same fields and kind; renders the same dialog for each variant', () => {
+    const variants = [
+      {},
+      { variant: 'drawer', side: 'left', size: 'full', closeOnBackdrop: false, showClose: false, labelledBy: 'first-heading' },
+      { variant: 'drawer', side: 'bottom', size: 'sm' },
+      { variant: 'modal', size: 'xl', showClose: true },
+    ];
+    for (const p of variants) {
+      const { source, composed, ejected } = same(overlaySpec(p), [
+        { name: 'lien-he', title: 'Contact us', _locale: 'en-US' },
+        { name: 'menu-mobile', title: 'Liên hệ', _locale: 'vi-VN' },
+        { name: 'Not Valid', title: 'x', _locale: 'fr-FR', _editor: true },
+        { title: 'x' },
+      ]);
+      expect(ejected.kind).toBe('overlay');
+      expect(ejected.fields).toEqual(composed.fields);
+      expect(Object.keys(ejected.fields)).toEqual(['name', 'title']);
+      expect(source).toContain('<ui.Overlay');
+      expect(source).toContain("const overlay = h.overlayName(props.name, 'lien-he');");
+      expect(source).toContain("action={{ type: 'overlay', op: 'open', target: 'menu' }}");
+    }
+    const out = html(loadEjected(printEjectedBlockTsx(overlaySpec({}))), { name: 'lien-he', title: 'T' });
+    expect(out).toContain('aria-labelledby="lien-he-title"');
+    expect(out).toContain('<h3 id="lien-he-title"');
+    expect(out).toContain('<h2 id="second"');
+  });
+});
+
+describe('printEjectedBlockTsx: overlay label heading', () => {
+  const spec = (first: Record<string, unknown>): ComposedBlockSpec => ({
+    ...overlaySpec({}),
+    fields: { title: { kind: 'text', default: 'Contact us' }, showIntro: { kind: 'boolean', default: true } },
+    tree: {
+      el: 'Overlay',
+      children: [
+        { el: 'Stack', showIf: { from: 'field', name: 'showIntro', is: 'present' }, children: [{ el: 'Heading', props: { text: 'Intro', ...first } }] },
+        { el: 'Heading', props: { level: 3 }, showIf: { from: 'field', name: 'title', is: 'present' }, bind: { text: { from: 'field', name: 'title' } } },
+        { el: 'Heading', props: { text: 'Always', anchorId: 'always' } },
+        { el: 'Heading', props: { text: 'Never a label' } },
+      ],
+    },
+  });
+  const cases = [
+    { name: 'lien-he', title: 'T', showIntro: true },
+    { name: 'lien-he', title: 'T', showIntro: false },
+    { name: 'lien-he', title: '', showIntro: false },
+  ];
+
+  it('the first heading has its own anchorId: labelled by it when shown, else by the next shown heading', () => {
+    const { source, ejected } = same(spec({ anchorId: 'intro' }), cases);
+    expect(source).toContain('const labelled = h.present(props.showIntro) ? 0 : h.present(props.title) ? 1 : 2;');
+    expect(source).toContain('<ui.Heading id="intro"');
+    const [a, b, c] = cases.map((p) => html(ejected, p));
+    expect(a).toContain('aria-labelledby="intro"');
+    expect(b).toContain('aria-labelledby="lien-he-title"');
+    expect(b).toContain('<h3 id="lien-he-title"');
+    expect(c).toContain('aria-labelledby="always"');
+    expect(c).not.toContain('lien-he-title');
+    expect(c).toContain('<h2 id="always"');
+  });
+
+  it('without anchorIds the shown heading gets <name>-title, the others no id', () => {
+    const { ejected } = same(spec({}), cases);
+    const a = html(ejected, cases[0]);
+    expect(a).toContain('aria-labelledby="lien-he-title"');
+    expect(a.match(/id="lien-he-title"/g)).toHaveLength(1);
+    expect(a).toMatch(/<h2 id="lien-he-title"[^>]*>Intro/);
+  });
 });
 
 describe('ejectComposedBlock', () => {

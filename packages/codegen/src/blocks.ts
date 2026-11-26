@@ -6,7 +6,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createJiti } from 'jiti';
 import type { ComposedBlockSpec, ResolvedConfig } from '@opencloudcms/schema';
-import { validateComposedSpec, type ComposedIssue } from '@opencloudcms/schema';
+import { kebabName, validateComposedSpec, type ComposedIssue } from '@opencloudcms/schema';
 
 const NAME_RE = /^[A-Z][A-Za-z0-9]{0,63}$/;
 
@@ -16,6 +16,13 @@ const MAX_INLINE = 90;
 const SPEC_ORDER = ['id', 'name', 'label', 'category', 'icon', 'version', 'binding', 'fields', 'tree'];
 const BINDING_ORDER = ['apiId', 'mode', 'filter', 'sort', 'limit', 'layout', 'urlPattern', 'options'];
 const NODE_ORDER = ['el', 'props', 'bind', 'showIf', 'children'];
+/** Prop order of the layout/overlay elements (first), then other props in insertion order, then `TRAILING_PROPS`. */
+const ELEMENT_PROPS_ORDER: Record<string, string[]> = {
+  Overlay: ['variant', 'side', 'size', 'closeOnBackdrop', 'showClose', 'labelledBy'],
+  Region: ['name', 'label', 'allow'],
+};
+const TRAILING_PROPS = ['anchorId', 'action'];
+const ACTION_ORDER = ['type', 'op', 'target'];
 
 const q = (s: string) => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '\\r')}'`;
 const key = (k: string) => (IDENT.test(k) ? k : q(k));
@@ -105,11 +112,9 @@ function orderFor(p: string[]): string[] {
   return [];
 }
 
+/** `ProductCard` → `product-card` (same rule as the default overlay name). */
 export function kebab(name: string): string {
-  return name
-    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
-    .toLowerCase();
+  return kebabName(name);
 }
 
 export function blocksDir(config: ResolvedConfig): string {
@@ -125,7 +130,34 @@ function composedIndexFile(config: ResolvedConfig): string {
   return path.join(blocksDir(config), 'composed.ts');
 }
 
+const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const reorder = (o: Record<string, unknown>, order: string[]) => Object.fromEntries(ordered(o, order));
+
+/**
+ * The tree with a fixed key order for the props of `Overlay`/`Region` nodes, `anchorId` and `action` (last) and the
+ * keys of `action`. Other nodes are returned as they are, so specs without these elements and props print as before.
+ */
+function canonicalNode(n: unknown): unknown {
+  if (!isPlain(n)) return n;
+  let out = n;
+  const order = typeof n.el === 'string' ? ELEMENT_PROPS_ORDER[n.el] : undefined;
+  if (isPlain(n.props) && (order || TRAILING_PROPS.some((k) => k in (n.props as object)))) {
+    const src = n.props;
+    const lead = order ? reorder(src, order) : src;
+    const props: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(lead)) if (!TRAILING_PROPS.includes(k)) props[k] = v;
+    for (const k of TRAILING_PROPS) if (k in src) props[k] = k === 'action' && isPlain(src[k]) ? reorder(src[k] as Record<string, unknown>, ACTION_ORDER) : src[k];
+    out = { ...out, props };
+  }
+  if (Array.isArray(n.children)) {
+    const children = n.children.map(canonicalNode);
+    if (children.some((c, i) => c !== (n.children as unknown[])[i])) out = { ...out, children };
+  }
+  return out;
+}
+
 export function printComposedBlockFile(spec: ComposedBlockSpec): string {
+  spec = { ...spec, tree: canonicalNode(spec.tree) as ComposedBlockSpec['tree'] };
   return [
     '// Composed block. Managed by OpenCloudCMS: edit by hand or from the admin',
     '// Block Builder (which rewrites this file).',

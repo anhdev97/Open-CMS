@@ -60,12 +60,20 @@ describe('core-owned opencloudcmsPage type', () => {
     await t.db.connection().execute(async (c) => {
       await sql`set search_path to drift_check`.execute(c);
       for (const s of plan.up) await executeStatement(c, s);
+      // Field definitions cannot say `not null` / `default`: 0007_page_kind adds them to these two columns.
+      await sql`alter table ct_opencloudcms_page alter column kind set default 'page', alter column kind set not null`.execute(c);
+      await sql`alter table ct_opencloudcms_page alter column is_default set default false, alter column is_default set not null`.execute(c);
       await sql`set search_path to public`.execute(c);
     });
     const [a, b] = [await snapshot('public'), await snapshot('drift_check')];
     const only = (s: typeof a) => ({ cols: s.cols.filter((c: any) => String(c.table_name).startsWith('ct_opencloudcms_page')), idx: s.idx.filter((i) => i.includes('ct_opencloudcms_page')) });
     expect(only(b)).toEqual(only(a));
     expect(only(b).cols.length).toBeGreaterThan(10);
+    const pageCols = only(a).cols.filter((c: any) => c.table_name === 'ct_opencloudcms_page');
+    const col = (name: string) => pageCols.find((c: any) => c.column_name === name);
+    expect(col('kind')).toMatchObject({ data_type: 'character varying', character_maximum_length: 16, is_nullable: 'NO', column_default: "'page'::character varying" });
+    expect(col('is_default')).toMatchObject({ data_type: 'boolean', is_nullable: 'NO', column_default: 'false' });
+    expect(col('layout')).toMatchObject({ data_type: 'jsonb', is_nullable: 'YES' });
     await sql`drop schema drift_check cascade`.execute(t.db);
   });
 

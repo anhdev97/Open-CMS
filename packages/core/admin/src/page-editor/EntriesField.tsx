@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { t } from '../i18n';
 import type { ContentTypeDefinition, FieldDefinition } from '../lib/types';
 import { EntryPicker } from './EntryPicker';
-import { FieldShell, fieldLabel } from './FieldShell';
+import { FieldShell, PrivateTypeNote, fieldLabel } from './FieldShell';
 import { editorFilterFields, entriesApiId, entriesFieldControls, filterableFields, fixedConditionText } from './field-logic';
 import { loadContentType } from './data';
 
@@ -215,6 +215,8 @@ export const EntriesField: CustomFieldRender<StoredEntries> = ({ field, name, id
         )}
         {!apiId ? (
           <p className="text-sm text-muted-foreground">{t('pageEditor.fields.entry.noType')}</p>
+        ) : type?.private ? (
+          <PrivateTypeNote apiId={apiId} />
         ) : v.mode === 'pick' ? (
           <EntryPicker id={id} apiId={apiId} multiple readOnly={readOnly} selected={v.ids} onChange={(ids) => onChange({ mode: 'pick', ids: bf.limit ? ids.slice(0, bf.limit) : ids })} />
         ) : (

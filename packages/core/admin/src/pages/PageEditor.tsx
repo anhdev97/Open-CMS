@@ -15,7 +15,7 @@ import {
   type BlockRegistry,
   type PuckData,
 } from '@opencloudcms/core/blocks';
-import type { Locale, ThemeDefinition } from '@opencloudcms/schema';
+import type { Locale, PageKind, PageLayout, ThemeDefinition } from '@opencloudcms/schema';
 import { DeviceMemory, ViewportBreakpoint, deviceUi, deviceViewports } from '../block-builder/style/DeviceToggle';
 import { CanvasFrame, ThemeProvider, loadTheme } from '../block-builder/style/theme-context';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -30,16 +30,39 @@ import { ApiError } from '../lib/api-error';
 import { useCan } from '../lib/can';
 import { pickEditorLocale } from '../lib/locales';
 import { useAdminNavigate, useAdminParams } from '../lib/nav';
-import { getPage, getShadowedPaths, pageErrorMessageKey, pagePreviewUrl, publishPage, savePage, type PageEntry } from '../lib/pages';
+import {
+  baseErrorMessage,
+  getBaseUsage,
+  getPage,
+  getShadowedPaths,
+  listBases,
+  pageErrorMessageKey,
+  pagePreviewUrl,
+  publishPage,
+  savePage,
+  type PageEntry,
+} from '../lib/pages';
 import type { Meta } from '../lib/types';
+import { BasePublishDialog, baseRegionNames, structureViolation, type BaseOption } from '../page-editor/base-fields';
+import { BaseFrame } from '../page-editor/BaseFrame';
 import { BlocksContext } from '../page-editor/blocks-context';
 import { ContentTypeField } from '../page-editor/ContentTypeField';
 import { PAGE_CUSTOM_FIELDS } from '../page-editor/custom-fields';
+import { invalidate, loadBase } from '../page-editor/data';
 import { buildEditorConfig } from '../page-editor/editor-config';
-import { EditorInfoContext, ResolvedContext, type EditorInfo } from '../page-editor/editor-context';
+import { BaseContext, EditorInfoContext, ResolvedContext, type EditorInfo } from '../page-editor/editor-context';
 import { EditorHeader, HeaderContext, type HeaderModel } from '../page-editor/EditorHeader';
-import { canvasProps, fromEditorData, slotOverflows, toEditorData, unknownBlockTypes, type PageSeo } from '../page-editor/field-logic';
-import { UNSAVED_STATES, useAutosave, usePreviewResolution } from '../page-editor/hooks';
+import {
+  canvasProps,
+  fromEditorData,
+  readRootRegions,
+  rootPropsToLayout,
+  slotOverflows,
+  toEditorData,
+  unknownBlockTypes,
+  type PageSeo,
+} from '../page-editor/field-logic';
+import { UNSAVED_STATES, useAutosave, useBasePage, usePreviewResolution } from '../page-editor/hooks';
 import { fieldTypes } from '../page-editor/puck-fields';
 import { TokenField } from '../page-editor/TokenField';
 import { UnknownBlock } from '../page-editor/UnknownBlock';
@@ -78,6 +101,8 @@ function puckDictionary(): Dictionary {
 function errorMessage(e: unknown): string {
   const key = pageErrorMessageKey(e);
   if (key) return t(key);
+  const base = baseErrorMessage(e);
+  if (base) return base;
   return e instanceof Error ? e.message : String(e);
 }
 
@@ -107,13 +132,16 @@ interface EditorProps {
   locales: Locale[];
   entry: PageEntry;
   theme: ThemeDefinition | null;
+  /** Base pages offered by the `Base page` root field (pages only). */
+  bases: readonly BaseOption[];
 }
 
-function Editor({ documentId, locale, defaultLocale, locales, entry, theme }: EditorProps) {
+function Editor({ documentId, locale, defaultLocale, locales, entry, theme, bases }: EditorProps) {
   const registry = useBlocks();
   const adminLocale = useLocale();
   const can = useCan();
   const navigate = useAdminNavigate();
+  const kind: PageKind = entry.kind === 'base' ? 'base' : 'page';
 
   // The server falls back to the default locale: then this locale has no translation yet.
   const missing = (entry.locale ?? locale) !== locale;
@@ -121,21 +149,30 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme }: Ed
   // `readPageContent` does it for `ok`; a page that needs migration is shown read-only and never saved back.
   const stored = useMemo(() => {
     const s = readPageContent(entry.content, registry);
-    return s.status === 'needs-migration' ? { ...s, data: normalizePageRichText(s.data, registry) } : s;
+    // Replaced base page regions (root `region__<name>`) are read like the content.
+    return s.status === 'needs-migration' ? { ...s, data: normalizePageRichText(s.data, registry) } : { ...s, data: readRootRegions(s.data, registry) };
   }, [entry, registry]);
   const migration = !missing && stored.status === 'needs-migration';
   const readOnly = migration || !can('content.update');
   const canPublish = !migration && (can('content.update') || can('content.publish'));
 
   const [initial, setInitial] = useState<PuckData>(() =>
-    toEditorData({ title: entry.title, path: entry.path, seo: entry.seo as PageSeo | null }, missing ? EMPTY : stored.data),
+    toEditorData({ title: entry.title, path: entry.path, seo: entry.seo as PageSeo | null, layout: entry.layout ?? null }, missing ? EMPTY : stored.data, kind),
   );
   const [puckKey, setPuckKey] = useState(0);
   const [offerCopy, setOfferCopy] = useState(missing && stored.status === 'ok');
   const [publishing, setPublishing] = useState(false);
   const latest = useRef<PuckData>(initial);
   const storedSeo = entry.seo as PageSeo | null | undefined;
-  const lastBody = useRef(JSON.stringify(fromEditorData(initial, registry, storedSeo)));
+  const lastBody = useRef(JSON.stringify(fromEditorData(initial, registry, storedSeo, kind)));
+  // The page's base choice (document-level, saved with every locale), followed live for the canvas frame.
+  const [layout, setLayout] = useState<PageLayout>(kind === 'page' ? (entry.layout ?? null) : null);
+  const lastLayout = useRef(JSON.stringify(layout));
+  const base = useBasePage({ kind, layout, registry, fetcher, locale, defaultLocale, load: loadBase });
+  // Region modes saved are those of the current base page once it is known (modes left from another base are dropped).
+  const knownRegions = useRef<readonly string[] | null>(null);
+  knownRegions.current = base.status === 'ok' ? base.regions : null;
+  const [confirmPublish, setConfirmPublish] = useState(false);
   const getPuck = useRef<ReturnType<typeof useGetPuck> | null>(null);
 
   const [shadowedPaths, setShadowedPaths] = useState<string[]>([]);
@@ -150,7 +187,7 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme }: Ed
   const unknownTypes = useMemo(() => unknownBlockTypes(initial, registry), [initial, registry]);
 
   const { autosave, state: saveState } = useAutosave<PuckData>({
-    save: (data, ifMatch) => savePage(documentId, locale, fromEditorData(data, registry, storedSeo), ifMatch),
+    save: (data, ifMatch) => savePage(documentId, locale, { ...fromEditorData(data, registry, storedSeo, kind, knownRegions.current) }, ifMatch),
     debounceMs: 1500,
     ifMatch: entry.updatedAt,
   });
@@ -163,24 +200,42 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme }: Ed
       const d = data as PuckData;
       latest.current = d;
       scheduleResolve(d);
+      if (kind === 'page') {
+        const next = rootPropsToLayout((d.root?.props ?? {}) as Record<string, unknown>);
+        const key = JSON.stringify(next);
+        if (key !== lastLayout.current) {
+          lastLayout.current = key;
+          setLayout(next);
+        }
+      }
       if (readOnly) return;
-      const body = JSON.stringify(fromEditorData(d, registry, storedSeo));
+      const body = JSON.stringify(fromEditorData(d, registry, storedSeo, kind, knownRegions.current));
       if (body === lastBody.current) return; // Puck also reports loads and selection-only updates
       lastBody.current = body;
       autosave.change(d);
     },
-    [autosave, readOnly, registry, scheduleResolve, storedSeo],
+    [autosave, readOnly, registry, scheduleResolve, storedSeo, kind],
   );
 
-  // Puck 0.24 slots have no `max`: undo a drop that overfills a `b.slot({ max })`.
+  // Puck 0.24 slots have no `max` and drop zones cannot count: undo a drop that overfills a `b.slot({ max })` or
+  // breaks the page structure (a base page holds one layout block at its root; pages hold none).
   const onAction = useCallback(
     (_action: unknown, next: { data: Data }, prev: { data: Data }) => {
-      const over = slotOverflows(next.data as PuckData, registry);
-      if (!over.length) return;
-      const before = new Set(slotOverflows(prev.data as PuckData, registry).map((o) => `${o.id}:${o.slot}`));
-      const fresh = over.find((o) => !before.has(`${o.id}:${o.slot}`));
-      if (!fresh) return;
-      toast.error(t('pageEditor.slotFull', { max: fresh.max }));
+      const nextData = next.data as PuckData;
+      const prevData = prev.data as PuckData;
+      let message: string | null = null;
+      const over = slotOverflows(nextData, registry);
+      if (over.length) {
+        const before = new Set(slotOverflows(prevData, registry).map((o) => `${o.id}:${o.slot}`));
+        const fresh = over.find((o) => !before.has(`${o.id}:${o.slot}`));
+        if (fresh) message = t('pageEditor.slotFull', { max: fresh.max });
+      }
+      if (!message) {
+        const broken = structureViolation(kind, nextData, registry);
+        if (broken && broken !== structureViolation(kind, prevData, registry)) message = t(broken);
+      }
+      if (!message) return;
+      toast.error(message);
       setTimeout(() => {
         const puck = getPuck.current?.();
         if (!puck) return;
@@ -189,7 +244,22 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme }: Ed
         else puck.dispatch({ type: 'setData', data: prev.data, recordHistory: false });
       }, 0);
     },
-    [registry],
+    [registry, kind],
+  );
+
+  // A base page the page points at that is no longer listed still shows in the select (the server refuses it on save).
+  const baseOptions = useMemo(() => {
+    const id = kind === 'page' ? entry.layout?.baseId : null;
+    return id && !bases.some((b) => b.documentId === id) ? [...bases, { documentId: id, title: t('pageEditor.root.baseUnknown') }] : bases;
+  }, [bases, entry, kind]);
+
+  const regionsOf = useCallback(
+    async (baseId: string) => {
+      // null: no such base page (Default: none set); a base that cannot frame pages has no regions to choose.
+      const b = await loadBase(baseId, locale);
+      return b ? (baseRegionNames(b.content, registry) ?? []) : null;
+    },
+    [locale, registry],
   );
 
   const config = useMemo(() => {
@@ -206,6 +276,10 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme }: Ed
         contentType: ContentTypeField,
         unknown: ({ name }) => createElement(UnknownBlock, { name }),
         wrapRender,
+        kind,
+        bases: baseOptions,
+        regionsOf,
+        baseFrame: BaseFrame,
       },
       unknownTypes,
     );
@@ -214,7 +288,7 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme }: Ed
       if (title !== `pageEditor.categories.${key}`) cat.title = title;
     }
     return c;
-  }, [registry, adminLocale, locale, unknownTypes]);
+  }, [registry, adminLocale, locale, unknownTypes, kind, baseOptions, regionsOf]);
 
   const overrides = useMemo(() => ({ header: () => createElement(EditorHeader), puck: ViewportBreakpoint, iframe: CanvasFrame, fieldTypes }), []);
   const dictionary = useMemo(() => puckDictionary(), [adminLocale]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -243,7 +317,8 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme }: Ed
         return;
       }
       await publishPage(documentId);
-      toast.success(t('pageEditor.published'));
+      toast.success(t(kind === 'base' ? 'pageEditor.base.published' : 'pageEditor.published'));
+      if (kind === 'base') invalidate('base:');
       // Publishing leaves the draft's updatedAt alone; re-read it anyway so the next autosave's If-Match matches
       // the server (only when no save is in flight: that save's response carries the version).
       try {
@@ -259,20 +334,21 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme }: Ed
     } finally {
       setPublishing(false);
     }
-  }, [autosave, documentId, locale]);
+  }, [autosave, documentId, locale, kind]);
 
   const copyFromDefault = () => {
-    const { title, path, seo } = fromEditorData(latest.current, registry, storedSeo);
-    const next = toEditorData({ title, path, seo }, stored.data);
+    const { title, path, seo, layout: own } = fromEditorData(latest.current, registry, storedSeo, kind);
+    const next = toEditorData({ title, path, seo, layout: own ?? null }, stored.data, kind);
     setOfferCopy(false);
     setInitial(next);
     setPuckKey((k) => k + 1);
     latest.current = next;
-    lastBody.current = JSON.stringify(fromEditorData(next, registry, storedSeo));
+    lastBody.current = JSON.stringify(fromEditorData(next, registry, storedSeo, kind));
     autosave.change(next);
   };
 
   const header: HeaderModel = {
+    kind,
     locale,
     locales,
     saveState,
@@ -281,10 +357,10 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme }: Ed
     shadowedPaths,
     canPublish,
     publishing,
-    onBack: () => void leave('/pages'),
+    onBack: () => void leave(kind === 'base' ? '/pages?tab=base' : '/pages'),
     onLocaleChange: (l) => void leave(`/pages/${documentId}?locale=${encodeURIComponent(l)}`),
     onSave: () => void autosave.flush(),
-    onPublish: () => void publish(),
+    onPublish: () => (kind === 'base' ? setConfirmPublish(true) : void publish()),
     onViewOnWebsite: () => {
       const tab = window.open('', '_blank');
       void autosave.flush().then(() => {
@@ -343,6 +419,15 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme }: Ed
           </AlertDescription>
         </Alert>
       )}
+      {kind === 'base' && (
+        <BasePublishDialog
+          documentId={documentId}
+          open={confirmPublish}
+          loadUsage={getBaseUsage}
+          onOpenChange={setConfirmPublish}
+          onConfirm={() => void publish()}
+        />
+      )}
       <ConfirmDialog
         open={leaveTo !== null}
         onOpenChange={(o) => !o && setLeaveTo(null)}
@@ -356,24 +441,26 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme }: Ed
         <ThemeProvider theme={theme}>
           <DeviceMemory.Provider value={device}>
             <EditorInfoContext.Provider value={info}>
-              <ResolvedContext.Provider value={resolved}>
-                <HeaderContext.Provider value={header}>
-                  <Puck
-                    key={puckKey}
-                    config={config}
-                    data={initial}
-                    onChange={onChange}
-                    onAction={onAction as never}
-                    overrides={overrides as never}
-                    permissions={readOnly ? READ_ONLY : undefined}
-                    iframe={{ enabled: true, syncHostStyles: true, waitForStyles: true }}
-                    viewports={viewports}
-                    ui={ui}
-                    dictionary={dictionary}
-                    height="100%"
-                  />
-                </HeaderContext.Provider>
-              </ResolvedContext.Provider>
+              <BaseContext.Provider value={base}>
+                <ResolvedContext.Provider value={resolved}>
+                  <HeaderContext.Provider value={header}>
+                    <Puck
+                      key={puckKey}
+                      config={config}
+                      data={initial}
+                      onChange={onChange}
+                      onAction={onAction as never}
+                      overrides={overrides as never}
+                      permissions={readOnly ? READ_ONLY : undefined}
+                      iframe={{ enabled: true, syncHostStyles: true, waitForStyles: true }}
+                      viewports={viewports}
+                      ui={ui}
+                      dictionary={dictionary}
+                      height="100%"
+                    />
+                  </HeaderContext.Provider>
+                </ResolvedContext.Provider>
+              </BaseContext.Provider>
             </EditorInfoContext.Provider>
           </DeviceMemory.Provider>
         </ThemeProvider>
@@ -382,7 +469,7 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme }: Ed
   );
 }
 
-type Loaded = { meta: Meta; entry: PageEntry; locale: Locale; theme: ThemeDefinition | null };
+type Loaded = { meta: Meta; entry: PageEntry; locale: Locale; theme: ThemeDefinition | null; bases: BaseOption[] };
 
 function EditorLoader({ documentId, requested }: { documentId: string; requested: string | null }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -393,12 +480,16 @@ function EditorLoader({ documentId, requested }: { documentId: string; requested
     let live = true;
     // The theme only adds canvas colours and brand swatches: the editor opens without it.
     const theme = loadTheme();
+    // Base pages may have changed since the editor was last open.
+    invalidate('base:');
     (async () => {
       const meta = await api<Meta>('/api/admin/meta');
       const locale = pickEditorLocale(requested, meta.locales, meta.defaultLocale) as Locale;
       const entry = await getPage(documentId, locale);
+      // The `Base page` select of a page; without the list it still offers Default and None.
+      const bases = entry.kind === 'base' ? [] : await listBases().catch(() => []);
       const projectTheme = await theme;
-      if (live) setLoaded({ meta, entry, locale, theme: projectTheme });
+      if (live) setLoaded({ meta, entry, locale, theme: projectTheme, bases });
     })().catch((e) => live && setError(e instanceof ApiError && e.status === 404 ? new Error(t('pageEditor.notFound')) : (e as Error)));
     return () => {
       live = false;
@@ -432,6 +523,7 @@ function EditorLoader({ documentId, requested }: { documentId: string; requested
       locales={loaded.meta.locales as Locale[]}
       entry={loaded.entry}
       theme={loaded.theme}
+      bases={loaded.bases}
     />
   );
 }

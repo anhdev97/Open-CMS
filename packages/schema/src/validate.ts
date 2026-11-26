@@ -29,6 +29,7 @@ export function collectSchemaIssues(defs: ContentTypeDefinition[], groups?: Cont
   const groupKeys = groups ? new Set(groups.map((g) => g.key)) : undefined;
   const typeIds = new Set<string>();
   const apiIds = new Set(defs.map((d) => d.apiId));
+  const privateApiIds = new Set(defs.filter((d) => d.private).map((d) => d.apiId));
   const seenApiIds = new Set<string>();
 
   for (const def of defs) {
@@ -49,6 +50,11 @@ export function collectSchemaIssues(defs: ContentTypeDefinition[], groups?: Cont
 
     if (def.review !== undefined && typeof def.review !== 'boolean') issues.push(`${where}: review must be a boolean`);
 
+    if (def.private !== undefined && def.private !== true) issues.push(`${where}: private must be true when present`);
+    if (def.private) {
+      if (def.review) issues.push(`${where}: a private type cannot use review (private entries are never published)`);
+    }
+
     const fieldIds = new Set<string>();
     const fieldNames = new Set<string>();
     const columns = new Map<string, string>(); // "main:col" -> field
@@ -67,6 +73,8 @@ export function collectSchemaIssues(defs: ContentTypeDefinition[], groups?: Cont
         continue;
       }
       const o = field.options as Record<string, any>;
+      if (field.readOnly !== undefined && field.readOnly !== true) issues.push(`${at}: readOnly must be true when present`);
+      if (def.private && field.localizable) issues.push(`${at}: a private type cannot have localizable fields (all fields are document-level)`);
 
       if (isMultiRelation(field)) {
         if (field.localizable) issues.push(`${at}: multiple relations cannot be localizable`);
@@ -99,6 +107,9 @@ export function collectSchemaIssues(defs: ContentTypeDefinition[], groups?: Cont
       if (field.kind === 'reference') {
         if (!o.target) issues.push(`${at}: reference requires a "target" content type apiId`);
         else if (!apiIds.has(o.target)) issues.push(`${at}: reference target "${o.target}" does not exist`);
+        else if (!def.private && privateApiIds.has(o.target)) {
+          issues.push(`${at}: a public type cannot reference private type "${o.target}"`);
+        }
       }
       if (field.kind === 'taxonomy' && !o.taxonomy) issues.push(`${at}: taxonomy requires a "taxonomy" slug`);
       if (field.kind === 'money' && o.currencyMode === 'fixed' && !/^[A-Z]{3}$/.test(o.currency ?? '')) {

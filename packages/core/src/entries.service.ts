@@ -1,8 +1,9 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import type { Kysely } from 'kysely';
-import type { ContentTypeDefinition, Locale } from '@opencloudcms/schema';
+import type { ContentTypeDefinition, FieldDefinition, Locale } from '@opencloudcms/schema';
 import { AuthError, type RequestUser } from '@opencloudcms/oauth2';
 import { EntryRepository, type ListQuery, type Status } from './entry.repository';
+import { PrivateAssetOwnership } from './private-assets';
 import { OPENCLOUDCMS_DB, OPENCLOUDCMS_OPTIONS, type HookContext, type ResolvedOpenCloudCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
 import { WorkflowService } from './workflow.service';
@@ -19,7 +20,48 @@ export interface ListParams {
   offset?: string | number;
   /** Admin only: `in_review` lists entries waiting for review (spec B §5.3). */
   workflow?: string;
+  /** Server-side only (never from request input): main-table column -> required value. */
+  mainWhere?: Record<string, string | boolean>;
 }
+
+/** Write options for trusted server-side callers. */
+export interface EntryWriteOptions {
+  /**
+   * @internal Bypasses the admin API's `readOnly` rule. Only `PrivateEntriesService` sets it; request handlers must
+   * never pass it.
+   */
+  writeReadOnly?: boolean;
+}
+
+/** Same as the schema validator's emptiness: null, undefined, '' and [] all mean "no value". */
+const isEmpty = (v: unknown): boolean => v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0);
+
+/** JSON with sorted object keys, so that `{ a, b }` and `{ b, a }` compare equal. */
+function canonical(v: unknown): string {
+  return JSON.stringify(v, (_k, x) =>
+    x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, x[k]])) : x,
+  );
+}
+
+/** Whether a submitted (validated) value equals the stored one, the way the repository reads it back. */
+function sameValue(field: FieldDefinition, sent: unknown, stored: unknown): boolean {
+  if (isEmpty(sent) || isEmpty(stored)) return isEmpty(sent) && isEmpty(stored);
+  if (field.kind === 'money') {
+    const a = sent as { amount?: unknown; currency?: unknown };
+    const b = stored as { amount?: unknown; currency?: unknown };
+    return Number(a.amount) === Number(b.amount) && String(a.currency).trim() === String(b.currency).trim();
+  }
+  if (field.kind === 'number') return Number(sent) === Number(stored);
+  if (field.kind === 'datetime') return new Date(sent as string).getTime() === new Date(stored as string).getTime();
+  return canonical(sent) === canonical(stored);
+}
+
+const readOnlyError = (paths: string[]) =>
+  new UnprocessableEntityException({
+    code: 'read_only',
+    message: `Read-only field${paths.length > 1 ? 's' : ''} cannot be written through the admin API: ${paths.join(', ')}`,
+    issues: paths.map((path) => ({ path, message: 'read-only' })),
+  });
 
 @Injectable()
 export class EntriesService {
@@ -29,6 +71,7 @@ export class EntriesService {
     @Inject(OPENCLOUDCMS_OPTIONS) private readonly options: ResolvedOpenCloudCmsOptions,
     @Inject(OPENCLOUDCMS_DB) private readonly db: Kysely<any>,
     @Inject(WorkflowService) private readonly workflow: WorkflowService,
+    @Inject(PrivateAssetOwnership) private readonly assetOwnership: PrivateAssetOwnership,
   ) {}
 
   private ctx(apiId: string, locale: string): HookContext {
@@ -62,6 +105,32 @@ export class EntriesService {
     return result.data as Row;
   }
 
+  /** Private entries have one draft row and are never published or reviewed (spec §7). */
+  private assertNotPrivate(def: ContentTypeDefinition): void {
+    if (def.private) {
+      throw new ConflictException({ code: 'private_type', message: `${def.apiId} is a private content type: its entries are never published or reviewed` });
+    }
+  }
+
+  /** Decision 12, create: any non-empty readOnly value is rejected. */
+  private checkReadOnlyCreate(def: ContentTypeDefinition, data: Row): void {
+    const paths = def.fields.filter((f) => f.readOnly && !isEmpty(data[f.name])).map((f) => f.name);
+    if (paths.length) throw readOnlyError(paths);
+  }
+
+  /** Decision 12, update: a readOnly value equal to the stored one is dropped, a changed one is rejected. */
+  private async stripReadOnlyUpdate(def: ContentTypeDefinition, documentId: string, data: Row, locale: string): Promise<Row> {
+    const sent = def.fields.filter((f) => f.readOnly && f.name in data);
+    if (!sent.length) return data;
+    const stored = await this.repo.findOne(def, documentId, 'draft', [locale]);
+    if (!stored) throw new NotFoundException(`${def.apiId} ${documentId} not found`);
+    const changed = sent.filter((f) => !sameValue(f, data[f.name], stored[f.name])).map((f) => f.name);
+    if (changed.length) throw readOnlyError(changed);
+    const out = { ...data };
+    for (const f of sent) delete out[f.name];
+    return out;
+  }
+
   async list(apiId: string, params: ListParams) {
     const def = this.registry.get(apiId);
     const limit = Math.min(Math.max(Number(params.limit ?? 25) || 25, 1), 100);
@@ -86,6 +155,7 @@ export class EntriesService {
       limit,
       offset,
       inReview,
+      mainWhere: params.mainWhere,
     });
     await this.workflow.attach(def, items);
     return { data: items, meta: { total, limit, offset } };
@@ -99,15 +169,17 @@ export class EntriesService {
     return { data: entry };
   }
 
-  async create(apiId: string, body: unknown, locale?: string) {
+  async create(apiId: string, body: unknown, locale?: string, opts: EntryWriteOptions = {}) {
     const def = this.registry.get(apiId);
     const loc = this.locale(locale);
     let data = this.validate(def, body, 'draft');
+    if (!opts.writeReadOnly) this.checkReadOnlyCreate(def, data);
     for (const h of this.registry.hooksFor(apiId)) {
       const r = await h.beforeCreate?.(data, this.ctx(apiId, loc));
       if (r && typeof r === 'object') data = r as Row;
     }
-    const documentId = await this.repo.create(def, data, loc);
+    await this.assetOwnership.assertNoPrivate(def, data);
+    const documentId = await this.repo.create(def, data, loc, (trx, id) => this.assetOwnership.attach(trx, def, id, data));
     return this.get(apiId, documentId, 'draft', loc);
   }
 
@@ -118,16 +190,36 @@ export class EntriesService {
     body: unknown,
     locale?: string,
     user?: Pick<RequestUser, 'permissions'>,
-    opts?: { expectedUpdatedAt?: string },
+    opts?: { expectedUpdatedAt?: string } & EntryWriteOptions,
   ) {
     const def = this.registry.get(apiId);
     const loc = this.locale(locale);
     let data = this.validate(def, body, 'draft');
+    if (!opts?.writeReadOnly) data = await this.stripReadOnlyUpdate(def, documentId, data, loc);
     for (const h of this.registry.hooksFor(apiId)) {
       const r = await h.beforeUpdate?.(data, { ...this.ctx(apiId, loc), documentId });
       if (r && typeof r === 'object') data = r as Row;
     }
-    await this.repo.update(def, documentId, data, loc, (trx) => this.workflow.guardUpdate(trx, def, documentId, user), opts?.expectedUpdatedAt);
+    await this.assetOwnership.assertNoPrivate(def, data);
+    // Decision 9: files this save replaced are detached inside its transaction and deleted after commit.
+    const touchesAssets = def.private && def.fields.some((f) => f.kind === 'asset' && f.name in data);
+    let replaced: string[] = [];
+    await this.repo.update(
+      def,
+      documentId,
+      data,
+      loc,
+      (trx) => this.workflow.guardUpdate(trx, def, documentId, user),
+      opts?.expectedUpdatedAt,
+      // After the write, with the draft row locked: every lock on asset rows is taken after the entry's, in one order.
+      touchesAssets
+        ? async (trx, rowId) => {
+            await this.assetOwnership.attach(trx, def, documentId, data);
+            replaced = await this.assetOwnership.detachReplaced(trx, def, documentId, rowId);
+          }
+        : undefined,
+    );
+    if (replaced.length) await this.assetOwnership.deleteDetached(replaced);
     return this.get(apiId, documentId, 'draft', loc);
   }
 
@@ -150,6 +242,7 @@ export class EntriesService {
    */
   async publish(apiId: string, documentId: string, user: Pick<RequestUser, 'id' | 'permissions'>, action: 'publish' | 'approve' = 'publish', opts: { force?: boolean } = {}) {
     const def = this.registry.get(apiId);
+    this.assertNotPrivate(def);
     this.assertCanPublish(def, user);
     const doc = await this.repo.exportDocument(def, documentId, 'draft');
     if (!doc) throw new NotFoundException(`${apiId} ${documentId} not found`);
@@ -169,15 +262,25 @@ export class EntriesService {
 
     const ctx = { ...this.ctx(apiId, this.options.config.defaultLocale), force: opts.force === true };
     for (const h of this.registry.hooksFor(apiId)) await h.beforePublish?.(doc, ctx);
-    await this.repo.publish(def, documentId, doc, (trx) => this.workflow.guardPublish(trx, def, documentId, user, action));
+    await this.repo.publish(def, documentId, doc, async (trx) => {
+      const tctx = { ...ctx, db: trx };
+      for (const h of this.registry.hooksFor(apiId)) await h.inPublishTransaction?.(documentId, tctx);
+      await this.workflow.guardPublish(trx, def, documentId, user, action);
+    });
     for (const h of this.registry.hooksFor(apiId)) await h.afterPublish?.(doc, ctx);
     return this.get(apiId, documentId, 'published');
   }
 
-  async unpublish(apiId: string, documentId: string, user: Pick<RequestUser, 'permissions'>) {
+  async unpublish(apiId: string, documentId: string, user: Pick<RequestUser, 'permissions'>, opts: { force?: boolean } = {}) {
     const def = this.registry.get(apiId);
+    this.assertNotPrivate(def);
     this.assertCanPublish(def, user);
-    const removed = await this.repo.unpublish(def, documentId);
+    // Guards run in the unpublish transaction (ctx.db is it), so they can lock and see what they guard.
+    const removed = await this.db.transaction().execute(async (trx) => {
+      const ctx = { ...this.ctx(apiId, this.options.config.defaultLocale), db: trx, force: opts.force === true };
+      for (const h of this.registry.hooksFor(apiId)) await h.beforeUnpublish?.(documentId, ctx);
+      return this.repo.unpublish(def, documentId, trx);
+    });
     if (!removed) throw new NotFoundException(`${apiId} ${documentId} is not published`);
     for (const h of this.registry.hooksFor(apiId)) await h.afterUnpublish?.(documentId, this.ctx(apiId, this.options.config.defaultLocale));
     return { ok: true };
@@ -185,7 +288,14 @@ export class EntriesService {
 
   async remove(apiId: string, documentId: string) {
     const def = this.registry.get(apiId);
-    if (!(await this.repo.delete(def, documentId, (trx) => this.workflow.guardDelete(trx, def, documentId)))) throw new NotFoundException(`${apiId} ${documentId} not found`);
+    const guard = async (trx: Kysely<any>) => {
+      // In the delete transaction (ctx.db is it), so guards can lock and see what they guard.
+      const ctx = { ...this.ctx(apiId, this.options.config.defaultLocale), db: trx };
+      for (const h of this.registry.hooksFor(apiId)) await h.beforeDelete?.(documentId, ctx);
+      await this.workflow.guardDelete(trx, def, documentId);
+    };
+    if (!(await this.repo.delete(def, documentId, guard))) throw new NotFoundException(`${apiId} ${documentId} not found`);
+    await this.assetOwnership.deleteOwned(def, documentId);
     for (const h of this.registry.hooksFor(apiId)) await h.afterDelete?.(documentId, this.ctx(apiId, this.options.config.defaultLocale));
     return { ok: true };
   }
@@ -193,6 +303,7 @@ export class EntriesService {
   /** submit / withdraw / reject (spec B §4.2); returns the draft with its new `workflow`. */
   async transition(apiId: string, documentId: string, action: 'submit' | 'withdraw' | 'reject', user: Pick<RequestUser, 'id' | 'permissions'>, note?: unknown) {
     const def = this.registry.get(apiId);
+    this.assertNotPrivate(def);
     await this.workflow.transition(def, documentId, action, user, note);
     return this.get(apiId, documentId, 'draft');
   }

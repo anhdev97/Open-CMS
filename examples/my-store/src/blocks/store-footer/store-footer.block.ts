@@ -60,6 +60,11 @@ export default defineComposedBlock({
       label: { 'en-US': 'Email link', 'vi-VN': 'Liên kết email' },
       default: { kind: 'url', href: 'mailto:hello@example.com' },
     },
+    contactLinkLabel: {
+      kind: 'text',
+      label: { 'en-US': 'Contact link', 'vi-VN': 'Liên kết liên hệ' },
+      default: 'Write to us',
+    },
   },
   tree: {
     el: 'Box',
@@ -118,6 +123,16 @@ export default defineComposedBlock({
                 el: 'Button',
                 props: { variant: 'link', size: 'sm' },
                 bind: { label: { from: 'field', name: 'email' }, href: { from: 'field', name: 'emailLink' } },
+                style: { padding: { l: '0', r: '0' }, color: 'brand:accent-ink' },
+              },
+              {
+                el: 'Button',
+                props: {
+                  variant: 'link',
+                  size: 'sm',
+                  action: { type: 'overlay', op: 'open', target: 'lien-he' },
+                },
+                bind: { label: { from: 'field', name: 'contactLinkLabel' } },
                 style: { padding: { l: '0', r: '0' }, color: 'brand:accent-ink' },
               },
             ],

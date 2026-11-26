@@ -66,6 +66,22 @@ export class ContentRegistry {
     return def;
   }
 
+  /**
+   * A type the public delivery API may serve: private types answer exactly like an unknown apiId (same 404 and
+   * message), so the public API never reveals that they exist.
+   */
+  getPublic(apiId: string): ContentTypeDefinition {
+    const def = this.get(apiId);
+    if (def.private) throw new NotFoundException(`Unknown content type "${apiId}"`);
+    return def;
+  }
+
+  /** Whether `apiId` names a type the public API serves (known and not private). */
+  isPublic(apiId: string): boolean {
+    const def = this.coreById.get(apiId)?.def ?? this.byApiId.get(apiId);
+    return !!def && !def.private;
+  }
+
   validator(def: ContentTypeDefinition, mode: 'draft' | 'publish') {
     const key = `${def.apiId}:${mode}`;
     let v = this.validators.get(key);

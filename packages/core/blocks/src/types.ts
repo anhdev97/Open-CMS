@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Config, CustomField, CustomFieldRender, Data } from '@puckeditor/core';
-import type { LocalizedText, Responsive, Track } from '@opencloudcms/schema';
+import type { ButtonAction, ComposedBlockKind, LocalizedText, Responsive, Track } from '@opencloudcms/schema';
 
 /** Design-system colour tokens offered by `b.color` (stored as the token name). */
 export const COLOR_TOKENS = ['primary', 'secondary', 'muted', 'accent', 'background', 'foreground', 'destructive'] as const;
@@ -116,6 +116,12 @@ export interface SlotBlockField extends FieldBase {
   max?: number;
 }
 
+/** A button action (open/close/toggle an overlay, scroll to an anchor); `null` = the button is a link. */
+export interface ActionBlockField extends FieldBase {
+  kind: 'action';
+  default?: ButtonAction | null;
+}
+
 export type BlockField =
   | TextBlockField
   | LongTextBlockField
@@ -132,7 +138,8 @@ export type BlockField =
   | EntryBlockField
   | EntriesBlockField
   | ListBlockField<any>
-  | SlotBlockField;
+  | SlotBlockField
+  | ActionBlockField;
 
 export type BlockFieldKind = BlockField['kind'];
 
@@ -179,7 +186,9 @@ export type ResolvedValue<F> = F extends { kind: 'text' | 'longText' }
                         ? ResolvedProps<S>[]
                         : F extends { kind: 'slot' }
                           ? ReactNode
-                          : never;
+                          : F extends { kind: 'action' }
+                            ? ButtonAction | null
+                            : never;
 
 export type ResolvedProps<F extends Record<string, BlockField>> = { [K in keyof F]: ResolvedValue<F[K]> };
 
@@ -196,6 +205,11 @@ export interface BlockDefinition<F extends Record<string, BlockField> = Record<s
   category: string;
   /** lucide icon name. */
   icon?: string;
+  /**
+   * `layout`: the root block of a base page (its `Region`/`PageContent` slots are the `region__<name>` and `pageContent`
+   * fields); `overlay`: a dialog placed on pages, taking no space. Default `block`. Set by `defineComposedBlock`.
+   */
+  kind?: ComposedBlockKind;
   /** Stored in each item's props as `_v`. Default 1. */
   version?: number;
   fields: F;
@@ -253,4 +267,6 @@ export type BlockCustomField<K extends CustomFieldKind = CustomFieldKind> = Cust
 export type CustomFieldRenderers = { [K in CustomFieldKind]: CustomFieldRender<StoredFieldValue<K>> } & {
   /** Optional: without it `b.tracks` falls back to a select of presets. */
   tracks?: CustomFieldRender<Responsive<Track[]> | null>;
+  /** Optional: without it `b.action` fields are left out of the editor (the stored value, default `null`, is kept). */
+  action?: CustomFieldRender<ButtonAction | null>;
 };

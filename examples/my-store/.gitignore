@@ -1,2 +1,3 @@
-# Media uploaded by the dev server and scripts/seed-pages.ts (local storage provider)
+# Media uploaded by the dev server and scripts/seed-pages.ts (local storage provider; private files in private-assets)
 /assets/
+/private-assets/

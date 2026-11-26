@@ -1,8 +1,10 @@
 // Pure helpers of the page editor (fields, preview values, tree checks). Relative imports only (root vitest).
-import { localizedText, PAGE_API_ID, type Locale } from '@opencloudcms/schema';
+import { localizedText, PAGE_API_ID, REGION_MODES, type Locale, type PageKind, type PageLayout, type RegionMode } from '@opencloudcms/schema';
 import {
   COLOR_TOKENS,
+  PUCK_FORMAT_VERSION,
   SPACING_TOKENS,
+  readPageContent,
   writePageContent,
   type BlockDefinition,
   type BlockField,
@@ -68,10 +70,10 @@ export function tokenOptions(kind: 'color' | 'spacing'): string[] {
   return [...(kind === 'color' ? COLOR_TOKENS : SPACING_TOKENS)];
 }
 
-/** Content types a block may list (core-owned types hidden), labelled in `locale`. */
+/** Content types a block may list (core-owned and private types hidden), labelled in `locale`. */
 export function contentTypeOptions(types: readonly ContentTypeDefinition[], locale: Locale): { value: string; label: string }[] {
   return types
-    .filter((t) => t.apiId !== PAGE_API_ID)
+    .filter((t) => t.apiId !== PAGE_API_ID && !t.private)
     .map((t) => ({ value: t.apiId, label: localizedText(t.displayName, locale, t.apiId) }));
 }
 
@@ -164,7 +166,85 @@ export function canvasProps(
   return out;
 }
 
-/** Calls `visit` for every block item (content, zones, slots, slots in list rows; heuristically inside unknown blocks). */
+/** Root prop of a page holding the blocks of a replaced base page region (`region__<name>`, spec §4). */
+export const REGION_PREFIX = 'region__';
+/** Editor-only root props (never stored in the content): the base page choice and one region mode per region. */
+export const BASE_FIELD = 'basePage';
+export const BASE_DEFAULT = '__default';
+export const BASE_NONE = '__none';
+export const REGION_MODE_PREFIX = 'regionMode__';
+/** Editor-only root prop of the "uses the default base page" hint field. */
+export const BASE_HINT_FIELD = 'basePageHint';
+
+/** Root props of the editor for a page's `layout` (base choice and region modes; no `baseId` = the default base). */
+export function layoutToRootProps(layout: PageLayout | undefined): Props {
+  if (layout && layout.baseId === null) return { [BASE_FIELD]: BASE_NONE };
+  const out: Props = { [BASE_FIELD]: !layout || layout.baseId === undefined ? BASE_DEFAULT : layout.baseId };
+  for (const [name, mode] of Object.entries(layout?.regions ?? {})) out[`${REGION_MODE_PREFIX}${name}`] = mode;
+  return out;
+}
+
+/**
+ * The page's `layout` from the editor root props: None → `{ baseId: null }`; Default → `{ regions }` (no `baseId`) or,
+ * with every region as it is, null; a base → `{ baseId, regions }`. `regions` holds the modes that are not `default`
+ * (omitted when none); with `known` (the current base page's region names) modes of other regions are left out.
+ */
+export function rootPropsToLayout(props: Props, known?: readonly string[] | null): PageLayout {
+  const choice = props[BASE_FIELD];
+  if (choice === BASE_NONE) return { baseId: null };
+  const regions: Record<string, RegionMode> = {};
+  for (const [k, v] of Object.entries(props)) {
+    if (!k.startsWith(REGION_MODE_PREFIX) || v === 'default' || !REGION_MODES.includes(v as RegionMode)) continue;
+    const name = k.slice(REGION_MODE_PREFIX.length);
+    if (known && !known.includes(name)) continue;
+    regions[name] = v as RegionMode;
+  }
+  const own = Object.keys(regions).length ? { regions } : {};
+  if (typeof choice !== 'string' || !choice || choice === BASE_DEFAULT) return Object.keys(own).length ? own : null;
+  return { baseId: choice, ...own };
+}
+
+const isEditorOnlyRootKey = (k: string) => k === BASE_FIELD || k === BASE_HINT_FIELD || k.startsWith(REGION_MODE_PREFIX);
+
+/** `fn` applied to the block list of each root `region__<name>` prop (others kept). */
+function mapRootRegions(data: PuckData, fn: (items: unknown[]) => unknown[]): PuckData {
+  const root = (isObj(data.root) ? data.root : {}) as { props?: Props };
+  const props = isObj(root.props) ? root.props : null;
+  if (!props || !Object.keys(props).some((k) => k.startsWith(REGION_PREFIX) && Array.isArray(props[k]))) return data;
+  const next: Props = {};
+  for (const [k, v] of Object.entries(props)) next[k] = k.startsWith(REGION_PREFIX) && Array.isArray(v) ? fn(v) : v;
+  return { ...data, root: { ...root, props: next } } as PuckData;
+}
+
+/**
+ * Replaced region blocks of the root read like the page content (`readPageContent`: props migrated, rich text
+ * normalized): `readPageContent` only reads `content` and `zones`.
+ */
+export function readRootRegions(data: PuckData, registry: BlockRegistry): PuckData {
+  return mapRootRegions(data, (items) => {
+    const read = readPageContent({ format: 'puck', formatVersion: PUCK_FORMAT_VERSION, data: { root: { props: {} }, content: items } }, registry);
+    return read.data.content as unknown[];
+  });
+}
+
+/**
+ * The root `region__<name>` blocks moved to the end of `content` (root props without them): what `resolvePage`, which
+ * reads `content` and `zones` only, needs to resolve the data fields of replaced region blocks in the editor preview.
+ */
+export function regionsIntoContent(data: PuckData): PuckData {
+  const root = (isObj(data.root) ? data.root : {}) as { props?: Props };
+  const props = isObj(root.props) ? root.props : {};
+  const moved: unknown[] = [];
+  const rest: Props = {};
+  for (const [k, v] of Object.entries(props)) {
+    if (k.startsWith(REGION_PREFIX) && Array.isArray(v)) moved.push(...v);
+    else rest[k] = v;
+  }
+  if (!moved.length) return data;
+  return { ...data, root: { ...root, props: rest }, content: [...(Array.isArray(data.content) ? data.content : []), ...moved] } as PuckData;
+}
+
+/** Calls `visit` for every block item (content, zones, root region props, slots, slots in list rows; heuristically inside unknown blocks). */
 export function walkItems(data: PuckData, registry: BlockRegistry, visit: (item: Item) => void): void {
   const walkProps = (fields: Record<string, BlockField>, props: Props) => {
     for (const [k, f] of Object.entries(fields)) {
@@ -184,6 +264,8 @@ export function walkItems(data: PuckData, registry: BlockRegistry, visit: (item:
   };
   walkList(Array.isArray(data.content) ? data.content : []);
   for (const zone of Object.values(data.zones ?? {})) if (Array.isArray(zone)) walkList(zone);
+  const rootProps = (data.root as { props?: Props } | undefined)?.props;
+  if (isObj(rootProps)) for (const [k, v] of Object.entries(rootProps)) if (k.startsWith(REGION_PREFIX) && Array.isArray(v)) walkList(v);
 }
 
 /**
@@ -271,40 +353,68 @@ export interface PageSeo {
 /** Page fields edited in Puck's root panel. */
 export const ROOT_KEYS = ['title', 'path', 'seoTitle', 'seoDescription', 'seoNoindex'] as const;
 
-/** Puck data for the editor: the stored data with the page's title, path and SEO as root props. */
-export function toEditorData(page: { title?: string | null; path?: string | null; seo?: PageSeo | null }, data: PuckData): PuckData {
+/**
+ * Puck data for the editor: the stored data with the page's fields as root props: title, path, SEO and the base page
+ * choice (`layoutToRootProps`); a base page (`kind: 'base'`) has the title only.
+ */
+export function toEditorData(
+  page: { title?: string | null; path?: string | null; seo?: PageSeo | null; layout?: PageLayout },
+  data: PuckData,
+  kind: PageKind = 'page',
+): PuckData {
   const root = (isObj(data.root) ? data.root : {}) as PuckData['root'] & { props?: Props };
   const seo = page.seo ?? {};
-  return {
-    ...data,
-    root: {
-      ...root,
-      props: {
-        ...(root.props ?? {}),
-        title: page.title ?? '',
-        path: page.path ?? '',
-        seoTitle: seo.title ?? '',
-        seoDescription: seo.description ?? '',
-        seoNoindex: seo.noindex === true,
-      },
-    },
-  } as PuckData;
+  const own =
+    kind === 'base'
+      ? { title: page.title ?? '' }
+      : {
+          title: page.title ?? '',
+          path: page.path ?? '',
+          seoTitle: seo.title ?? '',
+          seoDescription: seo.description ?? '',
+          seoNoindex: seo.noindex === true,
+          ...layoutToRootProps(page.layout ?? null),
+        };
+  return { ...data, root: { ...root, props: { ...(root.props ?? {}), ...own } } } as PuckData;
+}
+
+/** Save request body: a base page has no path, SEO or layout. */
+export interface PageSaveBody {
+  title: string;
+  path?: string;
+  seo?: PageSeo;
+  layout?: PageLayout;
+  content: StoredPageContent;
 }
 
 /**
- * Request body for saving the page: title, path, SEO from the root props; the rest as stored content.
- * `storedSeo` is the page's current `seo`: keys the editor does not edit (e.g. `image`) are carried over.
+ * Request body for saving the page: title, path, SEO and `layout` (document-level, sent with every locale) from the
+ * root props; the rest as stored content. Replaced region blocks (`region__<name>`) stay in the content root, written
+ * like the page content; empty ones are dropped. `storedSeo` is the page's current `seo`: keys the editor does not
+ * edit (e.g. `image`) are carried over. A base page saves its title and content only.
  */
 export function fromEditorData(
   data: PuckData,
   registry: BlockRegistry,
   storedSeo?: PageSeo | null,
-): { title: string; path: string; seo: PageSeo; content: StoredPageContent } {
+  kind: PageKind = 'page',
+  /** Region names of the page's current base page (`rootPropsToLayout`), when known. */
+  regions?: readonly string[] | null,
+): PageSaveBody {
   const root = (data.root ?? {}) as { props?: Props };
   const props = root.props ?? {};
   const rest: Props = {};
-  for (const [k, v] of Object.entries(props)) if (!(ROOT_KEYS as readonly string[]).includes(k)) rest[k] = v;
+  for (const [k, v] of Object.entries(props)) {
+    if ((ROOT_KEYS as readonly string[]).includes(k) || isEditorOnlyRootKey(k)) continue;
+    if (k.startsWith(REGION_PREFIX) && (!Array.isArray(v) || v.length === 0)) continue;
+    rest[k] = v;
+  }
   const str = (v: unknown) => (typeof v === 'string' ? v : '');
+  const content = writePageContent(
+    mapRootRegions({ ...data, root: { ...root, props: rest } } as PuckData, (items) => writePageContent({ root: { props: {} }, content: items } as unknown as PuckData, registry).data.content as unknown[]),
+    registry,
+  );
+  if (kind === 'base') return { title: str(props.title), content };
   const seo: PageSeo = { ...(isObj(storedSeo) ? storedSeo : {}) };
   delete seo.title;
   delete seo.description;
@@ -312,10 +422,5 @@ export function fromEditorData(
   if (str(props.seoTitle).trim()) seo.title = str(props.seoTitle).trim();
   if (str(props.seoDescription).trim()) seo.description = str(props.seoDescription).trim();
   if (props.seoNoindex === true) seo.noindex = true;
-  return {
-    title: str(props.title),
-    path: str(props.path),
-    seo,
-    content: writePageContent({ ...data, root: { ...root, props: rest } } as PuckData, registry),
-  };
+  return { title: str(props.title), path: str(props.path), seo, layout: rootPropsToLayout(props, regions), content };
 }

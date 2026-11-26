@@ -27,6 +27,8 @@ const variantField = () =>
     default: 'default',
   });
 
+const actionField = () => b.action({ label: L('Action', 'Hành động', 'Action', 'Aksi') });
+
 const HEADING_CLASS = {
   1: 'text-4xl font-bold tracking-tight sm:text-5xl',
   2: 'text-3xl font-semibold tracking-tight',
@@ -101,8 +103,9 @@ export const Button = defineBlock({
       ],
       default: 'default',
     }),
+    action: actionField(),
   },
-  render: ({ label, link, variant, size }) => <LinkButton label={label} href={link?.href} variant={variant} size={size} />,
+  render: ({ label, link, variant, size, action }) => <LinkButton label={label} href={link?.href} variant={variant} size={size} action={action} />,
 });
 
 export const ButtonGroup = defineBlock({
@@ -115,6 +118,7 @@ export const ButtonGroup = defineBlock({
         label: b.text({ label: L('Label', 'Nhãn', 'Libellé', 'Label'), default: 'Button' }),
         link: b.link({ label: L('Link', 'Liên kết', 'Lien', 'Tautan') }),
         variant: variantField(),
+        action: actionField(),
       },
       {
         label: L('Buttons', 'Các nút', 'Boutons', 'Tombol'),
@@ -130,7 +134,7 @@ export const ButtonGroup = defineBlock({
   render: ({ buttons, align }) => (
     <div className={cn('flex flex-wrap gap-3', JUSTIFY[align])}>
       {buttons.map((x, i) => (
-        <LinkButton key={i} label={x.label} href={x.link?.href} variant={x.variant} />
+        <LinkButton key={i} label={x.label} href={x.link?.href} variant={x.variant} action={x.action} />
       ))}
     </div>
   ),

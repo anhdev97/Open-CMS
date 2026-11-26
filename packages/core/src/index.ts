@@ -3,6 +3,8 @@ export * from './opencloudcms.module';
 export * from './registry.service';
 export * from './entry.repository';
 export * from './entries.service';
+export * from './private-entries.service';
+export { PagesService } from './pages/pages.service';
 export * from './content.controllers';
 export * from './schema-builder';
 export * from './schema-write-queue';

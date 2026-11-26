@@ -52,6 +52,8 @@ export interface FieldFlags {
   indexed?: boolean;
   /** Unique per status (and per locale for localizable fields). Implies indexed. */
   unique?: boolean;
+  /** Only the server API may write it; admin API writes are rejected. Stored only when true. */
+  readOnly?: boolean;
   label?: string;
   description?: string;
 }
@@ -73,6 +75,8 @@ export interface FieldDefinition<K extends FieldKind = FieldKind> {
   localizable: boolean;
   indexed: boolean;
   unique: boolean;
+  /** Stored only when true. */
+  readOnly?: boolean;
   label?: string;
   description?: string;
   options: FieldOptionsMap[K];
@@ -89,6 +93,8 @@ export interface ContentTypeDefinition {
   description?: string;
   /** Entries need a reviewer (`content.publish`) to be published. Default false; stored only when true. */
   review?: boolean;
+  /** Server-only entries: never published, never on the public API. Stored only when true. */
+  private?: true;
   fields: FieldDefinition[];
 }
 
@@ -99,6 +105,7 @@ export interface ContentTypeInput {
   displayName: string | LocalizedText;
   description?: string;
   review?: boolean;
+  private?: boolean;
   fields: Record<string, FieldSpec>;
 }
 

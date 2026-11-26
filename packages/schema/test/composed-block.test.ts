@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  composedManifestEntry, isBreakingChange, slotSignature, validateComposedSpec, withAutoVersion, type ComposedBlockSpec,
+  composedKind, composedManifestEntry, isBreakingChange, kebabName, overlayDefaultName, regionNames, slotSignature, validateComposedSpec, withAutoVersion, type ComposedBlockSpec,
 } from '../src/composed-block';
 
 const single = (): ComposedBlockSpec => ({
@@ -197,5 +197,104 @@ describe('node style and column props', () => {
     expect(paths({ el: 'Columns', props: { gapX: '8', gapY: '24px', alignY: 'center' } })).toEqual([]);
     expect(paths({ el: 'Columns', props: { gapX: 'auto', gapY: '4px;x', alignY: 'middle' } }))
       .toEqual(expect.arrayContaining(['tree.props.gapX', 'tree.props.gapY', 'tree.props.alignY']));
+  });
+});
+
+const layout = (): ComposedBlockSpec => ({
+  ...unbound(), name: 'SiteLayout',
+  tree: { el: 'Box', children: [
+    { el: 'Region', props: { name: 'header', label: { 'en-US': 'Header' } } },
+    { el: 'PageContent' },
+    { el: 'Region', props: { name: 'footer', allow: ['Footer'] } },
+  ] },
+});
+const overlay = (): ComposedBlockSpec => ({
+  ...unbound(), name: 'MenuMobile',
+  tree: { el: 'Overlay', props: { variant: 'drawer', side: 'left', size: 'md', closeOnBackdrop: true, showClose: true, labelledBy: 'first-heading' },
+    children: [{ el: 'Heading' }, { el: 'Button', props: { action: { type: 'overlay', op: 'close' } } }] },
+});
+
+describe('layout and overlay elements', () => {
+  it('accepts a layout block', () => {
+    expect(validateComposedSpec(layout())).toEqual([]);
+    expect(composedKind(layout())).toBe('layout');
+    expect(regionNames(layout())).toEqual(['header', 'footer']);
+  });
+  it('accepts an overlay block', () => {
+    expect(validateComposedSpec(overlay())).toEqual([]);
+    expect(composedKind(overlay())).toBe('overlay');
+    expect(composedKind(unbound())).toBe('block');
+    expect(regionNames(overlay())).toEqual([]);
+  });
+  it('rejects a duplicate region name at the second Region', () => {
+    expect(paths(mut(layout(), (s) => (s.tree.children[2].props.name = 'header')))).toEqual(['tree.children.2.props.name']);
+  });
+  it('rejects a bad region name and children on Region/PageContent', () => {
+    expect(paths(mut(layout(), (s) => (s.tree.children[0].props.name = 'Head')))).toEqual(['tree.children.0.props.name']);
+    expect(paths(mut(layout(), (s) => (s.tree.children[1].children = [{ el: 'Text' }])))).toEqual(['tree.children.1.children']);
+    expect(paths(mut(layout(), (s) => (s.tree.children[0].children = [{ el: 'Text' }])))).toEqual(['tree.children.0.children']);
+  });
+  it('requires exactly one PageContent', () => {
+    expect(paths(mut(layout(), (s) => s.tree.children.push({ el: 'PageContent' })))).toEqual(['tree.children.3.el']);
+    expect(paths(mut(layout(), (s) => s.tree.children.splice(1, 1)))).toEqual(['tree']);
+  });
+  it('rejects layout elements under a collection binding', () => {
+    const s = mut(layout(), (x) => (x.binding = { apiId: 'product', mode: 'collection' }));
+    expect(paths(s)).toEqual(['tree.children.0.el', 'tree.children.1.el', 'tree.children.2.el']);
+  });
+  it('rejects Region/PageContent in an overlay block', () => {
+    expect(paths(mut(overlay(), (s) => s.tree.children.push({ el: 'PageContent' })))).toContain('tree.children.2.el');
+  });
+  it('allows Overlay only at the root', () => {
+    expect(paths(mut(unbound(), (s) => s.tree.children.push({ el: 'Overlay' })))).toEqual(['tree.children.2.el']);
+  });
+  it('checks Overlay props', () => {
+    expect(paths(mut(overlay(), (s) => (s.tree.props.variant = 'popup')))).toEqual(['tree.props.variant', 'tree.props.side']);
+    expect(paths(mut(overlay(), (s) => (s.tree.props.variant = 'modal')))).toEqual(['tree.props.side']);
+    expect(paths(mut(overlay(), (s) => (s.tree.props.size = 'huge')))).toEqual(['tree.props.size']);
+    expect(paths(mut(overlay(), (s) => (s.tree.props.showClose = 'yes')))).toEqual(['tree.props.showClose']);
+    expect(paths(mut(overlay(), (s) => (s.tree.props.labelledBy = 'x')))).toEqual(['tree.props.labelledBy']);
+  });
+  it('validates Button actions', () => {
+    const btn = (action: unknown) => mut(unbound(), (s) => s.tree.children.push({ el: 'Button', props: { action } }));
+    expect(validateComposedSpec(btn({ type: 'overlay', op: 'close' }))).toEqual([]);
+    expect(paths(btn({ type: 'overlay', op: 'open' }))).toEqual(['tree.children.2.props.action.target']);
+    expect(paths(btn({ type: 'scroll', target: '1bad' }))).toEqual(['tree.children.2.props.action.target']);
+    expect(paths(mut(unbound(), (s) => (s.tree.children[0].props = { action: { type: 'scroll', target: 'a' } })))).toEqual(['tree.children.0.props.action']);
+  });
+  it('validates anchorId on any element', () => {
+    expect(validateComposedSpec(mut(unbound(), (s) => (s.tree.props = { anchorId: 'gioi-thieu' })))).toEqual([]);
+    expect(paths(mut(unbound(), (s) => (s.tree.children[0].props = { anchorId: 'a b' })))).toEqual(['tree.children.0.props.anchorId']);
+  });
+  it('treats kind and region changes as breaking', () => {
+    expect(isBreakingChange(unbound(), overlay())).toBe(true);
+    expect(isBreakingChange(unbound(), layout())).toBe(true);
+    expect(isBreakingChange(layout(), layout())).toBe(false);
+    expect(isBreakingChange(layout(), mut(layout(), (s) => (s.tree.children[2].props.name = 'bottom')))).toBe(true);
+    expect(isBreakingChange(layout(), mut(layout(), (s) => s.tree.children.push({ el: 'Region', props: { name: 'aside' } })))).toBe(true);
+  });
+});
+
+describe('layout and overlay blocks: binding, reserved fields, manifest, default name', () => {
+  it('rejects a binding on an overlay block', () => {
+    expect(paths(mut(overlay(), (s) => (s.binding = { apiId: 'product', mode: 'single' })))).toEqual(['binding']);
+  });
+  it('reserves the generated field names of layout and overlay blocks', () => {
+    expect(paths(mut(overlay(), (s) => (s.fields.name = { kind: 'text' })))).toEqual(['fields.name']);
+    expect(paths(mut(layout(), (s) => (s.fields.pageContent = { kind: 'text' })))).toEqual(['fields.pageContent']);
+    expect(validateComposedSpec(mut(unbound(), (s) => (s.fields.name = { kind: 'text' })))).toEqual([]);
+  });
+  it('lists the kind of layout and overlay blocks in the manifest entry', () => {
+    expect(composedManifestEntry(layout())).toEqual({ name: 'SiteLayout', version: 1, richText: ['body'], kind: 'layout' });
+    expect(composedManifestEntry(overlay())).toEqual({ name: 'MenuMobile', version: 1, richText: ['body'], kind: 'overlay' });
+  });
+  it('kebab-cases block names for the default overlay name', () => {
+    expect(kebabName('LienHe')).toBe('lien-he');
+    expect(kebabName('HTMLBlock2Go')).toBe('html-block2-go');
+    expect(overlayDefaultName('MenuMobile')).toBe('menu-mobile');
+    const long = overlayDefaultName('A'.repeat(1) + 'bcdefghij'.repeat(3) + 'KlmnopQrst');
+    expect(long.length).toBeLessThanOrEqual(32);
+    expect(long).toMatch(/^[a-z][a-z0-9-]{0,31}$/);
+    expect(long.endsWith('-')).toBe(false);
   });
 });

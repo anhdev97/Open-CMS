@@ -198,12 +198,119 @@ function Frame({ props, children }: { props: Props; children: ReactNode }) {
   );
 }
 
+/** Region label as text: its label (string, or the en-US / first text of a localized label), else its name. */
+function regionText(props: Props): string {
+  const l = props.label;
+  if (typeof l === 'string' && l.trim()) return l;
+  if (isObj(l)) {
+    const v = (l['en-US'] as string | undefined) ?? Object.values(l).find((x) => typeof x === 'string' && x);
+    if (typeof v === 'string' && v) return v;
+  }
+  return typeof props.name === 'string' ? props.name : '';
+}
+
+/** A Region of a layout block: a labelled dashed drop area (base pages fill it). */
+function RegionPreview({ props }: { props: Props }) {
+  const allow = Array.isArray(props.allow) ? (props.allow as string[]) : [];
+  const name = typeof props.name === 'string' ? props.name : '';
+  return (
+    <div data-region={name} className="rounded-xl border-2 border-dashed border-primary/40 p-6 text-center text-sm text-muted-foreground">
+      <p className="font-medium text-foreground">
+        {elementLabel('Region')}: {regionText(props)}
+      </p>
+      <p className="mt-1 text-xs">{t('blockBuilder.canvas.regionHint')}</p>
+      {allow.length > 0 && <p className="mt-1 text-xs">{t('blockBuilder.canvas.slotAllow', { blocks: allow.join(', ') })}</p>}
+    </div>
+  );
+}
+
+const HATCH: CSSProperties = {
+  backgroundImage: 'repeating-linear-gradient(135deg, var(--color-muted, #f4f4f5) 0 8px, transparent 8px 16px)',
+};
+
+/** Where each page's own blocks go: a hatched placeholder. */
+function PageContentPreview() {
+  return (
+    <div data-page-content="" style={HATCH} className="rounded-xl border-2 border-dashed border-muted-foreground/40 p-10 text-center text-sm text-muted-foreground">
+      <p className="font-medium text-foreground">{t('blockBuilder.canvas.pageContent')}</p>
+      <p className="mt-1 text-xs">{t('blockBuilder.canvas.pageContentHint')}</p>
+    </div>
+  );
+}
+
+type OvSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
+type OvSide = 'left' | 'right' | 'top' | 'bottom';
+// Literal class tables (Tailwind scans them; never interpolate). Sizes match `ui.Overlay`.
+const OV_MODAL_SIZE: Record<OvSize, string> = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl', full: 'max-w-none h-full' };
+const OV_X_SIZE: Record<OvSize, string> = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl', full: 'max-w-none' };
+const OV_Y_SIZE: Record<OvSize, string> = { sm: 'h-1/3', md: 'h-1/2', lg: 'h-2/3', xl: 'h-5/6', full: 'h-full' };
+const OV_SIDE: Record<OvSide, string> = { left: 'mr-auto ml-0', right: 'ml-auto mr-0', top: 'mb-auto mt-0', bottom: 'mt-auto mb-0' };
+const OV_BACKDROP = {
+  modal: 'flex min-h-[32rem] bg-black/40 p-6',
+  x: 'flex min-h-[32rem] bg-black/40',
+  y: 'flex h-[32rem] flex-col bg-black/40',
+};
+const pickOv = <T extends string>(table: Record<T, string>, v: unknown, d: T): T => (typeof v === 'string' && v in table ? (v as T) : d);
+
+/**
+ * The overlay frame of an overlay block, edited in place: a dimmed backdrop with the dialog box at its size, centred
+ * (modal) or pinned to a side of the canvas (drawer). Never a real `<dialog>`. Padding goes to the content box, the
+ * rest of the style to the box, like `ui.Overlay`.
+ */
+function OverlayPreview({ props }: { props: Props }) {
+  const Slot = props.children as SlotComponent | undefined;
+  const drawer = props.variant === 'drawer';
+  const size = pickOv<OvSize>(OV_MODAL_SIZE, props.size, 'md');
+  const side = pickOv<OvSide>(OV_SIDE, props.side, 'right');
+  const axis = !drawer ? 'modal' : side === 'left' || side === 'right' ? 'x' : 'y';
+  const { padding, hidden: _h, span: _s, ...rest } = (isObj(props.style) ? props.style : {}) as NodeStyle & Props;
+  const fp = ui.styleProps(rest as NodeStyle);
+  const cp = padding === undefined ? null : ui.styleProps({ padding } as NodeStyle, 'flex');
+  const panel = [
+    'relative overflow-auto border text-card-foreground shadow-lg',
+    rest.background === undefined ? 'bg-card' : '',
+    drawer ? 'w-full' : 'm-auto w-full rounded-xl',
+    drawer ? OV_SIDE[side] : '',
+    axis === 'modal' ? OV_MODAL_SIZE[size] : axis === 'x' ? OV_X_SIZE[size] : OV_Y_SIZE[size],
+    fp.className,
+  ].filter(Boolean).join(' ');
+  const content = ['flex min-h-full flex-col gap-4', cp ? cp.className : 'p-6'].join(' ');
+  const zone = Slot ? createElement(Slot, { className: content, style: cp?.style, minEmptyHeight: 96 } as never) : <div className={content} />;
+  return (
+    <div className={OV_BACKDROP[axis]}>
+      <div data-overlay-panel="" data-variant={drawer ? 'drawer' : 'modal'} data-side={drawer ? side : undefined} className={panel} style={fp.style}>
+        {zone}
+        {props.showClose !== false && (
+          <span data-overlay-close="" aria-hidden="true" title={t('blockBuilder.canvas.overlayClose')} className="absolute top-3 right-3 inline-flex size-8 items-center justify-center rounded-md text-xl leading-none text-muted-foreground">
+            ×
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Puck render of element `el`. */
 export function elementRender(el: ComposedElement): (props: Props) => ReactElement {
+  if (el === 'Overlay') {
+    // The overlay is the root: its size is drawn by the preview, not by the item frame.
+    return (props) => {
+      const dragRef = (props.puck as { dragRef?: ((e: Element | null) => void) | null } | undefined)?.dragRef ?? undefined;
+      return (
+        <div ref={dragRef}>
+          <OverlayPreview props={props} />
+        </div>
+      );
+    };
+  }
   const inner: (props: Props) => ReactElement =
     el === 'Slot'
       ? (props) => <SlotPreview props={props} />
-      : ['Box', 'Stack', 'Columns', 'Grid', 'Card'].includes(el)
+      : el === 'Region'
+        ? (props) => <RegionPreview props={props} />
+        : el === 'PageContent'
+          ? () => <PageContentPreview />
+          : ['Box', 'Stack', 'Columns', 'Grid', 'Card'].includes(el)
         ? (props) => <ContainerPreview el={el as LayoutEl} props={props} />
         : (props) => <LeafPreview el={el} props={props} />;
   return (props) => <Frame props={props}>{inner(props)}</Frame>;

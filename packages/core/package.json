@@ -9,6 +9,7 @@
   "typesVersions": {
     "*": {
       "blocks": ["dist/blocks/index.d.ts"],
+      "blocks/client": ["dist/blocks/client/index.d.ts"],
       "blocks/next": ["dist/blocks/next/index.d.ts"]
     }
   },
@@ -103,6 +104,11 @@
       "types": "./dist/blocks/index.d.ts",
       "import": "./dist/blocks/index.js",
       "require": "./dist/blocks-cjs/index.js"
+    },
+    "./blocks/client": {
+      "types": "./dist/blocks/client/index.d.ts",
+      "import": "./dist/blocks/client/index.js",
+      "require": "./dist/blocks-cjs/client/index.js"
     },
     "./blocks/next": {
       "types": "./dist/blocks/next/index.d.ts",

@@ -1,4 +1,5 @@
 import type {
+  ActionBlockField,
   BlockField,
   BooleanBlockField,
   ColorBlockField,
@@ -56,6 +57,8 @@ export const b = {
     o: Omit<Opts<ListBlockField<S>>, 'fields'> = {},
   ): ListBlockField<S> => ({ ...o, kind: 'list', fields }),
   slot: (o: Opts<SlotBlockField> = {}): SlotBlockField => ({ ...o, kind: 'slot' }),
+  /** Button action (`ButtonAction | null`, default `null` = link button). */
+  action: (o: Opts<ActionBlockField> = {}): ActionBlockField => ({ ...o, kind: 'action' }),
 };
 
 export const optionValue = <T extends OptionValue>(o: SelectOption<T>): T =>
@@ -80,6 +83,7 @@ export function fieldDefault(f: BlockField): unknown {
     case 'link':
     case 'image':
     case 'tracks':
+    case 'action':
       return f.default ?? null;
     case 'entry':
       return null;

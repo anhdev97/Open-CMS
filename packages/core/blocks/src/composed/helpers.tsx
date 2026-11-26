@@ -3,7 +3,7 @@
 // `@opencloudcms/core/blocks` so they render exactly like the composed block they came from.
 // Isomorphic: no hooks, no browser or Node globals.
 import { Fragment, type ReactNode } from 'react';
-import { localizedText, type Locale, type LocalizedText } from '@opencloudcms/schema';
+import { localizedText, OVERLAY_NAME_RE, type Locale, type LocalizedText } from '@opencloudcms/schema';
 import { Grid, Stack } from '../ui/layout';
 import { Text } from '../ui/content';
 import { entryUrl, isPresent, readDate, readEntryImage, readEntryMoney, readHref, readText } from './values';
@@ -128,6 +128,11 @@ function collection(
   );
 }
 
+/** Overlay block `name` prop when it is a valid overlay name, else `fallback` (the block's default name). */
+function overlayName(v: unknown, fallback: string): string {
+  return typeof v === 'string' && OVERLAY_NAME_RE.test(v) ? v : fallback;
+}
+
 /** Building blocks of composed block rendering, public for blocks ejected to TSX. */
 export const composedHelpers = {
   locale,
@@ -145,4 +150,5 @@ export const composedHelpers = {
   when,
   single,
   collection,
+  overlayName,
 };

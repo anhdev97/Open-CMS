@@ -273,3 +273,70 @@ describe('composed block files', () => {
     expect(fs.existsSync(path.join(root, 'src/blocks/alpha'))).toBe(false);
   });
 });
+
+describe('composed block files: layout and overlay blocks', () => {
+  const layoutSpec = (): ComposedBlockSpec => ({
+    id: 'blk_layout01',
+    name: 'SiteFrame',
+    label: { 'en-US': 'Site frame' },
+    category: 'Layout',
+    version: 1,
+    fields: {},
+    tree: {
+      el: 'Stack',
+      children: [
+        { el: 'Region', props: { name: 'header', label: { 'en-US': 'Header', 'vi-VN': 'Đầu trang' }, allow: ['StoreHeader'] } },
+        { el: 'Box', props: { anchorId: 'main' }, children: [{ el: 'PageContent' }] },
+        { el: 'Region', props: { name: 'footer' } },
+      ],
+    },
+  });
+  const overlaySpec = (): ComposedBlockSpec => ({
+    id: 'blk_overlay01',
+    name: 'LienHe',
+    label: { 'en-US': 'Contact' },
+    category: 'Overlay',
+    version: 1,
+    fields: { title: { kind: 'text', default: 'Contact us' } },
+    tree: {
+      el: 'Overlay',
+      props: { variant: 'drawer', side: 'right', size: 'lg', closeOnBackdrop: false, showClose: true, labelledBy: 'first-heading' },
+      style: { padding: { t: '8' }, background: 'brand:surface' },
+      children: [
+        { el: 'Heading', bind: { text: { from: 'field', name: 'title' } } },
+        { el: 'Button', props: { label: 'Close', action: { type: 'overlay', op: 'close' } } },
+        { el: 'Button', props: { label: 'Go', action: { type: 'scroll', target: 'main' }, variant: 'link' } },
+      ],
+    },
+  });
+
+  it('print -> load -> print is byte-identical', async () => {
+    for (const s of [layoutSpec(), overlaySpec()]) {
+      const root = tmp();
+      const text = printComposedBlockFile(s);
+      project(root, { 'x/x.block.ts': text });
+      const { specs, errors } = await loadComposedBlocks(cfg(root));
+      expect(errors).toEqual([]);
+      expect(specs[0].spec).toEqual(s);
+      expect(printComposedBlockFile(specs[0].spec)).toBe(text);
+    }
+  });
+
+  it('prints Overlay, Region and action props in a fixed order', () => {
+    const text = printComposedBlockFile(overlaySpec());
+    const shuffled = overlaySpec();
+    shuffled.tree.props = { labelledBy: 'first-heading', showClose: true, size: 'lg', closeOnBackdrop: false, side: 'right', variant: 'drawer' };
+    shuffled.tree.children![1].props = { action: { op: 'close', type: 'overlay' }, label: 'Close' };
+    shuffled.tree.children![2].props = { action: { target: 'main', type: 'scroll' }, label: 'Go', variant: 'link' };
+    expect(printComposedBlockFile(shuffled)).toBe(text);
+    expect(text).toContain("variant: 'drawer',\n      side: 'right',\n      size: 'lg',\n      closeOnBackdrop: false,\n      showClose: true,\n      labelledBy: 'first-heading',\n");
+    expect(text).toContain("props: { label: 'Close', action: { type: 'overlay', op: 'close' } }");
+    expect(text).toContain("props: { label: 'Go', variant: 'link', action: { type: 'scroll', target: 'main' } }");
+    const l = layoutSpec();
+    l.tree.children![0].props = { allow: ['StoreHeader'], label: { 'en-US': 'Header', 'vi-VN': 'Đầu trang' }, name: 'header' };
+    expect(printComposedBlockFile(l)).toBe(printComposedBlockFile(layoutSpec()));
+    // Specs without the new props print as before (insertion order of other props kept).
+    const plain = spec();
+    expect(printComposedBlockFile(plain)).toContain("props: { padding: 'md' }");
+  });
+});

@@ -13,7 +13,10 @@ export interface HookContext {
   apiId: string;
   locale: string;
   db: Kysely<any>;
-  /** Set on publish when the request asked to skip validation hooks that honour it (pages: `{ force: true }`). */
+  /**
+   * Set on publish / unpublish when the request asked to skip checks that honour it (pages: publish `{ force: true }`
+   * skips unknown-block checks; unpublish `?force=true` unpublishes a base page that pages still use).
+   */
   force?: boolean;
 }
 
@@ -23,8 +26,20 @@ export interface EntryHooks {
   beforeUpdate?(data: Record<string, unknown>, ctx: HookContext & { documentId: string }): unknown;
   /** Throw to block publishing (e.g. business validation). */
   beforePublish?(document: PublishedDocument, ctx: HookContext): unknown;
+  /**
+   * Runs inside the publish transaction, before the published rows are written (`ctx.db` is that transaction), so it
+   * can take locks and see what it guards. Throw to refuse.
+   */
+  inPublishTransaction?(documentId: string, ctx: HookContext): unknown;
   afterPublish?(document: PublishedDocument, ctx: HookContext): unknown;
+  /**
+   * Throw to refuse unpublishing. Runs inside the unpublish transaction (`ctx.db` is that transaction).
+   * `ctx.force`: the request asked to override guards that honour it.
+   */
+  beforeUnpublish?(documentId: string, ctx: HookContext): unknown;
   afterUnpublish?(documentId: string, ctx: HookContext): unknown;
+  /** Throw to refuse deleting. Runs inside the delete transaction (`ctx.db` is that transaction). */
+  beforeDelete?(documentId: string, ctx: HookContext): unknown;
   afterDelete?(documentId: string, ctx: HookContext): unknown;
 }
 

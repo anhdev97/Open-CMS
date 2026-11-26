@@ -113,10 +113,16 @@ export function Blocks() {
         description={t('blocks.description')}
         actions={
           editable ? (
-            <Button size="sm" onClick={() => navigate('/settings/blocks/new')}>
-              <PlusIcon aria-hidden="true" />
-              {t('blocks.new')}
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => navigate('/settings/blocks/new?kind=overlay')}>
+                <PlusIcon aria-hidden="true" />
+                {t('blocks.newOverlay')}
+              </Button>
+              <Button size="sm" onClick={() => navigate('/settings/blocks/new')}>
+                <PlusIcon aria-hidden="true" />
+                {t('blocks.new')}
+              </Button>
+            </div>
           ) : undefined
         }
       />

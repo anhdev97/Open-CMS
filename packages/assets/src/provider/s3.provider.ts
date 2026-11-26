@@ -1,5 +1,6 @@
+import { Readable } from 'node:stream';
 import type { S3AssetsConfig } from '../types';
-import type { StorageProvider } from './storage-provider';
+import type { AssetVisibility, StorageProvider } from './storage-provider';
 
 interface S3Client {
   send(cmd: unknown): Promise<unknown>;
@@ -9,6 +10,7 @@ interface S3Sdk {
   S3Client: new (config: { region: string }) => S3Client;
   PutObjectCommand: new (input: { Bucket: string; Key: string; Body: Buffer; ContentType: string }) => unknown;
   DeleteObjectCommand: new (input: { Bucket: string; Key: string }) => unknown;
+  GetObjectCommand: new (input: { Bucket: string; Key: string }) => unknown;
 }
 
 export interface S3ProviderDeps {
@@ -29,21 +31,34 @@ export function createS3Provider(cfg: S3AssetsConfig, deps?: S3ProviderDeps): St
   const sdk = loadSdk();
   const client = deps?.client ?? new sdk.S3Client({ region: cfg.region });
   const { bucket, region } = cfg;
+  // Private objects go to `privateBucket` when configured, otherwise they share the main bucket.
+  const bucketFor = (visibility: AssetVisibility = 'public'): string =>
+    visibility === 'private' && cfg.privateBucket ? cfg.privateBucket : bucket;
   const baseUrl = (cfg.publicBaseUrl ?? `https://${bucket}.s3.${region}.amazonaws.com`).replace(/\/+$/, '');
 
   return {
     kind: 's3',
 
-    async put(key: string, body: Buffer, contentType: string): Promise<void> {
-      await client.send(new sdk.PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType }));
+    async put(key: string, body: Buffer, contentType: string, visibility?: AssetVisibility): Promise<void> {
+      await client.send(new sdk.PutObjectCommand({ Bucket: bucketFor(visibility), Key: key, Body: body, ContentType: contentType }));
     },
 
-    async delete(key: string): Promise<void> {
-      await client.send(new sdk.DeleteObjectCommand({ Bucket: bucket, Key: key }));
+    async delete(key: string, visibility?: AssetVisibility): Promise<void> {
+      await client.send(new sdk.DeleteObjectCommand({ Bucket: bucketFor(visibility), Key: key }));
     },
 
     publicUrl(key: string): string {
       return `${baseUrl}/${key}`;
+    },
+
+    async get(key: string, visibility?: AssetVisibility): Promise<Readable> {
+      const out = (await client.send(new sdk.GetObjectCommand({ Bucket: bucketFor(visibility), Key: key }))) as { Body?: unknown };
+      const body = out?.Body;
+      if (body instanceof Readable) return body;
+      if (body && typeof (body as { transformToByteArray?: unknown }).transformToByteArray === 'function') {
+        return Readable.from([Buffer.from(await (body as { transformToByteArray(): Promise<Uint8Array> }).transformToByteArray())]);
+      }
+      throw new Error(`S3 object "${key}" has no readable body`);
     },
   };
 }

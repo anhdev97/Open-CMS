@@ -1,4 +1,5 @@
 // Pure, runtime-agnostic page helpers. Must not import from `node:*` (bundled for the browser and shared with Nest).
+import { OVERLAY_NAME_RE } from './actions';
 
 /** apiId of the core-owned page content type. Projects may not define a type with this id. */
 export const PAGE_API_ID = 'opencloudcmsPage';
@@ -72,9 +73,10 @@ export const CORE_BLOCK_NAMES: readonly string[] = [
 
 /**
  * The blocks a project defines (`blockManifest`). `richText`: prop paths of the block's `b.richText` fields
- * (`'body'`, `'rows[].note'` inside list rows), normalized by the server when a page is saved.
+ * (`'body'`, `'rows[].note'` inside list rows), normalized by the server when a page is saved. `kind`: `layout` or
+ * `overlay` for layout and overlay blocks; absent for ordinary blocks (`block`).
  */
-export type BlockManifest = { name: string; version: number; richText?: string[] }[];
+export type BlockManifest = { name: string; version: number; richText?: string[]; kind?: 'block' | 'layout' | 'overlay' }[];
 
 function isItem(v: unknown): v is { type: string; props?: unknown } {
   if (!v || typeof v !== 'object') return false;
@@ -115,4 +117,40 @@ export function collectBlockNames(c: StoredPageContent | null | undefined): Map<
   const rootProps = (data.root as { props?: unknown } | null | undefined)?.props;
   if (isPlainObject(rootProps)) for (const v of Object.values(rootProps)) visitValue(v, out);
   return out;
+}
+
+/** Kinds of page documents: `page` is served at its path; `base` frames pages (never served on its own). */
+export type PageKind = 'page' | 'base';
+export const PAGE_KINDS: readonly PageKind[] = ['page', 'base'];
+
+export type RegionMode = 'default' | 'replace' | 'hide';
+export const REGION_MODES: readonly RegionMode[] = ['default', 'replace', 'hide'];
+
+/**
+ * A page's base choice (page-level, same for every locale). `null`, `{}` or an absent `baseId` = framed by the default
+ * base page (its region modes may still be set: `{ regions }`); `baseId: null` = no frame; a document id = that base
+ * page. An absent region is `default`.
+ */
+export type PageLayout = { baseId?: string | null; regions?: Record<string, RegionMode> } | null;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Shape check of a stored `layout` value (whether `baseId` names a base page is checked by the server). */
+export function validatePageLayout(value: unknown): { ok: true } | { ok: false; message: string } {
+  if (value == null) return { ok: true };
+  if (!isPlainObject(value)) return { ok: false, message: 'layout must be null or an object' };
+  const extra = Object.keys(value).filter((k) => k !== 'baseId' && k !== 'regions');
+  if (extra.length) return { ok: false, message: `layout has unknown keys: ${extra.join(', ')}` };
+  // Absent `baseId` = the default base page; when present it is a document id or null (no base page).
+  if ('baseId' in value && value.baseId !== null && (typeof value.baseId !== 'string' || !UUID_RE.test(value.baseId))) {
+    return { ok: false, message: 'layout.baseId must be a document id or null' };
+  }
+  if (value.regions !== undefined) {
+    if (!isPlainObject(value.regions)) return { ok: false, message: 'layout.regions must be an object' };
+    for (const [name, mode] of Object.entries(value.regions)) {
+      if (!OVERLAY_NAME_RE.test(name)) return { ok: false, message: `layout.regions: invalid region name "${name}"` };
+      if (!REGION_MODES.includes(mode as RegionMode)) return { ok: false, message: `layout.regions.${name} must be default, replace or hide` };
+    }
+  }
+  return { ok: true };
 }

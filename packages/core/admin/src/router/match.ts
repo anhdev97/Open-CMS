@@ -1,4 +1,4 @@
-export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'assets' | 'content' | 'pages' | 'pageEditor' | 'settingsUsers' | 'settingsGroups' | 'settingsContentTypes' | 'settingsLanguages' | 'settingsBlocks' | 'settingsTheme' | 'blockEditor' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
+export type RouteId = 'uikit' | 'setup' | 'login' | 'home' | 'assets' | 'content' | 'contentNew' | 'contentDetail' | 'contentEdit' | 'pages' | 'pageEditor' | 'settingsUsers' | 'settingsGroups' | 'settingsContentTypes' | 'settingsContentTypeNew' | 'settingsContentTypeDetail' | 'settingsContentTypeEdit' | 'settingsContentGroups' | 'settingsLanguages' | 'settingsBlocks' | 'settingsTheme' | 'blockEditor' | 'redirectUsers' | 'redirectBuilder' | 'account' | 'notFound';
 
 export interface RouteMatch {
   id: RouteId;
@@ -35,12 +35,27 @@ export function matchRoute(slug: string[] | undefined, opts: { dev?: boolean } =
   if (s.length === 2 && first === 'content' && second) {
     return { id: 'content', params: { apiId: second }, guarded: true };
   }
+  if (s.length === 3 && first === 'content' && second && s[2]) {
+    if (s[2] === 'new') return { id: 'contentNew', params: { apiId: second }, guarded: true };
+    return { id: 'contentDetail', params: { apiId: second, documentId: s[2] }, guarded: true };
+  }
+  if (s.length === 4 && first === 'content' && second && s[2] && s[3] === 'edit') {
+    return { id: 'contentEdit', params: { apiId: second, documentId: s[2] }, guarded: true };
+  }
   if (s.length === 2 && first === 'pages' && second) {
     return { id: 'pageEditor', params: { documentId: second }, guarded: true, fullScreen: true };
   }
   if (s.length === 2 && first === 'settings') {
     const id = Object.hasOwn(SETTINGS, second) ? SETTINGS[second] : undefined;
     if (id) return { id, params: {}, guarded: true };
+  }
+  if (s.length === 3 && first === 'settings' && second === 'content-types' && s[2]) {
+    if (s[2] === 'new') return { id: 'settingsContentTypeNew', params: {}, guarded: true };
+    if (s[2] === 'groups') return { id: 'settingsContentGroups', params: {}, guarded: true };
+    return { id: 'settingsContentTypeDetail', params: { apiId: s[2] }, guarded: true };
+  }
+  if (s.length === 4 && first === 'settings' && second === 'content-types' && s[2] && s[3] === 'edit') {
+    return { id: 'settingsContentTypeEdit', params: { apiId: s[2] }, guarded: true };
   }
   if (s.length === 3 && first === 'settings' && second === 'blocks' && s[2]) {
     return { id: 'blockEditor', params: { name: s[2] }, guarded: true, fullScreen: true };

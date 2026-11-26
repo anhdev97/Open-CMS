@@ -1,5 +1,6 @@
-import { CopyIcon, FileTextIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import { CopyIcon, FileTextIcon, LayoutTemplateIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { slugToPath, validatePagePath } from '@opencloudcms/schema';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -7,6 +8,7 @@ import { EmptyState } from '../components/EmptyState';
 import { ErrorAlert } from '../components/ErrorAlert';
 import { PageHeader } from '../components/PageHeader';
 import { StatusBadge } from '../components/StatusBadge';
+import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
@@ -15,22 +17,31 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useCan } from '../lib/can';
 import { t } from '../i18n';
 import { useFormat } from '../i18n/hooks';
 import { api } from '../lib/api';
+import { ApiError } from '../lib/api-error';
 import { Link, useAdminNavigate } from '../lib/nav';
 import { pickEditorLocale } from '../lib/locales';
 import {
+  baseErrorMessage,
   createPage,
   deletePage,
   duplicatePage,
+  getBaseUsage,
   getShadowedPaths,
   isShadowedPath,
+  listBases,
   listPages,
   listTruncation,
   pageErrorMessageKey,
+  pagesTab,
   pageStatus,
+  setDefaultBase,
+  splitPagesList,
+  unpublishPage,
   type PageEntry,
 } from '../lib/pages';
 import type { Meta } from '../lib/types';
@@ -128,6 +139,53 @@ function CreatePageDialog({ locale, onOpenChange, onCreated }: { locale: string;
   );
 }
 
+/** "New base page": a title only (a base page has no path). */
+function CreateBaseDialog({ locale, onOpenChange, onCreated }: { locale: string; onOpenChange: (open: boolean) => void; onCreated: (p: PageEntry) => void }) {
+  const [title, setTitle] = useState('');
+  const [error, setError] = useState<Error | null>(null);
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      onCreated(await createPage({ title: title.trim(), kind: 'base', locale }));
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent>
+        <form onSubmit={submit} className="space-y-4" noValidate>
+          <DialogHeader>
+            <DialogTitle>{t('pages.base.create.title')}</DialogTitle>
+            <DialogDescription>{t('pages.base.create.description', { locale })}</DialogDescription>
+          </DialogHeader>
+          <ErrorAlert error={error} />
+          <div className="space-y-2">
+            <Label htmlFor="base-title">{t('pages.create.titleLabel')}</Label>
+            <Input id="base-title" value={title} onChange={(e) => setTitle(e.target.value)} required autoFocus />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" disabled={busy || !title.trim()}>
+              {busy ? t('pages.create.submitting') : t('pages.base.create.submit')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Message of a failed base page action: the base page rules (409 lists the pages using it), else the error. */
+const failure = (e: unknown) => baseErrorMessage(e) ?? (e instanceof Error ? e.message : String(e));
+
 export function Pages() {
   const { formatDateTime } = useFormat();
   const can = useCan();
@@ -139,6 +197,10 @@ export function Pages() {
   const [error, setError] = useState<Error | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<PageEntry | null>(null);
+  const tab = pagesTab(useSearchParams().get('tab'));
+  const [bases, setBases] = useState<PageEntry[] | null>(null);
+  const [usage, setUsage] = useState<Record<string, number | null>>({});
+  const [forcing, setForcing] = useState<{ entry: PageEntry; message: string } | null>(null);
 
   useEffect(() => {
     const loadMeta = () =>
@@ -155,9 +217,15 @@ export function Pages() {
 
   const reload = useCallback(() => {
     if (!locale) return;
-    listPages(locale).then((r) => {
-      setPages(r.data);
-      setTotal(r.total);
+    // The page list also holds base pages: they are listed on their own tab (from the bases endpoint).
+    Promise.all([listPages(locale), listBases()]).then(([r, b]) => {
+      const own = splitPagesList(r.data);
+      setPages(own);
+      setTotal(Math.max(own.length, r.total - b.length));
+      setBases(b);
+      void Promise.all(b.map((x) => getBaseUsage(x.documentId).then((u) => u.count, () => null))).then((counts) =>
+        setUsage(Object.fromEntries(b.map((x, i) => [x.documentId, counts[i] ?? null]))),
+      );
     }, setError);
   }, [locale]);
   useEffect(reload, [reload]);
@@ -169,11 +237,26 @@ export function Pages() {
       toast.success(ok);
       reload();
     } catch (e) {
-      setError(e instanceof Error ? e : new Error(String(e)));
+      // Base page rules (in use, default, not published) as a toast listing the pages; anything else inline.
+      if (e instanceof ApiError && baseErrorMessage(e)) toast.error(failure(e));
+      else setError(e instanceof Error ? e : new Error(String(e)));
+    }
+  };
+
+  /** Unpublish a base page; when pages use it, ask before forcing (they are then shown without it). */
+  const unpublishBase = async (p: PageEntry) => {
+    try {
+      await unpublishPage(p.documentId);
+      toast.success(t('pages.base.unpublished'));
+      reload();
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'base_in_use') setForcing({ entry: p, message: failure(e) });
+      else toast.error(failure(e));
     }
   };
 
   const editorHref = (id: string) => `/pages/${id}?locale=${locale}`;
+  const isBaseTab = tab === 'base';
 
   return (
     <div className="space-y-6">
@@ -197,96 +280,209 @@ export function Pages() {
             {can('content.create') && (
               <Button size="sm" onClick={() => setCreating(true)} disabled={!locale}>
                 <PlusIcon aria-hidden="true" />
-                {t('pages.new')}
+                {isBaseTab ? t('pages.base.new') : t('pages.new')}
               </Button>
             )}
           </>
         }
       />
+      <Tabs value={tab} onValueChange={(v) => navigate(v === 'base' ? '/pages?tab=base' : '/pages')}>
+        <TabsList>
+          <TabsTrigger value="pages">{t('pages.tabPages')}</TabsTrigger>
+          <TabsTrigger value="base">{t('pages.tabBases')}</TabsTrigger>
+        </TabsList>
+      </Tabs>
       <ErrorAlert error={error} />
-      <Card className="py-0">
-        <CardContent className="px-0">
-          {pages === null ? (
-            <div className="space-y-2 p-4" aria-hidden="true">
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-            </div>
-          ) : pages.length === 0 ? (
-            <div className="p-4">
-              <EmptyState
-                icon={FileTextIcon}
-                title={t('pages.emptyTitle')}
-                description={t('pages.emptyDescription')}
-                action={
-                  can('content.create') ? (
-                    <Button size="sm" onClick={() => setCreating(true)}>
-                      {t('pages.new')}
-                    </Button>
-                  ) : undefined
-                }
-              />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t('pages.titleColumn')}</TableHead>
-                  <TableHead>{t('pages.pathColumn')}</TableHead>
-                  <TableHead>{t('content.statusColumn')}</TableHead>
-                  <TableHead>{t('content.updatedColumn')}</TableHead>
-                  <TableHead>{t('content.localeColumn')}</TableHead>
-                  <TableHead className="text-right">{t('pages.actionsColumn')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pages.map((p) => {
-                  const status = pageStatus(p, p.publishedAt ? { publishedAt: p.publishedAt } : null);
-                  const label = p.title || t('content.untitled');
-                  return (
-                    <TableRow key={p.documentId}>
-                      <TableCell>
-                        <Link to={editorHref(p.documentId)} className="font-medium underline-offset-4 hover:underline">
-                          {label}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="font-mono text-muted-foreground">{p.path}</TableCell>
-                      <TableCell>
-                        <StatusBadge status={status} />
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{formatDateTime(p.updatedAt)}</TableCell>
-                      <TableCell className="font-mono">{p.locale ?? locale}</TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          {can('content.create') && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={t('pages.duplicateAria', { title: label })}
-                              onClick={() => void act(() => duplicatePage(p.documentId, locale), t('pages.duplicated'))}
-                            >
-                              <CopyIcon aria-hidden="true" />
-                            </Button>
-                          )}
-                          {can('content.delete') && (
-                            <Button variant="ghost" size="icon" aria-label={t('pages.deleteAria', { title: label })} onClick={() => setDeleting(p)}>
-                              <Trash2Icon aria-hidden="true" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
+      {isBaseTab ? (
+        <>
+          <p className="text-sm text-muted-foreground">{t('pages.base.description')}</p>
+          <Card className="py-0">
+            <CardContent className="px-0">
+              {bases === null ? (
+                <div className="space-y-2 p-4" aria-hidden="true">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              ) : bases.length === 0 ? (
+                <div className="p-4">
+                  <EmptyState
+                    icon={LayoutTemplateIcon}
+                    title={t('pages.base.emptyTitle')}
+                    description={t('pages.base.emptyDescription')}
+                    action={
+                      can('content.create') ? (
+                        <Button size="sm" onClick={() => setCreating(true)}>
+                          {t('pages.base.new')}
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t('pages.titleColumn')}</TableHead>
+                      <TableHead>{t('content.statusColumn')}</TableHead>
+                      <TableHead>{t('pages.base.usageColumn')}</TableHead>
+                      <TableHead>{t('content.updatedColumn')}</TableHead>
+                      <TableHead className="text-right">{t('pages.actionsColumn')}</TableHead>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-      {pages && listTruncation(pages.length, total) && (
+                  </TableHeader>
+                  <TableBody>
+                    {bases.map((p) => {
+                      const status = pageStatus(p, p.publishedAt ? { publishedAt: p.publishedAt } : null);
+                      const label = p.title || t('content.untitled');
+                      const count = usage[p.documentId];
+                      return (
+                        <TableRow key={p.documentId}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Link to={editorHref(p.documentId)} className="font-medium underline-offset-4 hover:underline">
+                                {label}
+                              </Link>
+                              {p.isDefault && <Badge variant="secondary">{t('pages.base.defaultBadge')}</Badge>}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge status={status} />
+                          </TableCell>
+                          <TableCell className="tabular-nums text-muted-foreground">{count ?? '–'}</TableCell>
+                          <TableCell className="text-muted-foreground">{formatDateTime(p.updatedAt)}</TableCell>
+                          <TableCell>
+                            <div className="flex justify-end gap-1">
+                              {can('content.publish') &&
+                                (p.isDefault ? (
+                                  <Button variant="ghost" size="sm" onClick={() => void act(() => setDefaultBase(null), t('pages.base.defaultCleared'))}>
+                                    {t('pages.base.clearDefault')}
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={!p.publishedAt}
+                                    title={p.publishedAt ? undefined : t('pages.errors.baseNotPublished')}
+                                    onClick={() => void act(() => setDefaultBase(p.documentId), t('pages.base.defaultSet'))}
+                                  >
+                                    {t('pages.base.setDefault')}
+                                  </Button>
+                                ))}
+                              {can('content.publish') && p.publishedAt && (
+                                <Button variant="ghost" size="sm" onClick={() => void unpublishBase(p)}>
+                                  {t('pages.base.unpublish')}
+                                </Button>
+                              )}
+                              {can('content.delete') && (
+                                <Button variant="ghost" size="icon" aria-label={t('pages.deleteAria', { title: label })} onClick={() => setDeleting(p)}>
+                                  <Trash2Icon aria-hidden="true" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      ) : (
+        <Card className="py-0">
+          <CardContent className="px-0">
+            {pages === null ? (
+              <div className="space-y-2 p-4" aria-hidden="true">
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+              </div>
+            ) : pages.length === 0 ? (
+              <div className="p-4">
+                <EmptyState
+                  icon={FileTextIcon}
+                  title={t('pages.emptyTitle')}
+                  description={t('pages.emptyDescription')}
+                  action={
+                    can('content.create') ? (
+                      <Button size="sm" onClick={() => setCreating(true)}>
+                        {t('pages.new')}
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t('pages.titleColumn')}</TableHead>
+                    <TableHead>{t('pages.pathColumn')}</TableHead>
+                    <TableHead>{t('content.statusColumn')}</TableHead>
+                    <TableHead>{t('content.updatedColumn')}</TableHead>
+                    <TableHead>{t('content.localeColumn')}</TableHead>
+                    <TableHead className="text-right">{t('pages.actionsColumn')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pages.map((p) => {
+                    const status = pageStatus(p, p.publishedAt ? { publishedAt: p.publishedAt } : null);
+                    const label = p.title || t('content.untitled');
+                    return (
+                      <TableRow key={p.documentId}>
+                        <TableCell>
+                          <Link to={editorHref(p.documentId)} className="font-medium underline-offset-4 hover:underline">
+                            {label}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="font-mono text-muted-foreground">{p.path}</TableCell>
+                        <TableCell>
+                          <StatusBadge status={status} />
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{formatDateTime(p.updatedAt)}</TableCell>
+                        <TableCell className="font-mono">{p.locale ?? locale}</TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1">
+                            {can('content.create') && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={t('pages.duplicateAria', { title: label })}
+                                onClick={() => void act(() => duplicatePage(p.documentId, locale), t('pages.duplicated'))}
+                              >
+                                <CopyIcon aria-hidden="true" />
+                              </Button>
+                            )}
+                            {can('content.delete') && (
+                              <Button variant="ghost" size="icon" aria-label={t('pages.deleteAria', { title: label })} onClick={() => setDeleting(p)}>
+                                <Trash2Icon aria-hidden="true" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
+      {!isBaseTab && pages && listTruncation(pages.length, total) && (
         <p className="text-sm text-muted-foreground">{t('pages.showing', { shown: pages.length, total })}</p>
       )}
 
-      {creating && (
+      {creating && isBaseTab && (
+        <CreateBaseDialog
+          locale={locale}
+          onOpenChange={(o) => !o && setCreating(false)}
+          onCreated={(p) => {
+            setCreating(false);
+            navigate(editorHref(p.documentId));
+          }}
+        />
+      )}
+      {creating && !isBaseTab && (
         <CreatePageDialog
           locale={locale}
           onOpenChange={(o) => !o && setCreating(false)}
@@ -304,6 +500,15 @@ export function Pages() {
         confirmLabel={t('common.delete')}
         destructive
         onConfirm={() => deleting && void act(() => deletePage(deleting.documentId), t('content.deleted'))}
+      />
+      <ConfirmDialog
+        open={!!forcing}
+        onOpenChange={(o) => !o && setForcing(null)}
+        title={t('pages.base.forceTitle')}
+        description={t('pages.base.forceDescription', { message: forcing?.message ?? '' })}
+        confirmLabel={t('pages.base.forceConfirm')}
+        destructive
+        onConfirm={() => forcing && void act(() => unpublishPage(forcing.entry.documentId, { force: true }), t('pages.base.unpublished'))}
       />
     </div>
   );

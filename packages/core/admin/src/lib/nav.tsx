@@ -4,20 +4,32 @@ import NextLink from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, type ComponentProps } from 'react';
 import { adminHref } from './admin-href';
+import { confirmNavigation } from './nav-guard';
 
 export { adminHref };
 
 type LinkProps = Omit<ComponentProps<typeof NextLink>, 'href'> & { to: string };
 
-/** `next/link` with an admin-relative `to`. */
-export function Link({ to, ...rest }: LinkProps) {
-  return <NextLink {...rest} href={adminHref(to)} />;
+/** `next/link` with an admin-relative `to`; asks the unsaved-changes guard (lib/nav-guard) first. */
+export function Link({ to, onClick, ...rest }: LinkProps) {
+  return (
+    <NextLink
+      {...rest}
+      href={adminHref(to)}
+      onClick={(e) => {
+        onClick?.(e);
+        if (!e.defaultPrevented && !confirmNavigation()) e.preventDefault();
+      }}
+    />
+  );
 }
 
-export function useAdminNavigate(): (to: string, opts?: { replace?: boolean }) => void {
+/** `skipGuard`: the caller already confirmed, or the move keeps the page (e.g. a `?locale=` replace). */
+export function useAdminNavigate(): (to: string, opts?: { replace?: boolean; skipGuard?: boolean }) => void {
   const router = useRouter();
   return useCallback(
     (to, opts) => {
+      if (!opts?.skipGuard && !confirmNavigation()) return;
       if (opts?.replace) router.replace(adminHref(to));
       else router.push(adminHref(to));
     },
@@ -42,6 +54,11 @@ export function Redirect({ to }: { to: string }) {
 export function useAdminSearch(): string {
   const qs = useSearchParams().toString();
   return qs ? `?${qs}` : '';
+}
+
+/** One query parameter of the current admin URL, or `null`. */
+export function useAdminSearchParam(name: string): string | null {
+  return useSearchParams().get(name);
 }
 
 /** Pathname without the `/admin` prefix; `/` for the root. */

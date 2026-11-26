@@ -1,4 +1,5 @@
 import { BrandLogo } from './BrandLogo';
+import { PrivateLock } from './PrivateLock';
 import { ChevronRightIcon, ChevronsUpDownIcon, HomeIcon, ImageIcon, LogOutIcon, PaletteIcon, UserIcon } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { ContentGroupDefinition, LocalizedText } from '@opencloudcms/schema';
@@ -73,6 +74,7 @@ interface ContentTypeLink {
   apiId: string;
   displayName: string | LocalizedText;
   group?: string;
+  private?: boolean;
 }
 
 async function loadContentTypes(): Promise<ContentTypeLink[]> {
@@ -170,12 +172,13 @@ function AppSidebar() {
     writeOpen(next);
   };
 
-  const link = (to: string, label: string, icon?: ReactNode) => (
+  const link = (to: string, label: string, icon?: ReactNode, trailing?: ReactNode) => (
     <SidebarMenuItem key={to}>
       <SidebarMenuButton asChild isActive={isActive(to)}>
         <Link to={to} aria-current={isActive(to) ? 'page' : undefined} onClick={closeOnNavigate}>
           {icon}
           <span>{label}</span>
+          {trailing}
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -238,7 +241,9 @@ function AppSidebar() {
               open={isOpen(g.key, holds)}
               onToggle={() => toggle(g.key, holds)}
             >
-              {g.items.map((i) => link(`/content/${i.apiId}`, i.title))}
+              {g.items.map((i) =>
+                link(`/content/${i.apiId}`, i.title, undefined, i.private ? <PrivateLock className="ml-auto size-3.5" /> : undefined),
+              )}
             </NavGroup>
           );
         })}

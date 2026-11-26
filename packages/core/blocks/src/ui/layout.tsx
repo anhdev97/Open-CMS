@@ -7,7 +7,7 @@ import {
 } from './tokens';
 import { bpClasses, cssLength, resolveTracks, setsBackground, setsPadding, styleAttr, styleProps, type StyleResult } from './style';
 
-type Children = { children?: ReactNode };
+type Children = { children?: ReactNode; /** Element id (scroll target). */ id?: string };
 type Styled = { style?: NodeStyle };
 type Align = 'start' | 'center' | 'end' | 'stretch';
 type Direction = 'vertical' | 'horizontal';
@@ -131,30 +131,30 @@ export const layoutStyle = {
   Card: (p: CardProps) => styleAttr(layout.Card(p)),
 };
 
-export function Box({ children, ...p }: BoxProps & Children) {
+export function Box({ children, id, ...p }: BoxProps & Children) {
   const l = layout.Box(p);
-  return <div className={l.className} style={styleAttr(l)}>{children}</div>;
+  return <div id={id} className={l.className} style={styleAttr(l)}>{children}</div>;
 }
 
-export function Stack({ children, ...p }: StackProps & Children) {
+export function Stack({ children, id, ...p }: StackProps & Children) {
   const l = layout.Stack(p);
-  return <div className={l.className} style={styleAttr(l)}>{children}</div>;
+  return <div id={id} className={l.className} style={styleAttr(l)}>{children}</div>;
 }
 
-export function Columns({ children, ...p }: ColumnsProps & Children) {
+export function Columns({ children, id, ...p }: ColumnsProps & Children) {
   const l = layout.Columns(p);
-  return <div className={l.className} style={styleAttr(l)}>{children}</div>;
+  return <div id={id} className={l.className} style={styleAttr(l)}>{children}</div>;
 }
 
-export function Grid({ children, ...p }: GridProps & Children) {
+export function Grid({ children, id, ...p }: GridProps & Children) {
   const l = layout.Grid(p);
-  return <div className={l.className} style={styleAttr(l)}>{children}</div>;
+  return <div id={id} className={l.className} style={styleAttr(l)}>{children}</div>;
 }
 
-export function Card({ children, ...p }: CardProps & Children) {
+export function Card({ children, id, ...p }: CardProps & Children) {
   const l = layout.Card(p);
   return (
-    <div data-slot="card" className={l.className} style={styleAttr(l)}>
+    <div id={id} data-slot="card" className={l.className} style={styleAttr(l)}>
       {children}
     </div>
   );

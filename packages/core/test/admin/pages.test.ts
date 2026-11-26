@@ -16,9 +16,16 @@ import {
   pageErrorMessageKey,
   pagePreviewUrl,
   pageStatus,
+  pagesTab,
   publishPage,
   savePage,
   unpublishPage,
+  listBases,
+  getBaseUsage,
+  setDefaultBase,
+  getBasePage,
+  baseErrorMessage,
+  splitPagesList,
 } from '../../admin/src/lib/pages';
 import { ApiError } from '../../admin/src/lib/api-error';
 
@@ -175,5 +182,57 @@ describe('page builder style fields', () => {
     expect(pageTracks.in({ base: ['1fr'] })).toEqual({ base: ['1fr'] });
     expect(pageTracks.out(undefined)).toBeNull();
     expect(pageTracks.out(['2fr', '1fr'])).toEqual(['2fr', '1fr']);
+  });
+});
+
+describe('base pages client', () => {
+  const e = (status: number, code: string, issues: unknown[] = []) => new ApiError(status, code, 'x', issues);
+
+  it('createPage with kind base posts the title and kind, no path', async () => {
+    api.mockResolvedValue({ data: { documentId: 'n' } });
+    await createPage({ title: 'Site frame', kind: 'base', locale: 'en-US' });
+    expect(api).toHaveBeenCalledWith('/api/admin/content/opencloudcmsPage?locale=en-US', { method: 'POST', json: { title: 'Site frame', kind: 'base' } });
+  });
+  it('listBases / getBaseUsage / setDefaultBase call the base endpoints', async () => {
+    api.mockResolvedValueOnce({ data: [{ documentId: 'b', isDefault: true }] });
+    await expect(listBases()).resolves.toEqual([{ documentId: 'b', isDefault: true }]);
+    expect(api).toHaveBeenLastCalledWith('/api/admin/pages/bases');
+    api.mockResolvedValueOnce({ count: 2, pages: [] });
+    await expect(getBaseUsage('b')).resolves.toEqual({ count: 2, pages: [] });
+    expect(api).toHaveBeenLastCalledWith('/api/admin/pages/bases/b/usage');
+    api.mockResolvedValueOnce({ data: { documentId: null } });
+    await setDefaultBase(null);
+    expect(api).toHaveBeenLastCalledWith('/api/admin/pages/bases/default', { method: 'PUT', json: { documentId: null } });
+  });
+  it('getBasePage reads the admin draft base in the locale; 404 is null', async () => {
+    api.mockResolvedValueOnce({ data: { documentId: 'b', content: {} } });
+    await expect(getBasePage('default', 'vi-VN')).resolves.toEqual({ documentId: 'b', content: {} });
+    expect(api).toHaveBeenLastCalledWith('/api/admin/content/opencloudcmsPage/base?id=default&locale=vi-VN');
+    api.mockRejectedValueOnce(e(404, 'not_found'));
+    await expect(getBasePage('b', 'en-US')).resolves.toBeNull();
+    api.mockRejectedValueOnce(e(500, 'boom'));
+    await expect(getBasePage('b', 'en-US')).rejects.toThrow();
+  });
+  it('unpublishPage can force', async () => {
+    api.mockResolvedValue({ data: {} });
+    await unpublishPage('a', { force: true });
+    expect(api).toHaveBeenCalledWith('/api/admin/content/opencloudcmsPage/a/unpublish?force=true', { method: 'POST' });
+  });
+  it('base errors read as messages listing the pages', () => {
+    const inUse = e(409, 'base_in_use', [
+      { path: ['p1'], message: 'About' },
+      { path: ['p2'], message: 'Contact' },
+    ]);
+    expect(baseErrorMessage(inUse)).toBe('Used by 2 pages: About, Contact.');
+    expect(baseErrorMessage(e(409, 'base_is_default'))).toContain('default base page');
+    expect(baseErrorMessage(e(422, 'layout_block_misplaced'))).toContain('Layout blocks');
+    expect(baseErrorMessage(e(500, 'boom'))).toBeNull();
+  });
+  it('pagesTab reads ?tab=base; splitPagesList keeps base pages off the Pages tab', () => {
+    expect(pagesTab('base')).toBe('base');
+    expect(pagesTab(null)).toBe('pages');
+    expect(pagesTab('x')).toBe('pages');
+    const list = [{ documentId: 'a', kind: 'page' }, { documentId: 'b', kind: 'base' }, { documentId: 'c' }] as never[];
+    expect(splitPagesList(list).map((p: { documentId: string }) => p.documentId)).toEqual(['a', 'c']);
   });
 });

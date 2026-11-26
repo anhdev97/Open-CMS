@@ -9,6 +9,7 @@ import { fieldColumns, isMultiRelation } from '@opencloudcms/schema';
 export type Operation =
   | { op: 'createType'; def: ContentTypeDefinition }
   | { op: 'dropType'; def: ContentTypeDefinition }
+  | { op: 'setPrivate'; def: ContentTypeDefinition; to: boolean }
   | { op: 'renameType'; def: ContentTypeDefinition; toApiId: string }
   | { op: 'addField'; ctx: ContentTypeDefinition; field: FieldDefinition }
   | { op: 'dropField'; ctx: ContentTypeDefinition; field: FieldDefinition }
@@ -82,6 +83,7 @@ export function diffSchemas(prev: ContentTypeDefinition[], next: ContentTypeDefi
   const prevById = new Map(prev.map((d) => [d.id, d]));
   const nextById = new Map(next.map((d) => [d.id, d]));
 
+  const guards: Operation[] = [];
   const drops: Operation[] = [];
   const renames: Operation[] = [];
   const creates: Operation[] = [];
@@ -97,6 +99,7 @@ export function diffSchemas(prev: ContentTypeDefinition[], next: ContentTypeDefi
       creates.push({ op: 'createType', def: cur });
       continue;
     }
+    if (!!old.private !== !!cur.private) guards.push({ op: 'setPrivate', def: old, to: !!cur.private });
     if (old.apiId !== cur.apiId) renames.push({ op: 'renameType', def: old, toApiId: cur.apiId });
 
     // Field ops run against a context whose table names already use the new apiId.
@@ -162,7 +165,7 @@ export function diffSchemas(prev: ContentTypeDefinition[], next: ContentTypeDefi
   }
 
   if (issues.length) throw new DiffError(issues);
-  const operations = [...drops, ...renames, ...creates, ...fieldOps];
+  const operations = [...guards, ...drops, ...renames, ...creates, ...fieldOps];
   const changed = operations.length > 0 || !definitionsEqual(sortById(prev), sortById(next));
   return { operations, changed };
 }

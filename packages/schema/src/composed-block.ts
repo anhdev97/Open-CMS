@@ -1,21 +1,22 @@
 // Pure spec types, validation and versioning for composed (builder-made) page blocks.
 // Must not import from `node:*` (bundled for the browser and shared with Nest and the blocks package).
+import { ANCHOR_ID_RE, OVERLAY_NAME_RE, validateButtonAction } from './actions';
 import { validateLocalizedText } from './groups';
 import type { LocalizedText } from './i18n';
 import { checkResponsive, isLength, isTrack, MAX_TRACKS, validateNodeStyle, type NodeStyle } from './style';
 
 export type ComposedElement =
   | 'Box' | 'Stack' | 'Columns' | 'Grid' | 'Card' | 'Slot' | 'Heading' | 'Text'
-  | 'Image' | 'Button' | 'Badge' | 'Price' | 'Date' | 'Divider' | 'Spacer';
+  | 'Image' | 'Button' | 'Badge' | 'Price' | 'Date' | 'Divider' | 'Spacer' | 'Region' | 'PageContent' | 'Overlay';
 
 export const COMPOSED_ELEMENTS: readonly ComposedElement[] = [
   'Box', 'Stack', 'Columns', 'Grid', 'Card', 'Slot', 'Heading', 'Text',
-  'Image', 'Button', 'Badge', 'Price', 'Date', 'Divider', 'Spacer',
+  'Image', 'Button', 'Badge', 'Price', 'Date', 'Divider', 'Spacer', 'Region', 'PageContent', 'Overlay',
 ];
 
 /** Props of each element that may be bound to data (everything else takes design tokens only). */
 export const ELEMENT_BINDABLE: Record<ComposedElement, readonly string[]> = {
-  Box: [], Stack: [], Columns: [], Grid: [], Card: [], Slot: [], Divider: [], Spacer: [],
+  Box: [], Stack: [], Columns: [], Grid: [], Card: [], Slot: [], Divider: [], Spacer: [], Region: [], PageContent: [], Overlay: [],
   Heading: ['text'],
   Text: ['text', 'html'],
   Image: ['src', 'alt'],
@@ -80,6 +81,8 @@ export interface ComposedBlockSpec {
   tree: ComposedNode;
 }
 
+export type ComposedBlockKind = 'block' | 'layout' | 'overlay';
+
 export type ComposedIssue = { path: (string | number)[]; message: string };
 
 const ID_RE = /^blk_[a-z0-9]{6,}$/;
@@ -120,6 +123,7 @@ const DEFAULT_EXPECTED: Record<ComposedFieldKind, string> = {
 };
 const NAME_RE = /^[A-Z][A-Za-z0-9]{0,63}$/;
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const has = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 
 const enumLeaf = (allowed: readonly string[], add: (p: (string | number)[], m: string) => void) => (v: unknown, p: (string | number)[]) => {
   if (typeof v !== 'string' || !allowed.includes(v)) add(p, `must be one of ${allowed.join(', ')}`);
@@ -147,6 +151,17 @@ function checkLayoutProps(
     if (props.align !== undefined) checkResponsive(props.align, at('align'), enumLeaf(['start', 'center', 'end', 'stretch'], add));
     if (props.justify !== undefined) enumLeaf(['start', 'center', 'end', 'between'], add)(props.justify, at('justify'));
     if (props.wrap !== undefined && typeof props.wrap !== 'boolean') add(at('wrap'), 'wrap must be a boolean');
+  } else if (el === 'Overlay') {
+    if (props.variant !== undefined) enumLeaf(['modal', 'drawer'], add)(props.variant, at('variant'));
+    if (props.side !== undefined) {
+      enumLeaf(['left', 'right', 'top', 'bottom'], add)(props.side, at('side'));
+      if (props.variant !== 'drawer') add(at('side'), 'side is only allowed on a drawer');
+    }
+    if (props.size !== undefined) enumLeaf(['sm', 'md', 'lg', 'xl', 'full'], add)(props.size, at('size'));
+    for (const k of ['closeOnBackdrop', 'showClose']) {
+      if (props[k] !== undefined && typeof props[k] !== 'boolean') add(at(k), `${k} must be a boolean`);
+    }
+    if (props.labelledBy !== undefined && props.labelledBy !== 'first-heading') add(at('labelledBy'), "labelledBy must be 'first-heading'");
   } else if (el === 'Image') {
     if (props.fit !== undefined) enumLeaf(['cover', 'contain'], add)(props.fit, at('fit'));
     if (props.aspect !== undefined) checkResponsive(props.aspect, at('aspect'), enumLeaf(['auto', 'square', 'video', '3/2', '4/3', 'wide'], add));
@@ -251,6 +266,15 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
     }
   }
 
+  // layout and overlay blocks
+  const rootEl = isObj(spec.tree) ? spec.tree.el : undefined;
+  if (rootEl === 'Overlay' && spec.binding !== undefined) add(['binding'], 'an overlay block cannot have a binding');
+  if (isObj(spec.fields)) {
+    const kind = composedKind(spec as unknown as ComposedBlockSpec);
+    if (kind === 'overlay' && has(spec.fields, 'name')) add(['fields', 'name'], '"name" is reserved for the overlay name field');
+    if (kind === 'layout' && has(spec.fields, 'pageContent')) add(['fields', 'pageContent'], '"pageContent" is reserved for the page content slot');
+  }
+
   // tree
   const collection = binding?.mode === 'collection';
   const hasBinding = binding !== undefined;
@@ -275,6 +299,10 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
         add([...path, 'from'], "from must be 'entry', 'entryUrl', 'field' or 'const'");
     }
   };
+  const rootIsOverlay = isObj(spec.tree) && spec.tree.el === 'Overlay';
+  const regionNamesSeen = new Set<string>();
+  let pageContents = 0;
+  let layoutNodes = 0;
   const walk = (n: unknown, path: (string | number)[]) => {
     if (!isObj(n)) return add(path, 'node must be an object');
     const el = n.el as ComposedElement;
@@ -283,6 +311,27 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
     } else if (el === 'Slot' && collection) {
       add([...path, 'el'], 'Slot is not allowed inside a collection item template');
     }
+    if (el === 'Region' || el === 'PageContent') {
+      layoutNodes++;
+      if (collection) add([...path, 'el'], `${el} is not allowed in a block with a collection binding`);
+      if (rootIsOverlay) add([...path, 'el'], `${el} is not allowed in an overlay block`);
+      if (Array.isArray(n.children) ? n.children.length > 0 : n.children !== undefined) add([...path, 'children'], `${el} cannot have children`);
+      if (el === 'PageContent' && ++pageContents === 2) add([...path, 'el'], 'only one PageContent is allowed');
+      if (el === 'Region' && (n.props === undefined || isObj(n.props))) {
+        const rp = isObj(n.props) ? n.props : {};
+        if (typeof rp.name !== 'string' || !OVERLAY_NAME_RE.test(rp.name)) add([...path, 'props', 'name'], 'name must match ^[a-z][a-z0-9-]{0,31}$');
+        else if (regionNamesSeen.has(rp.name)) add([...path, 'props', 'name'], `duplicate region name "${rp.name}"`);
+        else regionNamesSeen.add(rp.name);
+        if (rp.label !== undefined && typeof rp.label !== 'string') {
+          const m = isObj(rp.label) ? validateLocalizedText(rp.label, 'label') : ['label must be a string or localized text'];
+          if (m.length) add([...path, 'props', 'label'], m.join('; '));
+        }
+        if (rp.allow !== undefined && !(Array.isArray(rp.allow) && rp.allow.every((x) => typeof x === 'string' && x))) {
+          add([...path, 'props', 'allow'], 'allow must be an array of block names');
+        }
+      }
+    }
+    if (el === 'Overlay' && path.length > 1) add([...path, 'el'], 'Overlay is only allowed as the root node');
     if (n.props !== undefined && !isObj(n.props)) add([...path, 'props'], 'props must be an object');
     else if (el === 'Slot' && isObj(n.props)) {
       const { allow, max } = n.props;
@@ -292,7 +341,17 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
       if (max !== undefined && !(Number.isInteger(max) && (max as number) > 0)) add([...path, 'props', 'max'], 'max must be a positive integer');
     }
     for (const i of validateNodeStyle(n.style, [...path, 'style'])) add(i.path, i.message);
-    if (isObj(n.props)) checkLayoutProps(el, n.props, [...path, 'props'], add);
+    if (isObj(n.props)) {
+      checkLayoutProps(el, n.props, [...path, 'props'], add);
+      const pp = [...path, 'props'];
+      if (n.props.anchorId !== undefined && (typeof n.props.anchorId !== 'string' || !ANCHOR_ID_RE.test(n.props.anchorId))) {
+        add([...pp, 'anchorId'], 'anchorId must match ^[A-Za-z][\\w-]{0,63}$');
+      }
+      if (n.props.action !== undefined) {
+        if (el === 'Button') for (const i of validateButtonAction(n.props.action, [...pp, 'action'])) add(i.path, i.message);
+        else add([...pp, 'action'], 'action is only allowed on Button');
+      }
+    }
     if (n.bind !== undefined) {
       if (!isObj(n.bind)) add([...path, 'bind'], 'bind must be an object');
       else for (const [k, s] of Object.entries(n.bind)) {
@@ -323,13 +382,33 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
   };
   if (spec.tree === undefined) add(['tree'], 'tree is required');
   else walk(spec.tree, ['tree']);
+  if (layoutNodes > 0 && pageContents === 0 && !rootIsOverlay && !collection) add(['tree'], 'a layout block requires exactly one PageContent');
 
   return issues;
 }
 
-export function composedManifestEntry(spec: ComposedBlockSpec): { name: string; version: number; richText?: string[] } {
+export function composedManifestEntry(spec: ComposedBlockSpec): { name: string; version: number; richText?: string[]; kind?: ComposedBlockKind } {
   const richText = Object.entries(spec.fields ?? {}).filter(([, f]) => f.kind === 'richText').map(([n]) => n);
-  return richText.length ? { name: spec.name, version: spec.version, richText } : { name: spec.name, version: spec.version };
+  const kind = composedKind(spec);
+  return {
+    name: spec.name,
+    version: spec.version,
+    ...(richText.length ? { richText } : {}),
+    ...(kind !== 'block' ? { kind } : {}),
+  };
+}
+
+/** `ProductCard` → `product-card` (block folders and file names, default overlay names). */
+export function kebabName(name: string): string {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .toLowerCase();
+}
+
+/** Default `name` of an overlay block placement: the block name in kebab case, cut to the overlay name length. */
+export function overlayDefaultName(blockName: string): string {
+  return kebabName(blockName).slice(0, 32).replace(/-+$/, '');
 }
 
 /**
@@ -360,8 +439,35 @@ export function slotsChanged(prev: ComposedBlockSpec, next: ComposedBlockSpec): 
   return b.length < a.length || a.some((s, i) => b[i] !== s);
 }
 
+const someNode = (n: unknown, f: (n: ComposedNode) => boolean): boolean => {
+  if (!isObj(n)) return false;
+  return f(n as unknown as ComposedNode) || (Array.isArray(n.children) && n.children.some((c) => someNode(c, f)));
+};
+
+/** `overlay` when the tree root is an `Overlay`, `layout` when it holds a `Region` or `PageContent`, else `block`. */
+export function composedKind(spec: Pick<ComposedBlockSpec, 'tree'> | undefined): ComposedBlockKind {
+  const tree = spec?.tree as unknown;
+  if (isObj(tree) && tree.el === 'Overlay') return 'overlay';
+  return someNode(tree, (n) => n.el === 'Region' || n.el === 'PageContent') ? 'layout' : 'block';
+}
+
+/** Names of the valid, first-seen `Region`s of `spec`, in tree order. */
+export function regionNames(spec: Pick<ComposedBlockSpec, 'tree'> | undefined): string[] {
+  const out: string[] = [];
+  const walk = (n: unknown) => {
+    if (!isObj(n)) return;
+    const name = isObj(n.props) ? n.props.name : undefined;
+    if (n.el === 'Region' && typeof name === 'string' && OVERLAY_NAME_RE.test(name) && !out.includes(name)) out.push(name);
+    if (Array.isArray(n.children)) n.children.forEach(walk);
+  };
+  walk(spec?.tree);
+  return out;
+}
+
 export function isBreakingChange(prev: ComposedBlockSpec, next: ComposedBlockSpec): boolean {
   if (slotsChanged(prev, next)) return true;
+  if (composedKind(prev) !== composedKind(next)) return true;
+  if (regionNames(prev).join('\n') !== regionNames(next).join('\n')) return true;
   for (const [name, f] of Object.entries(prev.fields ?? {})) {
     const n = next.fields?.[name];
     if (!n || n.kind !== f.kind) return true;

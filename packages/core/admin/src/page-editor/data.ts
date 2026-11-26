@@ -1,6 +1,6 @@
 // Cached admin API reads used by the page editor's fields.
 import { api } from '../lib/api';
-import { listPages, type PageEntry } from '../lib/pages';
+import { getBasePage, listPages, type PageEntry } from '../lib/pages';
 import type { ContentTypeDefinition } from '../lib/types';
 
 const cache = new Map<string, Promise<unknown>>();
@@ -36,6 +36,9 @@ export const loadPages = (locale: string) => cached(`pages:${locale}`, () => lis
 export type AssetRow = { id: string; filename: string; url: string; mimeType: string | null; alt: string | null };
 
 export const loadAssets = () => cached('assets', () => api<{ data: AssetRow[] }>('/api/admin/assets?limit=200').then((r) => r.data));
+
+/** Draft of a base page (`default` or a document id) in `locale`, null when there is none (cached: invalidate `base:`). */
+export const loadBase = (id: string, locale: string) => cached(`base:${id}:${locale}`, () => getBasePage(id, locale));
 
 /** Forget cached reads (after an upload, or when the editor opens again). */
 export function invalidate(prefix?: string): void {

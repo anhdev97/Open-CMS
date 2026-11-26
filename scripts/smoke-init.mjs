@@ -6,6 +6,10 @@
 // (block-builder spec §10: written as a Block Builder file before the build) lists only products with active = true,
 // even when the page data asks for active = false. The brand theme (src/theme.ts + ThemeStyle) and the StoreHeader
 // Block Builder file of examples/my-store survive a Theme / Block Builder save without changes byte-identically.
+// Base pages: a default base page built from the my-store StoreFrame layout frames every page (header with the
+// lien-he contact modal and the menu-mobile drawer, footer), and a page replaces its header and hides its footer.
+// Private types: the my-store `order` type is absent from the public API (CORS preflight too), refuses readOnly
+// writes and publishing, and its PDF invoice is a private file (sniffed, admin-only download, gone with the entry).
 // Exit code 0 = pass, 1 = fail.
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -226,12 +230,26 @@ export default defineContentType({
 });
 `,
   );
+  // The private order type of examples/my-store (readOnly items/total, a PDF invoice in private storage).
+  const orderRel = 'src/content-types/order/order.schema.ts';
+  mkdirSync(join(app, 'src/content-types/order'), { recursive: true });
+  writeFileSync(join(app, orderRel), readFileSync(join(repo, 'examples/my-store', orderRel), 'utf8').replace("group: 'shop',", ''));
+  // Private files need asset storage: the scaffold has none, so add the local provider as examples/my-store does.
+  const appModuleFile = join(app, 'src/app.module.ts');
+  const appModuleSrc = readFileSync(appModuleFile, 'utf8');
+  const pagesLine = '      pages: { blocks: blockManifest(blocks) },\n';
+  assert(appModuleSrc.includes(pagesLine), 'src/app.module.ts lacks the pages option line');
+  writeFileSync(
+    appModuleFile,
+    appModuleSrc.replace(pagesLine, `${pagesLine}      assets: { provider: 'local', local: { root: projectRoot + '/assets', publicBaseUrl: '/media' } },\n`),
+  );
   const cli = join(app, 'node_modules/@opencloudcms/cli/bin/opencloudcms.js');
   run('node', [cli, 'generate'], { cwd: app });
-  run('node', [cli, 'migrate:create', 'add-article-product'], { cwd: app });
+  run('node', [cli, 'migrate:create', 'add-article-product-order'], { cwd: app });
   assert(readFileSync(join(app, 'src/generated/registry.ts'), 'utf8').match(/"?review"?: true/), 'generated registry lacks review: true for article');
   assert(readFileSync(join(app, 'migrations/_snapshot.json'), 'utf8').includes('"article"'), 'migrations/_snapshot.json lacks article');
-  ok('article (review: true) + product schemas -> opencloudcms generate + opencloudcms migrate:create');
+  assert(readFileSync(join(app, 'src/generated/registry.ts'), 'utf8').match(/"?private"?: true/), 'generated registry lacks private: true for order');
+  ok('article (review: true) + product + order (private) schemas -> opencloudcms generate + opencloudcms migrate:create; local asset storage added');
 
   // A composed block, as the admin Block Builder writes it (production cannot run the builder: write it before the
   // build). Printed by the codegen printer, so the files are byte-identical to the builder's.
@@ -260,14 +278,21 @@ export default defineContentType({
   const storeHeaderSrc = readFileSync(join(repo, 'examples/my-store', storeHeaderRel), 'utf8');
   mkdirSync(join(app, 'src/blocks/store-header'), { recursive: true });
   writeFileSync(join(app, storeHeaderRel), storeHeaderSrc);
+  // The base page and overlay blocks of examples/my-store: the StoreFrame layout, the contact modal, the menu drawer.
+  const storeBlocks = { StoreFrame: 'store-frame', ContactModal: 'contact-modal', MobileMenu: 'mobile-menu' };
+  for (const dir of Object.values(storeBlocks)) {
+    mkdirSync(join(app, 'src/blocks', dir), { recursive: true });
+    writeFileSync(join(app, 'src/blocks', dir, `${dir}.block.ts`), readFileSync(join(repo, 'examples/my-store/src/blocks', dir, `${dir}.block.ts`), 'utf8'));
+  }
   writeFileSync(
     join(app, 'src/blocks/composed.ts'),
     codegen.printComposedIndex([
       { name: 'ActiveProducts', importPath: './active-products/active-products.block' },
       { name: 'StoreHeader', importPath: './store-header/store-header.block' },
+      ...Object.entries(storeBlocks).map(([name, dir]) => ({ name, importPath: `./${dir}/${dir}.block` })),
     ]),
   );
-  ok('composed blocks ActiveProducts (product, collection, fixed filter active = true, grid 4) + StoreHeader (examples/my-store) written to src/blocks + composed.ts');
+  ok('composed blocks ActiveProducts (product, collection, fixed filter active = true, grid 4) + StoreHeader, StoreFrame, ContactModal, MobileMenu (examples/my-store) written to src/blocks + composed.ts');
 
   // Registry-install approximation: with symlinks preserved, @types/node must come from the project's own devDependencies.
   run('node', [join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.server.json', '--noEmit', '--preserveSymlinks'], { cwd: app });
@@ -341,7 +366,7 @@ export default defineContentType({
       assert(callback.status === 302, `callback (${who}) -> ${callback.status}`);
       assert(jar.has('oc_session'), `callback did not set oc_session (${who})`);
     };
-    return { jar, send, post: json('POST'), patch: json('PATCH'), put: json('PUT'), startLogin, login };
+    return { jar, send, post: json('POST'), patch: json('PATCH'), put: json('PUT'), delete: json('DELETE'), startLogin, login };
   };
   const admin = browser();
   const { send, post, startLogin } = admin;
@@ -414,6 +439,16 @@ export default defineContentType({
     const text = await res.text();
     assert(res.status < 300, `${method} ${path} -> ${res.status} ${text}`);
     return text ? JSON.parse(text) : undefined;
+  };
+  /** Like `api`, without the status check: `{ status, body, text }`. */
+  const call0 = async (b, method, path, body) => {
+    const res = method === 'GET' ? await b.send(path) : await b[method.toLowerCase()](path, body);
+    const text = await res.text();
+    let parsed = null;
+    try {
+      parsed = text ? JSON.parse(text) : null;
+    } catch {}
+    return { status: res.status, body: parsed, text };
   };
   const page$ = async (b, path) => {
     const res = await b.send(path);
@@ -575,6 +610,121 @@ export default defineContentType({
   assert(headerPut.status === 403, `PUT /api/admin/blocks/StoreHeader in production -> ${headerPut.status} (want 403)`);
   assert(readFileSync(join(app, storeHeaderRel), 'utf8') === storeHeaderSrc, 'PUT /api/admin/blocks/StoreHeader changed the file');
   ok('builder opens StoreHeader (no problems); its spec prints back byte-identical; PUT -> 403 in production, file unchanged');
+
+  // 4e. base pages + overlays (base-pages spec §4-§6): a default base page frames every page; a page can replace a
+  // region and hide another. The contact modal is a <dialog> rendered on the server.
+  const manifest = (await api(admin, 'GET', '/api/admin/pages/blocks-check')).manifest;
+  const kindOf = (name) => manifest.find((m) => m.name === name)?.kind;
+  assert(kindOf('StoreFrame') === 'layout' && kindOf('ContactModal') === 'overlay' && kindOf('MobileMenu') === 'overlay', `blocks-check kinds: ${JSON.stringify(manifest)}`);
+  const it = (type, id, props = {}) => ({ type, props: { id, _v: 1, ...props } });
+  const puck = (content, rootProps = {}) => ({ format: 'puck', formatVersion: PUCK_FORMAT_VERSION, data: { root: { props: rootProps }, content } });
+  const BASE_HEADER = 'Smoke base store';
+  const BASE_FOOTER = 'Smoke base footer';
+  const baseDoc = (
+    await api(admin, 'POST', `${pageApi}?locale=en-US`, {
+      kind: 'base',
+      title: 'Smoke base',
+      content: puck([
+        it('StoreFrame', 'frame-1', {
+          region__header: [
+            it('StoreHeader', 'header-1', { brand: BASE_HEADER, contactLabel: 'Contact', menuLabel: '☰ Menu' }),
+            it('MobileMenu', 'menu-1', { name: 'menu-mobile', title: 'Menu' }),
+            it('ContactModal', 'modal-1', { name: 'lien-he', heading: 'Smoke contact', email: 'smoke@example.com', emailLink: { kind: 'url', href: 'mailto:smoke@example.com' } }),
+          ],
+          pageContent: [],
+          region__footer: [it('Heading', 'footer-1', { text: BASE_FOOTER, level: 2, align: 'left' })],
+        }),
+      ]),
+    })
+  ).data;
+  assert(baseDoc.kind === 'base' && baseDoc.path === null, `base page create: ${JSON.stringify(baseDoc)}`);
+  await api(admin, 'POST', `${pageApi}/${baseDoc.documentId}/publish`);
+  await api(admin, 'PUT', '/api/admin/pages/bases/default', { documentId: baseDoc.documentId });
+  const usage = await api(admin, 'GET', `/api/admin/pages/bases/${baseDoc.documentId}/usage`);
+  assert(usage.count === 2 && ['/', '/shop'].every((p) => usage.pages.some((x) => x.path === p)), `base usage: ${JSON.stringify(usage)}`);
+  // The site remembers "no default base page" for 30 s (NO_DEFAULT_BASE_TTL_MS): / was rendered without one above.
+  for (const until = Date.now() + 40_000; ; await new Promise((res) => setTimeout(res, 1000))) {
+    r = await page$(browser(), '/');
+    if (r.text.includes(BASE_HEADER) || Date.now() > until) break;
+  }
+  assert(r.res.status === 200 && r.text.includes(PUB), `GET / framed by the base lacks "${PUB}" (${r.res.status})`);
+  assert(r.text.includes(BASE_HEADER) && r.text.includes(BASE_FOOTER), 'GET / lacks the base page header / footer');
+  assert(r.text.indexOf(BASE_HEADER) < r.text.indexOf(PUB) && r.text.indexOf(PUB) < r.text.indexOf(BASE_FOOTER), 'GET /: header, page content, footer out of order');
+  assert(/<dialog [^>]*data-ocms-overlay="lien-he"/.test(r.text) && /<dialog [^>]*data-ocms-overlay="menu-mobile"/.test(r.text), 'GET / lacks the lien-he / menu-mobile dialogs');
+  assert(r.text.includes('href="mailto:smoke@example.com"'), 'GET / contact modal lacks its email link');
+  assert(/<button type="button"[^>]*md:hidden lg:hidden[^>]*>☰ Menu<\/button>/.test(r.text), 'GET / lacks the ☰ button hidden on desktop');
+  ok('default base page (StoreFrame) published: / is framed (header, page, footer) with the lien-he modal and the menu-mobile drawer; usage 2 pages');
+
+  const LANDING_HEADER = 'Smoke landing header';
+  const landing = (
+    await api(admin, 'POST', `${pageApi}?locale=en-US`, {
+      title: 'Landing',
+      path: '/smoke-landing',
+      layout: { regions: { header: 'replace', footer: 'hide' } },
+      content: puck([it('Heading', 'landing-1', { text: 'Smoke landing body', level: 1, align: 'left' })], {
+        region__header: [it('Heading', 'landing-h', { text: LANDING_HEADER, level: 2, align: 'left' })],
+      }),
+    })
+  ).data;
+  await api(admin, 'POST', `${pageApi}/${landing.documentId}/publish`);
+  r = await page$(browser(), '/smoke-landing');
+  assert(r.res.status === 200 && r.text.includes('Smoke landing body') && r.text.includes(LANDING_HEADER), `GET /smoke-landing (${r.res.status}) lacks its body / replaced header`);
+  assert(!r.text.includes(BASE_HEADER) && !r.text.includes(BASE_FOOTER) && !r.text.includes('data-ocms-overlay'), 'GET /smoke-landing still shows the base header, footer or overlays');
+  const pubPages = await (await browser().send('/api/content/opencloudcmsPage?limit=100')).json();
+  assert(Array.isArray(pubPages.data) && pubPages.data.length > 0 && pubPages.data.every((p) => p.kind !== 'base'), `public page list shows a base page: ${JSON.stringify(pubPages)}`);
+  const delBase = await call0(admin, 'DELETE', `${pageApi}/${baseDoc.documentId}`);
+  assert(delBase.status === 409, `DELETE of the default base page -> ${delBase.status} ${delBase.text}`);
+  ok('/smoke-landing replaces the header and hides the footer; base pages not in the public list; deleting the used default base -> 409');
+
+  // 4f. private content types + private files (spec §7): order is absent from the public API (also preflight),
+  // readOnly fields are refused by the admin API, never published, and its invoice is a private file.
+  const anon = browser();
+  const unknownType = await anon.send('/api/content/no-such-type');
+  const unknownBody = await unknownType.json();
+  const pubOrder = await anon.send('/api/content/order');
+  const pubOrderBody = await pubOrder.json();
+  assert(pubOrder.status === 404 && pubOrderBody.error?.code === unknownBody.error?.code, `GET /api/content/order -> ${pubOrder.status} ${JSON.stringify(pubOrderBody)}`);
+  const preflight = await anon.send('/api/content/order', { method: 'OPTIONS', headers: { origin: 'https://shop.example', 'access-control-request-method': 'GET' } });
+  await preflight.text();
+  assert(preflight.status === 404 && !preflight.headers.has('access-control-allow-origin'), `OPTIONS /api/content/order -> ${preflight.status}`);
+  const types = await api(admin, 'GET', '/api/admin/content-types');
+  assert(types.data.find((t) => t.apiId === 'order')?.private === true, `GET /api/admin/content-types: order not private ${JSON.stringify(types.data.map((t) => [t.apiId, t.private]))}`);
+  const orderApi = '/api/admin/content/order';
+  const ro = await call0(admin, 'POST', orderApi, { code: 'SMK-1', orderStatus: 'paid', total: { amount: 1000, currency: 'USD' } });
+  assert(ro.status === 422 && ro.body?.error?.code === 'read_only', `POST order with readOnly total -> ${ro.status} ${ro.text}`);
+  const order = (await api(admin, 'POST', orderApi, { code: 'SMK-1', orderStatus: 'paid' })).data;
+  const pubTry = await call0(admin, 'POST', `${orderApi}/${order.documentId}/publish`);
+  assert(pubTry.status === 409, `publish of a private entry -> ${pubTry.status} ${pubTry.text}`);
+  const upload = async (buffer, filename, type) => {
+    const form = new FormData();
+    form.append('field', 'invoice');
+    form.append('file', new Blob([buffer], { type }), filename);
+    const res = await admin.send(`${orderApi}/assets`, { method: 'POST', headers: { origin: publicUrl }, body: form });
+    const text = await res.text();
+    return { status: res.status, body: text ? JSON.parse(text) : null, text };
+  };
+  const notPdf = await upload(Buffer.from('not a pdf'), 'fake.pdf', 'application/pdf');
+  assert(notPdf.status === 415 && notPdf.body?.error?.code === 'unsupported_file_type', `upload of a non-PDF into invoice -> ${notPdf.status} ${notPdf.text}`);
+  const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n');
+  const up = await upload(pdf, 'invoice-SMK-1.pdf', 'application/pdf');
+  assert(up.status === 201 || up.status === 200, `private upload -> ${up.status} ${up.text}`);
+  const invoiceId = up.body.data.id;
+  assert(!up.body.data.url, `a private file has a URL: ${JSON.stringify(up.body.data)}`);
+  await api(admin, 'PATCH', `${orderApi}/${order.documentId}`, { invoice: invoiceId });
+  const dl = await admin.send(`/api/admin/assets/${invoiceId}/file`);
+  const dlBody = Buffer.from(await dl.arrayBuffer());
+  assert(dl.status === 200 && dlBody.subarray(0, 5).toString() === '%PDF-', `admin download -> ${dl.status}`);
+  assert((dl.headers.get('content-disposition') ?? '').startsWith('attachment') && (dl.headers.get('cache-control') ?? '').includes('no-store'), `download headers: ${JSON.stringify([...dl.headers])}`);
+  const anonDl = await anon.send(`/api/admin/assets/${invoiceId}/file`);
+  await anonDl.text();
+  assert(anonDl.status === 401, `anonymous download of a private file -> ${anonDl.status}`);
+  const media = await api(admin, 'GET', `/api/admin/assets?ids=${invoiceId}`);
+  assert(Array.isArray(media.data) && media.data.length === 0, `media library lists the private file: ${JSON.stringify(media)}`);
+  await api(admin, 'DELETE', `${orderApi}/${order.documentId}`);
+  const gone = await admin.send(`/api/admin/assets/${invoiceId}/file`);
+  await gone.text();
+  assert(gone.status === 404, `download after deleting the order -> ${gone.status}`);
+  ok('private order: 404 on /api/content (and preflight), readOnly total -> 422, publish -> 409; PDF invoice private (sniffed, no URL, not in the media library, admin-only download, deleted with the entry)');
 
   // 5. groups + review workflow: the super admin creates a Contenter and a Reviewer from the seed groups
   const call = async (b, method, path, body) => {

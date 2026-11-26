@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import { Input } from './ui/input';
@@ -7,7 +7,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea';
 import { t } from '../i18n';
 import { api } from '../lib/api';
+import { useFormat } from '../i18n/hooks';
 import type { FieldDefinition } from '../lib/types';
+import { DownloadIcon, FileIcon, XIcon } from 'lucide-react';
+
+/** A private file owned by an entry (`GET /api/admin/content/:apiId/:documentId/files`). */
+export interface EntryFile {
+  id: string;
+  filename: string;
+  size: number | null;
+  mime: string | null;
+}
 
 type AssetMeta = { mimeType: string | null; alt: string | null };
 type Option = { value: string; label: string; asset?: AssetMeta };
@@ -17,6 +27,10 @@ const optionCache = new Map<string, Promise<Option[]>>();
 // Set from `meta.uploadEnabled` of the asset list response; upload route only exists when `assets` is configured.
 let assetsUploadEnabled = false;
 const NONE = '__none__';
+
+type AriaProps = { 'aria-invalid'?: boolean; 'aria-describedby'?: string };
+/** Error state of the field (form validation) for the widget's main control. */
+const FieldAria = createContext<AriaProps>({});
 const META_KEYS = ['documentId', 'status', 'locale', 'createdAt', 'updatedAt', 'publishedAt'];
 
 function loadOptions(field: FieldDefinition): Promise<Option[]> {
@@ -162,9 +176,10 @@ function AssetTools({
   );
 }
 
-function RelationInput({ id, field, value, onChange }: { id: string; field: FieldDefinition; value: any; onChange: (v: any) => void }) {
+function RelationInput({ id, field, value, onChange, disabled }: { id: string; field: FieldDefinition; value: any; onChange: (v: any) => void; disabled?: boolean }) {
   const [options, setOptions] = useState<Option[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
+  const aria = useContext(FieldAria);
   useEffect(() => {
     let live = true;
     loadOptions(field).then((o) => live && setOptions(o));
@@ -174,7 +189,7 @@ function RelationInput({ id, field, value, onChange }: { id: string; field: Fiel
   }, [field.kind, field.options.target, field.options.taxonomy, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tools =
-    field.kind === 'asset' ? (
+    field.kind === 'asset' && !disabled ? (
       <AssetTools id={id} field={field} value={value} options={options} onChange={onChange} onReload={() => setReloadKey((k) => k + 1)} uploadEnabled={assetsUploadEnabled} />
     ) : null;
 
@@ -185,6 +200,7 @@ function RelationInput({ id, field, value, onChange }: { id: string; field: Fiel
       <>
         <div
           id={id}
+          {...aria}
           role="group"
           aria-labelledby={`${id}-label`}
           className="max-h-44 space-y-2 overflow-y-auto rounded-md border border-input p-3"
@@ -192,7 +208,7 @@ function RelationInput({ id, field, value, onChange }: { id: string; field: Fiel
           {options.length === 0 && <p className="text-sm text-muted-foreground">{t('field.noOptions')}</p>}
           {options.map((o) => (
             <div key={o.value} className="flex items-center gap-2">
-              <Checkbox id={`${id}-${o.value}`} checked={selected.includes(o.value)} onCheckedChange={(c) => toggle(o.value, c === true)} />
+              <Checkbox id={`${id}-${o.value}`} disabled={disabled} checked={selected.includes(o.value)} onCheckedChange={(c) => toggle(o.value, c === true)} />
               <Label htmlFor={`${id}-${o.value}`} className="font-normal">
                 {o.label}
               </Label>
@@ -205,8 +221,8 @@ function RelationInput({ id, field, value, onChange }: { id: string; field: Fiel
   }
   return (
     <>
-      <Select value={value ?? NONE} onValueChange={(v) => onChange(v === NONE ? null : v)}>
-        <SelectTrigger id={id} className="w-full">
+      <Select value={value ?? NONE} disabled={disabled} onValueChange={(v) => onChange(v === NONE ? null : v)}>
+        <SelectTrigger id={id} {...aria} className="w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -223,17 +239,20 @@ function RelationInput({ id, field, value, onChange }: { id: string; field: Fiel
   );
 }
 
-function JsonInput({ id, value, onChange }: { id: string; value: any; onChange: (v: any) => void }) {
+function JsonInput({ id, value, onChange, disabled }: { id: string; value: any; onChange: (v: any) => void; disabled?: boolean }) {
   const [text, setText] = useState(value == null ? '' : JSON.stringify(value, null, 2));
   const [bad, setBad] = useState(false);
+  const aria = useContext(FieldAria);
+  const describedBy = [bad ? `${id}-error` : '', aria['aria-describedby'] ?? ''].filter(Boolean).join(' ');
   return (
     <>
       <Textarea
         id={id}
         className="font-mono"
+        disabled={disabled}
         value={text}
-        aria-invalid={bad}
-        aria-describedby={bad ? `${id}-error` : undefined}
+        aria-invalid={bad || aria['aria-invalid'] || undefined}
+        aria-describedby={describedBy || undefined}
         onChange={(e) => {
           setText(e.target.value);
           if (!e.target.value.trim()) {
@@ -263,19 +282,40 @@ interface FieldInputProps {
   field: FieldDefinition;
   value: any;
   onChange: (v: any) => void;
+  /** Shown but not editable (readOnly fields, the detail page, entries locked in review). */
+  disabled?: boolean;
+  /**
+   * Asset fields of a private type (spec §7): files upload to the type's private route and show filename, size and
+   * Download; `files` holds the metadata of the files the entry already owns.
+   */
+  privateAssets?: { apiId: string; files: EntryFile[] };
+  /** Validation state: sets `aria-invalid` and `aria-describedby` (the error / help ids) on the main control. */
+  invalid?: boolean;
+  describedBy?: string;
 }
 
-export function FieldInput({ id, field, value, onChange }: FieldInputProps) {
+export function FieldInput({ invalid, describedBy, ...props }: FieldInputProps) {
+  const aria: AriaProps = { 'aria-invalid': invalid || undefined, 'aria-describedby': describedBy || undefined };
+  return (
+    <FieldAria.Provider value={aria}>
+      <FieldControl {...props} aria={aria} />
+    </FieldAria.Provider>
+  );
+}
+
+function FieldControl({ id, field, value, onChange, disabled, privateAssets, aria }: FieldInputProps & { aria: AriaProps }) {
   switch (field.kind) {
     case 'longText':
-      return <Textarea id={id} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} />;
+      return <Textarea id={id} {...aria} disabled={disabled} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} />;
     case 'richText':
     case 'json':
-      return <JsonInput id={id} value={value} onChange={onChange} />;
+      return <JsonInput id={id} disabled={disabled} value={value} onChange={onChange} />;
     case 'number':
       return (
         <Input
           id={id}
+          {...aria}
+          disabled={disabled}
           type="number"
           step={field.options.format === 'decimal' ? 'any' : 1}
           value={value ?? ''}
@@ -283,13 +323,15 @@ export function FieldInput({ id, field, value, onChange }: FieldInputProps) {
         />
       );
     case 'boolean':
-      return <Checkbox id={id} checked={!!value} onCheckedChange={(c) => onChange(c === true)} />;
+      return <Checkbox id={id} {...aria} disabled={disabled} checked={!!value} onCheckedChange={(c) => onChange(c === true)} />;
     case 'date':
-      return <Input id={id} type="date" value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} />;
+      return <Input id={id} {...aria} disabled={disabled} type="date" value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} />;
     case 'datetime':
       return (
         <Input
           id={id}
+          {...aria}
+          disabled={disabled}
           type="datetime-local"
           value={value ? new Date(value).toISOString().slice(0, 16) : ''}
           onChange={(e) => onChange(e.target.value ? new Date(e.target.value).toISOString() : null)}
@@ -301,6 +343,8 @@ export function FieldInput({ id, field, value, onChange }: FieldInputProps) {
         <div className="flex gap-2">
           <Input
             id={id}
+            {...aria}
+            disabled={disabled}
             type="number"
             step="any"
             aria-label={t('field.amount')}
@@ -310,6 +354,7 @@ export function FieldInput({ id, field, value, onChange }: FieldInputProps) {
           />
           <Input
             className="w-24"
+            disabled={disabled}
             aria-label={t('field.currency')}
             placeholder={t('field.currencyPlaceholder')}
             maxLength={3}
@@ -320,10 +365,156 @@ export function FieldInput({ id, field, value, onChange }: FieldInputProps) {
       );
     }
     case 'asset':
+      if (privateAssets) {
+        return <PrivateAssetInput id={id} field={field} value={value} onChange={onChange} disabled={disabled} apiId={privateAssets.apiId} files={privateAssets.files} />;
+      }
+      return <RelationInput id={id} field={field} value={value} onChange={onChange} disabled={disabled} />;
     case 'reference':
     case 'taxonomy':
-      return <RelationInput id={id} field={field} value={value} onChange={onChange} />;
+      return <RelationInput id={id} field={field} value={value} onChange={onChange} disabled={disabled} />;
     default:
-      return <Input id={id} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} />;
+      return <Input id={id} {...aria} disabled={disabled} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} />;
   }
+}
+
+/** Human-readable file size (B / KB / MB / GB, one decimal). */
+export function formatBytes(n: number | null, formatNumber: (v: number, o?: Intl.NumberFormatOptions) => string): string {
+  if (n == null) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let v = n;
+  let u = 0;
+  while (v >= 1024 && u < units.length - 1) {
+    v /= 1024;
+    u++;
+  }
+  return `${formatNumber(v, { maximumFractionDigits: u === 0 ? 0 : 1 })} ${units[u]}`;
+}
+
+/** Opens a short-lived signed link (`POST /api/admin/assets/:id/link`) as a download. */
+async function downloadPrivate(id: string, filename: string) {
+  const { url } = await api<{ url: string; expiresAt: string }>(`/api/admin/assets/${id}/link`, { method: 'POST' });
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function PrivateAssetInput({
+  id,
+  field,
+  value,
+  onChange,
+  disabled,
+  apiId,
+  files,
+}: {
+  id: string;
+  field: FieldDefinition;
+  value: any;
+  onChange: (v: any) => void;
+  disabled?: boolean;
+  apiId: string;
+  files: EntryFile[];
+}) {
+  const { formatNumber } = useFormat();
+  const aria = useContext(FieldAria);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [uploaded, setUploaded] = useState<EntryFile[]>([]);
+  const multiple = !!field.options.multiple;
+  const selected: string[] = multiple ? (value ?? []) : value ? [value] : [];
+  const known = (sid: string) => uploaded.find((f) => f.id === sid) ?? files.find((f) => f.id === sid);
+  const saved = (sid: string) => !uploaded.some((f) => f.id === sid);
+
+  const upload = async (file: File) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      body.append('field', field.name);
+      const res = await api<{ data: { id: string; filename: string; size?: number | null; mimeType?: string | null } }>(
+        `/api/admin/content/${apiId}/assets`,
+        { method: 'POST', body },
+      );
+      const meta: EntryFile = { id: res.data.id, filename: res.data.filename, size: res.data.size ?? file.size, mime: res.data.mimeType ?? null };
+      setUploaded((u) => [...u, meta]);
+      onChange(multiple ? [...selected, meta.id] : meta.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const download = async (sid: string, filename: string) => {
+    setError(null);
+    try {
+      await downloadPrivate(sid, filename);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('content.downloadFailed'));
+    }
+  };
+
+  return (
+    <div id={id} {...aria} role="group" aria-labelledby={`${id}-label`} className="space-y-2">
+      {selected.length === 0 && <p className="text-sm text-muted-foreground">{t('content.noFile')}</p>}
+      {selected.length > 0 && (
+        <ul className="divide-y rounded-md border">
+          {selected.map((sid) => {
+            const f = known(sid);
+            const name = f?.filename ?? sid;
+            return (
+              <li key={sid} className="flex items-center gap-3 px-3 py-2 text-sm">
+                <FileIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{name}</span>
+                {f?.size != null && <span className="shrink-0 text-muted-foreground">{formatBytes(f.size, formatNumber)}</span>}
+                {/* A file uploaded in this session is not the entry's yet (the save attaches it): no download link. */}
+                {saved(sid) && (
+                  <Button type="button" variant="outline" size="sm" aria-label={t('content.downloadFile', { name })} onClick={() => void download(sid, name)}>
+                    <DownloadIcon aria-hidden="true" />
+                    {t('content.download')}
+                  </Button>
+                )}
+                {!disabled && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={t('content.removeFile', { name })}
+                    onClick={() => onChange(multiple ? selected.filter((s) => s !== sid) : null)}
+                  >
+                    <XIcon aria-hidden="true" />
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {!disabled && (multiple || selected.length === 0) && (
+        <Input
+          id={`${id}-upload`}
+          type="file"
+          aria-label={t('content.uploadFile')}
+          accept={Array.isArray(field.options.accept) ? field.options.accept.join(',') : undefined}
+          disabled={busy}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (file) void upload(file);
+          }}
+        />
+      )}
+      {busy && <p className="text-sm text-muted-foreground">{t('content.uploading')}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }

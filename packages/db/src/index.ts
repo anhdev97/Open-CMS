@@ -210,6 +210,45 @@ export const coreMigrations: Record<string, Migration> = {
       await db.schema.dropTable('ct_opencloudcms_page').execute();
     },
   },
+  '0007_page_kind': {
+    /**
+     * Base pages: document-level `kind` ('page' | 'base'), the default-base flag and a page's base choice. Matches the
+     * codegen DDL for the `kind` / `isDefault` / `layout` fields of page.type.ts plus `not null` and defaults.
+     */
+    async up(db) {
+      await db.schema
+        .alterTable('ct_opencloudcms_page')
+        .addColumn('kind', sql`varchar(16)`, (col) => col.notNull().defaultTo('page'))
+        .addColumn('is_default', sql`boolean`, (col) => col.notNull().defaultTo(false))
+        .addColumn('layout', sql`jsonb`)
+        .execute();
+    },
+    async down(db) {
+      await db.schema.alterTable('ct_opencloudcms_page').dropColumn('layout').dropColumn('is_default').dropColumn('kind').execute();
+    },
+  },
+  '0008_private_assets': {
+    /**
+     * Private files (spec §7, decision 9): `visibility` ('public' | 'private'), the private content type and entry
+     * that own a private file (`owner_document_id` null = uploaded, not yet attached). Private rows store `url = ''`.
+     */
+    async up(db) {
+      await db.schema
+        .alterTable(SYSTEM_TABLES.assets)
+        .addColumn('visibility', 'varchar(16)', (c) => c.notNull().defaultTo('public'))
+        .addColumn('owner_api_id', 'varchar(64)')
+        .addColumn('owner_document_id', 'uuid')
+        .execute();
+      await db.schema.createIndex('opencms_assets_owner_idx').on(SYSTEM_TABLES.assets).columns(['owner_api_id', 'owner_document_id']).execute();
+    },
+    async down(db) {
+      // Without `visibility` every row would read as a public asset: drop the private rows first. Their stored
+      // objects stay where they are (private storage), unreferenced.
+      await db.deleteFrom(SYSTEM_TABLES.assets).where('visibility', '=', 'private').execute();
+      await db.schema.dropIndex('opencms_assets_owner_idx').execute();
+      await db.schema.alterTable(SYSTEM_TABLES.assets).dropColumn('owner_document_id').dropColumn('owner_api_id').dropColumn('visibility').execute();
+    },
+  },
 };
 
 /* ----------------------------- project ---------------------------- */

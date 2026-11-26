@@ -11,6 +11,17 @@
 
 ### Fixed
 
+- **Private files on S3/GCS can use their own bucket.** `assets.s3.privateBucket` / `assets.gcs.privateBucket`
+  (optional) receive every private file (`put`, `get` and `delete` with `visibility: 'private'`). Without it private
+  files share the media bucket under `private/`, and the provider sets no ACL: a bucket that serves public reads must
+  deny them on `private/*` (see "Private files" in the core README).
+- **Publishing a base page takes the default-base lock** (the one `setDefault`, unpublish and delete take), so
+  copying the draft's `isDefault` cannot interleave with a default change. The lock is taken by the new entry hook
+  `inPublishTransaction(documentId, ctx)`, which runs inside the publish transaction (`ctx.db`) before the published
+  rows are written. `base?id=default` picks the most recently updated default row should two ever be marked.
+- `by-path` filters `kind = 'page'` in the query instead of after taking one row, so a base row can never take
+  the page's place. Rolling back `0008_private_assets` deletes the private asset rows first (their stored objects
+  are left in private storage), so a rollback never lists private files as public assets.
 - **Publishing no longer changes the draft's `updatedAt`.** Only its `publishedAt` moves (`hasUnpublishedChanges`
   stays `updatedAt > publishedAt`), so a save sent with the `If-Match` the editor saw before Publish succeeds
   instead of answering 409 `stale_draft`. The page editor also re-reads the draft version after publishing.
@@ -32,6 +43,32 @@
   `enableShutdownHooks(['SIGINT', 'SIGTERM'], { useProcessExit: true })`.
 
 ### Breaking changes
+
+- **`StorageProvider` gains `get(key, visibility?)`, and `put`/`delete` take an optional `visibility`**
+  (`'public'` default, `'private'` for private files). Custom providers must implement `get`. The local provider
+  stores private files in `assets.local.privateRoot` (default: `private-assets` next to `assets.local.root`; the two
+  may not contain each other, symlinks included). **The local `/media` middleware now answers 404 for any path with
+  a `private` or `private-assets` segment**: public files uploaded earlier into a media folder whose slug is
+  `private` (key `private/…`) are no longer served there; upload them again (moving a file does not change its key;
+  new uploads into such a folder get the key segment `private-folder`).
+
+- **CORS preflight answers 404 for every `/api/content/<segment>` that is not served publicly.** Only public content
+  types and the asset lookup `/api/content/assets` get CORS headers and a 204 preflight; an `OPTIONS` request for an
+  unknown or private type **or for a custom route you mounted under `/api/content/<custom>`** now answers 404
+  (`not_found`, no CORS headers), the same as a `GET` of an unknown type, so a private type cannot be told from a
+  missing one. Move custom cross-origin routes out of `/api/content`.
+- **A custom `ContentFetcher` that can read private entries must implement `privateApiIds()`**
+  (`() => Promise<ReadonlySet<string>>`, the apiIds of private types). `resolvePage` drops bindings to those types
+  before fetching; a fetcher without it makes the resolver fail open, so a block bound to a private type would render
+  its entries (for example with an admin or draft fetcher of your own). The built-in `adminFetcher` implements it;
+  `publicFetcher` needs none (the public API answers 404 for private types).
+- **The my-store `StoreHeader` is one row at every width** (it was stacked on mobile): its nav links are hidden on
+  mobile, where the new ☰ button opens the `menu-mobile` drawer, and a Contact button opens the `lien-he` modal.
+  `StoreHeader` and `StoreFooter` moved from the pages into the base page "Store" (`pnpm seed:pages -- --force`
+  rewrites the seeded pages).
+
+- **Publishing a page without a path answers 422 `path_required`** (was 400 with a validation issue on `path`):
+  `path` is now required by the page hooks for `kind: 'page'` only, since base pages have none.
 
 - **Core link buttons drop links they used to render.** Because of `safeHref` (see Fixed), existing page content
   whose `Button`, `ButtonGroup`, `Card`, `Hero` or `CallToAction` links are relative without a leading `/`
@@ -116,6 +153,54 @@
   returns `meta.uploadEnabled` (true when `assets` is configured). Clients reading the old fields must be updated.
 
 ### Added
+
+- **Base pages.** Rows of the page type with `kind: 'base'` (core migration `0007_page_kind`: `kind`, `is_default`,
+  `layout`), edited in **Page builder > Pages > Base pages** with drafts, publish, versions, locales and permissions.
+  A base page's content is one **layout block** (a composed block with `Region` elements, slot fields
+  `region__<name>`, and one `PageContent`, field `pageContent`); publish checks: 422 `invalid_base_root`,
+  `layout_block_misplaced`, `base_has_path`. A page's `layout` (`null | { baseId?: string | null; regions?:
+  Record<string, 'default' | 'replace' | 'hide'> }`, absent `baseId` = the default base, `null` = none) chooses its
+  frame; replaced regions are the page's root props `region__<name>`. `PUT /api/admin/pages/bases/default`,
+  `GET /api/admin/pages/bases`, `GET /api/admin/pages/bases/:id/usage`, `GET /api/content/opencloudcmsPage/base`;
+  409 `base_is_default`, `base_in_use`, `base_not_published`. The website composes the page with its base
+  (`composeWithBase` from `@opencloudcms/core/blocks`); a missing base renders the page alone with one warning.
+  `PagesService` is exported from `@opencloudcms/core` and `OpenCloudCmsModule`.
+- **Overlays (modal / drawer) and button actions.** Block Builder elements `Overlay` (root only: `variant`, `side`,
+  `size`, `closeOnBackdrop`, `showClose`, `labelledBy`), `Region`, `PageContent`, and an `anchorId` prop on elements.
+  Overlay blocks get a page-builder `name` field and render as `<dialog data-ocms-overlay>`. A `Button` (composed, and
+  the library `Button` / `ButtonGroup` items) takes `action: { type: 'overlay', op: 'open' | 'close' | 'toggle',
+  target? } | { type: 'scroll', target }`; without one the output is unchanged. Printer and Export as TSX support all
+  three elements and actions.
+- **Client overlay API** `@opencloudcms/core/blocks/client` (`'use client'`, ESM and CJS): `openOverlay`,
+  `closeOverlay`, `toggleOverlay`, `closeAllOverlays`, `isOverlayOpen`, `subscribeOverlays`, `useOverlay`,
+  `<OverlayTrigger>`, `ActionButton`. The page renderer mounts `OverlayRouteWatcher` (closes overlays on navigation)
+  only on pages with an overlay or an action button.
+- **Private content types.** `private: true` on a content type and `readOnly: true` on fields (`@opencloudcms/schema`;
+  no `review`, no localizable fields, not a `reference` target of a public type, switchable only while empty).
+  `/api/content` answers 404 for them (preflight included), builders and reference expansion leave them out, entries
+  are never published (409 `private_type`) and have no version history, and the admin API refuses `readOnly` writes
+  (422 `read_only`). Server code uses the injectable **`PrivateEntriesService`** (`create`, `update`, `get`, `list`,
+  `remove`; may write `readOnly` fields; file values `{ buffer, filename, contentType }` for asset fields).
+  `GET /api/admin/content/:apiId/:documentId/files` lists an entry's private files.
+- **Private files** (`@opencloudcms/assets`, core migration `0008_private_assets`: `assets.visibility`). Asset fields
+  of private types store files outside the public media (`assets.local.privateRoot`; `private/` key prefix on
+  S3/GCS), with no URL and absent from the media library. Upload `POST /api/admin/content/:apiId/assets` (type sniffed
+  against `accept`, `maxBytes`), download `GET /api/admin/assets/:id/file` (`content.read`, attachment, `no-store`),
+  5-minute signed link `POST /api/admin/assets/:id/link`. Unattached uploads are swept after 24 h; deleting the entry
+  deletes its files. `AssetsService` gains `uploadPrivate(file, { ownerApiId, accept, uploadedBy? })`,
+  `openPrivate(id)` → `{ asset, stream }` and **`deletePrivate(id: string, expected: { ownerDocumentId: string | null
+  }): Promise<boolean>`**: it deletes the row only while the file is still owned as the caller saw it
+  (`ownerDocumentId`, `null` = unattached), then the storage object (`StorageProvider.delete(key, 'private')`; a
+  storage failure is logged and the object orphaned), and returns whether the row was deleted.
+- **Admin: separate pages for content and content type setup.** Content list / detail / new / edit pages and content
+  type list / detail / new / edit pages (content groups in a modal); private types show a lock, no publish, review,
+  locale or version controls, disabled `readOnly` fields and a Download button for private files.
+- **examples/my-store: base page, overlays and private orders.** `StoreFrame` (layout: `header`, page content,
+  `footer`), `ContactModal` (`lien-he`, md modal) and `MobileMenu` (`menu-mobile`, small left drawer) blocks;
+  `seed:pages` publishes the default base page "Store" and `/landing` (header replaced, footer hidden); a private
+  `order` type (`code`, `orderStatus`, readOnly `items` and `total`, PDF `invoice`) and `pnpm seed:orders` (two
+  orders with a generated placeholder PDF, through `PrivateEntriesService`). The smoke test (`scripts/smoke-init.mjs`)
+  covers the base frame, region replace/hide, the overlays and the private type with a private invoice.
 
 - **`opencloudcms init` writes `src/theme.ts`** (one palette: `surface`, `ink`, `accent`, `accent-ink`) and renders
   `<ThemeStyle theme={theme} />` in the `<head>` of `app/(site)/layout.tsx`, whose body uses

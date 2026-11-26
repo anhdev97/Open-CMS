@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { Readable } from 'node:stream';
 import { createS3Provider } from '../../src/provider/s3.provider';
 
 describe('createS3Provider', () => {
@@ -31,5 +32,38 @@ describe('createS3Provider', () => {
       { client: { send: vi.fn() } },
     );
     expect(p.publicUrl('a/b.webp')).toBe('https://cdn.example.com/a/b.webp');
+  });
+});
+
+describe('createS3Provider privateBucket', () => {
+  const cmds = (send: ReturnType<typeof vi.fn>) => send.mock.calls.map((c) => c[0] as { constructor: { name: string }; input: { Bucket: string; Key: string } });
+
+  it('puts, gets and deletes private objects in privateBucket', async () => {
+    const send = vi.fn().mockResolvedValue({ Body: Readable.from([Buffer.from('x')]) });
+    const p = createS3Provider({ bucket: 'pub', region: 'r', privateBucket: 'vault' }, { client: { send } });
+    await p.put('private/order/1', Buffer.from('x'), 'application/pdf', 'private');
+    await p.get('private/order/1', 'private');
+    await p.delete('private/order/1', 'private');
+    expect(cmds(send).map((c) => [c.constructor.name, c.input.Bucket, c.input.Key])).toEqual([
+      ['PutObjectCommand', 'vault', 'private/order/1'],
+      ['GetObjectCommand', 'vault', 'private/order/1'],
+      ['DeleteObjectCommand', 'vault', 'private/order/1'],
+    ]);
+  });
+
+  it('keeps public objects in the main bucket when privateBucket is set', async () => {
+    const send = vi.fn().mockResolvedValue({});
+    const p = createS3Provider({ bucket: 'pub', region: 'r', privateBucket: 'vault' }, { client: { send } });
+    await p.put('a/b.webp', Buffer.from('x'), 'image/webp');
+    await p.delete('a/b.webp', 'public');
+    expect(cmds(send).map((c) => c.input.Bucket)).toEqual(['pub', 'pub']);
+  });
+
+  it('keeps private objects in the main bucket when privateBucket is not set', async () => {
+    const send = vi.fn().mockResolvedValue({});
+    const p = createS3Provider({ bucket: 'pub', region: 'r' }, { client: { send } });
+    await p.put('private/order/1', Buffer.from('x'), 'application/pdf', 'private');
+    await p.delete('private/order/1', 'private');
+    expect(cmds(send).map((c) => c.input.Bucket)).toEqual(['pub', 'pub']);
   });
 });

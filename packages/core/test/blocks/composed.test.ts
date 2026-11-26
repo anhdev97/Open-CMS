@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { isDeepStrictEqual as isEqual } from 'node:util';
 import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -19,7 +20,7 @@ import {
   type CustomFieldRenderers,
   type Entry,
 } from '../../blocks/src';
-import { validateComposedSpec, validateTheme } from '@opencloudcms/schema';
+import { composedKind, validateComposedSpec, validateTheme } from '@opencloudcms/schema';
 import { loadComposedBlocks, loadConfig, loadTheme, printComposedBlockFile, printThemeFile } from '@opencloudcms/codegen';
 import { readEntryImage, readEntryMoney } from '../../blocks/src/composed/values';
 import { GRID_N } from '../../blocks/src/ui/tokens';
@@ -687,7 +688,7 @@ describe('defineComposedBlock: style', () => {
 // Block Builder files and a theme. Every file must validate, render, and survive a builder/Theme save unchanged.
 describe('examples/my-store storefront', () => {
   const root = path.resolve(__dirname, '../../../../examples/my-store');
-  const STORE = ['StoreHeader', 'StoreHero', 'SectionHead', 'StoryBand', 'StoreFooter'];
+  const STORE = ['StoreHeader', 'StoreHero', 'SectionHead', 'StoryBand', 'StoreFooter', 'StoreFrame', 'ContactModal', 'MobileMenu'];
   const ALL = [...STORE, 'FeaturedProducts'];
   const load = async () => {
     const config = await loadConfig(root);
@@ -726,7 +727,10 @@ describe('examples/my-store storefront', () => {
 
   it('StoreHeader and StoreHero: base (mobile) and md layouts', async () => {
     const header = await renderStore('StoreHeader');
-    expect(header).toContain('flex-col md:flex-row');
+    // One row at every width; the nav links are hidden on mobile (the ☰ drawer holds them).
+    expect(header).toContain('flex-row');
+    expect(header).not.toContain('flex-col');
+    expect(header).toContain('hidden md:flex');
     expect(header).toContain('justify-between');
     expect(header).toContain('--ocms-minh:76px');
     expect(header).toContain('--ocms-pl:5%');
@@ -765,6 +769,61 @@ describe('examples/my-store storefront', () => {
     expect(out).not.toContain('data-slot="card"');
   });
 
+  // Base pages and overlays (spec 2026-11-25): the StoreFrame layout of the "Store" base page, the contact modal
+  // and the mobile menu drawer, and the header/footer buttons that open them.
+  const spec = async (name: string) => (await load()).specs.find((s) => s.spec.name === name)!.spec;
+  /** Specs nodes in tree order. */
+  const nodes = (n: ComposedBlockSpec['tree']): ComposedBlockSpec['tree'][] => [n, ...(n.children ?? []).flatMap(nodes)];
+  const buttons = async (name: string) => nodes((await spec(name)).tree).filter((n) => n.el === 'Button');
+
+  it('StoreFrame: a layout block with Region header, PageContent and Region footer, in that order', async () => {
+    const s = await spec('StoreFrame');
+    expect(composedKind(s)).toBe('layout');
+    const def = defineComposedBlock(s);
+    expect(def.kind).toBe('layout');
+    expect(Object.keys(def.fields).filter((k) => k.startsWith('region__') || k === 'pageContent')).toEqual(['region__header', 'pageContent', 'region__footer']);
+    const out = render(def, { region__header: '[HEADER]', pageContent: '[PAGE]', region__footer: '[FOOTER]' });
+    expect(out.indexOf('[HEADER]')).toBeGreaterThan(-1);
+    expect(out.indexOf('[HEADER]')).toBeLessThan(out.indexOf('[PAGE]'));
+    expect(out.indexOf('[PAGE]')).toBeLessThan(out.indexOf('[FOOTER]'));
+  });
+
+  it('ContactModal: a md modal with a heading, text, email and phone links and a close button', async () => {
+    const s = await spec('ContactModal');
+    expect(composedKind(s)).toBe('overlay');
+    expect(s.tree.props).toMatchObject({ variant: 'modal', size: 'md' });
+    const def = defineComposedBlock(s);
+    const out = render(def, { ...defaults(s), name: 'lien-he' });
+    expect(out).toMatch(/^<dialog [^>]*data-ocms-overlay="lien-he"/);
+    expect(out).toContain('aria-labelledby="lien-he-title"');
+    expect(out).toMatch(/<h2 id="lien-he-title"/);
+    expect(out).toContain('href="mailto:hello@example.com"');
+    expect(out).toMatch(/href="tel:\+?[0-9]+"/);
+    expect((await buttons('ContactModal')).some((b) => isEqual(b.props?.action, { type: 'overlay', op: 'close' }))).toBe(true);
+  });
+
+  it('MobileMenu: a small left drawer with the store nav links', async () => {
+    const s = await spec('MobileMenu');
+    expect(composedKind(s)).toBe('overlay');
+    expect(s.tree.props).toMatchObject({ variant: 'drawer', side: 'left', size: 'sm' });
+    const out = render(defineComposedBlock(s), { ...defaults(s), name: 'menu-mobile' });
+    expect(out).toMatch(/^<dialog [^>]*data-ocms-overlay="menu-mobile"/);
+    for (const href of ['/', '/shop', '/about']) expect(out).toContain(`href="${href}"`);
+  });
+
+  it('StoreHeader: a menu toggle hidden on desktop, a Contact button; StoreFooter: a Contact link', async () => {
+    const header = await buttons('StoreHeader');
+    const toggle = header.find((b) => isEqual(b.props?.action, { type: 'overlay', op: 'toggle', target: 'menu-mobile' }));
+    expect(toggle?.style?.hidden).toEqual({ md: true, lg: true });
+    expect(header.some((b) => isEqual(b.props?.action, { type: 'overlay', op: 'open', target: 'lien-he' }))).toBe(true);
+    const out = await renderStore('StoreHeader');
+    expect(out).toContain('md:hidden');
+    expect(out).toContain('lg:hidden');
+    expect(out).toContain('☰');
+    const footer = await buttons('StoreFooter');
+    expect(footer.some((b) => isEqual(b.props?.action, { type: 'overlay', op: 'open', target: 'lien-he' }))).toBe(true);
+  });
+
   it('src/theme.ts: the three palettes of the mockup, valid, printed exactly as the Theme screen writes it', async () => {
     const { config } = await load();
     const theme = (await loadTheme(config))!;
@@ -776,5 +835,149 @@ describe('examples/my-store storefront', () => {
     expect(theme.palettes.clay.values.accent).toBe('#8b432f');
     expect(theme.palettes.night.values.accent).toBe('#20483c');
     expect(printThemeFile(theme)).toBe(fs.readFileSync(path.join(root, 'src/theme.ts'), 'utf8'));
+  });
+});
+
+describe('layout and overlay blocks, button actions', () => {
+  const overlaySpec = (props: Record<string, unknown> = {}) =>
+    base({
+      name: 'LienHe',
+      fields: { title: { kind: 'text', default: 'Contact us' } },
+      tree: {
+        el: 'Overlay',
+        props,
+        children: [
+          { el: 'Heading', props: { level: 2 }, bind: { text: { from: 'field', name: 'title' } } },
+          { el: 'Text', props: { text: 'Body' } },
+          { el: 'Button', props: { label: 'Done', action: { type: 'overlay', op: 'close' } } },
+        ],
+      },
+    });
+  const layoutSpec = () =>
+    base({
+      name: 'SiteFrame',
+      tree: {
+        el: 'Stack',
+        children: [
+          { el: 'Region', props: { name: 'header', label: { 'en-US': 'Header', 'vi-VN': 'Đầu trang' } } },
+          { el: 'Box', children: [{ el: 'PageContent' }] },
+          { el: 'Region', props: { name: 'footer-bar', allow: ['Footer'] } },
+          { el: 'Slot' },
+        ],
+      },
+    });
+
+  it('overlay: renders a dialog named after the block (kebab case) with its children and a close button', () => {
+    const def = defineComposedBlock(overlaySpec());
+    expect(def.kind).toBe('overlay');
+    expect(Object.keys(def.fields)).toEqual(['name', 'title']);
+    expect(def.fields.name).toMatchObject({ kind: 'text', default: 'lien-he' });
+    const out = render(def, { name: 'lien-he', title: 'Contact us' });
+    expect(out).toMatch(/^<dialog [^>]*data-ocms-overlay="lien-he"/);
+    expect(out).toContain('data-close-on-backdrop="true"');
+    expect(out).toContain('aria-labelledby="lien-he-title"');
+    expect(out).toMatch(/<h2 id="lien-he-title"[^>]*>Contact us<\/h2>/);
+    expect(out).toContain('Body');
+    // × close button plus the Done action button.
+    expect(out.match(/<button type="button"/g)).toHaveLength(2);
+    expect(out).toContain('aria-label="Close"');
+    expect(out).toMatch(/<\/dialog>$/);
+  });
+
+  it('overlay: the page-builder name wins; invalid names fall back to the default', () => {
+    const def = defineComposedBlock(overlaySpec());
+    expect(render(def, { name: 'menu-mobile' })).toContain('data-ocms-overlay="menu-mobile"');
+    expect(render(def, { name: 'Bad Name' })).toContain('data-ocms-overlay="lien-he"');
+    expect(render(def, {})).toContain('data-ocms-overlay="lien-he"');
+  });
+
+  it('overlay: variant, side, size, closeOnBackdrop and showClose come from the literal tables', async () => {
+    const { OVERLAY_SIDE, OVERLAY_SIZE, OVERLAY_VARIANT } = await import('../../blocks/src/ui/overlay');
+    const drawer = render(defineComposedBlock(overlaySpec({ variant: 'drawer', side: 'left', size: 'lg', closeOnBackdrop: false, showClose: false })), { name: 'x' });
+    const cls = /class="([^"]*)"/.exec(drawer)![1].split(' ');
+    for (const c of OVERLAY_SIDE.left.split(' ')) expect(cls).toContain(c);
+    for (const c of OVERLAY_SIZE.x.lg.split(' ')) expect(cls).toContain(c);
+    for (const c of OVERLAY_VARIANT.drawer.split(' ')) expect(cls).toContain(c);
+    expect(drawer).toContain('data-close-on-backdrop="false"');
+    expect(drawer).not.toContain('aria-label="Close"');
+    const modal = render(defineComposedBlock(overlaySpec()), {});
+    const mcls = /class="([^"]*)"/.exec(modal)![1].split(' ');
+    for (const c of OVERLAY_SIZE.modal.md.split(' ')) expect(mcls).toContain(c);
+    const top = render(defineComposedBlock(overlaySpec({ variant: 'drawer', side: 'top', size: 'sm' })), {});
+    for (const c of OVERLAY_SIZE.y.sm.split(' ')) expect(/class="([^"]*)"/.exec(top)![1].split(' ')).toContain(c);
+  });
+
+  it('overlay: labelled by the first heading that is shown', () => {
+    const def = defineComposedBlock(
+      base({
+        name: 'LienHe',
+        fields: { intro: { kind: 'boolean', default: true } },
+        tree: {
+          el: 'Overlay',
+          children: [
+            { el: 'Box', showIf: { from: 'field', name: 'intro', is: 'present' }, children: [{ el: 'Heading', props: { text: 'Intro' } }] },
+            { el: 'Heading', props: { text: 'Main', anchorId: 'main-title' } },
+          ],
+        },
+      }),
+    );
+    const shown = render(def, { intro: true });
+    expect(shown).toContain('aria-labelledby="lien-he-title"');
+    expect(shown).toMatch(/<h2 id="lien-he-title"[^>]*>Intro/);
+    const hidden = render(def, { intro: false });
+    expect(hidden).toContain('aria-labelledby="main-title"');
+    expect(hidden).not.toContain('lien-he-title');
+  });
+
+  it('overlay: full size lifts the dialog max height', async () => {
+    const { OVERLAY_SIZE } = await import('../../blocks/src/ui/overlay');
+    expect(OVERLAY_SIZE.modal.full.split(' ')).toContain('max-h-none');
+    expect(OVERLAY_SIZE.x.full.split(' ')).toContain('max-h-none');
+  });
+
+  it('overlay: the close label follows the locale', () => {
+    expect(render(defineComposedBlock(overlaySpec()), { _locale: 'vi-VN' })).toContain('aria-label="Đóng"');
+  });
+
+  it('layout: one slot field per Region and pageContent, rendered in tree order', () => {
+    const def = defineComposedBlock(layoutSpec());
+    expect(def.kind).toBe('layout');
+    expect(Object.keys(def.fields)).toEqual(['slot', 'region__header', 'pageContent', 'region__footer-bar']);
+    expect(def.fields['region__footer-bar']).toMatchObject({ kind: 'slot', allow: ['Footer'] });
+    expect(def.fields.region__header).toMatchObject({ kind: 'slot', label: { 'en-US': 'Header', 'vi-VN': 'Đầu trang' } });
+    const out = render(def, { region__header: '[HEADER]', pageContent: '[PAGE]', 'region__footer-bar': '[FOOTER]', slot: '[SLOT]' });
+    expect(out.indexOf('[HEADER]')).toBeGreaterThan(-1);
+    expect(out.indexOf('[HEADER]')).toBeLessThan(out.indexOf('[PAGE]'));
+    expect(out.indexOf('[PAGE]')).toBeLessThan(out.indexOf('[FOOTER]'));
+    expect(out.indexOf('[FOOTER]')).toBeLessThan(out.indexOf('[SLOT]'));
+    expect(() => defineBlocks([def])).not.toThrow();
+  });
+
+  it('manifest lists the kind of layout and overlay blocks', async () => {
+    const { blockManifest } = await import('../../blocks/src');
+    const r = defineBlocks([defineComposedBlock(layoutSpec()), defineComposedBlock(overlaySpec()), defineComposedBlock(productCard())]);
+    expect(blockManifest(r).map((m) => [m.name, m.kind])).toEqual([['SiteFrame', 'layout'], ['LienHe', 'overlay'], ['ProductCard', undefined]]);
+    expect(defineComposedBlock(productCard()).kind).toBe('block');
+  });
+
+  it('Button with an action renders a <button type="button"> with the link classes and no href', () => {
+    const btn = (props: Record<string, unknown>, style?: Record<string, unknown>) =>
+      render(defineComposedBlock(base({ tree: { el: 'Button', props: { label: 'Open', href: '/x', variant: 'outline', size: 'lg', ...props }, ...(style ? { style } : {}) } })), {});
+    const link = btn({}, { background: 'brand:accent' });
+    const action = btn({ action: { type: 'overlay', op: 'open', target: 'lien-he' } }, { background: 'brand:accent' });
+    expect(action).toMatch(/^<button type="button"/);
+    expect(action).not.toContain('href');
+    const attrs = (s: string) => [/class="([^"]*)"/.exec(s)![1], /style="([^"]*)"/.exec(s)![1]];
+    expect(attrs(action)).toEqual(attrs(link));
+    expect(action).toContain('>Open</button>');
+    expect(link).toMatch(/^<a data-slot="button" href="\/x"/);
+    // An invalid action never reaches the renderer: the spec is rejected.
+    expect(() => btn({ action: { type: 'overlay', op: 'open' } })).toThrow(/action\.target/);
+  });
+
+  it('anchorId becomes the element id', () => {
+    const out = render(defineComposedBlock(base({ tree: { el: 'Box', props: { anchorId: 'gioi-thieu' }, children: [{ el: 'Heading', props: { text: 'Hi', anchorId: 'h1' } }] } })), {});
+    expect(out).toMatch(/^<div id="gioi-thieu"/);
+    expect(out).toContain('<h2 id="h1"');
   });
 });

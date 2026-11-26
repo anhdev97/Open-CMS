@@ -1,4 +1,4 @@
-import { composedFieldNameIssue } from '@opencloudcms/schema';
+import { composedFieldNameIssue, composedKind, validateComposedSpec } from '@opencloudcms/schema';
 import { describe, expect, it } from 'vitest';
 import type { ComposedBlockSpec } from '@opencloudcms/schema';
 import {
@@ -21,7 +21,8 @@ import {
   suggestName,
 } from '../../admin/src/block-builder/logic';
 import { canvasFieldValues, placeholderEntry, sampleQuery } from '../../admin/src/block-builder/sample-data';
-import { STYLE_SECTIONS, buildBuilderConfig } from '../../admin/src/block-builder/element-config';
+import { STYLE_SECTIONS, buildBuilderConfig, paletteCategories } from '../../admin/src/block-builder/element-config';
+import { enUS } from '../../admin/src/i18n/messages/en-US';
 import { migrateLegacyProps } from '../../admin/src/block-builder/style/migrate';
 import { DEVICE_VIEWPORTS, breakpointForWidth } from '../../admin/src/block-builder/style/breakpoint';
 import { shownTracks } from '../../admin/src/block-builder/style/puck-fields';
@@ -153,6 +154,13 @@ describe('names and ids', () => {
   it('new ids match the spec pattern', () => {
     expect(newBlockId()).toMatch(/^blk_[a-z0-9]{6,}$/);
   });
+  it('the overlay starting template is a valid overlay block', () => {
+    const o = { ...emptySpec('blk_abcdef1', 'overlay'), name: 'Menu', label: { 'en-US': 'Menu' } };
+    expect(o.tree.el).toBe('Overlay');
+    expect(o.tree.props).toEqual({ variant: 'modal', size: 'md', closeOnBackdrop: true, showClose: true });
+    expect(validateComposedSpec(o)).toEqual([]);
+    expect(composedKind(o)).toBe('overlay');
+  });
   it('emptySpec is a valid starting point', () => {
     const s = emptySpec('blk_abcdef');
     expect(s).toMatchObject({ id: 'blk_abcdef', name: '', version: 1, fields: {}, tree: { el: 'Card' } });
@@ -229,6 +237,18 @@ describe('change summary and breaking notes', () => {
       { key: 'binding' },
     ]);
     expect(breakingNotes(null, next)).toEqual([]);
+  });
+  it('a kind change (block ↔ layout ↔ overlay) and a region change are breaking notes', () => {
+    const block = { ...spec(), fields: {}, tree: { el: 'Stack', children: [{ el: 'Heading' }] } } as ComposedBlockSpec;
+    const layout = { ...block, tree: { el: 'Stack', children: [{ el: 'Region', props: { name: 'header' } }, { el: 'PageContent' }] } } as ComposedBlockSpec;
+    const overlay = { ...block, tree: { el: 'Overlay', children: [{ el: 'Heading' }] } } as ComposedBlockSpec;
+    expect(breakingNotes(block, layout)).toEqual([{ key: 'kind', from: 'block', to: 'layout' }]);
+    expect(breakingNotes(block, overlay)).toEqual([{ key: 'kind', from: 'block', to: 'overlay' }]);
+    const renamed = { ...layout, tree: { el: 'Stack', children: [{ el: 'Region', props: { name: 'top' } }, { el: 'PageContent' }] } } as ComposedBlockSpec;
+    expect(breakingNotes(layout, renamed)).toEqual([{ key: 'regions' }]);
+    expect(enUS.blockBuilder.changes.kind).toContain('{from}');
+    expect(enUS.blockBuilder.changes.kind).toContain('{to}');
+    expect(enUS.blockBuilder.changes.regions).toBeTruthy();
   });
   it('removing or moving a Slot is a breaking note', () => {
     const prev = { ...spec(), tree: { el: 'Stack', children: [{ el: 'Slot' }, { el: 'Slot' }] } } as ComposedBlockSpec;
@@ -447,7 +467,14 @@ describe('style sections per element (spec table)', () => {
     expect(STYLE_SECTIONS.Image).toEqual(expect.arrayContaining(['margin', 'size']));
     expect(STYLE_SECTIONS.Image).not.toContain('colors');
     expect(STYLE_SECTIONS.Divider).not.toContain('size');
-    for (const sections of Object.values(STYLE_SECTIONS)) expect(sections).toContain('span');
+    for (const [el, sections] of Object.entries(STYLE_SECTIONS)) {
+      if (!['Region', 'PageContent', 'Overlay'].includes(el)) expect(sections).toContain('span');
+    }
+  });
+  it('Region and PageContent have no style; the Overlay frame gets spacing, size and colors (no visibility or span)', () => {
+    expect(STYLE_SECTIONS.Region).toEqual([]);
+    expect(STYLE_SECTIONS.PageContent).toEqual([]);
+    expect(STYLE_SECTIONS.Overlay).toEqual(['spacing', 'size', 'colors']);
   });
 });
 
@@ -466,7 +493,10 @@ describe('builder Puck config and the style system', () => {
   const comp = (el: string) => config.components[el] as unknown as Comp;
 
   it('one style field per element; new layout fields; Box/Card padding and background move into the style panel', () => {
-    for (const el of Object.keys(config.components)) expect(comp(el).fields).toHaveProperty('style');
+    for (const el of Object.keys(config.components)) {
+      if (el === 'Region' || el === 'PageContent') expect(comp(el).fields).not.toHaveProperty('style');
+      else expect(comp(el).fields).toHaveProperty('style');
+    }
     expect(Object.keys(comp('Columns').fields)).toEqual(expect.arrayContaining(['tracks', 'alignY', 'gapX', 'gapY']));
     expect(Object.keys(comp('Stack').fields)).toEqual(expect.arrayContaining(['justify', 'wrap']));
     expect(Object.keys(comp('Image').fields)).toEqual(expect.arrayContaining(['fit', 'aspect']));
@@ -524,5 +554,78 @@ describe('device breakpoints and canvas fidelity', () => {
     expect(shownTracks(undefined, 3)).toEqual({ base: ['1fr'], md: ['1fr', '1fr', '1fr'] });
     expect(shownTracks(null, undefined)).toBeUndefined();
     expect(shownTracks({ base: ['2fr'] }, 3)).toEqual({ base: ['2fr'] });
+  });
+});
+
+describe('layout and overlay elements in the builder', () => {
+  const stub = (() => null) as never;
+  const make = (collection: boolean, regionNames?: (exceptId: string) => string[]) =>
+    buildBuilderConfig({
+      collection, token: stub, sources: stub, showIf: stub, allow: stub, tracks: stub, style: stub, responsiveSelect: stub, length: stub,
+      action: stub, pattern: stub, render: () => stub, root: stub, ...(regionNames ? { regionNames } : {}),
+    });
+  type Comp = {
+    label: string;
+    fields: Record<string, { type: string; metadata?: Record<string, unknown> }>;
+    defaultProps: Record<string, unknown>;
+    permissions?: { insert?: boolean };
+    resolveData: (d: { props: Record<string, unknown> }, p: { lastData: { props: Record<string, unknown> } | null; trigger: string }) => { props: Record<string, unknown> };
+    resolveFields: (d: { props: Record<string, unknown> }, p: { fields: Record<string, unknown> }) => Record<string, unknown>;
+  };
+  const config = make(false, (except) => (except === 'Region-new' ? ['region', 'region-2'] : []));
+  const comp = (el: string, c = config) => c.components[el] as unknown as Comp;
+
+  it('palette: a "Layout regions" category; Overlay only while the root is empty; regions hidden in an overlay block', () => {
+    const cats = paletteCategories({ collection: false, overlayRoot: false, emptyRoot: false });
+    expect(cats.regions).toEqual({ title: 'Layout regions', components: ['Region', 'PageContent'], visible: true });
+    expect(cats.overlay).toMatchObject({ components: ['Overlay'], visible: false });
+    expect(cats.content!.components).not.toEqual(expect.arrayContaining(['Region']));
+    expect(cats.content!.components).not.toContain('PageContent');
+    expect(cats.content!.components).not.toContain('Overlay');
+    expect(paletteCategories({ collection: false, overlayRoot: false, emptyRoot: true }).overlay!.visible).toBe(true);
+    expect(paletteCategories({ collection: false, overlayRoot: true, emptyRoot: false }).regions!.visible).toBe(false);
+    expect(config.categories).toMatchObject({ regions: { visible: true }, overlay: { visible: false } });
+  });
+
+  it('labels and defaults: Region (name region, auto-uniquified), Page content, Overlay (modal/md, backdrop and × on)', () => {
+    expect(comp('Region').label).toBe('Region');
+    expect(comp('PageContent').label).toBe('Page content');
+    expect(comp('Overlay').label).toBe('Overlay');
+    expect(comp('Region').defaultProps).toEqual({ name: 'region' });
+    expect(comp('Overlay').defaultProps).toEqual({ variant: 'modal', size: 'md', closeOnBackdrop: true, showClose: true });
+    const inserted = comp('Region').resolveData({ props: { id: 'Region-new', name: 'region' } }, { lastData: null, trigger: 'insert' });
+    expect(inserted.props.name).toBe('region-3');
+    const typed = comp('Region').resolveData({ props: { id: 'Region-new', name: 'region' } }, { lastData: { props: { name: 'regio' } }, trigger: 'replace' });
+    expect(typed.props.name).toBe('region');
+  });
+
+  it('fields: Region name/label/allow; Overlay side only for a drawer; Button action; anchorId on content elements', () => {
+    expect(Object.keys(comp('Region').fields)).toEqual(['name', 'label', 'allow']);
+    expect(comp('Region').fields.name!.metadata).toMatchObject({ pattern: 'name' });
+    expect(comp('Region').fields.label!.type).toBe('custom'); // a localized label from code is shown read-only
+    expect(Object.keys(comp('PageContent').fields)).toEqual([]);
+    const ov = comp('Overlay');
+    expect(Object.keys(ov.fields)).toEqual(expect.arrayContaining(['variant', 'side', 'size', 'closeOnBackdrop', 'showClose', 'anchorId', 'style', 'children']));
+    expect(ov.resolveFields({ props: { variant: 'modal' } }, { fields: ov.fields })).not.toHaveProperty('side');
+    expect(ov.resolveFields({ props: { variant: 'drawer' } }, { fields: ov.fields })).toHaveProperty('side');
+    // Switching to a drawer pins it right; back to a modal drops the side (only valid on a drawer).
+    expect(ov.resolveData({ props: { id: 'o', variant: 'drawer' } }, { lastData: { props: { variant: 'modal' } }, trigger: 'replace' }).props.side).toBe('right');
+    const back = ov.resolveData({ props: { id: 'o', variant: 'modal', side: 'left' } }, { lastData: { props: { variant: 'drawer' } }, trigger: 'replace' }).props;
+    expect('side' in back && back.side === undefined).toBe(true);
+    expect(comp('Button').fields.action!.type).toBe('custom');
+    expect(comp('Heading').fields.anchorId!.metadata).toMatchObject({ pattern: 'anchor' });
+    expect(comp('Box').fields).toHaveProperty('anchorId');
+    for (const el of ['Region', 'PageContent', 'Slot']) expect(comp(el).fields).not.toHaveProperty('anchorId');
+  });
+
+  it('Overlay and regions never go into a slot; in a collection block Region and Page content cannot be inserted', () => {
+    const slot = comp('Box').fields.children as unknown as { disallow?: string[] };
+    expect(slot.disallow).toEqual(expect.arrayContaining(['Overlay']));
+    expect((comp('Overlay').fields.children as unknown as { disallow: string[] }).disallow).toEqual(expect.arrayContaining(['Overlay', 'Region', 'PageContent']));
+    const col = make(true);
+    expect(comp('Region', col).permissions).toEqual({ insert: false });
+    expect(comp('PageContent', col).permissions).toEqual({ insert: false });
+    expect(comp('Region').permissions).toBeUndefined();
+    expect((comp('Box', col).fields.children as unknown as { disallow: string[] }).disallow).toEqual(expect.arrayContaining(['Slot', 'Region', 'PageContent', 'Overlay']));
   });
 });

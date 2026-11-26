@@ -6,13 +6,15 @@ export interface SidebarTypeInput {
   apiId: string;
   displayName: string | LocalizedText;
   group?: string;
+  /** Private content type (spec §7): shown with a lock. */
+  private?: boolean;
 }
 
 export interface SidebarGroupNode {
   key: string;
   /** Empty for the ungrouped entry; the caller supplies its translated label. */
   title: string;
-  items: { apiId: string; title: string }[];
+  items: { apiId: string; title: string; private?: true }[];
 }
 
 /** Content groups -> sidebar tree. Pure: sorted by group order (missing last) then title; empty groups omitted. */
@@ -23,7 +25,11 @@ export function buildSidebarTree(
 ): SidebarGroupNode[] {
   const cmp = (a: string, b: string) => a.localeCompare(b, locale);
   const known = new Set(groups.map((g) => g.key));
-  const toItem = (ty: SidebarTypeInput) => ({ apiId: ty.apiId, title: localizedText(ty.displayName, locale, ty.apiId) });
+  const toItem = (ty: SidebarTypeInput) => ({
+    apiId: ty.apiId,
+    title: localizedText(ty.displayName, locale, ty.apiId),
+    ...(ty.private ? { private: true as const } : {}),
+  });
   const byTitle = (a: { title: string }, b: { title: string }) => cmp(a.title, b.title);
 
   const nodes = groups

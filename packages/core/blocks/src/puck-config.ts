@@ -1,4 +1,4 @@
-import { createElement, Fragment, type ComponentType, type ReactElement } from 'react';
+import { createElement, Fragment, isValidElement, type ComponentType, type ReactElement } from 'react';
 import type { ComponentConfig, Field } from '@puckeditor/core';
 import { localizedText, type Locale } from '@opencloudcms/schema';
 import { MAX_TRACKS } from './tracks';
@@ -6,6 +6,7 @@ import { fieldsDefaults, optionValue } from './fields';
 import {
   COLOR_TOKENS,
   SPACING_TOKENS,
+  type BlockDefinition,
   type BlockField,
   type BlockRegistry,
   type CustomFieldRenderers,
@@ -45,7 +46,7 @@ const TRACK_PRESETS: readonly [string, ...number[]][] = [
 
 const tokens = (list: readonly string[]) => list.map((t) => ({ label: t, value: t }));
 
-function toPuckField(f: BlockField, opts: ToPuckConfigOptions): Field {
+function toPuckField(f: BlockField, opts: ToPuckConfigOptions): Field | null {
   const { locale, customFields } = opts;
   const label = f.label === undefined ? undefined : localizedText(f.label as Label, locale);
   const base = label === undefined ? {} : { label };
@@ -96,8 +97,7 @@ function toPuckField(f: BlockField, opts: ToPuckConfigOptions): Field {
     case 'entries':
       return { ...base, type: 'custom', render: customFields[f.kind] as never, metadata: { blockField: f } };
     case 'list': {
-      const arrayFields: Record<string, Field> = {};
-      for (const [k, sub] of Object.entries(f.fields as Record<string, BlockField>)) arrayFields[k] = toPuckField(sub, opts);
+      const arrayFields = toPuckFields(f.fields as Record<string, BlockField>, opts);
       const firstText = Object.entries(f.fields as Record<string, BlockField>).find(([, s]) => s.kind === 'text')?.[0];
       return {
         ...base,
@@ -112,16 +112,31 @@ function toPuckField(f: BlockField, opts: ToPuckConfigOptions): Field {
     }
     case 'slot':
       return { ...base, type: 'slot', ...(f.allow ? { allow: f.allow } : {}), metadata: { blockField: f } };
+    case 'action':
+      return customFields.action ? { ...base, type: 'custom', render: customFields.action as never, metadata: { blockField: f } } : null;
   }
 }
 
-/** Puck passes each slot as a component; blocks receive it rendered (ReactNode). Same inside list rows. */
+/** Puck fields of `fields`; fields with no editor (`b.action` without its renderer) are left out. */
+function toPuckFields(fields: Record<string, BlockField>, opts: ToPuckConfigOptions): Record<string, Field> {
+  const out: Record<string, Field> = {};
+  for (const [k, f] of Object.entries(fields)) {
+    const pf = toPuckField(f, opts);
+    if (pf) out[k] = pf;
+  }
+  return out;
+}
+
+/**
+ * Puck passes each slot as a component; blocks receive it rendered (ReactNode). Same inside list rows. A slot value that
+ * is already a React element (a caller rendering the block outside Puck, e.g. the editor's base frame) is kept.
+ */
 function toRenderProps(fields: Record<string, BlockField>, props: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, f] of Object.entries(fields)) {
     const v = props[k];
     if (f.kind === 'slot') {
-      out[k] = typeof v === 'function' ? createElement(v as ComponentType) : null;
+      out[k] = typeof v === 'function' ? createElement(v as ComponentType) : isValidElement(v) ? v : null;
     } else if (f.kind === 'list' && Array.isArray(v)) {
       out[k] = v.map((row) =>
         row && typeof row === 'object' ? toRenderProps(f.fields, row as Record<string, unknown>) : row,
@@ -145,13 +160,21 @@ function composedReserved(props: Record<string, unknown>, locale: Locale): Recor
   };
 }
 
+/**
+ * Props `d.render` receives for the Puck props `props`, exactly as the Puck config's render builds them: slots rendered
+ * (functions as components, React elements kept), list rows mapped, and for composed / `usesLocale` blocks the reserved
+ * `_locale` / `_editor` props (`locale` when `_locale` is not stamped).
+ */
+export function blockRenderProps(d: Pick<BlockDefinition<any>, 'fields' | 'composed' | 'usesLocale'>, props: Record<string, unknown>, locale: Locale): Record<string, unknown> {
+  return d.composed || d.usesLocale ? { ...toRenderProps(d.fields, props), ...composedReserved(props, locale) } : toRenderProps(d.fields, props);
+}
+
 /** Puck `Config` for the editor and renderer. Labels are resolved for `locale` (en-US fallback). */
 export function toPuckConfig(r: BlockRegistry, opts: ToPuckConfigOptions): PuckConfig {
   const components: Record<string, ComponentConfig> = {};
   const categories: Record<string, { title: string; components: string[] }> = {};
   for (const d of r.list) {
-    const fields: Record<string, Field> = {};
-    for (const [k, f] of Object.entries(d.fields as Record<string, BlockField>)) fields[k] = toPuckField(f, opts);
+    const fields = toPuckFields(d.fields as Record<string, BlockField>, opts);
     components[d.name] = {
       label: localizedText(d.label, opts.locale, d.name),
       fields,
@@ -160,7 +183,7 @@ export function toPuckConfig(r: BlockRegistry, opts: ToPuckConfigOptions): PuckC
         createElement(
           Fragment,
           null,
-          d.render((d.composed || d.usesLocale ? { ...toRenderProps(d.fields, props), ...composedReserved(props, opts.locale) } : toRenderProps(d.fields, props)) as never),
+          d.render(blockRenderProps(d, props, opts.locale) as never),
         )) as never,
     };
     (categories[d.category] ??= { title: d.category, components: [] }).components.push(d.name);
