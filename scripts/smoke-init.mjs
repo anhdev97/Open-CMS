@@ -8,6 +8,8 @@
 // Block Builder file of examples/my-store survive a Theme / Block Builder save without changes byte-identically.
 // Base pages: a default base page built from the my-store StoreFrame layout frames every page (header with the
 // lien-he contact modal and the menu-mobile drawer, footer), and a page replaces its header and hides its footer.
+// Builder components: the my-store StoreHeader has a logo link to / and a two-level Shop menu (Dropdown), and the home
+// page carries the my-store HomeBanner (Carousel) and Faq (Accordion) blocks, all in the server HTML.
 // Private types: the my-store `order` type is absent from the public API (CORS preflight too), refuses readOnly
 // writes and publishing, and its PDF invoice is a private file (sniffed, admin-only download, gone with the entry).
 // Exit code 0 = pass, 1 = fail.
@@ -279,7 +281,8 @@ export default defineContentType({
   mkdirSync(join(app, 'src/blocks/store-header'), { recursive: true });
   writeFileSync(join(app, storeHeaderRel), storeHeaderSrc);
   // The base page and overlay blocks of examples/my-store: the StoreFrame layout, the contact modal, the menu drawer.
-  const storeBlocks = { StoreFrame: 'store-frame', ContactModal: 'contact-modal', MobileMenu: 'mobile-menu' };
+  // Builder components (spec 2026-11-26): the home banner carousel and the FAQ, both builder-format files.
+  const storeBlocks = { StoreFrame: 'store-frame', ContactModal: 'contact-modal', MobileMenu: 'mobile-menu', HomeBanner: 'home-banner', Faq: 'faq' };
   for (const dir of Object.values(storeBlocks)) {
     mkdirSync(join(app, 'src/blocks', dir), { recursive: true });
     writeFileSync(join(app, 'src/blocks', dir, `${dir}.block.ts`), readFileSync(join(repo, 'examples/my-store/src/blocks', dir, `${dir}.block.ts`), 'utf8'));
@@ -292,7 +295,7 @@ export default defineContentType({
       ...Object.entries(storeBlocks).map(([name, dir]) => ({ name, importPath: `./${dir}/${dir}.block` })),
     ]),
   );
-  ok('composed blocks ActiveProducts (product, collection, fixed filter active = true, grid 4) + StoreHeader, StoreFrame, ContactModal, MobileMenu (examples/my-store) written to src/blocks + composed.ts');
+  ok('composed blocks ActiveProducts (product, collection, fixed filter active = true, grid 4) + StoreHeader, StoreFrame, ContactModal, MobileMenu, HomeBanner, Faq (examples/my-store) written to src/blocks + composed.ts');
 
   // Registry-install approximation: with symlinks preserved, @types/node must come from the project's own devDependencies.
   run('node', [join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.server.json', '--noEmit', '--preserveSymlinks'], { cwd: app });
@@ -469,6 +472,11 @@ export default defineContentType({
   const DRAFT = 'Smoke draft heading';
   // Rich text with an event handler and a javascript: link: normalized on save, rendered in place on the site.
   const RICH = '<p>Smoke rich <strong>text</strong></p><img src=x onerror="alert(1)"><a href="javascript:alert(2)">bad</a>';
+  // Field defaults of a composed block (what the page editor fills in when the block is dropped).
+  const blockDefaults = async (name) =>
+    Object.fromEntries(Object.entries((await api(admin, 'GET', `/api/admin/blocks/${name}`)).spec.fields).filter(([, f]) => f.default !== undefined).map(([k, f]) => [k, f.default]));
+  const bannerProps = await blockDefaults('HomeBanner');
+  const faqProps = await blockDefaults('Faq');
   const pageContent = (heading) => ({
     format: 'puck',
     formatVersion: PUCK_FORMAT_VERSION,
@@ -481,6 +489,9 @@ export default defineContentType({
           type: 'EntryList',
           props: { id: 'list-1', _v: 1, apiId: 'product', source: { mode: 'pick', ids: [product.documentId] }, layout: 'list', fields: [{ name: 'name' }] },
         },
+        // Builder components: a banner carousel and an FAQ (my-store blocks, every field at its default).
+        { type: 'HomeBanner', props: { id: 'banner-1', _v: 1, ...bannerProps } },
+        { type: 'Faq', props: { id: 'faq-1', _v: 1, ...faqProps } },
       ],
     },
   });
@@ -627,8 +638,9 @@ export default defineContentType({
       content: puck([
         it('StoreFrame', 'frame-1', {
           region__header: [
-            it('StoreHeader', 'header-1', { brand: BASE_HEADER, contactLabel: 'Contact', menuLabel: '☰ Menu' }),
-            it('MobileMenu', 'menu-1', { name: 'menu-mobile', title: 'Menu' }),
+            // Every field at its default (logo, the Shop menu links), then the smoke's own values.
+            it('StoreHeader', 'header-1', { ...(await blockDefaults('StoreHeader')), brand: BASE_HEADER, contactLabel: 'Contact', menuLabel: '☰ Menu' }),
+            it('MobileMenu', 'menu-1', { ...(await blockDefaults('MobileMenu')), name: 'menu-mobile', title: 'Menu' }),
             it('ContactModal', 'modal-1', { name: 'lien-he', heading: 'Smoke contact', email: 'smoke@example.com', emailLink: { kind: 'url', href: 'mailto:smoke@example.com' } }),
           ],
           pageContent: [],
@@ -654,6 +666,35 @@ export default defineContentType({
   assert(r.text.includes('href="mailto:smoke@example.com"'), 'GET / contact modal lacks its email link');
   assert(/<button type="button"[^>]*md:hidden lg:hidden[^>]*>☰ Menu<\/button>/.test(r.text), 'GET / lacks the ☰ button hidden on desktop');
   ok('default base page (StoreFrame) published: / is framed (header, page, footer) with the lien-he modal and the menu-mobile drawer; usage 2 pages');
+
+  // Builder components in the server HTML of / (spec 2026-11-26): everything a visitor can open is already there.
+  // Header: the logo is a link to / around an <img>, and the Shop Dropdown carries its panel links (hover/focus opens
+  // it before hydration) in both the header and the drawer.
+  assert(/<a [^>]*href="\/"[^>]*><img [^>]*alt="Smoke base store"/.test(r.text), 'GET / lacks the header logo <a href="/"><img alt>');
+  const dropdowns = [...r.text.matchAll(/<div data-ocms-dropdown=""/g)].length;
+  assert(dropdowns === 2, `GET / should have 2 Shop dropdowns (header popover + drawer inline), found ${dropdowns}`);
+  // The header dropdown: from its wrapper to the next nav link (About), the trigger links /shop and the panel the 3 pages.
+  const shopMenu = r.text.slice(r.text.indexOf('data-ocms-dropdown'), r.text.indexOf('href="/about"', r.text.indexOf('data-ocms-dropdown')));
+  assert(
+    shopMenu.includes('href="/shop"') && /aria-expanded="false"/.test(shopMenu) && /role="group"/.test(shopMenu) && ['/shop/ao', '/shop/quan', '/shop/phu-kien'].every((h) => shopMenu.includes(`href="${h}"`)),
+    `GET / header Shop dropdown lacks its trigger or panel links: ${shopMenu.slice(0, 400)}`,
+  );
+  // The drawer: the same Shop menu, inline (it opens in place on tap).
+  const drawerStart = r.text.search(/<dialog [^>]*data-ocms-overlay="menu-mobile"/);
+  const drawer = r.text.slice(drawerStart, r.text.indexOf('</dialog>', drawerStart));
+  assert(
+    drawer.includes('data-ocms-dropdown') && ['/shop/ao', '/shop/quan', '/shop/phu-kien'].every((h) => drawer.includes(`href="${h}"`)),
+    'GET / menu-mobile drawer lacks the Shop dropdown or its links',
+  );
+  assert(r.text.includes('group-hover/dropdown:block'), 'GET / header Dropdown lacks its no-JS hover opening');
+  // Home banner: a carousel section with its 3 slides; FAQ: 4 <details> with <summary>, the first open.
+  assert(/<section [^>]*aria-roledescription="carousel"/.test(r.text), 'GET / lacks the banner carousel');
+  const slides = [...r.text.matchAll(/aria-roledescription="slide"/g)].length;
+  assert(slides === 3, `GET / banner carousel should have 3 slides in the HTML, found ${slides}`);
+  for (const t of ['New season linen', 'Totes for every day', 'Free delivery from 500,000']) assert(r.text.includes(t), `GET / banner lacks the slide "${t}"`);
+  const details = [...r.text.matchAll(/<details\b/g)].length;
+  assert(details === 4 && /<details [^>]*open=""/.test(r.text) && r.text.includes('How long does delivery take?'), `GET / FAQ should be 4 <details> (first open), found ${details}`);
+  ok('GET /: logo <a href="/">, Shop dropdown panel links (header + drawer), banner carousel with 3 slides, FAQ of 4 <details>');
 
   const LANDING_HEADER = 'Smoke landing header';
   const landing = (
