@@ -909,6 +909,8 @@ describe('examples/my-store storefront', () => {
     expect(send).toBeDefined();
     expect(send!.props?.action).toBeUndefined();
     expect(send!.bind?.href).toBeUndefined();
+    // Inert (layout only): no hover style, so it does not look clickable.
+    expect(send!.style?.hover).toBeUndefined();
     const out = render(defineComposedBlock(s), { ...defaults(s), name: 'lien-he', _locale: 'vi-VN' });
     expect(out).toContain('name="name"');
     expect(out).toMatch(/type="email"[^>]*name="email"|name="email"[^>]*type="email"/);

@@ -501,6 +501,9 @@ describe('Combobox', () => {
   it('arrow keys and a click choose; no match shows a message', () => {
     mount(h(Combobox, { name: 'topic', options: topics, defaultValue: 'sp' }));
     const input = $<HTMLInputElement>('input[role="combobox"]');
+    // No label: named by its name (no placeholder either), on the input and the listbox.
+    expect(input.getAttribute('aria-label')).toBe('topic');
+    expect($('[role="listbox"]').getAttribute('aria-label')).toBe('topic');
     expect(input.value).toBe('Sản phẩm');
     input.focus();
     key(input, 'ArrowDown');

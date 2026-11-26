@@ -155,11 +155,7 @@ export default defineComposedBlock({
                 el: 'Button',
                 props: { variant: 'default', icon: 'send', iconPosition: 'end' },
                 bind: { label: { from: 'field', name: 'sendLabel' } },
-                style: {
-                  background: 'brand:accent',
-                  color: 'brand:accent-ink',
-                  hover: { background: 'brand:ink' },
-                },
+                style: { background: 'brand:accent', color: 'brand:accent-ink' },
               },
               {
                 el: 'Button',

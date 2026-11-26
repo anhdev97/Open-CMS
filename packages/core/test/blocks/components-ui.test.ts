@@ -426,6 +426,21 @@ describe('form controls', () => {
     expect(out).toContain('peer-focus-visible:ring-2');
     expect(out).toContain('>Newsletter<');
   });
+  it('a control without a label is named by aria-label: placeholder, else name (Checkbox, Switch, Radio: name)', () => {
+    expect(attr(block({ el: 'Input', props: { name: 'q' }, bind: { placeholder: c('Search…') } }), 'input', 'aria-label')).toBe('Search…');
+    expect(attr(block({ el: 'Input', props: { name: 'q' } }), 'input', 'aria-label')).toBe('q');
+    expect(attr(block({ el: 'Textarea', props: { name: 'msg' }, bind: { placeholder: c('Your message') } }), 'textarea', 'aria-label')).toBe('Your message');
+    expect(attr(block({ el: 'Select', props: { name: 'size', options: [{ value: 's', label: 'S' }] } }), 'select', 'aria-label')).toBe('size');
+    expect(attr(block({ el: 'Checkbox', props: { name: 'terms' } }), 'input', 'aria-label')).toBe('terms');
+    expect(attr(block({ el: 'Switch', props: { name: 'news' } }), 'input', 'aria-label')).toBe('news');
+    expect(attr(block({ el: 'Radio', props: { name: 'ship', options: [{ value: 'a', label: 'A' }] } }), 'fieldset', 'aria-label')).toBe('ship');
+    // With a label: no aria-label (the <label>/<legend> names it).
+    for (const el of ['Input', 'Textarea', 'Checkbox', 'Switch'] as const) {
+      const ph = el === 'Input' || el === 'Textarea' ? { placeholder: c('P') } : {};
+      expect(block({ el, props: { name: 'n' }, bind: { label: c('L'), ...ph } }), el).not.toContain('aria-label');
+    }
+    expect(block({ el: 'Radio', props: { name: 'n', options: [{ value: 'a', label: 'A' }] }, bind: { label: c('L') } })).not.toContain('aria-label');
+  });
   it('ids are unique across two controls with the same name', () => {
     const one = (k: string) => h(ui.Input, { key: k, name: 'q', label: 'Q' });
     const ids = [...markup(h('div', null, one('1'), one('2'))).matchAll(/<input\b[^>]*\sid="([^"]+)"/g)].map((m) => m[1]);

@@ -7,7 +7,7 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 
 import { ChevronDownIcon } from 'lucide-react';
 import { foldSearch, type NodeStyle } from '@opencloudcms/schema';
 import { cn } from '../ui/tokens';
-import { CONTROL, Field, Help, INPUT_H, Label, Select, nonEmpty, type ControlOption } from '../ui/form';
+import { CONTROL, Field, Help, INPUT_H, Label, Select, fallbackLabel, nonEmpty, type ControlOption } from '../ui/form';
 
 export const COMBOBOX_BOX = 'relative';
 export const COMBOBOX_INPUT = 'pr-8';
@@ -162,6 +162,7 @@ function ComboboxInput({ name, options, defaultValue, label, placeholder, help, 
           aria-controls={listId}
           aria-autocomplete="list"
           aria-activedescendant={open && active >= 0 && matches[active] ? optId(active) : undefined}
+          aria-label={fallbackLabel(label, placeholder, name)}
           aria-describedby={helpId}
           aria-required={required || undefined}
           autoComplete="off"
@@ -180,7 +181,7 @@ function ComboboxInput({ name, options, defaultValue, label, placeholder, help, 
           onBlur={onBlur}
         />
         <ChevronDownIcon className={COMBOBOX_CHEVRON} aria-hidden="true" />
-        <ul id={listId} role="listbox" aria-label={nonEmpty(label)} hidden={!open} className={COMBOBOX_LIST}>
+        <ul id={listId} role="listbox" aria-label={nonEmpty(label) ?? fallbackLabel(label, placeholder, name)} hidden={!open} className={COMBOBOX_LIST}>
           {matches.map((o, i) => (
             <li
               key={o.value}

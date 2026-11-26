@@ -40,6 +40,10 @@ type Base = {
 
 export const nonEmpty = (s: string | undefined): string | undefined => (typeof s === 'string' && s.trim() ? s : undefined);
 
+/** `aria-label` of a control without a visible label: the first non-empty fallback (placeholder, then name). */
+export const fallbackLabel = (label: string | undefined, ...fallbacks: (string | undefined)[]): string | undefined =>
+  nonEmpty(label) ? undefined : fallbacks.map(nonEmpty).find((x) => x !== undefined);
+
 /** Ids of one control: the control, and its help text when there is one. */
 function useControlIds(help: string | undefined) {
   const id = useId();
@@ -81,6 +85,7 @@ export function Input({
         required={required || undefined}
         disabled={disabled || undefined}
         autoComplete={nonEmpty(autocomplete)}
+        aria-label={fallbackLabel(label, placeholder, name)}
         aria-describedby={ids.helpId}
         className={cn(CONTROL, INPUT_H)}
       />
@@ -104,6 +109,7 @@ export function Textarea({
         placeholder={nonEmpty(placeholder)}
         required={required || undefined}
         disabled={disabled || undefined}
+        aria-label={fallbackLabel(label, placeholder, name)}
         aria-describedby={ids.helpId}
         className={CONTROL}
       />
@@ -128,6 +134,7 @@ export function Select({
         defaultValue={known ? defaultValue : ph ? '' : undefined}
         required={required || undefined}
         disabled={disabled || undefined}
+        aria-label={fallbackLabel(label, placeholder, name)}
         aria-describedby={ids.helpId}
         className={cn(CONTROL, INPUT_H)}
       >
@@ -145,7 +152,7 @@ export function Radio({
   const ids = useControlIds(help);
   const sp = styleProps(style, 'block');
   return (
-    <fieldset id={id} aria-describedby={ids.helpId} disabled={disabled || undefined} className={cn('grid gap-2', sp.className)} style={styleAttr(sp)}>
+    <fieldset id={id} aria-label={fallbackLabel(label, name)} aria-describedby={ids.helpId} disabled={disabled || undefined} className={cn('grid gap-2', sp.className)} style={styleAttr(sp)}>
       {nonEmpty(label) ? (
         <legend className={cn(FIELD_LABEL, 'mb-1')}>
           {label}
@@ -188,6 +195,7 @@ export function Checkbox({
           defaultChecked={defaultChecked || undefined}
           required={required || undefined}
           disabled={disabled || undefined}
+          aria-label={fallbackLabel(label, name)}
           aria-describedby={ids.helpId}
           className={CHECK}
         />
@@ -210,6 +218,7 @@ export function Switch({ name, defaultChecked, label, help, disabled, id, style 
           name={name}
           defaultChecked={defaultChecked || undefined}
           disabled={disabled || undefined}
+          aria-label={fallbackLabel(label, name)}
           aria-describedby={ids.helpId}
           className={SWITCH_INPUT}
         />

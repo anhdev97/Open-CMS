@@ -354,7 +354,9 @@ native `<details>`, scroll-snap slides, native selects); the client runtimes com
 Áo / Quần / Phụ kiện) in `StoreHeader` and, expanding inline, in `MobileMenu`; the contact form layout in
 `ContactModal`; `HomeBanner` (carousel) and `Faq` (accordion) on the home page; `ProductTabs` (Description / Specs /
 Shipping, a tooltip on the delivery badge) and `ProductStrip` (clickable product cards in a carousel) on the product
-pages. Details: [`packages/core/README.md`](packages/core/README.md#builder-components).
+pages. `ProductStrip` cards link to `/products/{slug}`, but only `seed:pages` creates those pages: a product added
+later has no page until you create one (otherwise its card leads to a 404). Details:
+[`packages/core/README.md`](packages/core/README.md#builder-components).
 
 ## Users, groups and review
 

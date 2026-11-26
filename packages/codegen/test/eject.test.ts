@@ -465,6 +465,8 @@ describe('printEjectedBlockTsx: layout and overlay blocks', () => {
       expect(source).toContain('<ui.Overlay');
       expect(source).toContain("const overlay = h.overlayName(props.name, 'lien-he');");
       expect(source).toContain("action={{ type: 'overlay', op: 'open', target: 'menu' }}");
+      // Pre-sprint attribute order (action before style): re-ejecting an existing block does not reorder its file.
+      expect(source).toMatch(/action=\{\{ type: 'overlay', op: 'close' \}\}\s+style=/);
     }
     const out = html(loadEjected(printEjectedBlockTsx(overlaySpec({}))), { name: 'lien-he', title: 'T' });
     expect(out).toContain('aria-labelledby="lien-he-title"');

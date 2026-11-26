@@ -420,7 +420,7 @@ function body(g: Gen, n: ComposedNode, indent: string): Out {
     case 'Button': {
       const action = isObj(p.action) ? [attrLit('action', p.action)] : [];
       const icon = [...strings(p, ['icon']), ...(p.iconPosition === 'end' ? ['iconPosition="end"'] : []), ...(p.iconOnly === true ? ['iconOnly'] : [])];
-      return jsx(element('ui.Button', [textAttr('label', val(g, n, 'label')), attrExpr('href', `h.href(${code(val(g, n, 'href'))})`), ...tokens(p, ['variant', 'size']), ...st, ...action, ...icon, ...describedAttr(g, n)], null, indent));
+      return jsx(element('ui.Button', [textAttr('label', val(g, n, 'label')), attrExpr('href', `h.href(${code(val(g, n, 'href'))})`), ...tokens(p, ['variant', 'size']), ...action, ...st, ...icon, ...describedAttr(g, n)], null, indent));
     }
     case 'Icon':
       return jsx(element('ui.Icon', [...idAttr(p), attrLit('name', typeof p.name === 'string' ? p.name : ''), ...tokens(p, ['size']), textAttr('label', val(g, n, 'label')), ...styleAttr(n)], null, indent));
