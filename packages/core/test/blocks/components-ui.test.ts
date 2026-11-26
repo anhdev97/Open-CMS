@@ -6,6 +6,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { defineComposedBlock, ui, type ComposedBlockSpec } from '../../blocks/src';
 import { loadComposedBlocks, loadConfig } from '@opencloudcms/codegen';
 import { ICON_NAMES } from '@opencloudcms/schema';
+import preStoreHeader from './fixtures/pre-sprint/store-header.block';
+import preMobileMenu from './fixtures/pre-sprint/mobile-menu.block';
+import preContactModal from './fixtures/pre-sprint/contact-modal.block';
 
 const html = (node: unknown) => renderToString(node as never);
 
@@ -19,6 +22,8 @@ const BASELINE_STORE = [
   'ActiveProducts', 'ContactModal', 'FeaturedProducts', 'MobileMenu', 'ProductCard', 'SectionHead',
   'StoreFooter', 'StoreFrame', 'StoreHeader', 'StoreHero', 'StoryBand',
 ];
+
+const PRE_SPRINT = [preStoreHeader, preMobileMenu, preContactModal];
 
 const base = (over: Partial<ComposedBlockSpec>): ComposedBlockSpec => ({
   id: 'blk_test01',
@@ -145,6 +150,8 @@ async function renderCases(): Promise<Record<string, string>> {
   // ProductStrip) are built from the new elements and tested in composed.test.ts. StoreHeader, MobileMenu and
   // ContactModal were rebuilt with the new elements on purpose (Task 7), so their entries were re-captured then.
   for (const { spec } of specs) if (BASELINE_STORE.includes(spec.name)) out[`my-store/${spec.name}`] = html(defineComposedBlock(spec).render(props(spec) as never));
+  // The same three blocks as they were before Task 7 rebuilt them (37be4d7): pre-sprint specs must still render as then.
+  for (const def of PRE_SPRINT) out[`my-store@37be4d7/${def.spec.name}`] = html(def.render(props(def.spec) as never));
   for (const spec of fixtureSpecs()) out[`fixture/${spec.name}`] = html(defineComposedBlock(spec).render(props(spec) as never));
   out['ui/Button-link'] = html(h(ui.Button, { label: 'Go', href: '/x' }));
   out['ui/Button-span'] = html(h(ui.Button, { label: 'Go', href: null, variant: 'link', size: 'sm' }));
@@ -166,6 +173,7 @@ describe('render baseline: existing blocks render byte-identically', () => {
     expect(Object.keys(now).sort()).toEqual(Object.keys(before).sort());
     for (const k of Object.keys(before)) expect(now[k], k).toBe(before[k]);
     expect(Object.keys(before).filter((k) => k.startsWith('my-store/')).length).toBeGreaterThanOrEqual(9);
+    expect(Object.keys(before).filter((k) => k.startsWith('my-store@37be4d7/'))).toHaveLength(3);
   });
 });
 
