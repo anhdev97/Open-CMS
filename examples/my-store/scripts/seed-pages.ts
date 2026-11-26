@@ -1,13 +1,18 @@
-// Dev seed for the page builder: publishes `/` (the storefront of docs/superpowers/specs/assets/2026-11-24-store-preview.html,
-// built from the Block Builder blocks StoreHeader, StoreHero, SectionHead (holding FeaturedProducts: the three oldest
-// products), StoryBand, StoreFooter; English, plus its vi-VN translation), `/shop` (the Block Builder examples: ProductCard
-// for one product, ActiveProducts for the products with active = true) and `/about`.
+// Dev seed for the page builder. First the base page "Store" (made the default base page): the StoreFrame layout
+// block with StoreHeader, the MobileMenu drawer (`menu-mobile`) and the ContactModal (`lien-he`) in its `header`
+// region and StoreFooter in its `footer` region. Then the pages, which sit in that frame: `/` (the storefront of
+// docs/superpowers/specs/assets/2026-11-24-store-preview.html, built from the Block Builder blocks StoreHero,
+// SectionHead (holding FeaturedProducts: the three oldest products) and StoryBand; English, plus its vi-VN
+// translation), `/shop` (the Block Builder examples: ProductCard for one product, ActiveProducts for the products with
+// active = true), `/about`, and `/landing`, which replaces the base's header with a simple one (and its own contact
+// popup) and hides the footer.
 // Without any product yet it first publishes three sample products (two on sale, one not), each with a photo uploaded to
 // the media library (scripts/seed-assets/*.webp, crops of public/files/store-editorial.webp). With --force, sample
 // products (by slug) that have no image yet get theirs too.
 // Run after `opencloudcms migrate:up`:  pnpm seed:pages
-// A page that already exists at one of these paths (in the default locale) is left untouched, unless --force
-// (`pnpm seed:pages -- --force`): then its content, title and SEO are replaced and it is published again.
+// A page that already exists at one of these paths (in the default locale), or a base page titled "Store", is left
+// untouched, unless --force (`pnpm seed:pages -- --force`): then its content, title, SEO and layout are replaced, it
+// is published again, and "Store" becomes the default base page again.
 import 'reflect-metadata';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -22,7 +27,7 @@ if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
 
 async function main() {
   // Imported after .env is loaded: opencloudcms.config.ts reads DATABASE_URL.
-  const { EntriesService, OpenCloudCmsModule } = await import('@opencloudcms/core');
+  const { EntriesService, OpenCloudCmsModule, PagesService } = await import('@opencloudcms/core');
   const { AssetsService } = await import('@opencloudcms/assets');
   const { blockManifest, writePageContent } = await import('@opencloudcms/core/blocks');
   const { PAGE_API_ID } = await import('@opencloudcms/schema');
@@ -63,7 +68,11 @@ async function main() {
       );
       return { type, props: { id: `${type}-seed-${++n}`, ...defaults, ...props } };
     };
-    const content = (...items: ReturnType<typeof item>[]) => writePageContent({ root: { props: {} }, content: items } as never, blocks);
+    type Item = ReturnType<typeof item>;
+    const content = (...items: Item[]) => writePageContent({ root: { props: {} }, content: items } as never, blocks);
+    /** Page content with replacement blocks for base page regions (root props `region__<name>`). */
+    const contentWithRegions = (regions: Record<string, Item[]>, ...items: Item[]) =>
+      writePageContent({ root: { props: Object.fromEntries(Object.entries(regions).map(([k, v]) => [`region__${k}`, v])) }, content: items } as never, blocks);
 
     const admin = { id: undefined as unknown as string, permissions: ['content.update', 'content.publish'] as never[] };
 
@@ -107,25 +116,92 @@ async function main() {
     const onSale = await entries.list('product', { status: 'published', locale, filter: { active: 'true' }, sort: 'createdAt:asc', limit: 1 });
     const pick = onSale.data[0]?.documentId;
 
+    // The base page "Store": the frame every page below sits in (none sets `layout.baseId`, so the default base).
+    const pagesService = app.get(PagesService);
+    const frame = (header: { nav: [string, string, string]; contact: string; menu: string }, modal: Record<string, unknown>, menu: string, footer: Record<string, unknown>) =>
+      content(
+        item('StoreFrame', {
+          region__header: [
+            item('StoreHeader', { nav1Label: header.nav[0], nav2Label: header.nav[1], nav3Label: header.nav[2], contactLabel: header.contact, menuLabel: header.menu }),
+            // Overlays take no space: the ☰ button toggles the drawer, the Contact buttons open the popup.
+            item('MobileMenu', { name: 'menu-mobile', title: menu, nav1Label: header.nav[0], nav2Label: header.nav[1], nav3Label: header.nav[2] }),
+            item('ContactModal', { name: 'lien-he', ...modal }),
+          ],
+          pageContent: [],
+          region__footer: [item('StoreFooter', footer)],
+        }),
+      );
+    const viModal = {
+      heading: 'Liên hệ với chúng mình',
+      body: 'Có câu hỏi về đơn hàng, kích cỡ hay đổi trả? Hãy viết hoặc gọi cho chúng mình, chúng mình trả lời trong một ngày.',
+      phone: '028 1234 5678',
+      closeLabel: 'Đóng',
+    };
+    const base = {
+      kind: 'base',
+      title: 'Store',
+      content: frame({ nav: ['Home', 'Shop', 'About'], contact: 'Contact', menu: '☰ Menu' }, {}, 'Menu', {}),
+      translations: {
+        'vi-VN': {
+          title: 'Cửa hàng',
+          content: frame(
+            { nav: ['Trang chủ', 'Cửa hàng', 'Giới thiệu'], contact: 'Liên hệ', menu: '☰ Danh mục' },
+            viModal,
+            'Danh mục',
+            {
+              tagline: 'Quần áo và phụ kiện cho mỗi ngày.',
+              exploreTitle: 'Khám phá',
+              link1Label: 'Cửa hàng',
+              link2Label: 'Giới thiệu',
+              contactTitle: 'Liên hệ',
+              contactLinkLabel: 'Viết cho chúng mình',
+            },
+          ),
+        },
+      },
+    };
+    const locales: string[] = config.locales ?? [locale];
+    {
+      const { translations, ...b } = base;
+      const found = (await pagesService.bases('draft')).data.find((d) => d.title === b.title);
+      let baseId = found?.documentId as string | undefined;
+      if (!baseId) {
+        baseId = (await entries.create(PAGE_API_ID, b, locale)).data.documentId as string;
+      } else if (force) {
+        await entries.update(PAGE_API_ID, baseId, { title: b.title, content: b.content }, locale);
+      }
+      if (!found || force) {
+        const done: string[] = [];
+        for (const [loc, t] of Object.entries(translations)) {
+          if (!locales.includes(loc)) continue;
+          await entries.update(PAGE_API_ID, baseId, t, loc);
+          done.push(loc);
+        }
+        await entries.publish(PAGE_API_ID, baseId, admin);
+        console.log(`${found ? 'replaced' : 'published'} base page Store (${baseId}${done.length ? `, + ${done.join(', ')}` : ''})`);
+      } else {
+        console.log('skip base page Store: it already exists (--force replaces it)');
+      }
+      const current = await pagesService.defaultBase('published');
+      if (!current || force) {
+        if (current !== baseId) await pagesService.setDefault(baseId);
+        console.log(`default base page: Store (${baseId})`);
+      }
+    }
+
     const pages = [
       {
         title: 'Home',
         path: '/',
         seo: { title: 'my-store', description: 'Clothing and accessories for every day.' },
         // Copy = the blocks' field defaults (English); the vi-VN translation below uses the mockup's Vietnamese copy.
-        content: content(
-          item('StoreHeader'),
-          item('StoreHero'),
-          item('SectionHead', { slot: [item('FeaturedProducts')] }),
-          item('StoryBand'),
-          item('StoreFooter'),
-        ),
+        // StoreHeader and StoreFooter come from the base page "Store".
+        content: content(item('StoreHero'), item('SectionHead', { slot: [item('FeaturedProducts')] }), item('StoryBand')),
         translations: {
           'vi-VN': {
             title: 'Trang chủ',
             seo: { title: 'my-store', description: 'Quần áo và phụ kiện cho mỗi ngày.' },
             content: content(
-              item('StoreHeader', { nav1Label: 'Trang chủ', nav2Label: 'Cửa hàng', nav3Label: 'Giới thiệu' }),
               item('StoreHero', {
                 heading: 'Mặc đẹp mỗi ngày',
                 intro: 'Áo linen thoáng nhẹ, túi canvas chắc tay và những món đồ đơn giản để dùng lâu.',
@@ -137,13 +213,6 @@ async function main() {
                 heading: 'Về my-store',
                 body: 'Chúng mình chọn những chất liệu dễ chăm sóc và kiểu dáng dễ phối để mỗi món bạn mua đều có chỗ trong tủ đồ.',
                 linkLabel: 'Đọc câu chuyện của cửa hàng →',
-              }),
-              item('StoreFooter', {
-                tagline: 'Quần áo và phụ kiện cho mỗi ngày.',
-                exploreTitle: 'Khám phá',
-                link1Label: 'Cửa hàng',
-                link2Label: 'Giới thiệu',
-                contactTitle: 'Liên hệ',
               }),
             ),
           },
@@ -170,12 +239,50 @@ async function main() {
           item('Text', { content: '<p>my-store is the example project of OpenCloudCMS. Edit this page in the admin under Pages.</p>' }),
         ),
       },
+      {
+        title: 'Landing',
+        path: '/landing',
+        seo: { title: 'Summer linen - my-store' },
+        // Default base page, its header replaced by this page's `region__header` blocks, its footer hidden.
+        layout: { regions: { header: 'replace', footer: 'hide' } },
+        content: contentWithRegions(
+          {
+            header: [
+              item('Section', {
+                paddingY: '4',
+                children: [
+                  item('ButtonGroup', {
+                    align: 'left',
+                    buttons: [
+                      { label: 'my-store', link: { kind: 'url', href: '/' }, variant: 'ghost' },
+                      { label: 'Contact us', link: null, variant: 'outline', action: { type: 'overlay', op: 'open', target: 'lien-he' } },
+                    ],
+                  }),
+                ],
+              }),
+              // The base's popup lives in the replaced header region, so this page brings its own.
+              item('ContactModal', { name: 'lien-he' }),
+            ],
+          },
+          item('Hero', {
+            badge: 'New season',
+            heading: 'Summer linen, light on the skin',
+            subheading: 'Shirts and totes in washed linen and canvas, made to be worn every day.',
+            primaryLabel: 'Shop the collection',
+            primaryLink: { kind: 'url', href: '/shop' },
+            secondaryLabel: '',
+          }),
+          item('CallToAction', { heading: 'Questions before you buy?', description: 'Use the Contact us button at the top of the page.', buttonLabel: '' }),
+        ),
+      },
     ];
 
-    const locales: string[] = config.locales ?? [locale];
-    for (const { translations, ...p } of pages as (Omit<(typeof pages)[number], 'translations'> & {
+    for (const { translations, ...page } of pages as (Omit<(typeof pages)[number], 'translations' | 'layout'> & {
+      layout?: Record<string, unknown>;
       translations?: Record<string, { title: string; seo: Record<string, string>; content: unknown }>;
     })[]) {
+      // No layout: the default base page with every region as is (also resets a layout set earlier, with --force).
+      const p = { ...page, layout: page.layout ?? null };
       const existing = await entries.list(PAGE_API_ID, { status: 'draft', locale, filter: { path: p.path }, limit: 1 });
       const found = existing.data.find((d) => d.locale === locale);
       let documentId: string;

@@ -18,13 +18,7 @@ export default defineComposedBlock({
         el: 'Region',
         props: { name: 'header', label: { 'en-US': 'Header', 'vi-VN': 'Đầu trang' } },
       },
-      {
-        el: 'Box',
-        children: [
-          { el: 'PageContent' },
-        ],
-        style: { minHeight: '50vh' },
-      },
+      { el: 'PageContent' },
       {
         el: 'Region',
         props: { name: 'footer', label: { 'en-US': 'Footer', 'vi-VN': 'Chân trang' } },

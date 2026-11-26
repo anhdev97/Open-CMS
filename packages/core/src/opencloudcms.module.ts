@@ -119,7 +119,7 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, BeforeAppli
         ThemeService,
         { provide: CORE_READY_CORE, useValue: new DeferredCoreReady() },
       ],
-      exports: [OPENCLOUDCMS_DB, CORE_READY_CORE, ContentRegistry, EntriesService, PrivateEntriesService, PageBlocksManifest],
+      exports: [OPENCLOUDCMS_DB, CORE_READY_CORE, ContentRegistry, EntriesService, PrivateEntriesService, PagesService, PageBlocksManifest],
     };
   }
 
