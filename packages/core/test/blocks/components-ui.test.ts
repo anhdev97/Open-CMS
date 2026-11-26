@@ -220,7 +220,7 @@ describe('Tooltip', () => {
     expect(id).toBeDefined();
     expect(attr(out, 'a', 'aria-describedby')).toBe(bubbleId);
     expect(out).toContain('>Free shipping<');
-    expect(out).toMatch(/^<(span|div) class="[^"]*\brelative inline-flex group\b/);
+    expect(out).toMatch(/^<(span|div) class="[^"]*\brelative inline-flex group\/tooltip\b/);
     expect(out).not.toContain('tabindex');
   });
   it('a target without a focusable element makes the wrapper focusable and described', () => {
@@ -233,10 +233,10 @@ describe('Tooltip', () => {
   it('the closed bubble is display:none (no layout, no scroll overflow), shown on hover/focus, wrapping and width-capped', () => {
     const out = markup(h(ui.Tooltip, { text: 'x', children: h('span', null, 't') }));
     const cls = bubbleCls(out);
-    expect(cls).toEqual(expect.arrayContaining(['hidden', 'group-hover:block', 'group-focus-within:block', 'max-w-[min(20rem,calc(100vw-2rem))]', 'whitespace-normal']));
+    expect(cls).toEqual(expect.arrayContaining(['hidden', 'group-hover/tooltip:block', 'group-focus-within/tooltip:block', 'max-w-[min(20rem,calc(100vw-2rem))]', 'whitespace-normal']));
     expect(cls).not.toContain('invisible');
     expect(cls).not.toContain('opacity-0');
-    expect(out).toMatch(/^<div class="relative inline-flex group/);
+    expect(out).toMatch(/^<div class="relative inline-flex group\/tooltip\b/);
   });
   it('editor.open forces the bubble visible', () => {
     const cls = bubbleCls(markup(h(ui.Tooltip, { text: 'x', editor: { open: true }, children: h('span', null, 't') })));
@@ -251,6 +251,29 @@ describe('Tooltip', () => {
 });
 
 describe('Accordion', () => {
+  it('named groups: a Tooltip inside an AccordionItem and a nested accordion chevron react only to their own element', () => {
+    const out = block({
+      el: 'Accordion',
+      children: [
+        {
+          el: 'AccordionItem',
+          bind: { title: c('Outer') },
+          children: [
+            { el: 'Tooltip', bind: { text: c('Tip') }, children: [{ el: 'Button', bind: { label: c('Go'), href: c('/go') } }] },
+            { el: 'Accordion', children: [{ el: 'AccordionItem', bind: { title: c('Inner') }, children: [{ el: 'Text', props: { text: 'x' } }] }] },
+          ],
+        },
+      ],
+    });
+    const classes = [...out.matchAll(/class="([^"]*)"/g)].flatMap((m) => m[1].split(' '));
+    // No unnamed group or group-* variant anywhere: the item is group/acc, the tooltip group/tooltip.
+    expect(classes.filter((k) => k === 'group' || /^group-(hover|focus-within|open):/.test(k))).toEqual([]);
+    expect(out.match(/<details class="group\/acc /g)).toHaveLength(2);
+    expect(out.match(/group-open\/acc:rotate-180/g)).toHaveLength(2);
+    const bubble = /<span role="tooltip"[^>]*class="([^"]*)"/.exec(out)![1].split(' ');
+    expect(bubble).toEqual(expect.arrayContaining(['group-hover/tooltip:block', 'group-focus-within/tooltip:block']));
+    expect(out).toContain('relative inline-flex group/tooltip');
+  });
   const acc = (props: Record<string, unknown>) =>
     block({
       el: 'Accordion', props,

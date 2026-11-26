@@ -1,4 +1,5 @@
-// Tooltip shown with CSS only (`group-hover:` / `group-focus-within:`): the bubble is in the server HTML, named by
+// Tooltip shown with CSS only (`group-hover/tooltip:` / `group-focus-within/tooltip:`, a named group so an enclosing
+// `group` such as an AccordionItem does not open it): the bubble is in the server HTML, named by
 // `useId` so every rendered copy (collection items) has its own id. Isomorphic: `useId` is allowed in server
 // components; no state, no browser globals. Esc-to-dismiss is client behaviour (blocks/client).
 import { useId, type ReactNode } from 'react';
@@ -8,7 +9,7 @@ import { styleAttr, styleProps } from './style';
 
 export type TooltipSide = 'top' | 'bottom' | 'left' | 'right';
 
-export const TOOLTIP_WRAPPER = 'relative inline-flex group';
+export const TOOLTIP_WRAPPER = 'relative inline-flex group/tooltip';
 /** Wrapper focus ring, when the wrapper itself takes focus (a target with nothing focusable). */
 export const TOOLTIP_WRAPPER_FOCUS =
   'rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background';
@@ -17,7 +18,7 @@ export const TOOLTIP_WRAPPER_FOCUS =
  * no scrollable overflow; shown on hover/focus-within. Width-capped to the viewport and wrapping.
  */
 export const TOOLTIP_BUBBLE =
-  'pointer-events-none absolute z-50 hidden w-max max-w-[min(20rem,calc(100vw-2rem))] rounded-md bg-foreground px-3 py-1.5 text-xs leading-snug font-normal whitespace-normal break-words text-background shadow-md group-hover:block group-focus-within:block';
+  'pointer-events-none absolute z-50 hidden w-max max-w-[min(20rem,calc(100vw-2rem))] rounded-md bg-foreground px-3 py-1.5 text-xs leading-snug font-normal whitespace-normal break-words text-background shadow-md group-hover/tooltip:block group-focus-within/tooltip:block';
 export const TOOLTIP_OPEN = 'block';
 export const TOOLTIP_SIDE: Record<TooltipSide, string> = {
   top: 'bottom-full left-1/2 mb-2 -translate-x-1/2',

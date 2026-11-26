@@ -1,7 +1,7 @@
 'use client';
 // Dropdown: a trigger and one panel (`role="group"`), all content in the server HTML. Without JS a `popover` panel opens
 // on `:hover` / `:focus-within` (literal `group-hover/dropdown:` classes); after hydration the client owns the state:
-// hover (mouse only) or click/tap toggles, Esc, outside pointerdown, focus leaving, a link click, the containing overlay
+// hover (mouse only) or a click/tap (the `click` event, never `pointerdown`) toggles, Esc, outside pointerdown, focus leaving, a link click, the containing overlay
 // closing and route changes (`closeAllDropdowns`) close it. The hover classes are dropped once hydrated, so a tap never
 // leaves a "sticky hover" panel. Responsive `display` uses one markup: per breakpoint `popover` positions the panel,
 // `inline` keeps it in the flow (drawers). No browser globals at import time.
@@ -67,8 +67,6 @@ const SUBMENU: Record<string, string> = {
 const BPS: Breakpoint[] = ['base', 'md', 'lg'];
 const isDisplay = (x: unknown): x is DropdownDisplay => x === 'popover' || x === 'inline';
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-/** A tap's own `click` follows its `pointerdown`; it is ignored for this long. */
-const TAP_CLICK_MS = 800;
 const HOVER_CLOSE_MS = 150;
 
 export type DropdownProps = {
@@ -112,7 +110,8 @@ export function Dropdown({
   const root = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const lastTap = useRef(0);
+  /** Pointer type of the last `pointerdown` on the toggle; '' for keyboard clicks and after a cancelled press. */
+  const pressType = useRef('');
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const focusFirst = useRef(false);
   const open = editor?.open === true || openBy !== null;
@@ -176,16 +175,20 @@ export function Dropdown({
     clearTimeout(hoverTimer.current);
     hoverTimer.current = setTimeout(() => setOpenBy((by) => (by === 'hover' ? null : by)), HOVER_CLOSE_MS);
   };
-  // Touch and pen: the tap toggles on pointerdown (hover never fires for them); the tap's own click is ignored.
+  // The toggle acts on `click`, which fires only for a real tap or click: a touch that starts a scroll ends in
+  // `pointercancel` and no click, so scrolling a drawer over a trigger never flips its submenu.
   const onTogglePointerDown = (e: PointerEvent) => {
-    if (e.pointerType === 'mouse') return;
-    lastTap.current = Date.now();
-    setOpenBy((by) => (by ? null : 'click'));
+    pressType.current = e.pointerType;
+  };
+  const onTogglePointerCancel = () => {
+    pressType.current = '';
   };
   const onToggleClick = () => {
-    if (Date.now() - lastTap.current < TAP_CLICK_MS) return;
-    // A click on a hover-opened panel pins it open; the next click closes it.
-    setOpenBy((by) => (by === 'hover' ? 'click' : by ? null : 'click'));
+    const type = pressType.current;
+    pressType.current = '';
+    // Touch and pen: plain toggle. Mouse/keyboard: a click on a hover-opened panel pins it open; the next one closes it.
+    if (type && type !== 'mouse') setOpenBy((by) => (by ? null : 'click'));
+    else setOpenBy((by) => (by === 'hover' ? 'click' : by ? null : 'click'));
   };
   const onToggleKeyDown = (e: KeyboardEvent) => {
     if (e.key !== 'ArrowDown') return;
@@ -238,6 +241,7 @@ export function Dropdown({
     'aria-expanded': open,
     'aria-controls': panelId,
     onPointerDown: onTogglePointerDown,
+    onPointerCancel: onTogglePointerCancel,
     onClick: onToggleClick,
     onKeyDown: onToggleKeyDown,
   };

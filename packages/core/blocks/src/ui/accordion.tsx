@@ -9,10 +9,10 @@ import { cn } from './tokens';
 import { styleAttr, styleProps } from './style';
 
 export const ACCORDION = 'flex flex-col';
-export const ACCORDION_ITEM = 'group border-b border-border';
+export const ACCORDION_ITEM = 'group/acc border-b border-border';
 export const ACCORDION_SUMMARY =
   'flex cursor-pointer list-none items-center justify-between gap-4 rounded-sm py-4 text-left font-medium outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background [&::-webkit-details-marker]:hidden';
-export const ACCORDION_CHEVRON = 'size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180';
+export const ACCORDION_CHEVRON = 'size-4 shrink-0 text-muted-foreground transition-transform group-open/acc:rotate-180';
 export const ACCORDION_CONTENT = 'pb-4';
 
 export type AccordionItemProps = {

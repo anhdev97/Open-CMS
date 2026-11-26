@@ -91,19 +91,61 @@ describe('Dropdown', () => {
     expect(panel().className.split(' ')).toContain('hidden');
   });
 
-  it('touch: a tap on the trigger opens (hover is ignored), a second tap closes, a tap outside closes', () => {
+  it('touch: a tap (pointerdown + click) opens, a second tap closes, a tap outside closes; hover is ignored', () => {
     mount(menu());
+    const tap = (el: HTMLElement) => {
+      pointer('pointerdown', el, 'touch');
+      click(el);
+    };
     pointer('pointerover', toggle(), 'touch');
     expect(toggle().getAttribute('aria-expanded')).toBe('false');
     pointer('pointerdown', toggle(), 'touch');
+    expect(toggle().getAttribute('aria-expanded')).toBe('false'); // nothing until the click
+    click(toggle());
     expect(toggle().getAttribute('aria-expanded')).toBe('true');
-    click(toggle()); // the tap's own click: ignored
-    expect(toggle().getAttribute('aria-expanded')).toBe('true');
-    pointer('pointerdown', toggle(), 'touch');
+    tap(toggle());
     expect(toggle().getAttribute('aria-expanded')).toBe('false');
-    pointer('pointerdown', toggle(), 'touch');
+    tap(toggle());
     expect(toggle().getAttribute('aria-expanded')).toBe('true');
     pointer('pointerdown', document.body, 'touch');
+    expect(toggle().getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('touch: a press that becomes a scroll (pointerdown + pointercancel, no click) does not toggle', () => {
+    mount(menu({ display: 'inline' }));
+    pointer('pointerdown', toggle(), 'touch');
+    pointer('pointercancel', toggle(), 'touch');
+    expect(toggle().getAttribute('aria-expanded')).toBe('false');
+    // Open, then a scroll over the trigger leaves it open.
+    pointer('pointerdown', toggle(), 'touch');
+    click(toggle());
+    pointer('pointerdown', toggle(), 'touch');
+    pointer('pointercancel', toggle(), 'touch');
+    expect(toggle().getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('touch: a tap on a hover-capable dropdown toggles plainly (no hover pinning)', () => {
+    mount(menu());
+    pointer('pointerdown', toggle(), 'touch');
+    click(toggle());
+    expect(toggle().getAttribute('aria-expanded')).toBe('true');
+    pointer('pointerdown', toggle(), 'pen');
+    click(toggle());
+    expect(toggle().getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('mouse: a click on a hover-opened panel pins it; the next click closes', () => {
+    vi.useFakeTimers();
+    mount(menu());
+    pointer('pointerover', toggle(), 'mouse');
+    pointer('pointerdown', toggle(), 'mouse');
+    click(toggle());
+    expect(toggle().getAttribute('aria-expanded')).toBe('true');
+    pointer('pointerout', toggle(), 'mouse', { relatedTarget: document.body });
+    act(() => vi.advanceTimersByTime(200));
+    expect(toggle().getAttribute('aria-expanded')).toBe('true');
+    pointer('pointerdown', toggle(), 'mouse');
+    click(toggle());
     expect(toggle().getAttribute('aria-expanded')).toBe('false');
   });
 
@@ -575,6 +617,8 @@ describe('client runtime classes compile', () => {
       import('../../blocks/src/client/Tabs'),
       import('../../blocks/src/client/Carousel'),
       import('../../blocks/src/client/Combobox'),
+      import('../../blocks/src/ui/tooltip'),
+      import('../../blocks/src/ui/accordion'),
     ]);
     const strings: string[] = [];
     const walk = (v: unknown) => {
@@ -593,6 +637,8 @@ describe('client runtime classes compile', () => {
     }
     expect(bad).toEqual([]);
     const css = tw.build([]);
+    expect(css).toContain('.group\\/acc');
+    expect(css).toContain('.group\\/tooltip');
     expect(css).toContain('flex-basis: calc((100% - (var(--ocms-pv) - 1) * var(--ocms-gap)) / var(--ocms-pv))');
   });
 });
