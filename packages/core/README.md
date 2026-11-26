@@ -443,13 +443,13 @@ dropdown panels), so content is indexed and readable before JavaScript loads.
 
 | Element | HTML | Without JavaScript | With JavaScript (`@opencloudcms/core/blocks/client`) |
 |---|---|---|---|
-| Dropdown | trigger `<button aria-expanded aria-controls>` (plus `<a>` with `href`), panel `role="group"` | a `popover` panel opens on hover and keyboard focus (CSS); an `inline` one stays closed | tap/click toggles, Esc closes and returns focus, ↑/↓/Home/End move in the panel, outside click, panel link click and navigation close it, closes with its overlay |
-| Tooltip | wrapper + bubble `role="tooltip"`; `aria-describedby` on the target's first focusable element (or the wrapper gets `tabindex="0"`) | shows on hover and focus (CSS) | — |
+| Dropdown | trigger `<button aria-expanded aria-controls>` (plus `<a>` with `href`), panel `role="group"` | a `popover` panel opens on hover and keyboard focus (CSS); an `inline` one stays closed | tap/click toggles, a `popover` panel is shifted into the viewport (8 px margin), Esc closes and returns focus, ↑/↓/Home/End move in the panel, outside click, panel link click and navigation close it, closes with its overlay |
+| Tooltip | wrapper + bubble `role="tooltip"`; `aria-describedby` on the target's first focusable element (or the wrapper gets `tabindex="0"`) | shows on hover and focus (CSS) | kept inside the viewport (8 px margin); Esc hides it until the pointer and focus leave; a target hidden by `showIf` renders no tooltip |
 | Accordion | `<details>` / `<summary>` per item | native; `single` uses the `name` attribute where supported | `single` closes the other items |
 | Tabs | `role="tablist"` of `role="tab"` buttons, every `role="tabpanel"` (all but the first `hidden`) | the first tab shows | ←/→/Home/End switch tabs (roving focus) |
-| Carousel | `<section aria-roledescription="carousel">`, scroll-snap track, slides `role="group" aria-label="n of N"` | swipe and scroll | arrows, dots, autoplay (paused on hover, focus, a hidden tab and `prefers-reduced-motion`, with a Pause button) |
+| Carousel | `<section aria-roledescription="carousel">`, scroll-snap track, slides `role="group" aria-label="n of N"` | swipe and scroll | arrows, dots, autoplay (paused on hover, focus, a hidden tab and `prefers-reduced-motion`, with a Pause/Play button; Play resumes even with focus inside) |
 | Icon | inline `<svg>` (only the curated set is bundled) | — | — |
-| Input, Textarea, Select, Radio, Checkbox, Switch | `<label for>` + native control + help (`aria-describedby`); Radio is a `<fieldset>`/`<legend>`; Switch is a checkbox with `role="switch"` | native | — |
+| Input, Textarea, Select, Radio, Checkbox, Switch | `<label for>` + native control + help (`aria-describedby`); Radio is a `<fieldset>`/`<legend>`; Switch is a checkbox with `role="switch"`; without a label, `aria-label` is the placeholder, else the name | native | — |
 | Combobox | a native `<select>` with the same name and options | native select | input `role="combobox"` + `role="listbox"`, filtered as you type (accent-insensitive) |
 
 **Accessibility notes.** Every interactive element works with the keyboard (Tab, Enter/Space, Esc, arrows per the
