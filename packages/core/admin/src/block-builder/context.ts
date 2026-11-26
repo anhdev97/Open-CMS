@@ -57,3 +57,33 @@ export interface CanvasModel {
 }
 
 export const CanvasContext = createContext<CanvasModel>({ fields: {}, tree: { el: 'Box' }, entry: null, repeats: [], locale: 'en-US', fieldValues: {} });
+
+/** Item shapes of the Puck data the canvas reads (mirrors `tree-puck`'s `PuckItem`). */
+export interface CanvasItem {
+  type: string;
+  props: Record<string, unknown>;
+}
+
+/**
+ * The selection of the block builder canvas (spec §3 "Canvas visibility"): what is selected, its ancestors, the items
+ * of a container's slot, and a way to select an item. Provided inside Puck by `CanvasSelectionProvider`; the page
+ * builder has none, so its canvas keeps the real behaviour.
+ */
+export interface CanvasSelectionModel {
+  selectedId: string | null;
+  /** Ids from the selected item up to the top level (empty without a selection). */
+  path: readonly string[];
+  /** Items of container `id`'s `children` slot. */
+  children: (id: string) => readonly CanvasItem[];
+  select: (id: string) => void;
+}
+
+export const CanvasSelection = createContext<CanvasSelectionModel>({ selectedId: null, path: [], children: () => [], select: () => {} });
+
+/** "Show hover" of the style panel: the item drawn with its hover colours (or none). */
+export interface HoverPreviewModel {
+  id: string | null;
+  set: (id: string | null) => void;
+}
+
+export const HoverPreview = createContext<HoverPreviewModel>({ id: null, set: () => {} });

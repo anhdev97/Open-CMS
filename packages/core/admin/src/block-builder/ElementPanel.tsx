@@ -2,7 +2,7 @@
 // props, "show when", a Slot's allowed blocks and the name / anchor id texts. Token props use the page editor's fields.
 import { useEffect, useId, useRef, useState } from 'react';
 import type { CustomFieldRender } from '@puckeditor/core';
-import { ANCHOR_ID_RE, ELEMENT_BINDABLE, OVERLAY_NAME_RE, type BindSource, type ComposedElement, type ComposedNode } from '@opencloudcms/schema';
+import { ANCHOR_ID_RE, ELEMENT_BINDABLE, FORM_CONTROL_NAME_RE, OVERLAY_NAME_RE, type BindSource, type ComposedElement, type ComposedNode } from '@opencloudcms/schema';
 import { Checkbox } from '../components/ui/checkbox';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -145,14 +145,15 @@ export const AllowField: CustomFieldRender<unknown> = ({ field, name, value, onC
 };
 
 /**
- * A text checked against a name pattern (`metadata.pattern`): `name` (Region names, required) or `anchor`
- * (`anchorId`, optional). An invalid text shows an inline error and is not written; empty clears an optional value.
+ * A text checked against a name pattern (`metadata.pattern`): `name` (Region names, required), `control` (form
+ * control names, `FORM_CONTROL_NAME_RE`, required) or `anchor` (`anchorId`, optional). An invalid text shows an
+ * inline error and is not written; empty clears an optional value.
  */
 export const PatternField: CustomFieldRender<unknown> = ({ field, name, id, value, onChange, readOnly }) => {
   const m = useBuilder();
-  const meta = (field.metadata ?? {}) as { pattern?: 'name' | 'anchor'; required?: boolean };
+  const meta = (field.metadata ?? {}) as { pattern?: 'name' | 'anchor' | 'control'; required?: boolean };
   const kind = meta.pattern ?? 'anchor';
-  const re = kind === 'name' ? OVERLAY_NAME_RE : ANCHOR_ID_RE;
+  const re = kind === 'name' ? OVERLAY_NAME_RE : kind === 'control' ? FORM_CONTROL_NAME_RE : ANCHOR_ID_RE;
   const stored = typeof value === 'string' ? value : '';
   const [text, setText] = useState(stored);
   const last = useRef(stored);

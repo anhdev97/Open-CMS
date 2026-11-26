@@ -4,7 +4,11 @@
 import type { BindSource, ComposedBlockSpec, ComposedElement, ComposedNode, NodeStyle } from '@opencloudcms/schema';
 
 /** Elements that hold other elements (their Puck `children` slot). */
-export const CONTAINER_ELEMENTS: readonly ComposedElement[] = ['Box', 'Stack', 'Columns', 'Grid', 'Card', 'Overlay'];
+export const CONTAINER_ELEMENTS: readonly ComposedElement[] = [
+  'Box', 'Stack', 'Columns', 'Grid', 'Card', 'Overlay', 'Dropdown', 'Tooltip', 'Accordion', 'AccordionItem', 'Tabs', 'TabPanel', 'Carousel',
+];
+/** Layout containers: an empty one as the root is "nothing designed yet". */
+const LAYOUT_CONTAINERS: readonly string[] = ['Box', 'Stack', 'Columns', 'Grid', 'Card'];
 
 /** Puck prop names that are not node props. */
 export const RESERVED_ITEM_KEYS = ['id', 'bind', 'showIf', 'style', 'children'] as const;
@@ -84,7 +88,7 @@ export function uniqueRegionName(base: string, taken: readonly string[]): string
 
 /** Nothing designed yet: the root is a container (not an Overlay) without children. */
 export function isEmptyTree(tree: ComposedNode): boolean {
-  return tree.el !== 'Overlay' && isContainer(tree.el) && !(tree.children ?? []).length;
+  return LAYOUT_CONTAINERS.includes(tree.el) && !(tree.children ?? []).length;
 }
 
 /**
@@ -97,7 +101,7 @@ export function hoistOverlay(data: BuilderPuckData): BuilderPuckData | null {
   const overlays = items.filter((i) => i.type === 'Overlay');
   if (overlays.length !== 1) return null;
   const rest = items.filter((i) => i.type !== 'Overlay');
-  const empty = rest.every((i) => i.type !== 'Overlay' && isContainer(i.type) && !(Array.isArray(i.props?.children) && i.props.children.length));
+  const empty = rest.every((i) => LAYOUT_CONTAINERS.includes(i.type) && !(Array.isArray(i.props?.children) && i.props.children.length));
   return empty ? { ...data, content: [overlays[0]!] } : null;
 }
 
@@ -130,5 +134,33 @@ export function puckRegionNames(data: BuilderPuckData | null | undefined, except
     }
   };
   walk(data?.content);
+  return out;
+}
+
+export interface PuckIndexEntry {
+  item: PuckItem;
+  parentId: string | null;
+}
+
+/** Every item of the Puck data by id, with its parent's id (null at the top level). */
+export function indexPuck(data: BuilderPuckData | null | undefined): Map<string, PuckIndexEntry> {
+  const out = new Map<string, PuckIndexEntry>();
+  const walk = (items: unknown, parentId: string | null) => {
+    if (!Array.isArray(items)) return;
+    for (const it of items as PuckItem[]) {
+      if (!isObj(it) || !isObj(it.props)) continue;
+      const id = String(it.props.id);
+      out.set(id, { item: it, parentId });
+      walk(it.props.children, id);
+    }
+  };
+  walk(data?.content, null);
+  return out;
+}
+
+/** Ids from item `id` up to the top level (`[id, parent, grandparent…]`); empty when `id` is not in the index. */
+export function pathOf(index: Map<string, PuckIndexEntry>, id: string | null | undefined): string[] {
+  const out: string[] = [];
+  for (let cur = id ?? null; cur !== null && index.has(cur) && !out.includes(cur); cur = index.get(cur)!.parentId) out.push(cur);
   return out;
 }

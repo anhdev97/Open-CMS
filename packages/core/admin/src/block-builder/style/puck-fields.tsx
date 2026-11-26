@@ -27,8 +27,18 @@ export const LengthPuckField: CustomFieldRender<unknown> = ({ field, name, value
   <LengthField label={fieldLabel(field, name)} value={value as Length | undefined} onChange={onChange} responsive={false} readOnly={readOnly} />
 );
 
-/** A select per breakpoint over `metadata.options`. */
+/** A responsive value with every breakpoint value mapped by `f`. */
+function mapResponsive<A, B>(v: Responsive<A> | undefined, f: (x: A) => B): Responsive<B> | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'object') return f(v as A);
+  return Object.fromEntries(Object.entries(v).map(([bp, x]) => [bp, f(x as A)])) as Responsive<B>;
+}
+
+/** A select per breakpoint over `metadata.options`; `metadata.numeric` stores numbers (Carousel `perView`). */
 export const ResponsiveSelectPuckField: CustomFieldRender<unknown> = ({ field, name, value, onChange, readOnly }) => {
   const options = (field.metadata?.options ?? []) as SelectOption[];
-  return <ResponsiveSelect label={fieldLabel(field, name)} value={value as Responsive<string> | undefined} onChange={onChange} options={options} readOnly={readOnly} />;
+  const numeric = field.metadata?.numeric === true;
+  const shown = numeric ? mapResponsive(value as Responsive<number> | undefined, String) : (value as Responsive<string> | undefined);
+  const write = (v: Responsive<string> | undefined) => onChange(numeric ? mapResponsive(v, Number) : v);
+  return <ResponsiveSelect label={fieldLabel(field, name)} value={shown} onChange={write} options={options} readOnly={readOnly} />;
 };

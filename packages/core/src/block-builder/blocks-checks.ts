@@ -14,11 +14,26 @@ export const ENTRY_PROP_KINDS: Partial<Record<ComposedElement, Record<string, re
   Heading: { text: TEXT },
   Text: { text: TEXT, html: ['richText'] },
   // `alt` may also read the asset's own alt text (resolved by resolvePage). A multiple asset field shows its first asset.
-  Image: { src: ['asset', 'url'], alt: [...TEXT, 'asset'] },
+  Image: { src: ['asset', 'url'], alt: [...TEXT, 'asset'], href: ['url'] },
   Button: { label: TEXT, href: ['url'] },
   Badge: { text: TEXT },
   Price: { value: ['number', 'money'] },
   Date: { value: ['date', 'datetime'] },
+  // Builder component elements (spec §1 table) and the clickable Image/Box/Card `href`.
+  Box: { href: ['url'] },
+  Card: { href: ['url'] },
+  Dropdown: { label: TEXT, href: ['url'] },
+  Tooltip: { text: TEXT },
+  AccordionItem: { title: TEXT },
+  TabPanel: { label: TEXT },
+  Icon: { label: TEXT },
+  Input: { label: TEXT, placeholder: TEXT, help: TEXT },
+  Textarea: { label: TEXT, placeholder: TEXT, help: TEXT },
+  Select: { label: TEXT, placeholder: TEXT, help: TEXT },
+  Combobox: { label: TEXT, placeholder: TEXT, help: TEXT },
+  Radio: { label: TEXT, help: TEXT },
+  Checkbox: { label: TEXT, help: TEXT },
+  Switch: { label: TEXT, help: TEXT },
 };
 
 /** Entry properties every content API item carries besides its fields. */
