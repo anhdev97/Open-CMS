@@ -181,6 +181,8 @@ In production, set `schemaEditable: false`: schema changes go through git and `o
 | `GET/POST /api/admin/groups` · `PATCH/DELETE …/:id` · `GET /api/admin/permissions` | permission groups |
 | `GET/POST /api/admin/content-types` · `POST …/plan` · `DELETE …/:id` | schema builder |
 | `GET/POST /api/admin/assets` · `/api/admin/taxonomies[/:slug/terms]` | system data |
+| `POST /api/admin/content/:type/assets` · `GET /api/admin/assets/:id/file` · `POST …/:id/link` | private files (upload into a private type's asset field, download, 5-minute signed link) |
+| `GET /api/admin/pages/bases` · `PUT …/bases/default` · `GET …/bases/:id/usage` | base pages |
 | `GET/PUT /api/admin/locales` | website languages (`src/locales.ts`; `PUT` only with `schemaEditable`) |
 | `GET/PUT /api/admin/content-groups` | sidebar groups of content types (`src/content-groups.ts`; `PUT` only with `schemaEditable`) |
 | `PATCH /api/auth/me` `{ locale }` | admin language of the signed-in user (`null` = follow the browser) |
@@ -190,7 +192,9 @@ Filtering and sorting are only allowed on `indexed`/`unique` fields, so every st
 `/api/admin/*` requires a session and, per route, a permission (403 `forbidden` without it; see
 [Users, groups and review](#users-groups-and-review)); `/api/content/*` is public. Every `/api/**` failure
 answers `{ "error": { "code", "message", "issues"? } }`. Browsers on other origins can read
-`/api/content/**` (GET only, no credentials) if their origin is listed in `cors.origins`.
+`/api/content/**` (GET only, no credentials) if their origin is listed in `cors.origins`; a preflight for any
+`/api/content/<segment>` that is not a public content type (unknown, private, or a custom route mounted there)
+answers 404, so mount custom cross-origin routes elsewhere.
 
 ## Languages and content groups
 
@@ -267,7 +271,41 @@ Until a page is published at `/`, the home shows a welcome page. Field kinds, pr
 [`packages/core/README.md`](packages/core/README.md#page-builder). `examples/my-store` has a `ProductGrid` block
 and `pnpm --filter my-store seed:pages` publishes `/` (the storefront below, its featured products with photos uploaded
 to the media library, English with a vi-VN translation), `/shop` (the two composed blocks below; three sample products first when the catalogue is empty)
-and `/about`. Existing pages are skipped; `pnpm --filter my-store seed:pages -- --force` replaces their content.
+and `/about`, all framed by the base page below, plus `/landing`. Existing pages are skipped;
+`pnpm --filter my-store seed:pages -- --force` replaces their content.
+
+### Base pages, overlays and actions
+
+A **base page** (Page builder > Pages > Base pages) is the frame pages sit in: its single root block is a **layout
+block** built in the Block Builder with `Region` elements (header, footer, any other) and one `PageContent`, and each
+region holds default blocks. Every page uses the default base page unless its **Page settings** pick another one or
+none, and can keep, **replace** (drag blocks in for that page) or **hide** each region. **Overlay blocks** (root
+element `Overlay`: a modal or a drawer, named) are built the same way and placed anywhere; a `Button` with an
+**action** opens, closes or toggles one by name, or scrolls to an element. They render as native `<dialog>`
+elements (focus kept inside, Esc, inert background, scroll lock, closed on navigation); pages without them ship no
+extra JavaScript. Code uses the client API of `@opencloudcms/core/blocks/client` (`openOverlay`, `closeOverlay`,
+`toggleOverlay`, `useOverlay`, `<OverlayTrigger>`).
+
+`examples/my-store` shows all of it: the base page **Store** (the default) puts `StoreHeader` in the `header` region
+of the `StoreFrame` layout and `StoreFooter` in `footer`, so `/`, `/shop` and `/about` no longer contain them; the
+header's Contact button and the footer's "Write to us" link open the `ContactModal` named `lien-he` (a medium modal
+with email and phone links and a close button), and a ☰ button, hidden on desktop, toggles the `MobileMenu` drawer
+`menu-mobile` (left, small) that holds the nav links hidden on mobile. `/landing` replaces the header with a simple
+one (and its own contact popup) and hides the footer. Details:
+[`packages/core/README.md`](packages/core/README.md#base-pages).
+
+### Private content types
+
+`private: true` types hold data the admin must see and the public must never reach (orders, customers, CVs):
+`/api/content` answers 404 for them (as for an unknown type, CORS preflight included), the builders' type pickers
+and references leave them out, entries are never published (no review, locales or version history), `readOnly`
+fields are written only by server code through the injectable `PrivateEntriesService`, and their asset fields store
+**private files**: no `/media` URL, sniffed against the field's `accept`, downloadable only by signed-in users with
+`content.read`, deleted with the entry. `examples/my-store` has a private `order` type (`code`, `orderStatus`,
+readOnly `items` and `total`, a PDF `invoice`): `pnpm --filter my-store seed:orders` creates two orders with a
+generated placeholder invoice (`-- --force` recreates them). Code that lists content for the public (webhooks,
+search, a sitemap, a custom renderer) must skip private types. Details:
+[`packages/core/README.md`](packages/core/README.md#private-content-types).
 
 ### Block Builder
 

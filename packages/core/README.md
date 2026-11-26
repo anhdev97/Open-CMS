@@ -49,7 +49,10 @@ Fixed paths, none configurable: UI `/admin`, API `/api`, auth `/oauth2`, deliver
 | `env` | `process.env` | environment for the auth module (tests) |
 
 CORS applies to `GET`, `HEAD`, `OPTIONS` on `/api/content/**` only, without credentials. No other route
-sends CORS headers; the admin UI is same-origin.
+sends CORS headers; the admin UI is same-origin. Only routes the public API serves (public content types and the
+asset lookup `/api/content/assets`) get CORS headers: a preflight (`OPTIONS`) for any other `/api/content/<segment>`
+(an unknown or private type, or a custom route you mount under `/api/content`) answers 404 without CORS headers, so a
+private type cannot be told from a missing one. Mount custom cross-origin routes outside `/api/content`.
 
 The browser must reach the admin at the public URL (`OPENCLOUDCMS_PUBLIC_URL`, default `http://localhost:PORT`). Opening it at another address (`127.0.0.1`, a LAN IP) makes setup and login fail with `origin_mismatch`; open the configured URL or set `OPENCLOUDCMS_PUBLIC_URL` to the address you use.
 
@@ -291,6 +294,100 @@ panel and validated on save (422 `invalid_block` with the path of a bad value):
   `ui.cssLength`, `ui.cssColor`, `ui.cssTracks`, `ui.resolveTracks` and `ui.layoutClass` / `ui.layoutStyle` expose the
   same conversions.
 
+### Base pages
+
+A **base page** is the frame pages sit in (header, footer, any other region). It is a row of the page type with
+`kind: 'base'` (no `path`, never served by `by-path`, the sitemap of shadowed paths or the public page list), edited
+in **Page builder > Pages > Base pages** with the same drafts, publish, versions, locales and permissions as pages.
+
+- Its content is exactly **one layout block** at root (422 `invalid_base_root` on publish otherwise): a composed
+  block whose tree holds `Region` elements (`props: { name, label?, allow? }`, `name` `^[a-z][a-z0-9-]{0,31}$`,
+  unique in the block) and exactly one `PageContent`. Each region is a slot field `region__<name>` holding the
+  region's default blocks; `PageContent` (field `pageContent`) is where each page's blocks go. A layout block cannot
+  be placed anywhere else (422 `layout_block_misplaced`).
+- One base page may be the **default** (`PUT /api/admin/pages/bases/default { documentId | null }`, permission
+  `content.publish`; only a published base, 409 `base_not_published`). The default cannot be unpublished or deleted
+  (409 `base_is_default`); a base that pages use cannot be deleted, nor unpublished without `force` (409
+  `base_in_use`, the pages in `issues`). Publishing shows "used by N pages" (`GET /api/admin/pages/bases/:id/usage`).
+- A page chooses its base in **Page settings**, stored page-level (same for every locale) in `layout`:
+
+```ts
+layout: null                                    // the default base page, every region as is
+      | { baseId?: string | null;               // absent: the default base; an id; null: no base page
+          regions?: Record<string, 'default' | 'replace' | 'hide'> }  // absent region: 'default'
+```
+
+  `replace` takes the page's own blocks for that region from its root props `region__<name>` (localized page
+  content); `hide` renders nothing there.
+- The website (`createCmsPage`) loads the base (published, or the draft in draft mode, in the page's locale with the
+  default-locale fallback), composes it with `composeWithBase` (exported from `@opencloudcms/core/blocks`) and
+  resolves the data blocks of both. A missing or unpublished base renders the page without a frame and logs one
+  warning. When there is no default base page, the site remembers that for 30 s: a base page made the default
+  frames already-visited pages within 30 s.
+
+```ts
+// examples/my-store/src/blocks/store-frame/store-frame.block.ts (tree)
+{ el: 'Stack', props: { direction: 'vertical', gap: '0' }, children: [
+  { el: 'Region', props: { name: 'header', label: { 'en-US': 'Header' } } },
+  { el: 'PageContent' },
+  { el: 'Region', props: { name: 'footer', label: { 'en-US': 'Footer' } } },
+] }
+```
+
+### Overlays and button actions
+
+An **overlay block** is a composed block whose root is `Overlay`: a modal or a drawer, rendered on the server as a
+native `<dialog data-ocms-overlay="<name>">` (top layer, inert background, focus kept inside, Esc closes the top one,
+focus returned to the opener, page scroll locked, all closed on navigation). It takes no space where it is placed
+(any region of a base page or a page's content).
+
+- `Overlay` props: `variant: 'modal' | 'drawer'`, `side: 'left' | 'right' | 'top' | 'bottom'` (drawer only),
+  `size: 'sm' | 'md' | 'lg' | 'xl' | 'full'`, `closeOnBackdrop` (default `true`), `showClose` (the × button,
+  default `true`), `labelledBy: 'first-heading'`. Its style takes spacing, size, colors, border and radius.
+- Each placement has a page-builder field `name` (`^[a-z][a-z0-9-]{0,31}$`, default: the block name in kebab case;
+  a block cannot declare its own `name` field). Names must be unique on a rendered page (base + page); the editor warns
+  about duplicates and the runtime uses the first.
+- **Button actions.** A composed `Button` (and the library `Button` / `ButtonGroup` items) takes an optional `action`:
+
+```ts
+type ButtonAction =
+  | { type: 'overlay'; op: 'open' | 'close' | 'toggle'; target?: string } // close without target: the overlay
+                                                                           // containing the button, else the top one
+  | { type: 'scroll'; target: string };                                    // element id, smooth scroll
+```
+
+  Without `action` a button is the same link as before (byte-identical output). With one it renders
+  `<button type="button">` and `href` is ignored. Targets match the overlay name regex; scroll targets
+  `^[A-Za-z][\w-]{0,63}$`, set with the `anchorId` prop of an element.
+- Pages without an overlay or an action button ship no extra JavaScript: the renderer mounts the small
+  `OverlayRouteWatcher` only where one is present.
+
+**Client API** (`@opencloudcms/core/blocks/client`, `'use client'`, ESM and CJS, no browser globals at import):
+
+| | |
+|---|---|
+| `openOverlay(name)`, `toggleOverlay(name)` | open / toggle the first `<dialog data-ocms-overlay="<name>">` of the page |
+| `closeOverlay(name?)` | close it; without a name, the top-most open overlay |
+| `closeAllOverlays()`, `isOverlayOpen(name)`, `subscribeOverlays(cb)` | store helpers (`subscribeOverlays` returns the unsubscribe) |
+| `useOverlay(name)` | `{ open, close, toggle, isOpen }` in a client component |
+| `<OverlayTrigger name op?>` | wraps one element (`children`) and runs `op` (default `open`) on click |
+| `ActionButton` | the button the renderers use for `action` |
+
+```tsx
+'use client';
+import { OverlayTrigger, useOverlay } from '@opencloudcms/core/blocks/client';
+
+export function HeaderButtons() {
+  const menu = useOverlay('menu-mobile');
+  return (
+    <>
+      <button type="button" onClick={menu.toggle}>☰</button>
+      <OverlayTrigger name="lien-he"><button type="button">Contact</button></OverlayTrigger>
+    </>
+  );
+}
+```
+
 ### Wiring (written by `opencloudcms init`)
 
 | File | |
@@ -336,6 +433,10 @@ editor warns about them.
 | `GET /api/admin/content/opencloudcmsPage/by-path?path=&locale=` | draft page (`content.read`, `no-store`) |
 | `GET /api/admin/pages/blocks-check` | `{ data, manifest }`: pages using blocks missing from `pages.blocks` |
 | `GET /api/admin/pages/shadowed` | `{ data: string[] }`: page paths served by a file route of the website |
+| `GET /api/admin/pages/bases` | `{ data }`: base page drafts (default locale), the default first (`content.read`) |
+| `PUT /api/admin/pages/bases/default` | `{ documentId: string \| null }`: set or clear the default base page (`content.publish`) |
+| `GET /api/admin/pages/bases/:id/usage` | `{ count, pages: { documentId, title, path }[] }`: pages the base frames |
+| `GET /api/content/opencloudcmsPage/base?id=<documentId\|default>&locale=` | published base page (public); `/api/admin/…/base` for the draft |
 | `GET /api/admin/blocks` | `{ editable, composedIndexWired, data, loadErrors }`: every block with `source` (`core`, `code`, `composed`), `usage` (pages using it) and `problems` |
 | `GET` / `PUT` / `DELETE /api/admin/blocks/:name` | a composed block: `{ spec, file, usage, problems }`; save `{ spec, confirmBreaking? }`; delete (`?force=1` when used) |
 | `POST /api/admin/blocks/:name/eject` | export as TSX: `{ file, importLine, files }` |
@@ -362,7 +463,9 @@ empty body on the website (one WARN per page and locale).
 - The website serves the default locale only; other locales can be edited, published and previewed.
 - No caching: each request calls the API over loopback and resolves the data blocks.
 - Data blocks do not populate references inside entries (they stay ids).
-- The editor canvas shows the page body only (no website header/footer); "View on website" shows the full page.
+- The editor canvas draws the page inside its base page (default regions dimmed, replaced regions editable, hidden
+  regions marked); a website header or footer written as code in `app/(site)/layout.tsx` is not shown there.
+- Base pages: one level (no nested bases), no rules by path pattern.
 - Adding or changing a block is a code change (and a deploy), also from the Block Builder: production needs a
   rebuild to see a new block. Building and publishing pages works in production.
 - Composed blocks: fixed and editor filters are equality only, on indexed or unique fields (no `price > x`,
@@ -471,7 +574,62 @@ A type with `private: true` (and fields with `readOnly: true`) holds data the ad
   `remove`): it may write `readOnly` fields, runs the same validation and entry hooks, and each call has its own
   transaction. `opts.user` is optional (actor `system`; entries store no author).
 
-Core has no webhooks, search or sitemap today; whoever adds them must skip private types.
+Validation: a private type cannot have `review: true` or localizable fields, a public type cannot `reference` a
+private one, and `private` can only be switched while the type has no entries. Private entries have no version
+history. `GET /api/admin/content/:apiId/:documentId/files` lists the private files an entry owns
+(`{ id, filename, size, mime }[]`).
+
+```ts
+// examples/my-store/src/content-types/order/order.schema.ts
+defineContentType({
+  apiId: 'order',
+  private: true,
+  fields: {
+    code: f.text({ required: true, unique: true }),
+    orderStatus: f.text({ required: true }),          // `status` is a reserved field name
+    items: f.json({ readOnly: true }),
+    total: f.money({ readOnly: true }),
+    invoice: f.asset({ accept: ['application/pdf'] }), // a private file
+  },
+});
+
+// a project module (examples/my-store/scripts/seed-orders.ts)
+const orders = app.get(PrivateEntriesService);
+await orders.create('order', {
+  code: 'MS-1001', orderStatus: 'paid', items, total: { amount: 690000, currency: 'VND' },
+  invoice: { buffer: pdf, filename: 'invoice-MS-1001.pdf', contentType: 'application/pdf' },
+});
+```
+
+**Skip private types.** Core has no webhooks, search or sitemap today; whoever adds them (or any other code that
+lists content types or entries for the public, such as a custom renderer or export) must skip private types
+(`ContentRegistry.isPublic(apiId)`; `private: true` on the type in `/api/admin/content-types`).
+
+**Custom fetchers.** A `ContentFetcher` that can read private entries (an admin or draft fetcher you pass to
+`resolvePage` yourself) must implement `privateApiIds()`: without it the resolver cannot tell which types are private
+and fails open, so a block bound to a private type would render its entries. The built-in `adminFetcher` implements
+it; `publicFetcher` needs none (the public API answers 404 for private types). If `privateApiIds()` fails, the
+resolver fetches no entries at all for that render.
+
+### Private files
+
+Asset fields of a private type store **private files** (`@opencloudcms/assets`, `visibility = 'private'`, core
+migration `0008_private_assets`):
+
+- Stored apart from public media: `local` keeps them in `assets.local.privateRoot` (default `private-assets` next
+  to `assets.local.root`, never served by `/media`); S3/GCS use the `private/` key prefix without a public ACL. They
+  have no URL, and never appear in the media library, folders or public asset pickers.
+- Upload: `POST /api/admin/content/:apiId/assets` (multipart `file` + `field`, `content.update`) or a file value
+  `{ buffer, filename, contentType }` passed to `PrivateEntriesService`. The size limit is the assets `maxBytes`; the
+  type is sniffed from the bytes against the field's `accept` (the extension and declared type are not trusted). An
+  upload no entry attaches is deleted after 24 h; deleting the entry deletes its files.
+- Download: `GET /api/admin/assets/:id/file` streams the file to a signed-in user with `content.read`
+  (`Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`). For a
+  link that cannot send the session, `POST /api/admin/assets/:id/link` returns a signed URL (`?token=`, HMAC, 5
+  minutes, bound to the asset and the user).
+- `AssetsService` (server code): `uploadPrivate(file, { ownerApiId, accept, uploadedBy? })`, `openPrivate(id)`
+  (`{ asset, stream }`), `deletePrivate(id, { ownerDocumentId })` (deletes only while the file is still owned as the
+  caller saw it; `null` = unattached; returns whether the row was deleted).
 
 ## Breaking changes
 
