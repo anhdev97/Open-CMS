@@ -11,6 +11,10 @@
 
 ### Fixed
 
+- **Private files on S3/GCS can use their own bucket.** `assets.s3.privateBucket` / `assets.gcs.privateBucket`
+  (optional) receive every private file (`put`, `get` and `delete` with `visibility: 'private'`). Without it private
+  files share the media bucket under `private/`, and the provider sets no ACL: a bucket that serves public reads must
+  deny them on `private/*` (see "Private files" in the core README).
 - **Publishing no longer changes the draft's `updatedAt`.** Only its `publishedAt` moves (`hasUnpublishedChanges`
   stays `updatedAt > publishedAt`), so a save sent with the `If-Match` the editor saw before Publish succeeds
   instead of answering 409 `stale_draft`. The page editor also re-reads the draft version after publishing.

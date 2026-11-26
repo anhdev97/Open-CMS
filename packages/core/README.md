@@ -617,8 +617,33 @@ Asset fields of a private type store **private files** (`@opencloudcms/assets`, 
 migration `0008_private_assets`):
 
 - Stored apart from public media: `local` keeps them in `assets.local.privateRoot` (default `private-assets` next
-  to `assets.local.root`, never served by `/media`); S3/GCS use the `private/` key prefix without a public ACL. They
+  to `assets.local.root`, never served by `/media`). On S3/GCS their keys start with `private/` and they go to
+  `assets.s3.privateBucket` / `assets.gcs.privateBucket` when set, otherwise to the same bucket as public media. They
   have no URL, and never appear in the media library, folders or public asset pickers.
+- **Sharing one S3/GCS bucket:** the provider sets no ACL, so a private file is exactly as readable as the bucket
+  makes it. If the bucket (or a CDN in front of it) serves public reads, its policy **must deny public reads on
+  `private/*`**, or set `privateBucket` to a bucket with no public access. S3: keep Block Public Access on for the
+  private bucket, or add a deny to the shared bucket's policy, for example
+
+  ```json
+  {
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Sid": "DenyPublicReadOfPrivateFiles",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::my-media-bucket/private/*",
+      "Condition": { "StringNotEquals": { "aws:PrincipalAccount": "123456789012" } }
+    }]
+  }
+  ```
+
+  (replace the bucket and account; the CMS's own credentials must still read the objects). GCS: a public grant to
+  `allUsers` covers the whole bucket (IAM Conditions cannot narrow it to a prefix), so a GCS bucket that is public
+  through IAM cannot keep `private/*` private; use `privateBucket` (no `allUsers`/`allAuthenticatedUsers` access,
+  public access prevention enforced), or keep the shared bucket non-public and serve media through a CDN that only
+  reads paths outside `private/`.
 - Upload: `POST /api/admin/content/:apiId/assets` (multipart `file` + `field`, `content.update`) or a file value
   `{ buffer, filename, contentType }` passed to `PrivateEntriesService`. The size limit is the assets `maxBytes`; the
   type is sniffed from the bytes against the field's `accept` (the extension and declared type are not trusted). An
