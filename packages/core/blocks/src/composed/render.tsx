@@ -1,11 +1,16 @@
 // Generic renderer of a composed block spec: walks `tree`, reads `bind` sources and renders the public `ui`
 // primitives. Isomorphic (server components, editor canvas, CJS): no hooks, no browser or Node globals.
 import { Fragment, type ReactNode } from 'react';
-import type { BindSource, ComposedBlockSpec, ComposedNode, Responsive, Track } from '@opencloudcms/schema';
+import { localizedText, type BindSource, type Locale, type ComposedBlockSpec, type ComposedNode, type ControlOption as SpecOption, type Responsive, type Track } from '@opencloudcms/schema';
 import type { ColorToken, SpacingToken } from '../types';
 import { Badge, Button, DateText, Divider, Heading, Image, Price, Spacer, Text, validAction } from '../ui/content';
 import { Box, Card, Columns, Grid, Stack } from '../ui/layout';
 import { Overlay } from '../ui/overlay';
+import { Icon, type IconSize } from '../ui/icon';
+import { Tooltip } from '../ui/tooltip';
+import { Accordion, AccordionItem } from '../ui/accordion';
+import { Checkbox, Input, Radio, Select, Switch, Textarea, type ControlOption, type InputType } from '../ui/form';
+import { safeHref } from '../ui/href';
 import { composedHelpers } from './helpers';
 
 type Props = Record<string, unknown>;
@@ -25,6 +30,10 @@ interface Ctx {
   overlay?: { name: string; heading?: ComposedNode; labelId?: string };
   /** Entry field reader (warns once per missing path). */
   get: (entry: object | null | undefined, path: string) => unknown;
+  /** Block label in the locale: the name of a clickable image without alt. */
+  blockLabel: string;
+  /** Inside a Tooltip: the target's first focusable node and the bubble id it is described by. */
+  describe?: { node: ComposedNode; id: string };
 }
 
 const entryValue = (ctx: Ctx, path: string): unknown => ctx.get(ctx.entry, path);
@@ -54,6 +63,41 @@ const val = (ctx: Ctx, n: ComposedNode, k: string): unknown => (n.bind && has(n.
 const tok = <T,>(v: unknown) => v as T;
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
 
+/** Href of a clickable Image/Box/Card: only a bound `href` makes one (like `isClickable`); a fixed prop does not. */
+const boundHref = (ctx: Ctx, n: ComposedNode): string | null => (n.bind && has(n.bind, 'href') ? h.href(source(ctx, n.bind.href)) : null);
+
+/** Whether `n` itself renders as a link or button (it takes the focus a Tooltip describes). */
+function focusableSelf(ctx: Ctx, n: ComposedNode): boolean {
+  const p = n.props ?? {};
+  switch (n.el) {
+    case 'Button':
+      return !!validAction(p.action) || !!safeHref(h.href(val(ctx, n, 'href')));
+    case 'Image':
+      return !!h.image(val(ctx, n, 'src'), val(ctx, n, 'alt')) && (!!validAction(p.action) || !!boundHref(ctx, n));
+    case 'Box':
+    case 'Card':
+      return !!validAction(p.action) || !!boundHref(ctx, n);
+    default:
+      return false;
+  }
+}
+
+/** First rendered node of `n` (depth first) that takes focus. */
+function firstFocusable(ctx: Ctx, n: ComposedNode): ComposedNode | undefined {
+  if (!visible(ctx, n)) return undefined;
+  if (focusableSelf(ctx, n)) return n;
+  for (const c of n.children ?? []) {
+    const f = firstFocusable(ctx, c);
+    if (f) return f;
+  }
+  return undefined;
+}
+
+const describedBy = (ctx: Ctx, n: ComposedNode): string | undefined => (ctx.describe?.node === n ? ctx.describe.id : undefined);
+const options = (ctx: Ctx, v: unknown): ControlOption[] =>
+  Array.isArray(v) ? (v as SpecOption[]).map((o) => ({ value: o.value, label: localizedText(o.label, ctx.locale as Locale) })) : [];
+const bool = (v: unknown): boolean | undefined => (typeof v === 'boolean' ? v : undefined);
+
 /** First `Heading` of `n` (depth first) that is rendered: it and every ancestor pass their `showIf`. */
 function firstVisibleHeading(ctx: Ctx, n: ComposedNode): ComposedNode | undefined {
   if (!visible(ctx, n)) return undefined;
@@ -70,10 +114,24 @@ function renderNode(ctx: Ctx, n: ComposedNode, key?: number): ReactNode {
   const p = n.props ?? {};
   const st = n.style;
   const id = str(p.anchorId);
-  const kids = (n.children ?? []).map((c, i) => renderNode(ctx, c, i));
+  const kids = () => (n.children ?? []).map((c, i) => renderNode(ctx, c, i));
   switch (n.el) {
     case 'Box':
-      return <Box key={key} id={id} padding={tok<SpacingToken>(p.padding)} background={tok<ColorToken>(p.background)} style={st}>{kids}</Box>;
+      return (
+        <Box
+          key={key}
+          id={id}
+          padding={tok<SpacingToken>(p.padding)}
+          background={tok<ColorToken>(p.background)}
+          style={st}
+          href={boundHref(ctx, n)}
+          action={validAction(p.action)}
+          ariaLabel={str(p.ariaLabel)}
+          describedBy={describedBy(ctx, n)}
+        >
+          {kids()}
+        </Box>
+      );
     case 'Stack':
       return (
         <Stack
@@ -86,7 +144,7 @@ function renderNode(ctx: Ctx, n: ComposedNode, key?: number): ReactNode {
           wrap={typeof p.wrap === 'boolean' ? p.wrap : undefined}
           style={st}
         >
-          {kids}
+          {kids()}
         </Stack>
       );
     case 'Columns':
@@ -102,15 +160,26 @@ function renderNode(ctx: Ctx, n: ComposedNode, key?: number): ReactNode {
           gapY={str(p.gapY)}
           style={st}
         >
-          {kids}
+          {kids()}
         </Columns>
       );
     case 'Grid':
-      return <Grid key={key} id={id} columns={tok<3>(p.columns)} gap={tok<SpacingToken>(p.gap)} style={st}>{kids}</Grid>;
+      return <Grid key={key} id={id} columns={tok<3>(p.columns)} gap={tok<SpacingToken>(p.gap)} style={st}>{kids()}</Grid>;
     case 'Card':
       return (
-        <Card key={key} id={id} padding={tok<SpacingToken>(p.padding)} background={tok<ColorToken>(p.background)} bordered={p.bordered !== false} style={st}>
-          {kids}
+        <Card
+          key={key}
+          id={id}
+          padding={tok<SpacingToken>(p.padding)}
+          background={tok<ColorToken>(p.background)}
+          bordered={p.bordered !== false}
+          style={st}
+          href={boundHref(ctx, n)}
+          action={validAction(p.action)}
+          ariaLabel={str(p.ariaLabel)}
+          describedBy={describedBy(ctx, n)}
+        >
+          {kids()}
         </Card>
       );
     case 'Slot':
@@ -135,7 +204,7 @@ function renderNode(ctx: Ctx, n: ComposedNode, key?: number): ReactNode {
           locale={ctx.locale}
           style={st}
         >
-          {kids}
+          {kids()}
         </Overlay>
       );
     }
@@ -149,7 +218,26 @@ function renderNode(ctx: Ctx, n: ComposedNode, key?: number): ReactNode {
       // Explicit alt (bound or fixed) first, then the asset's own alt, then empty.
       const img = h.image(val(ctx, n, 'src'), val(ctx, n, 'alt'));
       if (!img) return null;
-      return <Image key={key} id={id} src={img.src} alt={img.alt} ratio={tok<'auto'>(p.ratio)} rounded={p.rounded === true} fit={tok<'cover'>(p.fit)} aspect={tok<'auto'>(p.aspect)} style={st} />;
+      const href = boundHref(ctx, n);
+      const action = validAction(p.action);
+      // A clickable image is its link's name: a missing alt falls back to the block label.
+      const alt = (href || action) && !img.alt.trim() ? ctx.blockLabel : img.alt;
+      return (
+        <Image
+          key={key}
+          id={id}
+          src={img.src}
+          alt={alt}
+          ratio={tok<'auto'>(p.ratio)}
+          rounded={p.rounded === true}
+          fit={tok<'cover'>(p.fit)}
+          aspect={tok<'auto'>(p.aspect)}
+          style={st}
+          href={href}
+          action={action}
+          describedBy={describedBy(ctx, n)}
+        />
+      );
     }
     case 'Button':
       return (
@@ -162,6 +250,120 @@ function renderNode(ctx: Ctx, n: ComposedNode, key?: number): ReactNode {
           size={tok<'default'>(p.size)}
           style={st}
           action={validAction(p.action)}
+          icon={str(p.icon)}
+          iconPosition={p.iconPosition === 'end' ? 'end' : undefined}
+          iconOnly={p.iconOnly === true}
+          describedBy={describedBy(ctx, n)}
+        />
+      );
+    case 'Icon':
+      return <Icon key={key} id={id} name={str(p.name) ?? ''} size={tok<IconSize>(p.size)} label={h.text(val(ctx, n, 'label'))} style={st} />;
+    case 'Tooltip': {
+      const child = n.children?.[0];
+      const target = child ? firstFocusable(ctx, child) : undefined;
+      return (
+        <Tooltip key={key} id={id} text={h.text(val(ctx, n, 'text'))} side={tok<'top'>(p.side)} focusWrapper={!target} style={st}>
+          {(tipId: string) => (child ? renderNode(target ? { ...ctx, describe: { node: target, id: tipId } } : ctx, child) : null)}
+        </Tooltip>
+      );
+    }
+    case 'Accordion':
+      return (
+        <Accordion key={key} id={id} single={p.single === true} defaultOpen={p.defaultOpen === 'first' ? 'first' : 'none'} style={st}>
+          {kids()}
+        </Accordion>
+      );
+    case 'AccordionItem':
+      return <AccordionItem key={key} id={id} title={h.text(val(ctx, n, 'title'))}>{kids()}</AccordionItem>;
+    case 'Input':
+      return (
+        <Input
+          key={key}
+          id={id}
+          name={str(p.name) ?? ''}
+          type={tok<InputType>(p.type)}
+          label={h.text(val(ctx, n, 'label'))}
+          placeholder={h.text(val(ctx, n, 'placeholder'))}
+          help={h.text(val(ctx, n, 'help'))}
+          required={bool(p.required)}
+          disabled={bool(p.disabled)}
+          autocomplete={str(p.autocomplete)}
+          style={st}
+        />
+      );
+    case 'Textarea':
+      return (
+        <Textarea
+          key={key}
+          id={id}
+          name={str(p.name) ?? ''}
+          rows={typeof p.rows === 'number' ? p.rows : undefined}
+          label={h.text(val(ctx, n, 'label'))}
+          placeholder={h.text(val(ctx, n, 'placeholder'))}
+          help={h.text(val(ctx, n, 'help'))}
+          required={bool(p.required)}
+          disabled={bool(p.disabled)}
+          style={st}
+        />
+      );
+    case 'Select':
+      return (
+        <Select
+          key={key}
+          id={id}
+          name={str(p.name) ?? ''}
+          options={options(ctx, p.options)}
+          defaultValue={str(p.defaultValue)}
+          label={h.text(val(ctx, n, 'label'))}
+          placeholder={h.text(val(ctx, n, 'placeholder'))}
+          help={h.text(val(ctx, n, 'help'))}
+          required={bool(p.required)}
+          disabled={bool(p.disabled)}
+          style={st}
+        />
+      );
+    case 'Radio':
+      return (
+        <Radio
+          key={key}
+          id={id}
+          name={str(p.name) ?? ''}
+          options={options(ctx, p.options)}
+          defaultValue={str(p.defaultValue)}
+          orientation={p.orientation === 'horizontal' ? 'horizontal' : 'vertical'}
+          label={h.text(val(ctx, n, 'label'))}
+          help={h.text(val(ctx, n, 'help'))}
+          required={bool(p.required)}
+          disabled={bool(p.disabled)}
+          style={st}
+        />
+      );
+    case 'Checkbox':
+      return (
+        <Checkbox
+          key={key}
+          id={id}
+          name={str(p.name) ?? ''}
+          value={str(p.value)}
+          defaultChecked={bool(p.defaultChecked)}
+          label={h.text(val(ctx, n, 'label'))}
+          help={h.text(val(ctx, n, 'help'))}
+          required={bool(p.required)}
+          disabled={bool(p.disabled)}
+          style={st}
+        />
+      );
+    case 'Switch':
+      return (
+        <Switch
+          key={key}
+          id={id}
+          name={str(p.name) ?? ''}
+          defaultChecked={bool(p.defaultChecked)}
+          label={h.text(val(ctx, n, 'label'))}
+          help={h.text(val(ctx, n, 'help'))}
+          disabled={bool(p.disabled)}
+          style={st}
         />
       );
     case 'Badge':
@@ -201,7 +403,8 @@ export function createComposedRender(spec: ComposedBlockSpec, slots: WeakMap<Com
 
   return (props) => {
     const locale = h.locale(props);
-    const ctx = (entry: Entry | null): Ctx => ({ props, entry, locale, urlPattern: binding?.urlPattern, slots, overlay, get });
+    const blockLabel = localizedText(spec.label, locale as Locale, spec.name) || spec.name;
+    const ctx = (entry: Entry | null): Ctx => ({ props, entry, locale, urlPattern: binding?.urlPattern, slots, overlay, get, blockLabel });
     let overlay: Ctx['overlay'];
     if (spec.tree.el === 'Overlay') {
       // Overlay blocks are never data-bound: visibility only reads fields.

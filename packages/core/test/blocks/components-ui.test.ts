@@ -1,10 +1,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createElement as h } from 'react';
-import { renderToString } from 'react-dom/server';
+import { renderToStaticMarkup, renderToString } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { defineComposedBlock, ui, type ComposedBlockSpec } from '../../blocks/src';
 import { loadComposedBlocks, loadConfig } from '@opencloudcms/codegen';
+import { ICON_NAMES } from '@opencloudcms/schema';
 
 const html = (node: unknown) => renderToString(node as never);
 
@@ -158,5 +159,302 @@ describe('render baseline: existing blocks render byte-identically', () => {
     expect(Object.keys(now).sort()).toEqual(Object.keys(before).sort());
     for (const k of Object.keys(before)) expect(now[k], k).toBe(before[k]);
     expect(Object.keys(before).filter((k) => k.startsWith('my-store/')).length).toBeGreaterThanOrEqual(9);
+  });
+});
+
+// ---- Builder components rendered without client JS (Task 2).
+
+const markup = (node: unknown) => renderToStaticMarkup(node as never);
+const c = (value: unknown) => ({ from: 'const' as const, value });
+const block = (tree: ComposedBlockSpec['tree'], over: Partial<ComposedBlockSpec> = {}) =>
+  markup(defineComposedBlock(base({ tree, ...over })).render({ _locale: 'en-US' } as never));
+const attr = (out: string, tag: string, name: string): string | undefined => {
+  const m = new RegExp(`<${tag}\\b[^>]*\\s${name}="([^"]*)"`).exec(out);
+  return m?.[1];
+};
+
+describe('Icon', () => {
+  it('renders an aria-hidden svg without a label', () => {
+    const out = markup(h(ui.Icon, { name: 'menu' }));
+    expect(out).toMatch(/^<svg\b/);
+    expect(out).toContain('aria-hidden="true"');
+    expect(out).not.toContain('role=');
+    expect(out).not.toContain('aria-label');
+  });
+  it('renders role="img" with the label as aria-label', () => {
+    const out = markup(h(ui.Icon, { name: 'menu', label: 'Menu' }));
+    expect(out).toContain('role="img"');
+    expect(out).toContain('aria-label="Menu"');
+    expect(out).not.toContain('aria-hidden');
+  });
+  it('sizes come from the literal table; an unknown name renders nothing', () => {
+    expect(markup(h(ui.Icon, { name: 'menu', size: 'xl' }))).toContain('size-8');
+    expect(markup(h(ui.Icon, { name: 'menu' }))).toContain('size-5');
+    expect(markup(h(ui.Icon, { name: 'nope' }))).toBe('');
+  });
+  it('every ICON_NAMES entry renders an svg, brand icons included', () => {
+    for (const name of ICON_NAMES) {
+      expect(ui.ICON_COMPONENTS[name], name).toBeDefined();
+      const out = markup(h(ui.Icon, { name }));
+      expect(out, name).toMatch(/^<svg\b[^>]*viewBox="0 0 24 24"[^>]*>.*<\/svg>$/);
+      expect(out, name).toContain('stroke="currentColor"');
+    }
+    expect(Object.keys(ui.ICON_COMPONENTS).sort()).toEqual([...ICON_NAMES].sort());
+  });
+  it('the Icon element renders through the composed renderer', () => {
+    const out = block({ el: 'Box', children: [{ el: 'Icon', props: { name: 'phone', size: 'lg' }, bind: { label: c('Call us') } }] });
+    expect(out).toContain('aria-label="Call us"');
+    expect(out).toContain('size-6');
+  });
+});
+
+describe('Tooltip', () => {
+  it('renders role="tooltip" and the target button gets aria-describedby = bubble id', () => {
+    const out = block({
+      el: 'Tooltip', props: { side: 'bottom' }, bind: { text: c('Free shipping') },
+      children: [{ el: 'Button', props: { label: 'Ship', href: '/ship' } }],
+    });
+    const id = attr(out, 'span', 'id') ?? attr(out, 'div', 'id');
+    const bubble = /<(?:span|div)\b[^>]*role="tooltip"[^>]*>/.exec(out)![0];
+    const bubbleId = /id="([^"]+)"/.exec(bubble)![1];
+    expect(id).toBeDefined();
+    expect(attr(out, 'a', 'aria-describedby')).toBe(bubbleId);
+    expect(out).toContain('>Free shipping<');
+    expect(out).toMatch(/^<(span|div) class="[^"]*\brelative inline-flex group\b/);
+    expect(out).not.toContain('tabindex');
+  });
+  it('a target without a focusable element makes the wrapper focusable and described', () => {
+    const out = block({ el: 'Tooltip', bind: { text: c('Hi') }, children: [{ el: 'Icon', props: { name: 'info' } }] });
+    expect(out).toMatch(/^<(span|div) [^>]*tabindex="0"/);
+    const bubbleId = /role="tooltip"[^>]*id="([^"]+)"|id="([^"]+)"[^>]*role="tooltip"/.exec(out)!;
+    expect(out).toContain(`aria-describedby="${bubbleId[1] ?? bubbleId[2]}"`);
+  });
+  it('the bubble wraps and is width-capped (no horizontal scroll on narrow screens)', () => {
+    const out = markup(h(ui.Tooltip, { text: 'x', children: h('span', null, 't') }));
+    expect(out).toMatch(/role="tooltip"/);
+    expect(out).toContain('max-w-');
+    expect(out).toContain('group-hover:visible');
+    expect(out).toContain('group-focus-within:visible');
+  });
+  it('editor.open forces the bubble visible', () => {
+    const out = markup(h(ui.Tooltip, { text: 'x', editor: { open: true }, children: h('span', null, 't') }));
+    expect(out).not.toMatch(/role="tooltip"[^>]*\binvisible\b|\binvisible\b[^>]*role="tooltip"/);
+  });
+  it('ids are unique per rendered item', () => {
+    const out = markup(h('div', null, h(ui.Tooltip, { text: 'a', children: h('span', null, '1') }), h(ui.Tooltip, { text: 'b', children: h('span', null, '2') })));
+    const ids = [...out.matchAll(/role="tooltip"[^>]*?id="([^"]+)"|id="([^"]+)"[^>]*?role="tooltip"/g)].map((m) => m[1] ?? m[2]);
+    expect(new Set(ids).size).toBe(2);
+  });
+});
+
+describe('Accordion', () => {
+  const acc = (props: Record<string, unknown>) =>
+    block({
+      el: 'Accordion', props,
+      children: [
+        { el: 'AccordionItem', bind: { title: c('One') }, children: [{ el: 'Text', props: { text: 'Body 1' } }] },
+        { el: 'AccordionItem', bind: { title: c('Two') }, children: [{ el: 'Text', props: { text: 'Body 2' } }] },
+        { el: 'AccordionItem', bind: { title: c('Three') }, children: [{ el: 'Text', props: { text: 'Body 3' } }] },
+      ],
+    });
+  it('renders one <details> per item with the title in <summary> and the content in the HTML', () => {
+    const out = acc({});
+    expect(out.match(/<details\b/g)).toHaveLength(3);
+    expect(out.match(/<summary\b/g)).toHaveLength(3);
+    expect(out).toMatch(/<summary\b[^>]*>One/);
+    for (const t of ['Body 1', 'Body 2', 'Body 3']) expect(out).toContain(t);
+    expect(out).not.toContain(' open=""');
+    expect(out).not.toMatch(/<details\b[^>]*\sname=/);
+  });
+  it('single gives every item the same name', () => {
+    const names = [...acc({ single: true }).matchAll(/<details\b[^>]*\sname="([^"]+)"/g)].map((m) => m[1]);
+    expect(names).toHaveLength(3);
+    expect(new Set(names).size).toBe(1);
+  });
+  it("defaultOpen 'first' opens the first item only", () => {
+    const tags = [...acc({ defaultOpen: 'first' }).matchAll(/<details\b[^>]*>/g)].map((m) => m[0]);
+    expect(tags[0]).toContain('open=""');
+    expect(tags[1]).not.toContain('open');
+    expect(tags[2]).not.toContain('open');
+  });
+  it('two accordions get different names; editor.open opens every item', () => {
+    const one = (k: string) => h(ui.Accordion, { single: true, key: k }, h(ui.AccordionItem, { title: 'A' }, 'a'));
+    const names = [...markup(h('div', null, one('1'), one('2'))).matchAll(/name="([^"]+)"/g)].map((m) => m[1]);
+    expect(new Set(names).size).toBe(2);
+    const forced = markup(h(ui.Accordion, { editor: { open: true } }, h(ui.AccordionItem, { title: 'A' }, 'a'), h(ui.AccordionItem, { title: 'B' }, 'b')));
+    expect(forced.match(/open=""/g)).toHaveLength(2);
+  });
+});
+
+describe('form controls', () => {
+  it('Input: <label for=X>, <input id=X required aria-describedby=Y> and the help text with id Y', () => {
+    const out = block({
+      el: 'Input', props: { name: 'email', type: 'email', required: true, autocomplete: 'email' },
+      bind: { label: c('Email'), placeholder: c('you@example.com'), help: c('We never share it') },
+    });
+    const forId = attr(out, 'label', 'for')!;
+    expect(forId).toBeTruthy();
+    expect(attr(out, 'input', 'id')).toBe(forId);
+    const helpId = attr(out, 'input', 'aria-describedby')!;
+    expect(out).toMatch(new RegExp(`<p\\b[^>]*id="${helpId.replace(/[^\w-]/g, '\\$&')}"[^>]*>We never share it</p>`));
+    expect(out).toMatch(/<input\b[^>]*\srequired=""/);
+    expect(attr(out, 'input', 'type')).toBe('email');
+    expect(attr(out, 'input', 'name')).toBe('email');
+    expect(attr(out, 'input', 'autoComplete') ?? attr(out, 'input', 'autocomplete')).toBe('email');
+    expect(attr(out, 'input', 'placeholder')).toBe('you@example.com');
+    expect(out).toContain('>Email');
+  });
+  it('Input without help has no aria-describedby; disabled is passed through', () => {
+    const out = block({ el: 'Input', props: { name: 'q', disabled: true }, bind: { label: c('Search') } });
+    expect(out).not.toContain('aria-describedby');
+    expect(out).toMatch(/<input\b[^>]*\sdisabled=""/);
+    expect(attr(out, 'input', 'type')).toBe('text');
+  });
+  it('Textarea: rows, label and help', () => {
+    const out = block({ el: 'Textarea', props: { name: 'msg', rows: 6 }, bind: { label: c('Message'), help: c('Max 500') } });
+    expect(attr(out, 'textarea', 'rows')).toBe('6');
+    expect(attr(out, 'label', 'for')).toBe(attr(out, 'textarea', 'id'));
+    expect(attr(out, 'textarea', 'aria-describedby')).toBeTruthy();
+  });
+  it('Select: one <option> per option, defaultValue selected, a disabled placeholder option', () => {
+    const out = block({
+      el: 'Select',
+      props: { name: 'size', defaultValue: 'm', options: [{ value: 's', label: 'Small' }, { value: 'm', label: { 'en-US': 'Medium', 'vi-VN': 'Vừa' } }, { value: 'l', label: 'Large' }] },
+      bind: { label: c('Size'), placeholder: c('Pick a size') },
+    });
+    const opts = [...out.matchAll(/<option\b([^>]*)>([^<]*)<\/option>/g)];
+    expect(opts.map((m) => m[2])).toEqual(['Pick a size', 'Small', 'Medium', 'Large']);
+    expect(opts[0][1]).toContain('disabled=""');
+    expect(opts[0][1]).toContain('value=""');
+    expect(opts[2][1]).toContain('selected=""');
+    expect(opts.filter((m) => m[1].includes('selected')).length).toBe(1);
+    expect(attr(out, 'label', 'for')).toBe(attr(out, 'select', 'id'));
+  });
+  it('Select without defaultValue selects the placeholder', () => {
+    const out = block({ el: 'Select', props: { name: 'size', options: [{ value: 's', label: 'Small' }] }, bind: { placeholder: c('Pick') } });
+    expect(out).toMatch(/<option\b[^>]*selected=""[^>]*>Pick<\/option>|<option\b[^>]*value=""[^>]*selected=""/);
+  });
+  it('Radio: <fieldset><legend> and one radio per option sharing the name', () => {
+    const out = block({
+      el: 'Radio',
+      props: { name: 'ship', orientation: 'horizontal', defaultValue: 'b', required: true, options: [{ value: 'a', label: 'Standard' }, { value: 'b', label: 'Express' }] },
+      bind: { label: c('Shipping'), help: c('Pick one') },
+    });
+    expect(out).toMatch(/^<fieldset\b[^>]*><legend\b[^>]*>Shipping/);
+    const radios = [...out.matchAll(/<input\b[^>]*type="radio"[^>]*>/g)].map((m) => m[0]);
+    expect(radios).toHaveLength(2);
+    for (const r of radios) expect(r).toContain('name="ship"');
+    expect(radios[1]).toContain('checked=""');
+    expect(radios[0]).not.toContain('checked');
+    expect(out).toContain('>Express<');
+    expect(attr(out, 'fieldset', 'aria-describedby')).toBeTruthy();
+  });
+  it('Checkbox: native checkbox with value, label for and help', () => {
+    const out = block({ el: 'Checkbox', props: { name: 'terms', value: 'yes', defaultChecked: true, required: true }, bind: { label: c('I agree'), help: c('Required') } });
+    expect(attr(out, 'input', 'type')).toBe('checkbox');
+    expect(attr(out, 'input', 'value')).toBe('yes');
+    expect(out).toMatch(/<input\b[^>]*checked=""/);
+    expect(out).not.toContain('role="switch"');
+    expect(attr(out, 'label', 'for')).toBe(attr(out, 'input', 'id'));
+    expect(attr(out, 'input', 'aria-describedby')).toBeTruthy();
+  });
+  it('Switch: a checkbox with role="switch" and a styled track', () => {
+    const out = block({ el: 'Switch', props: { name: 'news' }, bind: { label: c('Newsletter') } });
+    expect(out).toMatch(/<input\b[^>]*type="checkbox"[^>]*role="switch"|<input\b[^>]*role="switch"[^>]*type="checkbox"/);
+    expect(out).toContain('peer-checked:');
+    expect(out).toContain('peer-focus-visible:ring-2');
+    expect(out).toContain('>Newsletter<');
+  });
+  it('ids are unique across two controls with the same name', () => {
+    const one = (k: string) => h(ui.Input, { key: k, name: 'q', label: 'Q' });
+    const ids = [...markup(h('div', null, one('1'), one('2'))).matchAll(/<input\b[^>]*\sid="([^"]+)"/g)].map((m) => m[1]);
+    expect(new Set(ids).size).toBe(2);
+  });
+});
+
+describe('Button icons', () => {
+  it("icon + iconOnly: aria-label is the label and the label text is not rendered", () => {
+    const out = block({ el: 'Button', props: { label: 'Cart', href: '/cart', icon: 'shopping-cart', iconOnly: true } });
+    expect(out).toMatch(/^<a\b[^>]*aria-label="Cart"/);
+    expect(out).toContain('lucide-shopping-cart');
+    expect(out).not.toMatch(/>Cart</);
+  });
+  it('icon at start by default, at end with iconPosition end; the label stays visible', () => {
+    const start = block({ el: 'Button', props: { label: 'Cart', href: '/cart', icon: 'shopping-cart' } });
+    expect(start).toMatch(/<svg\b.*<\/svg>Cart<\/a>$/);
+    expect(start).not.toContain('aria-label');
+    const end = block({ el: 'Button', props: { label: 'Next', href: '/n', icon: 'arrow-right', iconPosition: 'end' } });
+    expect(end).toMatch(/>Next<svg\b.*<\/svg><\/a>$/);
+  });
+  it('an action button with iconOnly gets aria-label too', () => {
+    const out = block({ el: 'Button', props: { label: 'Menu', icon: 'menu', iconOnly: true, action: { type: 'overlay', op: 'open', target: 'menu' } } });
+    expect(out).toMatch(/^<button type="button"[^>]*aria-label="Menu"/);
+    expect(out).not.toMatch(/>Menu</);
+  });
+});
+
+describe('clickable Image, Box and Card', () => {
+  it('Image with a bound href renders <a href> around the <img> with its alt', () => {
+    const out = block({ el: 'Image', props: { src: '/logo.svg' }, bind: { href: c('/'), alt: c('Trang chủ') } });
+    expect(out).toMatch(/^<a\b[^>]*href="\/"[^>]*><img\b[^>]*alt="Trang chủ"/);
+    expect(out).toContain('focus-visible:ring-2');
+    expect(out).toMatch(/<\/a>$/);
+  });
+  it('a clickable Image without alt falls back to the block label', () => {
+    const out = block({ el: 'Image', props: { src: '/logo.svg' }, bind: { href: c('/') } }, { label: { 'en-US': 'Logo', 'vi-VN': 'Biểu trưng' } });
+    expect(attr(out, 'img', 'alt')).toBe('Logo');
+  });
+  it('Image with an action renders a <button type="button">', () => {
+    const out = block({ el: 'Image', props: { src: '/a.png', alt: 'Open', action: { type: 'overlay', op: 'open', target: 'menu' } } });
+    expect(out).toMatch(/^<button type="button"[^>]*><img\b/);
+  });
+  it('Box with a bound href renders an <a> with the Box classes, block display and focus ring', () => {
+    const plain = block({ el: 'Box', props: { padding: '4' }, children: [{ el: 'Text', props: { text: 'x' } }] });
+    const link = block({ el: 'Box', props: { padding: '4', ariaLabel: 'Go home' }, bind: { href: c('/home') }, children: [{ el: 'Text', props: { text: 'x' } }] });
+    expect(link).toMatch(/^<a\b/);
+    expect(attr(link, 'a', 'href')).toBe('/home');
+    expect(attr(link, 'a', 'aria-label')).toBe('Go home');
+    const cls = attr(link, 'a', 'class')!.split(' ');
+    for (const k of attr(plain, 'div', 'class')!.split(' ')) expect(cls).toContain(k);
+    expect(cls).toContain('block');
+    expect(cls).toContain('focus-visible:ring-2');
+  });
+  it('Card with an action renders a <button type="button"> carrying the Card classes', () => {
+    const plain = block({ el: 'Card', props: { padding: '4' }, children: [{ el: 'Text', props: { text: 'x' } }] });
+    const btn = block({ el: 'Card', props: { padding: '4', action: { type: 'scroll', target: 'top' } }, children: [{ el: 'Text', props: { text: 'x' } }] });
+    expect(btn).toMatch(/^<button type="button"/);
+    const cls = attr(btn, 'button', 'class')!.split(' ');
+    for (const k of attr(plain, 'div', 'class')!.split(' ')) expect(cls).toContain(k);
+    expect(cls).toContain('focus-visible:ring-2');
+    expect(cls).toContain('text-left');
+  });
+  it('an unsafe bound href leaves the Box unchanged', () => {
+    const plain = block({ el: 'Box', children: [] });
+    expect(block({ el: 'Box', bind: { href: c('javascript:alert(1)') }, children: [] })).toBe(plain);
+  });
+});
+
+describe('hover style', () => {
+  it('style.hover on Box adds the hover classes and variables', () => {
+    const out = block({ el: 'Box', style: { hover: { background: 'brand:accent', color: '#ffffff', borderColor: 'muted' } } });
+    const cls = attr(out, 'div', 'class')!.split(' ');
+    expect(cls).toEqual(expect.arrayContaining(['hover:bg-(--ocms-hover-bg)', 'hover:text-(--ocms-hover-fg)', 'hover:border-(--ocms-hover-border)']));
+    const st = attr(out, 'div', 'style')!;
+    expect(st).toContain('--ocms-hover-bg:var(--ocms-color-accent)');
+    expect(st).toContain('--ocms-hover-fg:#ffffff');
+    expect(st).toContain('--ocms-hover-border:var(--color-muted)');
+  });
+  it('only the set hover colors are emitted; no hover → no classes', () => {
+    const out = block({ el: 'Card', style: { hover: { background: 'brand:accent' } } });
+    expect(out).toContain('hover:bg-(--ocms-hover-bg)');
+    expect(out).not.toContain('--ocms-hover-fg');
+    expect(out).not.toContain('hover:text-(--ocms-hover-fg)');
+    expect(block({ el: 'Box', style: { background: 'brand:accent' } })).not.toContain('hover');
+  });
+  it('a Button hover background replaces the variant hover background', () => {
+    const out = block({ el: 'Button', props: { label: 'Go', href: '/x' }, style: { hover: { background: 'brand:accent' } } });
+    const cls = attr(out, 'a', 'class')!.split(' ');
+    expect(cls).toContain('hover:bg-(--ocms-hover-bg)');
+    expect(cls).not.toContain('hover:bg-primary/90');
   });
 });
