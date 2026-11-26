@@ -211,7 +211,7 @@ defineContentType({
   private: true,                       // stored in the snapshot; default false (omitted)
   fields: {
     code:    f.text({ required: true, unique: true }),
-    status:  f.text({ required: true }),         // pending | paid | shipped | cancelled (no select kind today)
+    orderStatus: f.text({ required: true }),     // pending | paid | shipped | cancelled (no select kind today; `status` is a reserved field name)
     items:   f.json({ readOnly: true }),       // readOnly: only the server API writes it
     total:   f.money({ readOnly: true }),
     invoice: f.asset({ accept: ['application/pdf'] }), // asset fields of a private type store private files
