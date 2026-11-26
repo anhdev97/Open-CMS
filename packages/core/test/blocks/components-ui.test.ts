@@ -15,6 +15,10 @@ const html = (node: unknown) => renderToString(node as never);
 
 const FIXTURE = path.join(__dirname, 'fixtures', 'render-baseline.json');
 const STORE_ROOT = path.resolve(__dirname, '../../../../examples/my-store');
+const BASELINE_STORE = [
+  'ActiveProducts', 'ContactModal', 'FeaturedProducts', 'MobileMenu', 'ProductCard', 'SectionHead',
+  'StoreFooter', 'StoreFrame', 'StoreHeader', 'StoreHero', 'StoryBand',
+];
 
 const base = (over: Partial<ComposedBlockSpec>): ComposedBlockSpec => ({
   id: 'blk_test01',
@@ -137,7 +141,10 @@ async function renderCases(): Promise<Record<string, string>> {
   });
   const config = await loadConfig(STORE_ROOT);
   const { specs } = await loadComposedBlocks(config);
-  for (const { spec } of specs) out[`my-store/${spec.name}`] = html(defineComposedBlock(spec).render(props(spec) as never));
+  // The my-store blocks that existed before the builder components. Blocks added later (HomeBanner, Faq, ProductTabs,
+  // ProductStrip) are built from the new elements and tested in composed.test.ts. StoreHeader, MobileMenu and
+  // ContactModal were rebuilt with the new elements on purpose (Task 7), so their entries were re-captured then.
+  for (const { spec } of specs) if (BASELINE_STORE.includes(spec.name)) out[`my-store/${spec.name}`] = html(defineComposedBlock(spec).render(props(spec) as never));
   for (const spec of fixtureSpecs()) out[`fixture/${spec.name}`] = html(defineComposedBlock(spec).render(props(spec) as never));
   out['ui/Button-link'] = html(h(ui.Button, { label: 'Go', href: '/x' }));
   out['ui/Button-span'] = html(h(ui.Button, { label: 'Go', href: null, variant: 'link', size: 'sm' }));

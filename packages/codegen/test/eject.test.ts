@@ -161,14 +161,21 @@ const entry = (id: string, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-function same(spec: ComposedBlockSpec, propsList: Record<string, unknown>[]) {
+/** React `useId` values (`_R_…_`) renamed by order of first appearance: they depend on the component depth only. */
+const sameIds = (s: string) => {
+  const seen = new Map<string, string>();
+  return s.replace(/_R_[A-Za-z0-9]+_/g, (m) => seen.get(m) ?? (seen.set(m, `_id${seen.size}_`), `_id${seen.size - 1}_`));
+};
+
+function same(spec: ComposedBlockSpec, propsList: Record<string, unknown>[], opts: { ids?: 'renamed' } = {}) {
   const source = printEjectedBlockTsx(spec);
   const composed = blocks.defineComposedBlock(spec);
   const ejected = loadEjected(source);
+  const norm = opts.ids === 'renamed' ? sameIds : (s: string) => s;
   for (const props of propsList) {
     const a = html(composed, props);
     expect(a.length).toBeGreaterThan(0);
-    expect(html(ejected, props)).toBe(a);
+    expect(norm(html(ejected, props))).toBe(norm(a));
   }
   return { source, composed, ejected };
 }
@@ -362,16 +369,18 @@ describe('printEjectedBlockTsx: my-store composed blocks', () => {
     entry('p2', { price: { amount: 150000, currency: 'VND' } }),
     entry('p3'),
   ];
-  for (const name of ['store-header', 'store-hero', 'section-head', 'story-band', 'store-footer', 'featured-products', 'store-frame', 'contact-modal', 'mobile-menu']) {
+  for (const name of ['store-header', 'store-hero', 'section-head', 'story-band', 'store-footer', 'featured-products', 'store-frame', 'contact-modal', 'mobile-menu', 'home-banner', 'faq', 'product-tabs', 'product-strip']) {
     it(`${name} renders the same HTML ejected as composed`, () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       const spec = loadSpec(name);
-      const base = { ...sampleProps(spec), ...(spec.binding?.mode === 'collection' ? { entries: products } : {}) };
+      const base = { ...sampleProps(spec), ...(spec.binding?.mode === 'collection' ? { entries: products } : {}), ...(spec.binding?.mode === 'single' ? { entry: products[1] } : {}) };
       const { source } = same(spec, [
         { ...base, _locale: 'en-US' },
         { ...base, _locale: 'vi-VN', _editor: true },
         ...(spec.binding?.mode === 'collection' ? [{ ...base, entries: [], _locale: 'en-US', _editor: true }] : []),
-      ]);
+        // Overlay blocks reach their form controls and dropdowns through one more component level when composed, so
+        // React's useId values differ; the markup must match with the ids renamed consistently.
+      ], { ids: 'renamed' });
       // Every styled node of the spec keeps its style in the ejected source.
       const styled = (n: ComposedBlockSpec['tree']): number => (n.style && Object.keys(n.style).length ? 1 : 0) + (n.children ?? []).reduce((a, c) => a + styled(c), 0);
       expect((source.match(/ style=\{/g) ?? []).length).toBe(styled(spec.tree));
