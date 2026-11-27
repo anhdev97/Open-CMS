@@ -1,10 +1,10 @@
-# Collection list, slug modes and entry detail pages — Implementation Plan
+# Collection list, slug patterns and entry detail pages — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A `CollectionList` builder element (static content + a repeating list in one block), real slug fields (four modes, SEO slugify, unique), and opt-in entry detail pages (`/products/{slug}`) rendered from one template page per content type, with automatic entry links.
+**Goal:** A `CollectionList` builder element (static content + a repeating list in one block), real slug fields (default = entry id, optional field pattern, SEO slugify, unique), and opt-in entry detail pages (`/products/{slug}`) rendered from one template page per content type, with automatic entry links.
 
-**Architecture:** Schema gains the element, slug options and `detailPage`; the server generates and checks slugs in the entry write path and resolves `by-path` against detail patterns after exact page paths; pages gain kind `detail`. The blocks layer renders CollectionLists from generated `b.entries` fields resolved in `resolvePage`, fills single-entry blocks from the route entry and resolves `entryUrl` from a per-type detail-path map. Admin adds the element to the block builder, a "Detail page" section and slug mode to content types, and detail templates to Pages.
+**Architecture:** Schema gains the element, slug options and `detailPage`; the server generates and checks slugs in the entry write path and resolves `by-path` against detail patterns after exact page paths; pages gain kind `detail`. The blocks layer renders CollectionLists from generated `b.entries` fields resolved in `resolvePage`, fills single-entry blocks from the route entry and resolves `entryUrl` from a per-type detail-path map. Admin adds the element to the block builder, a "Detail page" section and the slug pattern to content types, and detail templates to Pages.
 
 **Tech Stack:** TypeScript, NestJS 11, Kysely/Postgres 16, Next.js 16, React 19, Puck 0.24.1, Tailwind v4, vitest + happy-dom, pnpm.
 
@@ -55,7 +55,7 @@
 - [ ] **Step 2: Run** `pnpm vitest run packages/schema` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** — PASS; `pnpm -r typecheck`.
-- [ ] **Step 5: Commit** `feat(schema): collection list element, slug modes, detail pages`
+- [ ] **Step 5: Commit** `feat(schema): collection list element, slug patterns, detail pages`
 
 ### Task 2: Server — slug generation and uniqueness
 
@@ -113,7 +113,7 @@
 
 **Interfaces:**
 - Consumes: Tasks 1, 4.
-- Produces: round-trip of specs with CollectionLists; eject equality; content type files print `detailPage` and slug `mode` and round-trip; schema writes for these go through the existing pipeline (no DB rewrite).
+- Produces: round-trip of specs with CollectionLists; eject equality; content type files print `detailPage` and slug `pattern` and round-trip; schema writes for these go through the existing pipeline (no DB rewrite).
 - [ ] **Steps:** failing round-trip/eject/printer tests → implement → PASS → commit `feat(codegen): collection list eject and detail page schema printing`
 
 ### Task 6: Block builder — CollectionList element
@@ -128,7 +128,7 @@
 - [ ] **Step 1: Failing tests:** dropping two lists gives keys `list`, `list2`; item-template binding picker shows the list type's fields; outside the list `entry.*` is not offered; Collection list absent from the palette in a collection-bound block; the template validates in all 4 locales; private types absent from the picker.
 - [ ] **Steps 2–5:** FAIL → implement → PASS (+ typecheck) → commit `feat(admin): collection list in the block builder`
 
-### Task 7: Admin — content type Detail page section, slug modes, entry form
+### Task 7: Admin — content type Detail page section, slug pattern, entry form
 
 **Files:**
 - Modify: `packages/core/admin/src/pages/content-types/TypeEdit.tsx`, `FieldSheet.tsx`, `TypeDetail.tsx`, `packages/core/admin/src/pages/content/*` (entry form slug field), admin locale files
@@ -137,7 +137,7 @@
 **Interfaces:**
 - Consumes: Tasks 1–3.
 - Produces: "Detail page" section (switch off by default, slug field picker, path with live example, hidden for private types, validation messages); refusal to delete/retype the slug field while enabled; status badges (no template, misconfigured, duplicate slugs); slug field Sheet gets "Pattern" (placeholder chips for the type's fields, `{id}`, `{id6}`, live example; empty = id) and `maxLength`; entry form slug input: read-only without a pattern, generated preview, "Regenerate" action, inline `slug_taken`.
-- [ ] **Steps:** failing tests (switch writes `detailPage`; `{slug}` without slug field blocked; delete slug field blocked with message; entry form shows slug_taken inline; regenerate fills slugify(title)) → implement → PASS → commit `feat(admin): detail page settings and slug modes`
+- [ ] **Steps:** failing tests (switch writes `detailPage`; `{slug}` without slug field blocked; delete slug field blocked with message; entry form shows slug_taken inline; regenerate fills the pattern result) → implement → PASS → commit `feat(admin): detail page settings and slug patterns`
 
 ### Task 8: Admin — detail templates in Pages and the page editor
 
