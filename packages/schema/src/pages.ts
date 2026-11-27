@@ -121,11 +121,10 @@ export function collectBlockNames(c: StoredPageContent | null | undefined): Map<
 
 /**
  * Kinds of page documents: `page` is served at its path; `base` frames pages (never served on its own); `detail` is
- * the template of a content type's entry detail pages (no path of its own). `PAGE_KINDS` (what the page API accepts
- * today) gains `detail` with the server support for templates.
+ * the template of a content type's entry detail pages (no path of its own; `detailApiId` names the type).
  */
 export type PageKind = 'page' | 'base' | 'detail';
-export const PAGE_KINDS: readonly PageKind[] = ['page', 'base'];
+export const PAGE_KINDS: readonly PageKind[] = ['page', 'base', 'detail'];
 
 export type RegionMode = 'default' | 'replace' | 'hide';
 export const REGION_MODES: readonly RegionMode[] = ['default', 'replace', 'hide'];

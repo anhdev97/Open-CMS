@@ -33,7 +33,8 @@ describe('0008_private_assets down', () => {
 
   it('deletes private asset rows before dropping the columns; public rows stay', async () => {
     const migrations = allCoreMigrations();
-    const names = Object.keys(migrations).filter((n) => /^000\d_/.test(n)).sort();
+    // Up to 0008 only: later migrations (0009_detail_pages, …) are not part of this rollback.
+    const names = Object.keys(migrations).filter((n) => /^000\d_/.test(n) && n <= '0008_private_assets').sort();
     expect(names.at(-1)).toBe('0008_private_assets');
     for (const n of names) await migrations[n].up(db);
     await sql`insert into opencms_assets (filename, url, visibility) values ('pub.png', '/media/pub.png', 'public'), ('inv.pdf', '', 'private')`.execute(db);

@@ -50,6 +50,7 @@ describe('core migration stream with contributed sources', () => {
       '0006_pages',
       '0007_page_kind',
       '0008_private_assets',
+      '0009_detail_pages',
       'oauth2_0001_init',
     ]);
 

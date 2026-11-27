@@ -45,7 +45,7 @@ export async function findBase(db: Kysely<any>, documentId: string, status?: 'dr
 }
 
 /**
- * Page documents of kind `page` (draft or published, counted once) that a base frames: `layout.baseId` is the base
+ * Page documents of kind `page` or `detail` (draft or published, counted once) that a base frames: `layout.baseId` is the base
  * or, for the default base, the layout names none (`layout` null, JSON `null`, or an object without `baseId`, e.g.
  * `{ regions }` only). Title and path from the draft in `defaultLocale` when there is one.
  */
@@ -53,7 +53,7 @@ export async function baseUsage(db: Kysely<any>, baseId: string, isDefault: bool
   const r = await sql<{ document_id: string; title: string | null; path: string | null }>`
     select distinct on (m.document_id) m.document_id, l.title, l.path
     from ${sql.table(PAGE_MAIN)} m left join ${sql.table(PAGE_L10N)} l on l.entry_id = m.id
-    where m.kind = 'page' and (m.layout->>'baseId' = ${baseId}${isDefault ? sql` or m.layout is null or not jsonb_exists(m.layout, 'baseId')` : sql``})
+    where m.kind in ('page', 'detail') and (m.layout->>'baseId' = ${baseId}${isDefault ? sql` or m.layout is null or not jsonb_exists(m.layout, 'baseId')` : sql``})
     order by m.document_id, (m.status = 'draft') desc, (l.locale = ${defaultLocale}) desc nulls last, l.locale`.execute(db);
   const pages = r.rows
     .map((x) => ({ documentId: x.document_id, title: x.title, path: x.path }))

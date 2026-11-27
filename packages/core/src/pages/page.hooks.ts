@@ -1,4 +1,4 @@
-import { UnprocessableEntityException } from '@nestjs/common';
+import { ConflictException, UnprocessableEntityException } from '@nestjs/common';
 import { sql, type Kysely } from 'kysely';
 import {
   collectBlockNames,
@@ -6,6 +6,7 @@ import {
   validatePageLayout,
   validatePagePath,
   type BlockManifest,
+  type ContentTypeDefinition,
   type PageKind,
   type StoredPageContent,
 } from '@opencloudcms/schema';
@@ -37,11 +38,49 @@ function normalizeContent(data: Record<string, unknown>, manifest: BlockManifest
   return { ...data, content: normalizeStoredRichText(data.content, manifest) };
 }
 
-/** Stored `kind` / `isDefault` of the draft row, or null when there is none (the update then 404s). */
-async function storedDraft(db: Kysely<any>, documentId: string): Promise<{ kind: PageKind; isDefault: boolean } | null> {
-  const r = await sql<{ kind: PageKind; is_default: boolean }>`
-    select kind, is_default from ${sql.table(PAGE_MAIN)} where document_id = ${documentId} and status = 'draft'`.execute(db);
-  return r.rows[0] ? { kind: r.rows[0].kind, isDefault: r.rows[0].is_default } : null;
+interface StoredDraft {
+  kind: PageKind;
+  isDefault: boolean;
+  detailApiId: string | null;
+}
+
+/** Stored `kind` / `isDefault` / `detailApiId` of the draft row, or null when there is none (the update then 404s). */
+async function storedDraft(db: Kysely<any>, documentId: string): Promise<StoredDraft | null> {
+  const r = await sql<{ kind: PageKind; is_default: boolean; detail_api_id: string | null }>`
+    select kind, is_default, detail_api_id from ${sql.table(PAGE_MAIN)} where document_id = ${documentId} and status = 'draft'`.execute(db);
+  const row = r.rows[0];
+  return row ? { kind: row.kind, isDefault: row.is_default, detailApiId: row.detail_api_id } : null;
+}
+
+const detailHasPath = () => unprocessable('detail_has_path', 'A detail template has no path: it is served at the content type\'s detail path');
+
+/**
+ * Create checks of `detailApiId`: only on templates; there it must name a non-private type with a detail page and no
+ * template yet (draft or published). The `(status, detail_api_id)` unique index backs the last check against races.
+ */
+async function checkDetailCreate(
+  data: Record<string, unknown>,
+  kind: PageKind,
+  defs: () => readonly ContentTypeDefinition[],
+  db: Kysely<any>,
+): Promise<Record<string, unknown>> {
+  const apiId = data.detailApiId;
+  if (kind !== 'detail') {
+    if (!isEmpty(apiId)) throw unprocessable('detail_not_allowed', 'Only a detail template (kind detail) has a detailApiId');
+    if (!('detailApiId' in data)) return data;
+    const { detailApiId: _drop, ...rest } = data;
+    return rest;
+  }
+  if (!isEmpty(data.path)) throw detailHasPath();
+  const def = typeof apiId === 'string' ? defs().find((d) => d.apiId === apiId) : undefined;
+  if (!def || def.private || !def.detailPage) {
+    throw unprocessable('detail_not_enabled', `${isEmpty(apiId) ? 'detailApiId is required' : `Content type "${String(apiId)}" has no detail page`}: turn on its detail page first`);
+  }
+  const r = await sql`select 1 from ${sql.table(PAGE_MAIN)} where kind = 'detail' and detail_api_id = ${def.apiId} limit 1`.execute(db);
+  if (r.rows.length) {
+    throw new ConflictException({ code: 'detail_template_exists', message: `Content type "${def.apiId}" already has a detail template` });
+  }
+  return data;
 }
 
 /** `isDefault` is written only by the set-default endpoint; the unchanged value (an echoed document) is dropped. */
@@ -74,7 +113,8 @@ async function checkLayout(data: Record<string, unknown>, kind: PageKind, db: Ky
 const layoutNames = (manifest: BlockManifest) => new Set(manifest.filter((b) => b.kind === 'layout').map((b) => b.name));
 
 /**
- * Kind-specific publish checks. Pages: a path in every translation, no layout block anywhere. Base pages: no path,
+ * Kind-specific publish checks. Pages: a path in every translation, no layout block anywhere. Detail templates: no
+ * path, no layout block (a base frames them like pages). Base pages: no path,
  * no layout, and content whose root is exactly one layout block (no layout block elsewhere). Block kinds come from
  * the manifest: without one only the path rules apply.
  */
@@ -84,6 +124,8 @@ function checkKind(doc: PublishedDocument, manifest: BlockManifest | undefined):
   if (kind === 'page') {
     const missing = translations.length ? translations.filter(([, t]) => isEmpty(t.path)).map(([l]) => l) : ['(none)'];
     if (missing.length) throw unprocessable('path_required', `A page needs a path in every locale (missing: ${missing.join(', ')})`);
+  } else if (kind === 'detail') {
+    if (translations.some(([, t]) => !isEmpty(t.path))) throw detailHasPath();
   } else {
     const withPath = translations.filter(([, t]) => !isEmpty(t.path)).map(([l]) => l);
     if (withPath.length) throw unprocessable('base_has_path', `A base page has no path (set in: ${withPath.join(', ')})`);
@@ -113,25 +155,38 @@ function checkKind(doc: PublishedDocument, manifest: BlockManifest | undefined):
  * rich text is not normalized on save (the website renderer still sanitizes it). `manifest` may be a getter
  * (PageBlocksManifest.current), read on every call so that Block Builder changes apply at once.
  */
-export function createPageHooks(manifest: BlockManifest | undefined | (() => BlockManifest | undefined)): HookRegistration['hooks'] {
+export function createPageHooks(
+  manifest: BlockManifest | undefined | (() => BlockManifest | undefined),
+  defs: () => readonly ContentTypeDefinition[] = () => [],
+): HookRegistration['hooks'] {
   const get = typeof manifest === 'function' ? manifest : () => manifest;
   return {
     beforeCreate: async (input, ctx) => {
       checkPath(input);
       let data = stripManaged(input, false);
       const kind = (data.kind ?? 'page') as PageKind;
-      if (!PAGE_KINDS.includes(kind)) throw unprocessable('invalid_kind', 'kind must be page or base');
+      if (!PAGE_KINDS.includes(kind)) throw unprocessable('invalid_kind', 'kind must be page, base or detail');
       // Absent: the column default ('page'); an explicit null would violate `not null`.
       if ('kind' in data && data.kind == null) data = { ...data, kind };
+      data = await checkDetailCreate(data, kind, defs, ctx.db);
       await checkLayout(data, kind, ctx.db);
       return normalizeContent(data, get());
     },
     beforeUpdate: async (input, ctx) => {
       checkPath(input);
-      if (!('kind' in input) && !('isDefault' in input) && !('layout' in input)) return normalizeContent(input, get());
+      const touchesDetail = 'detailApiId' in input || !isEmpty(input.path);
+      if (!('kind' in input) && !('isDefault' in input) && !('layout' in input) && !touchesDetail) return normalizeContent(input, get());
       const current = await storedDraft(ctx.db, ctx.documentId);
       if (!current) return normalizeContent(input, get());
+      if (current.kind === 'detail' && !isEmpty(input.path)) throw detailHasPath();
       let data = stripManaged(input, current.isDefault);
+      if ('detailApiId' in data) {
+        if (data.detailApiId != null && data.detailApiId !== current.detailApiId) {
+          throw unprocessable('detail_immutable', 'The content type of a detail template cannot change');
+        }
+        const { detailApiId: _drop, ...rest } = data;
+        data = rest;
+      }
       if ('kind' in data) {
         if (data.kind != null && data.kind !== current.kind) throw unprocessable('kind_immutable', 'The kind of a page cannot change');
         const { kind: _drop, ...rest } = data;

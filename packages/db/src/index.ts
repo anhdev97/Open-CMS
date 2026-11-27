@@ -249,6 +249,27 @@ export const coreMigrations: Record<string, Migration> = {
       await db.schema.alterTable(SYSTEM_TABLES.assets).dropColumn('owner_document_id').dropColumn('owner_api_id').dropColumn('visibility').execute();
     },
   },
+  '0009_detail_pages': {
+    /**
+     * Entry detail templates (`kind: 'detail'`): the content type a template is for. Matches the codegen DDL for the
+     * `detailApiId` field of page.type.ts (`unique`: one template per type and status). Adds a column and an index only.
+     */
+    async up(db) {
+      await db.schema.alterTable('ct_opencloudcms_page').addColumn('detail_api_id', sql`varchar(64)`).execute();
+      await db.schema
+        .createIndex('ct_opencloudcms_page_detail_api_id_uq')
+        .on('ct_opencloudcms_page')
+        .columns(['status', 'detail_api_id'])
+        .unique()
+        .execute();
+    },
+    async down(db) {
+      // Template rows stay (kind 'detail'): code without detail pages never serves them (public lists and by-path
+      // only read kind 'page', base reads only kind 'base'). Only the column and its index go.
+      await db.schema.dropIndex('ct_opencloudcms_page_detail_api_id_uq').ifExists().execute();
+      await db.schema.alterTable('ct_opencloudcms_page').dropColumn('detail_api_id').execute();
+    },
+  },
 };
 
 /* ----------------------------- project ---------------------------- */

@@ -23,7 +23,7 @@ export class ContentRegistry {
     this.registerCore(pageType, { hidden: true, editable: false });
     this.reload(options.contentTypes);
     this.reloadGroups(options.contentGroups ?? []);
-    this.hooks.set(PAGE_API_ID, [createPageHooks(() => blocks.current())]);
+    this.hooks.set(PAGE_API_ID, [createPageHooks(() => blocks.current(), () => this.all())]);
     for (const h of options.hooks) this.hooks.set(h.apiId, [...(this.hooks.get(h.apiId) ?? []), h.hooks]);
   }
 

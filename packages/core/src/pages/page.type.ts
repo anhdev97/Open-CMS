@@ -2,12 +2,14 @@ import { defineContentType, f, PAGE_API_ID, type ContentTypeDefinition } from '@
 
 /**
  * Core-owned page content type. Not in the project's schema files or `_snapshot.json`: its tables come from the
- * core migrations `0006_pages` and `0007_page_kind`, which must match what the codegen DDL would produce for this definition
+ * core migrations `0006_pages`, `0007_page_kind` and `0009_detail_pages`, which must match what the codegen DDL would produce for this definition
  * (guarded by the drift test in test/integration/pages-type.test.ts), except that `kind` and `isDefault` are also
  * `not null` with a default there (field definitions cannot say so).
  *
  * `path` is required at publish for `kind: 'page'` only (page hooks); base pages have none. `isDefault` is managed
- * by `PUT /api/admin/pages/bases/default` alone; `kind` is set on create and never changes.
+ * by `PUT /api/admin/pages/bases/default` alone; `kind` is set on create and never changes. `detailApiId` names the
+ * content type of a `kind: 'detail'` template (set on create, never changes, null on other kinds); `unique` gives the
+ * `(status, detail_api_id)` index that backs "at most one template per type".
  */
 export const pageType: ContentTypeDefinition = defineContentType({
   id: 'ct_opencloudcms_page',
@@ -21,5 +23,6 @@ export const pageType: ContentTypeDefinition = defineContentType({
     kind: f.text({ id: 'fld_page_kind', maxLength: 16 }),
     isDefault: f.boolean({ id: 'fld_page_is_default' }),
     layout: f.json({ id: 'fld_page_layout' }),
+    detailApiId: f.text({ id: 'fld_page_detail_api_id', maxLength: 64, unique: true }),
   },
 });
