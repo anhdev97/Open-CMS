@@ -8,6 +8,7 @@ import { ErrorAlert } from '../../components/ErrorAlert';
 import { PageHeader } from '../../components/PageHeader';
 import { PrivateLock } from '../../components/PrivateLock';
 import { Alert, AlertDescription } from '../../components/ui/alert';
+import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { getActiveLocale, t } from '../../i18n';
@@ -63,6 +64,67 @@ function SaveResultCard({ result }: { result: ApplyResponse }) {
         ))}
       </CardContent>
     </Card>
+  );
+}
+
+/** `GET /api/admin/content-types/:apiId/status` (spec §3, decision 12). */
+export interface DetailStatus {
+  detailPage: { path: string; slugField?: string } | null;
+  detailTemplate: boolean;
+  templateId: string | null;
+  misconfigured: boolean;
+  duplicateSlugs: number;
+}
+
+/** Badges of the detail page state: misconfigured, no template, duplicate slugs (spec Review focus 4). */
+export function detailBadges(s: DetailStatus | null): { key: string; tone: 'destructive' | 'warning'; count?: number }[] {
+  if (!s?.detailPage) return [];
+  const out: { key: string; tone: 'destructive' | 'warning'; count?: number }[] = [];
+  if (s.misconfigured) out.push({ key: 'misconfigured', tone: 'destructive' });
+  if (!s.detailTemplate) out.push({ key: 'noTemplate', tone: 'warning' });
+  if (s.duplicateSlugs > 0) out.push({ key: 'duplicateSlugs', tone: 'warning', count: s.duplicateSlugs });
+  return out;
+}
+
+function DetailPageRow({ def }: { def: ContentTypeDefinition }) {
+  const [status, setStatus] = useState<DetailStatus | null>(null);
+  useEffect(() => {
+    if (!def.detailPage) return;
+    let live = true;
+    api<{ data: DetailStatus }>(`/api/admin/content-types/${def.apiId}/status`).then(
+      (r) => live && setStatus(r.data),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [def.apiId, def.detailPage]);
+  if (def.private) return null;
+  return (
+    <InfoRow label={t('contentTypes.detail.title')}>
+      {def.detailPage ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono">{def.detailPage.path}</span>
+          {detailBadges(status).map((b) => (
+            <Badge key={b.key} variant={b.tone}>
+              {t(`contentTypes.detail.status.${b.key}`, { count: b.count ?? 0 })}
+            </Badge>
+          ))}
+          {status && !status.detailTemplate && !status.misconfigured && (
+            <Link to={`/pages?newDetail=${encodeURIComponent(def.apiId)}`} className="text-sm underline">
+              {t('contentTypes.detail.createTemplate')}
+            </Link>
+          )}
+          {status?.templateId && (
+            <Link to={`/pages/${status.templateId}`} className="text-sm underline">
+              {t('contentTypes.detail.openTemplate')}
+            </Link>
+          )}
+        </div>
+      ) : (
+        <span className="text-muted-foreground">{t('contentTypes.detail.off')}</span>
+      )}
+    </InfoRow>
   );
 }
 
@@ -152,6 +214,7 @@ function DetailView({ def, meta }: { def: ContentTypeDefinition; meta: Meta }) {
             <InfoRow label={t('contentTypes.description')}>{def.description || <span className="text-muted-foreground">{t('content.noValue')}</span>}</InfoRow>
             <InfoRow label={t('contentTypes.private')}>{def.private ? t('contentTypes.yes') : t('contentTypes.no')}</InfoRow>
             <InfoRow label={t('builder.review')}>{def.review ? t('contentTypes.yes') : t('contentTypes.no')}</InfoRow>
+            <DetailPageRow def={def} />
             <InfoRow label={t('contentTypes.storage')}>
               <span className="font-mono text-xs">{t('builder.idLine', { id: def.id, table })}</span>
             </InfoRow>

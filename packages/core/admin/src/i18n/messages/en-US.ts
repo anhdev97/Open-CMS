@@ -692,6 +692,17 @@ export const enUS = {
     },
   },
   content: {
+    slug: {
+      idOnSave: "Set to the entry id on save",
+      idHint: "The entry id. Give the field a pattern in the content type to generate readable slugs.",
+      generatedOnSave: "Generated on save",
+      regenerate: "Regenerate",
+      regenerateHint: "Empty the slug: it is generated from the pattern on save.",
+      patternHint: "Generated from {pattern} on save (now: {example}). Type your own to keep it.",
+      customHint: "Custom slug: it no longer follows {pattern}. Regenerate to go back to the pattern.",
+      taken: "Another entry already uses this slug.",
+      readOnly: "This slug is the entry id and cannot be changed.",
+    },
     filter: "Filter",
     filterAll: "All entries",
     filterPending: "Pending review",
@@ -711,6 +722,7 @@ export const enUS = {
     lockedHint: "The form is locked while the entry is in review.",
     errors: {
       in_review_locked: "This entry is in review and cannot be edited.",
+      slug_taken: "Another entry already uses this slug. Change it, then publish again.",
       invalid_transition:
         "That action is not available for the entry in its current state.",
       forbidden: "You do not have permission to do that.",
@@ -1489,6 +1501,9 @@ export const enUS = {
     save: "Save and generate",
     working: "Working…",
     options: {
+      slugPattern: "Pattern",
+      slugPatternExample: "Example: {example}",
+      slugPatternNone: "Empty: the slug is the entry id.",
       maxLength: "Max length",
       generatedFrom: "Generated from",
       format: "Format",
@@ -1543,6 +1558,34 @@ export const enUS = {
     archivedToast: "Content type archived",
   },
   contentTypes: {
+    detail: {
+      title: "Detail page",
+      description: "Give each entry its own page, rendered from one template page.",
+      privateNote: "Private types have no detail pages.",
+      enable: "Entries have a detail page",
+      enableHint: "Off by default. Pages then link to entries automatically.",
+      slugField: "URL from",
+      entryId: "Entry id ({id})",
+      noSlugField: "Add a slug field to use readable URLs.",
+      path: "URL path",
+      example: "Example: {url}",
+      issues: {
+        pathInvalid: "Use a path like /products/{slug}: lowercase segments and {slug} or {id} at the end.",
+        slugFieldRequired: "{slug} needs a slug field: pick one, or use {id}.",
+        slugFieldMissing: "\"{field}\" is not a slug field of this type.",
+        overlap: "This path overlaps the detail page of \"{type}\".",
+      },
+      slugFieldRemove: "\"{name}\" is the detail page's slug field: turn the detail page off first.",
+      slugFieldKind: "This field is the detail page's slug field: its kind cannot change while the detail page is on.",
+      status: {
+        misconfigured: "Misconfigured: detail URLs return 404",
+        noTemplate: "No detail template",
+        duplicateSlugs: "{count} duplicate slugs",
+      },
+      createTemplate: "Create the template",
+      openTemplate: "Open the template",
+      off: "Off",
+    },
     listTitle: "Content types",
     listDescription:
       "Define content types and their fields. Saving writes schema files and applies a migration.",

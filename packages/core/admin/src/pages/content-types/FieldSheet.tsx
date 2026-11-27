@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '../../components/ui/sheet';
 import { t } from '../../i18n';
 import type { ContentTypeDefinition, FieldDefinition, FieldKind } from '../../lib/types';
-import { RESERVED_FIELD_NAMES } from '@opencloudcms/schema';
+import { RESERVED_FIELD_NAMES, SLUG_MAX_LENGTH } from '@opencloudcms/schema';
+import { patternExample, patternIssues, patternOf, patternPlaceholders, slugOptions } from './detail-page';
 import { ALL_KINDS, FIELD_NAME_RE, NONE, typeName } from './shared';
 
 /** Types a reference field may target: a public type cannot reference private types (the server rejects it). */
@@ -44,17 +45,18 @@ function CheckField({ id, label, hint, checked, disabled, onChange }: {
   );
 }
 
-function OptionSelect({ id, label, value, onChange, children }: {
+function OptionSelect({ id, label, value, disabled, onChange, children }: {
   id: string;
   label: string;
   value: string;
+  disabled?: boolean;
   onChange: (value: string) => void;
   children: ReactNode;
 }) {
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
-      <Select value={value} onValueChange={onChange}>
+      <Select value={value} disabled={disabled} onValueChange={onChange}>
         <SelectTrigger id={id} className="w-full min-w-40">
           <SelectValue />
         </SelectTrigger>
@@ -78,36 +80,20 @@ function FieldOptions({ field, targets, fields, accept, onAccept, onChange }: {
   const id = (name: string) => `field-opt-${name}`;
   switch (field.kind) {
     case 'text':
-    case 'slug':
       return (
-        <>
-          <div className="space-y-2">
-            <Label htmlFor={id('maxLength')}>{t('builder.options.maxLength')}</Label>
-            <Input
-              id={id('maxLength')}
-              type="number"
-              className="w-28"
-              value={o.maxLength ?? 255}
-              onChange={(e) => set({ maxLength: Number(e.target.value) })}
-            />
-          </div>
-          {field.kind === 'slug' && (
-            <OptionSelect
-              id={id('from')}
-              label={t('builder.options.generatedFrom')}
-              value={o.from ?? NONE}
-              onChange={(v) => set({ from: v === NONE ? undefined : v })}
-            >
-              <SelectItem value={NONE}>{t('content.noValue')}</SelectItem>
-              {fields.filter((f) => f.kind === 'text' && f.name).map((f) => (
-                <SelectItem key={f.id} value={f.name}>
-                  {f.name}
-                </SelectItem>
-              ))}
-            </OptionSelect>
-          )}
-        </>
+        <div className="space-y-2">
+          <Label htmlFor={id('maxLength')}>{t('builder.options.maxLength')}</Label>
+          <Input
+            id={id('maxLength')}
+            type="number"
+            className="w-28"
+            value={o.maxLength ?? 255}
+            onChange={(e) => set({ maxLength: Number(e.target.value) })}
+          />
+        </div>
       );
+    case 'slug':
+      return <SlugOptions options={o} fields={fields} onChange={onChange} />;
     case 'number':
       return (
         <OptionSelect id={id('format')} label={t('builder.options.format')} value={o.format ?? 'integer'} onChange={(v) => set({ format: v })}>
@@ -172,6 +158,58 @@ function FieldOptions({ field, targets, fields, accept, onAccept, onChange }: {
   }
 }
 
+/**
+ * Slug options (spec §2): `pattern` with placeholder chips (the type's text-like fields, `{id}`, `{id6}`) and a live
+ * example (empty = the entry id), and `maxLength` (default 75). The legacy `from` shows as `{from}` and is replaced.
+ */
+function SlugOptions({ options, fields, onChange }: { options: Record<string, any>; fields: FieldDefinition[]; onChange: (o: Record<string, any>) => void }) {
+  const pattern = patternOf({ kind: 'slug', options });
+  const max = typeof options.maxLength === 'number' ? options.maxLength : undefined;
+  const issues = patternIssues(pattern, fields, max ?? SLUG_MAX_LENGTH);
+  const set = (p: string, m: number | undefined) => onChange(slugOptions(options, p, m));
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="field-opt-pattern">{t('builder.options.slugPattern')}</Label>
+        <Input
+          id="field-opt-pattern"
+          className="font-mono"
+          value={pattern}
+          placeholder="{name}"
+          aria-invalid={issues.length ? true : undefined}
+          aria-describedby="field-opt-pattern-hint"
+          onChange={(e) => set(e.target.value, max)}
+        />
+        <div className="flex flex-wrap gap-1">
+          {patternPlaceholders(fields).map((p) => (
+            <Button key={p} type="button" variant="outline" size="sm" className="h-6 px-2 font-mono text-xs" onClick={() => set(`${pattern}${pattern ? '-' : ''}{${p}}`, max)}>
+              {`{${p}}`}
+            </Button>
+          ))}
+        </div>
+        <p id="field-opt-pattern-hint" className={`text-xs ${issues.length ? 'text-destructive' : 'text-muted-foreground'}`}>
+          {issues.length
+            ? issues.join(' · ')
+            : pattern
+              ? t('builder.options.slugPatternExample', { example: patternExample(pattern, fields, max ?? SLUG_MAX_LENGTH) })
+              : t('builder.options.slugPatternNone')}
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="field-opt-maxLength">{t('builder.options.maxLength')}</Label>
+        <Input
+          id="field-opt-maxLength"
+          type="number"
+          className="w-28"
+          min={1}
+          value={max ?? SLUG_MAX_LENGTH}
+          onChange={(e) => set(pattern, e.target.value === '' ? undefined : Number(e.target.value))}
+        />
+      </div>
+    </>
+  );
+}
+
 const acceptText = (f: FieldDefinition) => (Array.isArray(f.options.accept) ? (f.options.accept as string[]).join(', ') : '');
 const parseAccept = (s: string) =>
   s
@@ -211,12 +249,14 @@ interface FieldSheetProps {
   types: ContentTypeDefinition[];
   kinds: FieldKind[];
   privateType: boolean;
+  /** Why the kind cannot change (the detail page's slug field), or undefined. */
+  kindLocked?: string;
   onApply: (field: FieldDefinition) => void;
   onClose: () => void;
 }
 
 /** Right-side Sheet to add or edit one field; Apply puts it into the type form (saved with the type). */
-export function FieldSheet({ field, isNew, siblings, types, kinds, privateType, onApply, onClose }: FieldSheetProps) {
+export function FieldSheet({ field, isNew, siblings, types, kinds, privateType, kindLocked, onApply, onClose }: FieldSheetProps) {
   const [draft, setDraft] = useState<FieldDefinition | null>(field);
   const [accept, setAccept] = useState('');
   const [nameError, setNameError] = useState<string | null>(null);
@@ -234,6 +274,7 @@ export function FieldSheet({ field, isNew, siblings, types, kinds, privateType, 
       setNameError(parsed.error.issues[0]?.message ?? t('contentTypes.fieldNameInvalid'));
       return;
     }
+    if (draft.kind === 'slug' && patternIssues(patternOf(draft), siblings, draft.options.maxLength ?? SLUG_MAX_LENGTH).length) return;
     const next = privateType && draft.localizable ? { ...draft, localizable: false } : draft;
     onApply(finish(next, accept, isNew ? null : field));
   };
@@ -277,13 +318,14 @@ export function FieldSheet({ field, isNew, siblings, types, kinds, privateType, 
               )}
               {!isNew && <p className="font-mono text-xs text-muted-foreground">{draft.id}</p>}
             </div>
-            <OptionSelect id="field-kind" label={t('builder.fieldKind')} value={draft.kind} onChange={(v) => update({ kind: v as FieldKind, options: {} })}>
+            <OptionSelect id="field-kind" label={t('builder.fieldKind')} value={draft.kind} disabled={!!kindLocked} onChange={(v) => update({ kind: v as FieldKind, options: {} })}>
               {(kinds.length ? kinds : ALL_KINDS).map((k) => (
                 <SelectItem key={k} value={k}>
                   {t(`builder.kinds.${k}`)}
                 </SelectItem>
               ))}
             </OptionSelect>
+            {kindLocked && <p className="-mt-2 text-xs text-muted-foreground">{kindLocked}</p>}
             <div className="space-y-2">
               <Label htmlFor="field-label">{t('builder.fieldLabel')}</Label>
               <Input id="field-label" value={draft.label ?? ''} onChange={(e) => update({ label: e.target.value || undefined })} />

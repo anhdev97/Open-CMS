@@ -22,6 +22,7 @@ import { fromLocalizedText, toLocalizedText } from '../../lib/content-groups';
 import { Link, Redirect, useAdminNavigate, useAdminParams } from '../../lib/nav';
 import type { ApplyResponse, ContentTypeDefinition, FieldDefinition, Meta, PlanResponse } from '../../lib/types';
 import { useUnsavedChangesGuard } from '../content/useEntry';
+import { detailDraftOf, detailExample, detailIssue, detailPageOf, defaultDetailPath, slugFieldInUse, withParam, type DetailDraft } from './detail-page';
 import { FieldSheet } from './FieldSheet';
 import { FieldsTable, moveItem } from './FieldsTable';
 import {
@@ -63,8 +64,8 @@ export function infoValues(def: ContentTypeDefinition): InfoValues {
  * The definition the schema builder receives (same shape as the single-page Builder sent): the stored definition
  * with the form's values applied. Untouched values keep their stored form; optional flags are only present when on.
  */
-export function buildDefinition(base: ContentTypeDefinition, values: InfoValues, fields: FieldDefinition[]): ContentTypeDefinition {
-  const { group: _group, description: _description, review: _review, private: _private, ...rest } = base;
+export function buildDefinition(base: ContentTypeDefinition, values: InfoValues, fields: FieldDefinition[], detail?: DetailDraft): ContentTypeDefinition {
+  const { group: _group, description: _description, review: _review, private: _private, detailPage: _detailPage, ...rest } = base;
   const initial = infoValues(base);
   const sameNames = SUPPORTED_LOCALES.every((l) => (values.names[l.code] ?? '') === (initial.names[l.code] ?? ''));
   const def: ContentTypeDefinition = {
@@ -78,6 +79,9 @@ export function buildDefinition(base: ContentTypeDefinition, values: InfoValues,
   if (description !== undefined) def.description = description;
   if (values.private) def.private = true;
   else if (values.review) def.review = true;
+  // Detail page (spec §3): never on a private type; an unchanged one keeps its stored form.
+  const dp = detail ? detailPageOf(detail) : base.detailPage;
+  if (dp && !values.private) def.detailPage = stableJson(dp) === stableJson(base.detailPage) ? base.detailPage : dp;
   return def;
 }
 
@@ -141,6 +145,94 @@ const ErrorText = ({ id, message }: { id: string; message?: string }) =>
     </p>
   ) : null;
 
+/** "Detail page" section (spec §3): off by default; slug field (or the entry id), the path and a live example. */
+export function DetailPageCard({ detail, apiId, fields, isPrivate, issue, onChange }: {
+  detail: DetailDraft;
+  apiId: string;
+  fields: FieldDefinition[];
+  isPrivate: boolean;
+  issue: ReturnType<typeof detailIssue>;
+  onChange: (d: DetailDraft) => void;
+}) {
+  const slugFields = fields.filter((f) => f.kind === 'slug' && f.name);
+  const ID = '__id';
+  return (
+    <Card id="type-detail">
+      <CardHeader>
+        <CardTitle>{t('contentTypes.detail.title')}</CardTitle>
+        <CardDescription>{t('contentTypes.detail.description')}</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        {isPrivate ? (
+          <p className="text-sm text-muted-foreground">{t('contentTypes.detail.privateNote')}</p>
+        ) : (
+          <>
+            <SwitchRow
+              id="type-detail-on"
+              label={t('contentTypes.detail.enable')}
+              hint={t('contentTypes.detail.enableHint')}
+              checked={detail.on}
+              onChange={(on) => {
+                if (!on) return onChange({ ...detail, on: false });
+                const slugField = detail.slugField || slugFields[0]?.name || '';
+                onChange({ on: true, slugField, path: detail.path || defaultDetailPath(apiId, slugField) });
+              }}
+            />
+            {detail.on && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="type-detail-slug">{t('contentTypes.detail.slugField')}</Label>
+                  <Select
+                    value={detail.slugField || ID}
+                    onValueChange={(v) => {
+                      const slugField = v === ID ? '' : v;
+                      onChange({ ...detail, slugField, path: withParam(detail.path, slugField) });
+                    }}
+                  >
+                    <SelectTrigger id="type-detail-slug" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {slugFields.map((f) => (
+                        <SelectItem key={f.id} value={f.name}>
+                          {f.label || f.name}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={ID}>{t('contentTypes.detail.entryId')}</SelectItem>
+                      {detail.slugField && !slugFields.some((f) => f.name === detail.slugField) && (
+                        <SelectItem value={detail.slugField} disabled>
+                          {detail.slugField}
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {slugFields.length === 0 && <p className="text-xs text-muted-foreground">{t('contentTypes.detail.noSlugField')}</p>}
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="type-detail-path">{t('contentTypes.detail.path')}</Label>
+                  <Input
+                    id="type-detail-path"
+                    className="font-mono"
+                    value={detail.path}
+                    aria-invalid={issue ? true : undefined}
+                    aria-describedby="type-detail-path-hint"
+                    onChange={(e) => onChange({ ...detail, path: e.target.value })}
+                  />
+                  <p id="type-detail-path-hint" className={`text-xs ${issue ? 'text-destructive' : 'text-muted-foreground'}`}>
+                    {issue
+                      ? t(`contentTypes.detail.issues.${issue.key}`, { field: 'field' in issue ? issue.field : '', type: 'type' in issue ? issue.type : '' })
+                      : t('contentTypes.detail.example', { url: detailExample(detail.path) })}
+                  </p>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 interface TypeFormProps {
   /** The stored type; `null` creates one. */
   original: ContentTypeDefinition | null;
@@ -165,9 +257,11 @@ export function TypeForm({ original, base, types, meta, entries, crumbs, title, 
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [formError, setFormError] = useState<Error | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const [detail, setDetail] = useState<DetailDraft>(() => detailDraftOf(base));
 
   const values = form.watch();
-  const definition = buildDefinition(base, values, fields);
+  const definition = buildDefinition(base, values, fields, detail);
+  const detailProblem = values.private ? null : detailIssue(detail, fields, base, types);
   const dirty = isNew ? form.formState.isDirty || fields.length > 0 : stableJson(definition) !== stableJson(original);
   const release = useUnsavedChangesGuard(dirty);
   const submitting = form.formState.isSubmitting;
@@ -206,7 +300,11 @@ export function TypeForm({ original, base, types, meta, entries, crumbs, title, 
 
   async function onSubmit(v: InfoValues) {
     setFormError(null);
-    const def = buildDefinition(base, v, fields);
+    if (detailProblem) {
+      document.getElementById('type-detail')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    const def = buildDefinition(base, v, fields, detail);
     try {
       const r = await api<ApplyResponse>('/api/admin/content-types', { method: 'POST', json: { definition: def } });
       announceSchemaChange();
@@ -336,6 +434,18 @@ export function TypeForm({ original, base, types, meta, entries, crumbs, title, 
         </CardContent>
       </Card>
 
+      <DetailPageCard
+        detail={detail}
+        apiId={values.apiId.trim()}
+        fields={fields}
+        isPrivate={isPrivate}
+        issue={detailProblem}
+        onChange={(d) => {
+          setDetail(d);
+          setPlan(null);
+        }}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>{t('contentTypes.fieldsCard')}</CardTitle>
@@ -356,7 +466,14 @@ export function TypeForm({ original, base, types, meta, entries, crumbs, title, 
               persisted={original?.fields}
               onMove={(from, to) => changeFields(moveItem(fields, from, to))}
               onEdit={(i) => setSheet({ index: i, field: fields[i]! })}
-              onRemove={(i) => changeFields(fields.filter((_, j) => j !== i))}
+              onRemove={(i) => {
+                // The detail page's slug field stays while the detail page is on (spec §3).
+                if (slugFieldInUse(detail, fields[i]!) && !values.private) {
+                  toast.error(t('contentTypes.detail.slugFieldRemove', { name: fields[i]!.name }));
+                  return;
+                }
+                changeFields(fields.filter((_, j) => j !== i));
+              }}
             />
           )}
         </CardContent>
@@ -411,7 +528,7 @@ export function TypeForm({ original, base, types, meta, entries, crumbs, title, 
         <Button type="button" variant="outline" disabled={previewing || submitting} onClick={preview}>
           {t('builder.preview')}
         </Button>
-        <Button type="submit" disabled={submitting || !dirty}>
+        <Button type="submit" disabled={submitting || !dirty || !!detailProblem}>
           {submitting ? t('builder.working') : t('builder.save')}
         </Button>
       </div>
@@ -428,9 +545,12 @@ export function TypeForm({ original, base, types, meta, entries, crumbs, title, 
         }
         kinds={meta.fieldKinds}
         privateType={isPrivate}
+        kindLocked={!!sheet && sheet.index !== null && !isPrivate && slugFieldInUse(detail, sheet.field) ? t('contentTypes.detail.slugFieldKind') : undefined}
         onClose={() => setSheet(null)}
         onApply={(f) => {
           if (!sheet) return;
+          // A renamed detail slug field: the detail page follows it.
+          if (sheet.index !== null && slugFieldInUse(detail, sheet.field) && f.name !== sheet.field.name) setDetail((d) => ({ ...d, slugField: f.name }));
           changeFields(sheet.index === null ? [...fields, f] : fields.map((x, j) => (j === sheet.index ? f : x)));
           setSheet(null);
         }}

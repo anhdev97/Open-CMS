@@ -6,6 +6,7 @@ import { FormDescription, FormField, FormItem, FormMessage, useFormField } from 
 import { Label } from '../../components/ui/label';
 import { t } from '../../i18n';
 import type { ContentTypeDefinition, FieldDefinition } from '../../lib/types';
+import { SlugField } from './SlugField';
 import type { Values } from './useEntry';
 
 const noop = () => undefined;
@@ -69,6 +70,37 @@ function FormFieldBody({
   );
 }
 
+/** A slug field in the form: read-only without a pattern, else generated / custom (`SlugField`). */
+function SlugFormBody({ id, field, value, values, documentId, locale, disabled, onChange }: {
+  id: string;
+  field: FieldDefinition;
+  value: unknown;
+  values: Values;
+  documentId: string | null;
+  locale: string;
+  disabled: boolean;
+  onChange: (v: unknown) => void;
+}) {
+  const { error, formMessageId } = useFormField();
+  return (
+    <>
+      <SlugField
+        id={id}
+        field={field}
+        value={value}
+        values={values}
+        documentId={documentId}
+        locale={locale}
+        disabled={disabled}
+        invalid={!!error}
+        describedBy={error ? formMessageId : undefined}
+        onChange={onChange}
+      />
+      <FormMessage />
+    </>
+  );
+}
+
 interface Props {
   def: ContentTypeDefinition;
   locale: string;
@@ -87,8 +119,11 @@ export function EntryFieldsCards({
   form,
   values,
   locked = false,
-}: Props & { form?: UseFormReturn<Values>; values?: Values; locked?: boolean }) {
+  documentId = null,
+}: Props & { form?: UseFormReturn<Values>; values?: Values; locked?: boolean; documentId?: string | null }) {
   const privateAssets = def.private ? { apiId: def.apiId, files } : undefined;
+  // The slug preview follows the other fields as they are typed.
+  const live = form?.watch();
   return (
     <Card>
       <CardHeader>
@@ -115,6 +150,18 @@ export function EntryFieldsCards({
               render={({ field }) => (
                 <FormItem>
                   <FieldLabel id={id} field={f} locale={locale} />
+                  {f.kind === 'slug' ? (
+                    <SlugFormBody
+                      id={id}
+                      field={f}
+                      value={field.value}
+                      values={live ?? {}}
+                      documentId={documentId}
+                      locale={locale}
+                      disabled={locked || !!f.readOnly}
+                      onChange={(v) => field.onChange(v)}
+                    />
+                  ) : (
                   <FormFieldBody
                     id={id}
                     field={f}
@@ -123,6 +170,7 @@ export function EntryFieldsCards({
                     disabled={locked || !!f.readOnly}
                     privateAssets={privateAssets}
                   />
+                  )}
                 </FormItem>
               )}
             />

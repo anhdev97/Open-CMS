@@ -11,6 +11,7 @@ import { pickEditorLocale } from '../../lib/locales';
 import { useAdminNavigate, useAdminPathname, useAdminSearchParam } from '../../lib/nav';
 import { registerNavigationGuard } from '../../lib/nav-guard';
 import type { ContentTypeDefinition, FieldDefinition, Meta } from '../../lib/types';
+import { fieldPattern } from './SlugField';
 
 export type WorkflowInfo = { state: WorkflowState; submittedBy: { id: string; name: string } | null; submittedAt: string | null; note: string | null };
 export type Entry = Record<string, any> & {
@@ -25,7 +26,7 @@ export type Entry = Record<string, any> & {
 export type Version = { id: string; createdAt: string };
 export type Values = Record<string, any>;
 
-const WORKFLOW_ERRORS = ['in_review_locked', 'invalid_transition', 'forbidden'];
+const WORKFLOW_ERRORS = ['in_review_locked', 'invalid_transition', 'forbidden', 'slug_taken'];
 
 /** Known workflow error codes get the active-locale message; anything else passes through. */
 export function workflowError(e: unknown): ApiError | Error {
@@ -45,6 +46,8 @@ export function writableBody(def: ContentTypeDefinition, values: Values): Values
   const out: Values = {};
   for (const f of def.fields) {
     if (f.readOnly || values[f.name] === undefined) continue;
+    // A slug without a pattern is the entry id (read-only on the server).
+    if (f.kind === 'slug' && !fieldPattern(f)) continue;
     out[f.name] = values[f.name];
   }
   return out;
@@ -82,7 +85,8 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function entrySchema(def: ContentTypeDefinition) {
   return z.record(z.string(), z.any()).superRefine((v, ctx) => {
     for (const f of def.fields) {
-      if (f.readOnly) continue;
+      // Slugs are filled on the server (the entry id, or the pattern result when left empty).
+      if (f.readOnly || f.kind === 'slug') continue;
       const value = v[f.name];
       if (f.required && f.kind !== 'boolean' && empty(value)) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: [f.name], message: t('content.fieldRequired') });
@@ -102,7 +106,9 @@ export function fieldIssues(def: ContentTypeDefinition, e: unknown): { field: Fi
   for (const raw of e.issues as { path?: unknown; message?: unknown }[]) {
     const head = String(Array.isArray(raw?.path) ? raw.path[0] : (raw?.path ?? '')).split('.')[0];
     const field = def.fields.find((f) => f.name === head);
-    if (field) out.push({ field, message: typeof raw.message === 'string' && raw.message !== '' ? raw.message : e.message });
+    // Slug conflicts get the admin's own message (the server's says "already used").
+    if (field && (e.code === 'slug_taken' || e.code === 'slug_readonly')) out.push({ field, message: t(`content.slug.${e.code === 'slug_taken' ? 'taken' : 'readOnly'}`) });
+    else if (field) out.push({ field, message: typeof raw.message === 'string' && raw.message !== '' ? raw.message : e.message });
   }
   return out;
 }

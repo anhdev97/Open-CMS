@@ -85,7 +85,7 @@ export function EntryForm({ def, locale, entry, files, crumbs, title, cancelTo, 
         <PageHeader title={title} adornment={def.private ? <PrivateLock className="ml-2 size-5 align-[-0.125em]" /> : undefined} actions={actions} />
         <ErrorAlert error={formError} />
         {banner}
-        <EntryFieldsCards def={def} locale={locale} files={files} form={form} locked={locked} />
+        <EntryFieldsCards def={def} locale={locale} files={files} form={form} locked={locked} documentId={entry?.documentId ?? null} />
         <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-end gap-2 border-t bg-background/95 px-4 py-3 backdrop-blur md:-mx-8 md:px-8">
           {dirty && (
             <p className="mr-auto text-sm text-muted-foreground" role="status">
