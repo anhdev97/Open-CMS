@@ -1,5 +1,6 @@
 import {
   Body,
+  Catch,
   Controller,
   Delete,
   Get,
@@ -14,7 +15,10 @@ import {
   Query,
   BadRequestException,
   UploadedFile,
+  UseFilters,
   UseInterceptors,
+  type ArgumentsHost,
+  type ExceptionFilter,
 } from '@nestjs/common';
 import { AssetsService, AssetUploadInterceptor, decodeMultipartFilename, type UploadedFileInput } from '@opencloudcms/assets';
 import { CurrentUser, RequirePermission, type RequestUser } from '@opencloudcms/oauth2';
@@ -22,6 +26,7 @@ import { PAGE_API_ID } from '@opencloudcms/schema';
 import { EntriesService, type ListParams } from './entries.service';
 import { ContentRegistry } from './registry.service';
 import { PrivateAssetOwnership } from './private-assets';
+import { SlugError } from './slugs';
 import { WorkflowService } from './workflow.service';
 
 /** Accepts both `filter[name]=x` flat keys (Express 5) and nested objects (qs). */
@@ -92,10 +97,22 @@ export class ContentController {
 }
 
 /**
+ * `{ error: { code, message, path, locale?, issues } }` for slug errors: the global API filter keeps only code, message
+ * and issues, and the entry form needs `path` (spec §2: typed duplicate → 422 `slug_taken` with the field path).
+ */
+@Catch(SlugError)
+export class SlugErrorFilter implements ExceptionFilter<SlugError> {
+  catch(err: SlugError, host: ArgumentsHost): void {
+    host.switchToHttp().getResponse().status(err.getStatus()).json({ error: err.getResponse() });
+  }
+}
+
+/**
  * Management API: drafts, publishing, versions. Permissions are per method (spec B §4.2); publish/unpublish
  * depend on the type's `review` flag and are checked in EntriesService.
  */
 @Controller('api/admin/content')
+@UseFilters(SlugErrorFilter)
 export class AdminContentController {
   constructor(@Inject(EntriesService) private readonly entries: EntriesService) {}
 

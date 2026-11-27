@@ -29,6 +29,12 @@ export interface ListQuery {
 /** Runs inside a repository write transaction, before the write (workflow locks and checks). */
 export type InTransaction = (trx: Kysely<any>) => Promise<void>;
 
+/**
+ * Runs first in a create/update transaction and returns the data to write (slug generation, `slugs.ts`).
+ * `documentId` is the new entry's on create.
+ */
+export type PrepareData = (trx: Kysely<any>, documentId: string) => Promise<Row>;
+
 const META_SORT: Record<string, string> = { createdAt: 'created_at', updatedAt: 'updated_at', publishedAt: 'published_at' };
 
 function toColumnValues(field: FieldDefinition, value: unknown): Row {
@@ -147,11 +153,17 @@ export class EntryRepository {
   }
 
   /** `inTrx` runs first in the write transaction, with the new entry's documentId. */
-  async create(def: ContentTypeDefinition, data: Row, locale: string, inTrx?: (trx: Kysely<any>, documentId: string) => Promise<void>): Promise<string> {
+  async create(
+    def: ContentTypeDefinition,
+    data: Row,
+    locale: string,
+    inTrx?: (trx: Kysely<any>, documentId: string) => Promise<void>,
+    prepare?: PrepareData,
+  ): Promise<string> {
     const documentId = randomUUID();
     const id = randomUUID();
-    const { main, l10n, rels } = this.split(def, data);
     await this.writeTx(def, async (trx) => {
+      const { main, l10n, rels } = this.split(def, prepare ? await prepare(trx, documentId) : data);
       await inTrx?.(trx, documentId);
       await trx.insertInto(mainTable(def)).values({ id, document_id: documentId, status: 'draft', ...main }).execute();
       if (Object.keys(l10n).length) {
@@ -171,9 +183,10 @@ export class EntryRepository {
     inTrx?: InTransaction,
     expectedUpdatedAt?: string,
     afterWrite?: (trx: Kysely<any>, rowId: string) => Promise<void>,
+    prepare?: PrepareData,
   ): Promise<void> {
-    const { main, l10n, rels } = this.split(def, data);
     await this.writeTx(def, async (trx) => {
+      const { main, l10n, rels } = this.split(def, prepare ? await prepare(trx, documentId) : data);
       await inTrx?.(trx);
       const current = await trx
         .selectFrom(mainTable(def))
@@ -202,13 +215,13 @@ export class EntryRepository {
   }
 
   /** Loads l10n rows and relations for a batch of main rows and maps them to API objects. */
-  private async hydrate(def: ContentTypeDefinition, rows: Row[], locales: string[]): Promise<Row[]> {
+  private async hydrate(def: ContentTypeDefinition, rows: Row[], locales: string[], db: Kysely<any> = this.db): Promise<Row[]> {
     if (!rows.length) return [];
     const ids = rows.map((r) => r.id);
     const hasL10n = def.fields.some((f) => f.localizable);
     const l10nByEntry = new Map<string, Row>();
     if (hasL10n && locales.length) {
-      const l10nRows = await this.db
+      const l10nRows = await db
         .selectFrom(l10nTable(def))
         .selectAll()
         .where('entry_id', 'in', ids)
@@ -222,7 +235,7 @@ export class EntryRepository {
     const relsByField = new Map<string, Map<string, string[]>>();
     for (const field of def.fields.filter(isMultiRelation)) {
       const table = fieldStorage(def, field).table;
-      const relRows = await this.db
+      const relRows = await db
         .selectFrom(table)
         .select(['entry_id', 'target_id'])
         .where('entry_id', 'in', ids)
@@ -345,20 +358,20 @@ export class EntryRepository {
     return { items: await this.hydrate(def, rows, q.locales), total };
   }
 
-  /** Every locale of a draft (or published) document, for validation and version snapshots. */
-  async exportDocument(def: ContentTypeDefinition, documentId: string, status: Status): Promise<PublishedDocument | null> {
-    const row = await this.db
+  /** Every locale of a draft (or published) document, for validation and version snapshots. `db`: e.g. a transaction. */
+  async exportDocument(def: ContentTypeDefinition, documentId: string, status: Status, db: Kysely<any> = this.db): Promise<PublishedDocument | null> {
+    const row = await db
       .selectFrom(mainTable(def))
       .selectAll()
       .where('document_id', '=', documentId)
       .where('status', '=', status)
       .executeTakeFirst();
     if (!row) return null;
-    const [hydrated] = await this.hydrate(def, [row], []);
+    const [hydrated] = await this.hydrate(def, [row], [], db);
     const shared: Row = {};
     for (const field of def.fields) if (!field.localizable) shared[field.name] = hydrated[field.name];
     const translations: Record<string, Row> = {};
-    const l10nRows = await this.db.selectFrom(l10nTable(def)).selectAll().where('entry_id', '=', row.id).execute();
+    const l10nRows = await db.selectFrom(l10nTable(def)).selectAll().where('entry_id', '=', row.id).execute();
     for (const r of l10nRows) {
       const t: Row = {};
       for (const field of def.fields) if (field.localizable) t[field.name] = fromColumnValues(field, r);

@@ -2,10 +2,11 @@ import { BadRequestException, ConflictException, Inject, Injectable, NotFoundExc
 import type { Kysely } from 'kysely';
 import type { ContentTypeDefinition, FieldDefinition, Locale } from '@opencloudcms/schema';
 import { AuthError, type RequestUser } from '@opencloudcms/oauth2';
-import { EntryRepository, type ListQuery, type Status } from './entry.repository';
+import { EntryRepository, type ListQuery, type PrepareData, type Status } from './entry.repository';
 import { PrivateAssetOwnership } from './private-assets';
 import { OPENCLOUDCMS_DB, OPENCLOUDCMS_OPTIONS, type HookContext, type ResolvedOpenCloudCmsOptions } from './options';
 import { ContentRegistry } from './registry.service';
+import { applySlugs, checkPublishSlugs, hasSlugPatterns, lockSlugs, prepareSlugInput, slugFields } from './slugs';
 import { WorkflowService } from './workflow.service';
 
 type Row = Record<string, unknown>;
@@ -131,6 +132,26 @@ export class EntriesService {
     return out;
   }
 
+  /**
+   * Slug generation and checks (`slugs.ts`), first in the create/update transaction: the per-type lock (types with
+   * a slug pattern), the draft as it is now, then the data to write. Undefined for types without slug fields.
+   */
+  private slugStep(def: ContentTypeDefinition, data: Row, locale: string, mode: 'create' | 'update'): PrepareData | undefined {
+    if (!slugFields(def).length) return undefined;
+    return async (trx, documentId) => {
+      if (hasSlugPatterns(def)) await lockSlugs(trx, def);
+      const previous = mode === 'create' ? null : await this.repo.exportDocument(def, documentId, 'draft', trx);
+      return applySlugs(trx, def, documentId, data, previous, { locale, defaultLocale: this.options.config.defaultLocale });
+    };
+  }
+
+  /** Raw update body with slug values prepared (see `prepareSlugInput`); reads the draft only when a slug is sent. */
+  private async slugInputForUpdate(def: ContentTypeDefinition, documentId: string, body: unknown, locale: string): Promise<unknown> {
+    if (!body || typeof body !== 'object' || !slugFields(def).some((f) => f.name in (body as Row))) return body;
+    const stored = await this.repo.findOne(def, documentId, 'draft', [locale]);
+    return prepareSlugInput(def, body, documentId, stored);
+  }
+
   async list(apiId: string, params: ListParams) {
     const def = this.registry.get(apiId);
     const limit = Math.min(Math.max(Number(params.limit ?? 25) || 25, 1), 100);
@@ -172,14 +193,20 @@ export class EntriesService {
   async create(apiId: string, body: unknown, locale?: string, opts: EntryWriteOptions = {}) {
     const def = this.registry.get(apiId);
     const loc = this.locale(locale);
-    let data = this.validate(def, body, 'draft');
+    let data = this.validate(def, prepareSlugInput(def, body, null, null), 'draft');
     if (!opts.writeReadOnly) this.checkReadOnlyCreate(def, data);
     for (const h of this.registry.hooksFor(apiId)) {
       const r = await h.beforeCreate?.(data, this.ctx(apiId, loc));
       if (r && typeof r === 'object') data = r as Row;
     }
     await this.assetOwnership.assertNoPrivate(def, data);
-    const documentId = await this.repo.create(def, data, loc, (trx, id) => this.assetOwnership.attach(trx, def, id, data));
+    const documentId = await this.repo.create(
+      def,
+      data,
+      loc,
+      (trx, id) => this.assetOwnership.attach(trx, def, id, data),
+      this.slugStep(def, data, loc, 'create'),
+    );
     return this.get(apiId, documentId, 'draft', loc);
   }
 
@@ -194,7 +221,7 @@ export class EntriesService {
   ) {
     const def = this.registry.get(apiId);
     const loc = this.locale(locale);
-    let data = this.validate(def, body, 'draft');
+    let data = this.validate(def, await this.slugInputForUpdate(def, documentId, body, loc), 'draft');
     if (!opts?.writeReadOnly) data = await this.stripReadOnlyUpdate(def, documentId, data, loc);
     for (const h of this.registry.hooksFor(apiId)) {
       const r = await h.beforeUpdate?.(data, { ...this.ctx(apiId, loc), documentId });
@@ -218,6 +245,7 @@ export class EntriesService {
             replaced = await this.assetOwnership.detachReplaced(trx, def, documentId, rowId);
           }
         : undefined,
+      this.slugStep(def, data, loc, 'update'),
     );
     if (replaced.length) await this.assetOwnership.deleteDetached(replaced);
     return this.get(apiId, documentId, 'draft', loc);
@@ -263,6 +291,13 @@ export class EntriesService {
     const ctx = { ...this.ctx(apiId, this.options.config.defaultLocale), force: opts.force === true };
     for (const h of this.registry.hooksFor(apiId)) await h.beforePublish?.(doc, ctx);
     await this.repo.publish(def, documentId, doc, async (trx) => {
+      if (hasSlugPatterns(def)) {
+        // Decision 8: re-check against other entries' published rows, under the same lock as the writes.
+        await lockSlugs(trx, def);
+        const draft = await this.repo.exportDocument(def, documentId, 'draft', trx);
+        const published = await this.repo.exportDocument(def, documentId, 'published', trx);
+        await checkPublishSlugs(trx, def, documentId, draft, published);
+      }
       const tctx = { ...ctx, db: trx };
       for (const h of this.registry.hooksFor(apiId)) await h.inPublishTransaction?.(documentId, tctx);
       await this.workflow.guardPublish(trx, def, documentId, user, action);
