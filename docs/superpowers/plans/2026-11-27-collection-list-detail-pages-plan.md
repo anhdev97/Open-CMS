@@ -19,7 +19,7 @@
 - Exact page paths always win over detail patterns.
 - Schema writes stay dev-only through `SchemaWriteQueue`; new migrations only add columns or indexes.
 - CollectionList: `key` `^[a-z][a-zA-Z0-9]{0,31}$` unique in the block; limit 1–50 (default 12); grid columns 2–6; carousel per view 1–6; max 4 lists per block; no CollectionList inside a CollectionList.
-- Slug: modes `title` | `id` | `titleId` | `manual`; format `^[a-z0-9]+(?:-[a-z0-9]+)*$`; default `maxLength` 75; `titleId` suffix = first 6 hex chars of `documentId` (8 on collision); typed duplicate → 422 `slug_taken`; publish conflict → 409 `slug_taken`.
+- Slug: no pattern → value is the `documentId` (read-only); optional `pattern` with `{field}`, `{id}`, `{id6}` (first 6 hex, 8 on collision); legacy `from: 'x'` = `pattern: '{x}'`; format `^[a-z0-9]+(?:-[a-z0-9]+)*$`; default `maxLength` 75; typed duplicate → 422 `slug_taken`; publish conflict → 409 `slug_taken`.
 - `detailPage.path`: starts with `/`, exactly one `{slug}` or `{id}` as the last segment; not on private types; no overlapping patterns.
 - All new admin strings in en-US, vi-VN (accented), fr-FR, id-ID. my-store uses placeholder copy only.
 
@@ -44,13 +44,13 @@
 - Produces:
   - `ComposedElement` gains `'CollectionList'`; props per spec §1 table; `ELEMENT_BINDABLE.CollectionList = []`; `INTERACTIVE_ELEMENTS` unchanged.
   - `collectionListsOf(spec): { key: string; node: ComposedNode }[]`; generated field names `list`, `list2`, … added to the reserved generated names.
-  - `FieldOptions.slug` gains `mode?: 'title' | 'id' | 'titleId' | 'manual'`; `slugify(text: string, locale: string, maxLength = 75): string`; `SLUG_RE`; `effectiveSlugMode(field): mode`.
+  - `FieldOptions.slug` gains `pattern?: string`; `slugify(text: string, locale: string, maxLength = 75): string`; `SLUG_RE`; `slugPattern(field): string | null` (legacy `from` mapped); `parseSlugPattern(pattern, def): { parts; issues }`; `renderSlugPattern(pattern, values, documentId, locale, maxLength): string`.
   - `ContentTypeDefinition.detailPage?: { path: string; slugField?: string }`; `parseDetailPath(path): { prefix: string; param: 'slug' | 'id' } | null`; `matchDetailPath(defs, path): { apiId; value; param } | null`; `detailPatternsOverlap(a, b): boolean`.
   - `PageKind` gains `'detail'`.
 - Rules: spec §1 (children = item template with collection rules; outside entry sources only with a single binding; no CollectionList with a block-level collection binding; ≤ 4; no nesting); spec §3 path rules; `slugField` must be a slug field; private types refuse `detailPage`; the `entryUrl` rule from spec §4 (pure validator rejects only when neither a `urlPattern` nor a type context can apply — accept a `detailTypes?: Set<string>` option).
 - [ ] **Step 1: Failing tests:**
   - a block Heading + CollectionList{key:'list', apiId:'question'} > Card(entry.question) is valid; `entry.*` outside the list without a single binding → issue; CollectionList inside a CollectionList → issue; 5 lists → issue; duplicate `key` → issue; CollectionList in a collection-bound block → issue; `limit: 51` → issue; existing my-store specs keep their issues;
-  - `slugify('Áo Thun Trắng & Đen — Mùa Hè 2026!', 'vi')` = `'ao-thun-trang-va-den-mua-he-2026'`; `'and'` for `en`; a 90-char title cuts at a dash ≤ 75; emoji/`₫` dropped; `'---'` → `''`;
+  - `slugify('Áo Thun Trắng & Đen — Mùa Hè 2026!', 'vi')` = `'ao-thun-trang-va-den-mua-he-2026'`; `renderSlugPattern('{name}-{id6}', …)` = `'ao-thun-trang-3f9a2c'`; `{category}-{name}` joins parts; unknown placeholder `{nope}` → schema issue; legacy `from: 'name'` → `{name}`; `'and'` for `en`; a 90-char title cuts at a dash ≤ 75; emoji/`₫` dropped; `'---'` → `''`;
   - `parseDetailPath('/products/{slug}')` ok; `'/products/{slug}/x'`, `'products/{slug}'`, `'/a/{slug}/{id}'` → null; `{id}` ok; overlap of `/products/{slug}` and `/products/{id}` → true; `detailPage` on a private type → issue; `slugField` naming a text field → issue.
 - [ ] **Step 2: Run** `pnpm vitest run packages/schema` — FAIL.
 - [ ] **Step 3: Implement.**
@@ -65,9 +65,9 @@
 - Test: `packages/core/test/slugs.test.ts` (integration, Postgres)
 
 **Interfaces:**
-- Consumes: Task 1 `slugify`, `effectiveSlugMode`, `SLUG_RE`.
+- Consumes: Task 1 `slugify`, `slugPattern`, `renderSlugPattern`, `SLUG_RE`.
 - Produces: `applySlugs(trx, def, documentId, data, previous): data` called inside the create/update transaction under `pg_advisory_xact_lock(hashtext('opencloudcms.slug.' || apiId))`; uniqueness per type and locale across other documents' draft and published rows; publish re-check (409 `slug_taken`); `{ code: 'slug_taken', path }` 422 on typed duplicates; grandfathering (format checked only when the value changes; empty filled on update); localized/non-localized generation per spec §2.
-- [ ] **Step 1: Failing tests:** create with title "Áo thun" → `ao-thun`; second create → `ao-thun-2`; two concurrent creates (Promise.all) → distinct; edit title when slug untouched → follows; after manual edit → kept; typed duplicate → 422 slug_taken with path; `id` mode = documentId; `titleId` = `ao-thun-` + 6 hex of documentId; draft of A changes slug to B's published slug → 422; publish after another doc took it → 409; an old entry with slug `Old Value` saves another field without error; empty slug filled on update; localized slug per locale from that locale's title.
+- [ ] **Step 1: Failing tests:** no pattern → slug = documentId and typed values ignored/rejected; pattern `{name}`: create "Áo thun" → `ao-thun`; second create → `ao-thun-2`; pattern `{name}-{id6}` never suffixes and routing by id part; two concurrent creates (Promise.all) → distinct; edit title when slug untouched → follows; after manual edit → kept; typed duplicate → 422 slug_taken with path; draft of A changes slug to B's published slug → 422; publish after another doc took it → 409; an old entry with slug `Old Value` saves another field without error; empty slug filled on update; localized slug per locale from that locale's title.
 - [ ] **Step 2–4:** FAIL → implement → PASS; `pnpm -r typecheck`.
 - [ ] **Step 5: Commit** `feat(core): slug generation and uniqueness`
 
@@ -136,7 +136,7 @@
 
 **Interfaces:**
 - Consumes: Tasks 1–3.
-- Produces: "Detail page" section (switch off by default, slug field picker, path with live example, hidden for private types, validation messages); refusal to delete/retype the slug field while enabled; status badges (no template, misconfigured, duplicate slugs); slug field Sheet gets "Mode" (4 options) and `maxLength`; entry form slug input: read-only for `id`, generated preview, "Regenerate" action, inline `slug_taken`.
+- Produces: "Detail page" section (switch off by default, slug field picker, path with live example, hidden for private types, validation messages); refusal to delete/retype the slug field while enabled; status badges (no template, misconfigured, duplicate slugs); slug field Sheet gets "Pattern" (placeholder chips for the type's fields, `{id}`, `{id6}`, live example; empty = id) and `maxLength`; entry form slug input: read-only without a pattern, generated preview, "Regenerate" action, inline `slug_taken`.
 - [ ] **Steps:** failing tests (switch writes `detailPage`; `{slug}` without slug field blocked; delete slug field blocked with message; entry form shows slug_taken inline; regenerate fills slugify(title)) → implement → PASS → commit `feat(admin): detail page settings and slug modes`
 
 ### Task 8: Admin — detail templates in Pages and the page editor
@@ -153,7 +153,7 @@
 ### Task 9: my-store, smoke, docs and verification
 
 **Files:**
-- Modify: `examples/my-store/src/schema/*` (product slug mode, `detailPage`, new `question` type), `examples/my-store/src/blocks/*` (Questions block; ProductStrip/ProductGrid drop `urlPattern`), `examples/my-store/scripts/seed-pages.ts` (template instead of per-product pages, questions seed), `scripts/smoke-init.mjs`, `README.md`, `packages/core/README.md`, `CHANGELOG.md`
+- Modify: `examples/my-store/src/schema/*` (product slug `pattern: '{name}'`, `detailPage`, new `question` type), `examples/my-store/src/blocks/*` (Questions block; ProductStrip/ProductGrid drop `urlPattern`), `examples/my-store/scripts/seed-pages.ts` (template instead of per-product pages, questions seed), `scripts/smoke-init.mjs`, `README.md`, `packages/core/README.md`, `CHANGELOG.md`
 - Test: my-store spec tests, seeds, smoke
 
 - [ ] **Step 1:** spec tests for changed/new blocks — FAIL → implement → PASS.

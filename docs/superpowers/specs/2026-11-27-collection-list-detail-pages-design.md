@@ -28,8 +28,8 @@ one template page; a product created after seeding gets a working page and produ
 - **Collection list element** in the block builder: anywhere in a block's tree, children are the item template
   (with `entry.*` bindings and `entryUrl`), content outside renders once; several lists per block; per-list page
   editor options (filter, sort, limit, layout).
-- **Slug fields:** four generation modes (title, id, title + short id, manual), SEO-standard title slugs
-  (accent-free), editable, validated, unique per content type and locale.
+- **Slug fields:** default = the entry id; an optional pattern (`{name}`, `{name}-{id6}`, …) generates SEO-standard
+  slugs (accent-free), editable, validated, unique per content type and locale.
 - **Detail pages:** an opt-in per content type (off by default), a template page per enabled type in the page
   builder, website routing `/<prefix>/{slug}` → template rendered with that entry, 404 when missing.
 - **Automatic entry links:** `entryUrl` resolves from the type's detail path when no `urlPattern` is set.
@@ -111,30 +111,41 @@ New element `CollectionList`.
 
 ### 2. Slug fields (`slug` kind)
 
-New field option `mode` (default `title` when `from` is set, else `manual`; existing fields without `mode` keep
-today's behaviour plus generation only when `from` is set):
+**Default = id.** A slug field without a pattern holds the entry's `documentId` (read-only in the admin, no
+generation or uniqueness check). A detail page whose type has no slug field can also use `{id}` directly.
 
-| Mode | Example | Value |
-|---|---|---|
-| `title` | `/products/ao-thun-trang` | `slugify(from)`, follows the source until edited by hand |
-| `id` | `/products/3f9a2c1e-…` | the entry's `documentId`; read-only in the admin |
-| `titleId` | `/products/ao-thun-trang-3f9a2c` | `slugify(from)` + `-` + first 6 hex chars of `documentId`; routing resolves by the id part, so renaming keeps old links working (they render the entry; no redirect) |
-| `manual` | `/products/ao-mua-he-2026` | typed by the editor; the admin suggests `slugify(from)` when empty |
+**Pattern (optional field option `pattern`)** — the slug is generated from entry fields:
+
+| `pattern` | Result for name "Áo Thun Trắng", category "Áo" |
+|---|---|
+| (none, default) | `3f9a2c1e-…` (documentId) |
+| `{name}` | `ao-thun-trang` |
+| `{name}-{id6}` | `ao-thun-trang-3f9a2c` |
+| `{category}-{name}` | `ao-ao-thun-trang` |
+
+- Placeholders: field names of the type (text, slug-free scalar fields: text, longText, number, email, taxonomy
+  term name) plus `{id}` (documentId) and `{id6}` (first 6 hex chars; 8 on collision). Unknown placeholders are a
+  schema validation issue.
+- Each field part goes through `slugify`; the parts are joined with `-`; the whole result is cut to `maxLength`.
+- A pattern containing `{id}`/`{id6}` is unique by construction; routing resolves such slugs by the id part, so
+  renaming keeps old links working (they render the entry; no redirect).
+- With a pattern, editors may type their own value (custom). A typed value stops following the pattern; the admin
+  shows "Regenerate" to go back to the pattern. Without a pattern the field is read-only.
+- The legacy option `from: 'name'` is read as `pattern: '{name}'`.
 
 **SEO-standard `slugify`:** `foldSearch` (accents removed, `đ`→`d`); `&` → `va` (vi) / `and` (other locales);
 emoji and currency symbols dropped; lowercase; runs of other characters → `-`; no leading, trailing or double
 dashes; max `maxLength` (default 75), cut at a word (dash) boundary. Example: "Áo Thun Trắng & Đen — Mùa Hè 2026!" →
 `ao-thun-trang-va-den-mua-he-2026`.
 
-The rules below describe `title` (and `titleId`'s title part); `id` needs no generation or uniqueness check, and
-`titleId` is unique by construction except for the (checked) 6-char prefix collision, which falls back to 8 chars.
+The rules below apply to pattern slugs:
 
-- **Generation (server, on create and update):** if the slug value is empty, or it was never edited by hand and
-  the `from` field changed, it is regenerated with `slugify` as above.
-- **"Edited by hand" (inferred, no new column):** on update the server computes `slugify(old source value)`. If the
-  stored slug equals it, or equals it plus a numeric suffix (`-2`, `-3`…), the slug is treated as generated and
-  follows the new source value; otherwise it was edited by hand and is kept. The admin shows a "regenerate" action.
-- **Validation:** `^[a-z0-9]+(?:-[a-z0-9]+)*$`, length ≤ `maxLength` (`id` mode: the documentId format).
+- **Generation (server, on create and update):** if the slug value is empty, or it was never edited by hand and a
+  field used by the pattern changed, it is regenerated from the pattern.
+- **"Edited by hand" (inferred, no new column):** on update the server computes the pattern result from the old
+  values. If the stored slug equals it, or equals it plus a numeric suffix (`-2`, `-3`…), the slug is treated as
+  generated and follows the new values; otherwise it was edited by hand and is kept.
+- **Validation:** `^[a-z0-9]+(?:-[a-z0-9]+)*$`, length ≤ `maxLength`.
 - **Uniqueness:** per content type and locale, counted per entry (`documentId`): a slug is taken when another entry
   has it in its draft or published row; the two rows of the same entry never conflict with each other.
   - A generated duplicate gets `-2`, `-3`, …
@@ -144,9 +155,9 @@ The rules below describe `title` (and `titleId`'s title part); `id` needs no gen
   - Routing reads published rows (drafts only in an authenticated preview).
 - **Concurrency:** generation and uniqueness are enforced under a per-type advisory lock (or a unique index where
   the slug column exists), so two simultaneous creates cannot get the same slug.
-- **Localized fields:** a localized slug is generated per locale from the source value in the same locale (falling
-  back to the default locale's value); a non-localized slug is generated from the default locale's source value and
-  shared across locales.
+- **Localized fields:** a localized slug is generated per locale from the field values in the same locale (falling
+  back to the default locale's values); a non-localized slug is generated from the default locale's values and shared
+  across locales.
 - **Existing entries (grandfathered):** keep their values. Format validation applies only when the slug value
   changes, so saving another field never fails on an old slug; an empty slug is filled on the next update. Detail
   routing only matches slugs in the valid format. Duplicates already in the data are reported in the content type page
@@ -218,7 +229,7 @@ override them with placeholders `{field}`.
 
 ### 5. my-store
 
-- `product`'s slug uses `mode: 'title'`; `product` gets `detailPage: { path: '/products/{slug}', slugField: 'slug' }`
+- `product`'s slug uses `pattern: '{name}'`; `product` gets `detailPage: { path: '/products/{slug}', slugField: 'slug' }`
   and a template page with the existing product tabs and badge tooltip.
 - `seed-pages.ts` stops creating one page per product and creates the template instead; the README note about
   product pages created by the seed is removed.
@@ -247,7 +258,8 @@ override them with placeholders `{field}`.
 10. Old slugs are grandfathered: format checks only on change; empty ones are filled on the next update.
 11. Non-localized slugs come from the default locale's source value.
 12. A dangling `detailPage` is refused in the admin and tolerated at runtime (404 + admin warning).
-13. Slug modes `title` / `id` / `titleId` / `manual` (user request); SEO slugify with 75-char default.
+13. Slugs default to the entry id; generation only with a field `pattern` (`{field}`, `{id}`, `{id6}`), custom
+    values allowed when a pattern exists (user); SEO slugify with 75-char default.
 14. Related-by-route-entry lists and block lifecycle hooks are out of this sprint (user).
 
 ## Constraints
