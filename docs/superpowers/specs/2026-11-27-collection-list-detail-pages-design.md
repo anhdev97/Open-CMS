@@ -208,7 +208,8 @@ override them with placeholders `{field}`.
 - `entryUrl` (CollectionList items, block-level collections, clickable Box/Card/Image `href`, Button `href`)
   resolves as follows:
   1. the block's `urlPattern` if set (unchanged behaviour);
-  2. otherwise the entry type's `detailPage.path` with `{slug}` filled from `slugField`;
+  2. otherwise the entry type's `detailPage.path` with `{slug}` filled from `slugField` (or `{id}` from
+     `documentId`);
   3. otherwise no link (as today when `urlPattern` is missing).
 - The schema rule "'entryUrl' requires binding.urlPattern" becomes "requires `urlPattern` or a content type with a
   detail page". The check runs where type definitions are available (server block checks and the builder); the pure
