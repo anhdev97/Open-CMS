@@ -15,6 +15,12 @@ export class PublicPagesController {
     return this.pages.byPath('published', path, locale);
   }
 
+  /** `{ data: { [apiId]: { path, slugField? } } }`: detail paths of the content types the public API serves. */
+  @Get('detail-paths')
+  detailPaths() {
+    return this.pages.detailPaths();
+  }
+
   /** `id`: a base page's document id or `default`. The published base in `locale` (fallback: default locale). */
   @Get('base')
   base(@Query('id') id?: string, @Query('locale') locale?: string) {
@@ -82,5 +88,19 @@ export class PagesController {
   @Get('bases/:documentId/usage')
   usage(@Param('documentId', ParseUUIDPipe) documentId: string) {
     return this.pages.usage(documentId);
+  }
+}
+
+/** Detail page status of a content type, for the content type pages (spec §3, decision 12). */
+@Controller('api/admin/content-types')
+export class ContentTypeStatusController {
+  constructor(@Inject(PagesService) private readonly pages: PagesService) {}
+
+  /** `{ data: { detailPage, detailTemplate, templateId, misconfigured, duplicateSlugs } }`; 404 for an unknown type. */
+  @RequirePermission('content.read')
+  @Header('Cache-Control', 'no-store')
+  @Get(':apiId/status')
+  status(@Param('apiId') apiId: string) {
+    return this.pages.detailStatus(apiId);
   }
 }

@@ -26,6 +26,7 @@ import { PAGE_API_ID } from '@opencloudcms/schema';
 import { EntriesService, type ListParams } from './entries.service';
 import { ContentRegistry } from './registry.service';
 import { PrivateAssetOwnership } from './private-assets';
+import { pageHidesDetail } from './pages/detail';
 import { SlugError } from './slugs';
 import { WorkflowService } from './workflow.service';
 
@@ -91,7 +92,8 @@ export class ContentController {
   ) {
     this.registry.getPublic(apiId);
     const r = await this.entries.get(apiId, documentId, 'published', locale, fallback);
-    if (apiId === PAGE_API_ID && r.data.kind === 'base') throw new NotFoundException(`${apiId} ${documentId} not found`);
+    // Base pages and detail templates are read publicly only through `opencloudcmsPage/base` and `by-path`.
+    if (apiId === PAGE_API_ID && (r.data.kind === 'base' || r.data.kind === 'detail')) throw new NotFoundException(`${apiId} ${documentId} not found`);
     return r;
   }
 }
@@ -114,7 +116,21 @@ export class SlugErrorFilter implements ExceptionFilter<SlugError> {
 @Controller('api/admin/content')
 @UseFilters(SlugErrorFilter)
 export class AdminContentController {
-  constructor(@Inject(EntriesService) private readonly entries: EntriesService) {}
+  constructor(
+    @Inject(EntriesService) private readonly entries: EntriesService,
+    @Inject(ContentRegistry) private readonly registry: ContentRegistry,
+  ) {}
+
+  /**
+   * Page saves: `warnings` (only when there are any) when the saved ordinary page's path matches a detail pattern
+   * (spec §3 routing 4). Other responses are unchanged.
+   */
+  private withPageWarnings<T extends { data: Record<string, unknown> }>(apiId: string, r: T): T | (T & { warnings: unknown[] }) {
+    if (apiId !== PAGE_API_ID || r.data.kind !== 'page') return r;
+    const defs = this.registry.all().filter((d) => !this.registry.isCore(d.apiId));
+    const warnings = pageHidesDetail(defs, r.data.path);
+    return warnings.length ? { ...r, warnings } : r;
+  }
 
   @RequirePermission('content.read')
   @Get(':apiId')
@@ -137,14 +153,14 @@ export class AdminContentController {
 
   @RequirePermission('content.create')
   @Post(':apiId')
-  create(@Param('apiId') apiId: string, @Body() body: unknown, @Query('locale') locale?: string) {
-    return this.entries.create(apiId, body, locale);
+  async create(@Param('apiId') apiId: string, @Body() body: unknown, @Query('locale') locale?: string) {
+    return this.withPageWarnings(apiId, await this.entries.create(apiId, body, locale));
   }
 
   /** Partial update of the draft; `If-Match: <updatedAt ISO>` enables the stale-draft check (409 `stale_draft`). */
   @RequirePermission('content.update')
   @Patch(':apiId/:documentId')
-  update(
+  async update(
     @Param('apiId') apiId: string,
     @Param('documentId', ParseUUIDPipe) documentId: string,
     @Body() body: unknown,
@@ -152,7 +168,7 @@ export class AdminContentController {
     @Query('locale') locale?: string,
     @Headers('if-match') ifMatch?: string,
   ) {
-    return this.entries.update(apiId, documentId, body, locale, user, { expectedUpdatedAt: ifMatchValue(ifMatch) });
+    return this.withPageWarnings(apiId, await this.entries.update(apiId, documentId, body, locale, user, { expectedUpdatedAt: ifMatchValue(ifMatch) }));
   }
 
   @Post(':apiId/:documentId/publish')

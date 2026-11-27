@@ -16,7 +16,7 @@ import { BlocksService } from './block-builder/blocks.service';
 import { PageBlocksManifest } from './block-builder/page-blocks-manifest';
 import { AdminContentController, ContentController, PrivateAssetUploadController, PrivateEntryFilesController, WorkflowController } from './content.controllers';
 import { PrivateAssetOwnership } from './private-assets';
-import { AdminPagesController, PagesController, PublicPagesController } from './pages/pages.controller';
+import { AdminPagesController, ContentTypeStatusController, PagesController, PublicPagesController } from './pages/pages.controller';
 import { PagesService } from './pages/pages.service';
 import { EntriesService } from './entries.service';
 import { PrivateEntriesService } from './private-entries.service';
@@ -98,7 +98,7 @@ export class OpenCloudCmsModule implements NestModule, OnModuleInit, BeforeAppli
       controllers: [
         PublicPagesController, PublicAssetsController, AdminPagesController, PagesController, ContentController, AdminContentController, PrivateEntryFilesController,
         ...(input.assets ? [PrivateAssetUploadController] : []),
-        SchemaController, BlocksController, ContentGroupsController, LocalesController, ThemeController, SystemController, WorkflowController,
+        SchemaController, ContentTypeStatusController, BlocksController, ContentGroupsController, LocalesController, ThemeController, SystemController, WorkflowController,
       ],
       providers: [
         { provide: OPENCLOUDCMS_OPTIONS, useValue: options },

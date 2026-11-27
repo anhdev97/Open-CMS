@@ -1,15 +1,42 @@
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, UnprocessableEntityException, type OnModuleInit } from '@nestjs/common';
 import { sql, type Kysely } from 'kysely';
-import { collectBlockNames, fieldStorage, l10nTable, mainTable, PAGE_API_ID, type BlockManifest, type StoredPageContent } from '@opencloudcms/schema';
+import {
+  collectBlockNames,
+  fieldStorage,
+  l10nTable,
+  mainTable,
+  matchDetailPath,
+  PAGE_API_ID,
+  parseSlugPattern,
+  slugPattern,
+  type BlockManifest,
+  type ContentTypeDefinition,
+  type DetailPageOptions,
+  type DetailParam,
+  type StoredPageContent,
+} from '@opencloudcms/schema';
 import { EntriesService } from '../entries.service';
 import { OPENCLOUDCMS_DB, OPENCLOUDCMS_OPTIONS, type ResolvedOpenCloudCmsOptions } from '../options';
 import { PageBlocksManifest } from '../block-builder/page-blocks-manifest';
 import { ContentRegistry } from '../registry.service';
 import { baseUsage, findBase, lockDefaultBase, PAGE_MAIN, type BaseUsage } from './bases';
+import { detailPaths, detailState } from './detail';
 import { unknownBlocks } from './page.hooks';
 import { shadowedPagePaths } from './shadowed';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** A trailing `{id}` part of a slug value: `-<uuid>` or the whole value. */
+const TRAILING_UUID_RE = /(?:^|-)([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+/** A trailing `{id6}` part: 6 hex, or 8 after a prefix collision (slugs.ts); always at least 6. */
+const TRAILING_ID6_RE = /(?:^|-)([0-9a-f]{6,8})$/;
+
+export interface DetailStatus {
+  detailPage: DetailPageOptions | null;
+  detailTemplate: boolean;
+  templateId: string | null;
+  misconfigured: boolean;
+  duplicateSlugs: number;
+}
 
 export interface BlocksCheckItem {
   documentId: string;
@@ -40,16 +67,144 @@ export class PagesService implements OnModuleInit {
     }
   }
 
-  /** The page of `locale` (exact, no fallback) whose path is `path`. 404 when absent. */
+  /**
+   * The page of `locale` (exact, no fallback) whose path is `path`: `{ data }`. Otherwise (spec §3 routing), when the
+   * path matches a content type's detail pattern, that type's template in `locale` plus the entry:
+   * `{ data: template, routeEntry, detail: { apiId } }`. `status` applies to both (published for the public API,
+   * drafts for the admin API, which needs a session). 404 when nothing matches.
+   */
   async byPath(status: 'draft' | 'published', path: string | undefined, locale: string | undefined) {
     if (!path) throw new BadRequestException('Query parameter "path" is required');
     const loc = locale || this.options.config.defaultLocale;
-    // Base pages are never served at a path: filtered in the query, so a base row can never take the one result.
+    // Base pages and detail templates are never served at a path: filtered in the query, so they can never take the one result.
     const { data } = await this.entries.list(PAGE_API_ID, { status, locale: loc, filter: { path }, mainWhere: { kind: 'page' }, limit: 1 });
     // The list falls back to the default locale for display; by-path must match the requested locale only.
     const hit = data.find((d) => d.locale === loc);
-    if (!hit) throw new NotFoundException(`No page at ${path}`);
-    return { data: hit };
+    if (hit) return { data: hit };
+    const detail = await this.detailByPath(status, path, loc);
+    if (!detail) throw new NotFoundException(`No page at ${path}`);
+    return detail;
+  }
+
+  /** Project types (core types never have detail pages). */
+  private projectTypes(): ContentTypeDefinition[] {
+    return this.registry.all().filter((d) => !this.registry.isCore(d.apiId));
+  }
+
+  /** Exact page paths came first (decision 3); private and misconfigured types never match (`matchDetailPath`). */
+  private async detailByPath(status: 'draft' | 'published', path: string, loc: string) {
+    // A detail path has at least one static segment before `{slug}` / `{id}`: `/` and `/x` never match.
+    if (!/^\/[^/]+\/[^/]+/.test(path)) return null;
+    const m = matchDetailPath(this.projectTypes(), path);
+    if (!m) return null;
+    const def = this.registry.get(m.apiId);
+    if (def.private || !detailState(def).usable) return null;
+    const template = await this.template(def.apiId, status, loc);
+    if (!template) return null;
+    const documentId = await this.routeEntryId(def, m.param, m.value, status, loc);
+    if (!documentId) return null;
+    let routeEntry: Record<string, unknown>;
+    try {
+      ({ data: routeEntry } = await this.entries.get(def.apiId, documentId, status, loc));
+    } catch (e) {
+      // Deleted between the lookup and the read.
+      if (e instanceof NotFoundException) return null;
+      throw e;
+    }
+    return { data: template, routeEntry, detail: { apiId: def.apiId } };
+  }
+
+  /** The detail template of `apiId` in `locale` (exact, like pages), `status` row. */
+  private async template(apiId: string, status: 'draft' | 'published', loc: string): Promise<Record<string, unknown> | null> {
+    const { data } = await this.entries.list(PAGE_API_ID, { status, locale: loc, mainWhere: { kind: 'detail', detail_api_id: apiId }, limit: 1 });
+    return data.find((d) => d.locale === loc) ?? null;
+  }
+
+  /**
+   * Document id of the `status` entry that a detail URL value names. `{id}` paths: the documentId. `{slug}` paths: an
+   * exact slug match (a localized slug in `loc` only; with old duplicate values the oldest entry); when there is none
+   * and the slug pattern ends with `{id}` / `{id6}`, the trailing id part: the full documentId, or a documentId
+   * prefix of 6–8 hex that exactly one entry has (a slug whose other parts changed still resolves).
+   */
+  private async routeEntryId(def: ContentTypeDefinition, param: DetailParam, value: string, status: 'draft' | 'published', loc: string): Promise<string | null> {
+    const main = sql.table(mainTable(def));
+    if (param === 'id') {
+      const r = await sql<{ document_id: string }>`select document_id from ${main} where document_id = ${value} and status = ${status}`.execute(this.db);
+      return r.rows[0]?.document_id ?? null;
+    }
+    const field = def.fields.find((x) => x.name === def.detailPage?.slugField);
+    if (!field) return null;
+    const storage = fieldStorage(def, field);
+    if (storage.mode !== 'columns') return null;
+    const col = sql.ref(storage.columns[0].name);
+    const l10n = storage.location !== 'main';
+    const exact = l10n
+      ? await sql<{ document_id: string }>`
+          select m.document_id from ${main} m join ${sql.table(l10nTable(def))} l on l.entry_id = m.id
+          where m.status = ${status} and l.locale = ${loc} and l.${col} = ${value}
+          order by m.created_at, m.id limit 1`.execute(this.db)
+      : await sql<{ document_id: string }>`
+          select document_id from ${main} where status = ${status} and ${col} = ${value}
+          order by created_at, id limit 1`.execute(this.db);
+    if (exact.rows[0]) return exact.rows[0].document_id;
+
+    const pattern = slugPattern(field);
+    const last = pattern ? parseSlugPattern(pattern, def).parts.at(-1) : undefined;
+    if (last?.kind !== 'id' && last?.kind !== 'id6') return null;
+    const id = last.kind === 'id' ? TRAILING_UUID_RE.exec(value)?.[1] : TRAILING_ID6_RE.exec(value)?.[1];
+    if (!id) return null;
+    // A localized slug: the entry must exist in the requested locale, as for an exact match.
+    const inLocale = l10n
+      ? sql` and exists (select 1 from ${sql.table(l10nTable(def))} l where l.entry_id = m.id and l.locale = ${loc})`
+      : sql``;
+    const match = last.kind === 'id' ? sql`m.document_id = ${id}` : sql`m.document_id::text like ${`${id}%`}`;
+    const r = await sql<{ document_id: string }>`
+      select m.document_id from ${main} m where m.status = ${status} and ${match}${inLocale} limit 2`.execute(this.db);
+    return r.rows.length === 1 ? r.rows[0].document_id : null;
+  }
+
+  /** `{ data: { [apiId]: { path, slugField? } } }`: usable detail pages of non-private types (public). */
+  detailPaths(): { data: Record<string, DetailPageOptions> } {
+    return { data: detailPaths(this.projectTypes()) };
+  }
+
+  /** Admin status of a type's detail page (spec §3, decision 12). 404 for an unknown type. */
+  async detailStatus(apiId: string): Promise<{ data: DetailStatus }> {
+    const def = this.registry.get(apiId);
+    const state = detailState(def);
+    const t = await sql<{ document_id: string }>`
+      select document_id from ${sql.table(PAGE_MAIN)} where kind = 'detail' and detail_api_id = ${def.apiId}
+      order by (status = 'draft') desc, created_at limit 1`.execute(this.db);
+    const templateId = t.rows[0]?.document_id ?? null;
+    return {
+      data: {
+        detailPage: state.config,
+        detailTemplate: templateId !== null,
+        templateId,
+        misconfigured: state.misconfigured,
+        duplicateSlugs: state.usable?.param === 'slug' ? await this.duplicateSlugs(def) : 0,
+      },
+    };
+  }
+
+  /** Slug values (per locale for a localized slug) that more than one published entry holds: detail URLs serve one of them. */
+  private async duplicateSlugs(def: ContentTypeDefinition): Promise<number> {
+    const field = def.fields.find((x) => x.name === def.detailPage?.slugField);
+    if (!field) return 0;
+    const storage = fieldStorage(def, field);
+    if (storage.mode !== 'columns') return 0;
+    const col = sql.ref(storage.columns[0].name);
+    const main = sql.table(mainTable(def));
+    const r =
+      storage.location !== 'main'
+        ? await sql<{ n: string }>`select count(*) as n from (
+            select 1 from ${main} m join ${sql.table(l10nTable(def))} l on l.entry_id = m.id
+            where m.status = 'published' and l.${col} is not null and l.${col} <> ''
+            group by l.locale, l.${col} having count(distinct m.document_id) > 1) d`.execute(this.db)
+        : await sql<{ n: string }>`select count(*) as n from (
+            select 1 from ${main} where status = 'published' and ${col} is not null and ${col} <> ''
+            group by ${col} having count(distinct document_id) > 1) d`.execute(this.db);
+    return Number(r.rows[0]?.n ?? 0);
   }
 
   /** Document ids of base pages that have a `status` row, the default first, then by creation. */
