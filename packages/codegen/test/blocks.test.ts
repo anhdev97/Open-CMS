@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { resolveConfig, validateComposedSpec, type ComposedBlockSpec } from '@opencloudcms/schema';
-import { clickableSpec, componentsSpec, tooltipSpec } from './fixtures/components';
+import { clickableSpec, componentsSpec, listsSpec, singleListSpec, tooltipSpec } from './fixtures/components';
 import {
   blocksDir,
   captureProjectFiles,
@@ -344,7 +344,27 @@ describe('composed block files: layout and overlay blocks', () => {
 
 describe('printComposedBlockFile: builder component elements', () => {
   it('fixtures are valid specs', () => {
-    for (const s of [componentsSpec, clickableSpec, tooltipSpec]) expect(validateComposedSpec(s)).toEqual([]);
+    for (const s of [componentsSpec, clickableSpec, tooltipSpec, listsSpec, singleListSpec]) expect(validateComposedSpec(s)).toEqual([]);
+  });
+
+  it('CollectionList: round trip, props in a fixed order (key, apiId, query, layout, texts, editor, anchorId last)', async () => {
+    for (const s of [listsSpec, singleListSpec]) {
+      const root = tmp();
+      const text = printComposedBlockFile(s);
+      project(root, { 'x/x.block.ts': text });
+      const { specs, errors } = await loadComposedBlocks(cfg(root));
+      expect(errors).toEqual([]);
+      expect(specs[0].spec).toEqual(s);
+      expect(printComposedBlockFile(specs[0].spec)).toBe(text);
+    }
+    const text = printComposedBlockFile(listsSpec);
+    expect(text).toContain("el: 'CollectionList'");
+    const props = text.slice(text.indexOf("key: 'products'") - 200);
+    const order = ['key:', 'apiId:', 'filter:', 'sort:', 'limit:', 'layout:', 'emptyText:', 'editor:', 'anchorId:'].map((k) => props.indexOf(k));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(text).toMatch(/key: 'posts',\s+apiId: 'post',\s+layout: \{ kind: 'carousel', columns: 2 \},\s+urlPattern: '\/blog\/\{slug\}',/);
+    expect(printComposedBlockFile(singleListSpec)).toContain("props: { key: 'related', apiId: 'product', limit: 3 }");
   });
 
   it('prints every new element, hover, button icon props, clickable containers and the carousel layout (round trip)', async () => {

@@ -8,7 +8,21 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { composedKind, overlayDefaultName, validateNodeStyle, type BindSource, type ComposedBlockSpec, type ComposedField, type ComposedNode, type LocalizedText, type ResolvedConfig } from '@opencloudcms/schema';
+import {
+  COLLECTION_LIST_DEFAULT_LIMIT,
+  COLLECTION_LIST_MAX_LIMIT,
+  collectionListsOf,
+  composedKind,
+  overlayDefaultName,
+  validateNodeStyle,
+  type BindSource,
+  type CollectionListProps,
+  type ComposedBlockSpec,
+  type ComposedField,
+  type ComposedNode,
+  type LocalizedText,
+  type ResolvedConfig,
+} from '@opencloudcms/schema';
 import { blocksDir, printLiteral, writeComposedBlocks } from './blocks';
 
 const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -20,6 +34,39 @@ const has = (o: object | undefined, k: string) => !!o && Object.prototype.hasOwn
 /** Same as `layoutValue` of the composed renderer. */
 const layoutValue = (l: NonNullable<ComposedBlockSpec['binding']>['layout']) =>
   l?.kind === 'list' ? 'list' : l?.kind === 'carousel' ? `carousel-${l.columns ?? 3}` : `grid-${l?.columns ?? 3}`;
+
+/** Same as `LIST_LAYOUT_SUFFIX` of `@opencloudcms/core/blocks`: the editor layout field of a CollectionList is `<key>__layout`. */
+const LIST_LAYOUT_SUFFIX = '__layout';
+
+/** Options of the editor layout select, as `layoutOptions` of `defineComposedBlock` (carousel values only for a carousel). */
+const layoutOptions = (l: NonNullable<ComposedBlockSpec['binding']>['layout']) => [
+  { value: 'list', label: L('List', 'Danh sách', 'Liste', 'Daftar') },
+  ...[2, 3, 4, 5, 6].map((n) => ({ value: `grid-${n}`, label: L(`Grid · ${n}`, `Lưới · ${n}`, `Grille · ${n}`, `Kisi · ${n}`) })),
+  ...(l?.kind === 'carousel'
+    ? [1, 2, 3, 4, 5, 6].map((n) => ({ value: `carousel-${n}`, label: L(`Carousel · ${n}`, `Băng chuyền · ${n}`, `Carrousel · ${n}`, `Karosel · ${n}`) }))
+    : []),
+];
+
+/** `"<key> · <label>"` in every locale, as `prefixed` of `defineComposedBlock`. */
+const prefixed = (key: string, label: LocalizedText): LocalizedText =>
+  Object.fromEntries(Object.entries(label).map(([l, t]) => [l, `${key} · ${t}`])) as LocalizedText;
+
+/** Same as `detailLinksOf` of `defineComposedBlock`: apiIds whose detail path an `entryUrl` uses. */
+function detailLinksOf(spec: ComposedBlockSpec): string[] {
+  const out = new Set<string>();
+  const walk = (n: ComposedNode, list: CollectionListProps | undefined) => {
+    const inList = n.el === 'CollectionList' ? (n.props as unknown as CollectionListProps) : list;
+    for (const s of Object.values(n.bind ?? {})) {
+      if (s.from !== 'entryUrl') continue;
+      if (list) {
+        if (!list.urlPattern && list.apiId) out.add(list.apiId);
+      } else if (spec.binding && !spec.binding.urlPattern) out.add(spec.binding.apiId);
+    }
+    for (const c of n.children ?? []) walk(c, inList);
+  };
+  walk(spec.tree, undefined);
+  return [...out];
+}
 
 /** Nodes of the elements `els`, in tree order (depth first). */
 function nodesOf(n: ComposedNode, els: readonly string[], out: ComposedNode[] = []): ComposedNode[] {
@@ -113,18 +160,32 @@ function printFields(spec: ComposedBlockSpec, indent: string): string[] {
     };
     out.push(['entries', call('b.entries', [q(binding.apiId), printLiteral(e, indent)])]);
     if (o.editorLayout) {
-      const layout = {
-        label: L('Layout', 'Bố cục', 'Disposition', 'Tata letak'),
-        options: [
-          { value: 'list', label: L('List', 'Danh sách', 'Liste', 'Daftar') },
-          ...[2, 3, 4, 5, 6].map((n) => ({ value: `grid-${n}`, label: L(`Grid · ${n}`, `Lưới · ${n}`, `Grille · ${n}`, `Kisi · ${n}`) })),
-          ...(binding.layout?.kind === 'carousel'
-            ? [1, 2, 3, 4, 5, 6].map((n) => ({ value: `carousel-${n}`, label: L(`Carousel · ${n}`, `Băng chuyền · ${n}`, `Carrousel · ${n}`, `Karosel · ${n}`) }))
-            : []),
-        ],
-        default: layoutValue(binding.layout),
-      };
+      const layout = { label: L('Layout', 'Bố cục', 'Disposition', 'Tata letak'), options: layoutOptions(binding.layout), default: layoutValue(binding.layout) };
       out.push(['layout', call('b.select', [printLiteral(layout, indent)])]);
+    }
+  }
+  // CollectionLists: a `b.entries` field named after each key (+ `<key>__layout` when page editors pick the layout).
+  for (const { key, node } of collectionListsOf(spec)) {
+    const p = node.props as unknown as CollectionListProps;
+    const ed = p.editor ?? {};
+    const limit = p.limit ?? COLLECTION_LIST_DEFAULT_LIMIT;
+    const baseFilter = Object.fromEntries((p.filter ?? []).map((f) => [f.field, String(f.value)]));
+    const defaultSort = p.sort ? `${p.sort.field}:${p.sort.direction}` : undefined;
+    const e: Record<string, unknown> = {
+      label: prefixed(key, L('Entries', 'Danh sách mục', 'Entrées', 'Entri')),
+      limit,
+      sortable: ed.sort === true,
+      filterable: ed.filter === true,
+      ...(Object.keys(baseFilter).length ? { baseFilter } : {}),
+      ...(defaultSort ? { defaultSort } : {}),
+      lockLimit: ed.limit !== true,
+      maxLimit: COLLECTION_LIST_MAX_LIMIT,
+      default: { mode: 'query', limit, ...(defaultSort ? { sort: defaultSort } : {}) },
+    };
+    out.push([key, call('b.entries', [q(p.apiId), printLiteral(e, indent)])]);
+    if (ed.layout === true) {
+      const layout = { label: prefixed(key, L('Layout', 'Bố cục', 'Disposition', 'Tata letak')), options: layoutOptions(p.layout), default: layoutValue(p.layout) };
+      out.push([`${key}${LIST_LAYOUT_SUFFIX}`, call('b.select', [printLiteral(layout, indent)])]);
     }
   }
   slotNodes(spec.tree).forEach((n, i) => {
@@ -154,8 +215,10 @@ type Out = { jsx: boolean; code: string };
 type Val = { lit: unknown } | { expr: string };
 
 interface Gen {
+  /** `entry` is defined where the node sits (block binding or the enclosing CollectionList item). */
   bound: boolean;
-  urlPattern?: string;
+  /** Expression of the `entryUrl` of `entry` where the node sits (as the renderer's `ctx.link`). */
+  link: string;
   slots: Map<ComposedNode, string>;
   usesLocale: boolean;
   /** The block label is read (clickable image alt, carousel name): `const blockLabel` is printed. */
@@ -180,7 +243,7 @@ function source(g: Gen, s: BindSource): string {
     case 'entry':
       return g.bound ? `get(entry, ${q(s.path)})` : 'undefined';
     case 'entryUrl':
-      return g.bound && g.urlPattern ? `h.entryUrl(${q(g.urlPattern)}, entry, get)` : 'null';
+      return g.bound ? g.link : 'null';
     case 'field':
       return propExpr(s.name);
     case 'const':
@@ -223,10 +286,16 @@ const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
  * skips invalid values too). Nothing when there is no valid property.
  */
 function styleAttr(n: ComposedNode): string[] {
-  if (!isObj(n.style)) return [];
+  const ok = styleLiteral(n);
+  return ok ? [attrExpr('style', printLiteral(ok))] : [];
+}
+
+/** The valid top-level properties of a node's `style`, or null when there is none. */
+function styleLiteral(n: ComposedNode): Record<string, unknown> | null {
+  if (!isObj(n.style)) return null;
   const bad = new Set(validateNodeStyle(n.style, []).map((i) => String(i.path[0])));
   const ok = Object.fromEntries(Object.entries(n.style).filter(([k, v]) => v !== undefined && !bad.has(k)));
-  return Object.keys(ok).length ? [attrExpr('style', printLiteral(ok))] : [];
+  return Object.keys(ok).length ? ok : null;
 }
 
 /** Non-empty string props (Columns `gapX` / `gapY`), as the renderer's `str`. */
@@ -500,6 +569,8 @@ function body(g: Gen, n: ComposedNode, indent: string): Out {
       ];
       return jsx(element('ui.DateText', attrs, null, indent));
     }
+    case 'CollectionList':
+      return collectionList(g, n, indent);
     case 'Divider':
       return jsx(element('ui.Divider', st, null, indent));
     case 'Spacer':
@@ -507,6 +578,39 @@ function body(g: Gen, n: ComposedNode, indent: string): Out {
     default:
       return { jsx: false, code: 'null' };
   }
+}
+
+/** `entryUrl` expression for `entry`: `urlPattern` when set, else the `apiId` detail path, else none (as `linkFor`). */
+const linkExpr = (urlPattern: string | undefined, apiId: string | undefined): string =>
+  urlPattern ? `h.entryUrl(${q(urlPattern)}, entry, get)` : apiId ? `h.detailUrl(props, ${q(apiId)}, entry)` : 'null';
+
+/**
+ * `h.list(props, { … }, (entry) => <>…</>)`: inside the item template `entry` is the list item and `entryUrl` uses only
+ * the list's urlPattern, else the list type's detail path (decision 9).
+ */
+function collectionList(g: Gen, n: ComposedNode, indent: string): Out {
+  const p = (n.props ?? {}) as unknown as CollectionListProps & Record<string, unknown>;
+  const outer = { bound: g.bound, link: g.link };
+  g.bound = true;
+  g.link = linkExpr(p.urlPattern, p.apiId);
+  const inner = indent + '  ';
+  const kids = element('', [], (n.children ?? []).map((c) => node(g, c, inner + '  ')), inner);
+  g.bound = outer.bound;
+  g.link = outer.link;
+  const st = styleLiteral(n);
+  const parts = [
+    'name',
+    'label',
+    `key: ${q(p.key)}`,
+    `layout: ${q(layoutValue(p.layout))}`,
+    ...(p.editor?.layout === true ? ['editorLayout: true'] : []),
+    ...(p.emptyText ? [`emptyText: ${printLiteral(p.emptyText, inner)}`] : []),
+    ...(typeof p.anchorId === 'string' && p.anchorId ? [`id: ${q(p.anchorId)}`] : []),
+    ...(st ? [`style: ${printLiteral(st, inner)}`] : []),
+  ];
+  const flat = `{ ${parts.join(', ')} }`;
+  const cfg = flat.length <= 70 && !flat.includes('\n') ? flat : `{\n${parts.map((x) => `${inner}${x},`).join('\n')}\n${indent}}`;
+  return { jsx: false, code: `h.list(props, ${cfg}, (entry) => (\n${inner}${kids}\n${indent}))` };
 }
 
 /** JS expression of the id a label candidate gets: its own anchorId, else `<overlay name>-title`. */
@@ -554,7 +658,7 @@ function node(g: Gen, n: ComposedNode, indent: string): Out {
 export function printEjectedBlockTsx(spec: ComposedBlockSpec): string {
   const binding = spec.binding;
   const kind = composedKind(spec);
-  const g: Gen = { bound: !!binding, urlPattern: binding?.urlPattern, slots: slotNames(spec.tree), usesLocale: false, usesBlockLabel: false, tooltips: 0, describe: new Map() };
+  const g: Gen = { bound: !!binding, link: linkExpr(binding?.urlPattern, binding?.apiId), slots: slotNames(spec.tree), usesLocale: false, usesBlockLabel: false, tooltips: 0, describe: new Map() };
   let labelledLine: string[] = [];
   if (kind === 'overlay') {
     // Same choice as the renderer: the first Heading whose own and ancestors' showIf pass.
@@ -596,6 +700,7 @@ export function printEjectedBlockTsx(spec: ComposedBlockSpec): string {
   ];
 
   const assetPaths = [...imageEntryPaths(spec.tree)];
+  const detailLinks = detailLinksOf(spec);
   const def = [
     '  name,',
     '  label,',
@@ -606,6 +711,7 @@ export function printEjectedBlockTsx(spec: ComposedBlockSpec): string {
     '  // Reserved props `_locale` (stamped by resolvePage) and `_editor` (editor canvas), as for composed blocks.',
     '  usesLocale: true,',
     ...(assetPaths.length ? [`  entryAssetPaths: ${printLiteral(assetPaths, '  ')},`] : []),
+    ...(detailLinks.length ? ['  // Content types whose detail page URLs `entryUrl` links use (`resolvePage` stamps `_detailPaths`).', `  detailLinks: ${printLiteral(detailLinks, '  ')},`] : []),
     '  fields: {',
     ...printFields(spec, '    ').map((l) => `    ${l}`),
     '  },',

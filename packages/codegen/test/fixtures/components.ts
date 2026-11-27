@@ -154,3 +154,83 @@ function lift(n: ComposedNode): ComposedNode {
 }
 export const componentsSpec: ComposedBlockSpec = { ...componentsSpec0, tree: lift(componentsSpec0.tree) };
 export const tooltipSpec: ComposedBlockSpec = { ...tooltipSpec0, tree: lift(tooltipSpec0.tree) };
+
+/** Unbound block with three CollectionLists: grid (detail links, editor options), carousel (own urlPattern), list. */
+export const listsSpec: ComposedBlockSpec = {
+  id: 'blk_lists001',
+  name: 'HomeLists',
+  label: L('Home lists', 'Danh sách trang chủ'),
+  category: 'Marketing',
+  version: 1,
+  fields: { title: { kind: 'text', default: 'Latest' } },
+  tree: {
+    el: 'Box',
+    children: [
+      { el: 'Heading', bind: { text: { from: 'field', name: 'title' } } },
+      {
+        el: 'CollectionList',
+        props: {
+          editor: { sort: true, layout: true },
+          key: 'products',
+          apiId: 'product',
+          filter: [{ field: 'active', value: true }],
+          sort: { field: 'createdAt', direction: 'desc' },
+          limit: 6,
+          layout: { kind: 'grid', columns: 4 },
+          emptyText: L('No products yet', 'Chưa có sản phẩm'),
+          anchorId: 'products',
+        },
+        style: { margin: { t: '8' }, background: 'muted' },
+        children: [
+          {
+            el: 'Card',
+            props: { ariaLabel: 'Open product' },
+            bind: { href: { from: 'entryUrl' } },
+            children: [
+              { el: 'Image', bind: { src: { from: 'entry', path: 'image' } } },
+              { el: 'Heading', props: { level: 3 }, bind: { text: { from: 'entry', path: 'name' } } },
+              { el: 'Text', bind: { text: { from: 'entry', path: 'subtitle' } }, showIf: { from: 'entry', path: 'subtitle', is: 'present' } },
+            ],
+          },
+          { el: 'Tooltip', bind: { text: { from: 'const', value: 'Details' } }, children: [{ el: 'Button', props: { label: 'View' }, bind: { href: { from: 'entryUrl' } } }] },
+        ],
+      },
+      {
+        el: 'CollectionList',
+        props: { key: 'posts', apiId: 'post', layout: { kind: 'carousel', columns: 2 }, urlPattern: '/blog/{slug}' },
+        children: [{ el: 'Button', bind: { label: { from: 'entry', path: 'name' }, href: { from: 'entryUrl' } } }],
+      },
+      {
+        el: 'CollectionList',
+        props: { key: 'faq', apiId: 'faq', layout: { kind: 'list' }, editor: { limit: true, filter: true } },
+        children: [{ el: 'Text', bind: { text: { from: 'entry', path: 'name' } } }],
+      },
+    ],
+  },
+};
+
+/** Single-bound block (no urlPattern: detail link) with a related-products list. */
+export const singleListSpec: ComposedBlockSpec = {
+  id: 'blk_lists002',
+  name: 'ProductDetail',
+  label: L('Product detail'),
+  category: 'Shop',
+  version: 1,
+  binding: { apiId: 'product', mode: 'single' },
+  fields: {},
+  tree: {
+    el: 'Stack',
+    children: [
+      { el: 'Heading', bind: { text: { from: 'entry', path: 'name' } } },
+      { el: 'Button', props: { label: 'Permalink' }, bind: { href: { from: 'entryUrl' } } },
+      {
+        el: 'CollectionList',
+        props: { key: 'related', apiId: 'product', limit: 3 },
+        children: [
+          { el: 'Text', bind: { text: { from: 'entry', path: 'name' } } },
+          { el: 'Button', props: { label: 'Open' }, bind: { href: { from: 'entryUrl' } } },
+        ],
+      },
+    ],
+  },
+};

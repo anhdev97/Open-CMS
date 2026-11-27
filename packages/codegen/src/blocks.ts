@@ -16,10 +16,11 @@ const MAX_INLINE = 90;
 const SPEC_ORDER = ['id', 'name', 'label', 'category', 'icon', 'version', 'binding', 'fields', 'tree'];
 const BINDING_ORDER = ['apiId', 'mode', 'filter', 'sort', 'limit', 'layout', 'urlPattern', 'options'];
 const NODE_ORDER = ['el', 'props', 'bind', 'showIf', 'children'];
-/** Prop order of the layout/overlay elements (first), then other props in insertion order, then `TRAILING_PROPS`. */
+/** Prop order of the layout/overlay/CollectionList elements (first), then other props in insertion order, then `TRAILING_PROPS`. */
 const ELEMENT_PROPS_ORDER: Record<string, string[]> = {
   Overlay: ['variant', 'side', 'size', 'closeOnBackdrop', 'showClose', 'labelledBy'],
   Region: ['name', 'label', 'allow'],
+  CollectionList: ['key', 'apiId', 'filter', 'sort', 'limit', 'layout', 'emptyText', 'urlPattern', 'editor'],
 };
 const TRAILING_PROPS = ['anchorId', 'action'];
 const ACTION_ORDER = ['type', 'op', 'target'];
@@ -134,7 +135,7 @@ const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v ==
 const reorder = (o: Record<string, unknown>, order: string[]) => Object.fromEntries(ordered(o, order));
 
 /**
- * The tree with a fixed key order for the props of `Overlay`/`Region` nodes, `anchorId` and `action` (last) and the
+ * The tree with a fixed key order for the props of `Overlay`/`Region`/`CollectionList` nodes, `anchorId` and `action` (last) and the
  * keys of `action`. Other nodes are returned as they are, so specs without these elements and props print as before.
  */
 function canonicalNode(n: unknown): unknown {

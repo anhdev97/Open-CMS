@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resolveConfig, type ComposedBlockSpec, type ComposedNode } from '@opencloudcms/schema';
 // The real blocks package (source) and React, both from @opencloudcms/core.
 import * as blocks from '../../core/blocks/src/index';
-import { clickableSpec, componentsSpec, tooltipSpec } from './fixtures/components';
+import { clickableSpec, componentsSpec, listsSpec, singleListSpec, tooltipSpec } from './fixtures/components';
 import { composedBlockFile, ejectComposedBlock, EjectTargetExistsError, loadComposedBlocks, printComposedBlockFile, printEjectedBlockTsx, writeComposedBlocks } from '../src';
 
 const coreRequire = createRequire(path.resolve(__dirname, '../../core/package.json'));
@@ -566,6 +566,83 @@ describe('printEjectedBlockTsx: builder component elements', () => {
     expect(html(ejected, { entry: e() })).toContain('aria-describedby');
     // The unlinked tooltip child has no focusable node: the wrapper takes the focus.
     expect(html(ejected, { entry: e() })).toContain('tabindex="0"');
+  });
+});
+
+describe('printEjectedBlockTsx: CollectionList', () => {
+  const detailPaths = { product: { path: '/products/{slug}', slugField: 'slug' }, post: { path: '/posts/{id}' } };
+  const product = (id: string, slug: unknown, extra: Record<string, unknown> = {}) => entry(id, { slug, ...extra });
+  const post = (id: string, slug: string) => ({ documentId: id, name: `Post ${id}`, slug });
+
+  it('same fields (list queries, <key>__layout), detailLinks and a valid hand-written block', () => {
+    for (const spec of [listsSpec, singleListSpec]) {
+      const composed = blocks.defineComposedBlock(spec);
+      const ejected = loadEjected(printEjectedBlockTsx(spec));
+      expect(Object.keys(ejected.fields)).toEqual(Object.keys(composed.fields));
+      expect(ejected.fields).toEqual(composed.fields);
+      expect(ejected.detailLinks).toEqual(composed.detailLinks);
+      expect(ejected.entryAssetPaths).toEqual(composed.entryAssetPaths);
+      expect(() => blocks.defineBlocks([ejected])).not.toThrow();
+    }
+    expect(Object.keys(loadEjected(printEjectedBlockTsx(listsSpec)).fields)).toEqual(['title', 'products', 'products__layout', 'posts', 'faq']);
+    expect(loadEjected(printEjectedBlockTsx(listsSpec)).detailLinks).toEqual(['product']);
+  });
+
+  it('unbound block with lists: renders identically (detail links, own urlPattern, editor layout, empty text, placeholder)', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const full = {
+      title: 'Latest',
+      products: [product('a', 'ao-a'), product('b', 'Bad Slug', { subtitle: 'Sub' }), product('c', null)],
+      posts: [post('p1', 'hello-world'), post('p2', '')],
+      faq: [{ documentId: 'f1', name: 'Q1' }],
+    };
+    const { source, ejected } = same(
+      listsSpec,
+      [
+        { ...full, _detailPaths: detailPaths, _locale: 'en-US' },
+        { ...full, products__layout: 'list', _locale: 'vi-VN' },
+        { ...full, products__layout: 'carousel-2', _detailPaths: detailPaths, _locale: 'fr-FR' },
+        { title: 'Empty', products: [], posts: [], faq: [], _locale: 'vi-VN' },
+        { title: 'Empty', products: [], posts: null, _editor: true, _locale: 'id-ID' },
+        { title: 'Missing' },
+      ],
+      { ids: 'renamed' },
+    );
+    expect(source).toContain('h.list(props, {');
+    expect(source).toContain("key: 'products'");
+    expect(source).toContain("h.detailUrl(props, 'product', entry)");
+    expect(source).toContain("h.entryUrl('/blog/{slug}', entry, get)");
+    expect(source).toContain("{h.list(props, { name, label, key: 'faq', layout: 'list' }, (entry) => (");
+    const out = html(ejected, { ...full, _detailPaths: detailPaths });
+    expect(out).toContain('href="/products/ao-a"');
+    expect(out).not.toContain('Bad Slug"');
+    expect(out).toContain('href="/blog/hello-world"');
+    expect(out).toContain('id="products"');
+  });
+
+  it('single binding without urlPattern: block and list links use detail paths; the binding urlPattern never reaches the list', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const props = (extra: Record<string, unknown> = {}) => ({
+      entry: product('main', 'main-product'),
+      related: [product('r1', 'related-one'), product('r2', 'related-two')],
+      ...extra,
+    });
+    const { ejected } = same(singleListSpec, [
+      props({ _detailPaths: detailPaths }),
+      props(),
+      props({ related: [], _editor: true }),
+      { related: [], _editor: true },
+    ]);
+    const out = html(ejected, props({ _detailPaths: detailPaths }));
+    expect(out).toContain('href="/products/main-product"');
+    expect(out).toContain('href="/products/related-one"');
+
+    const patterned: ComposedBlockSpec = { ...singleListSpec, binding: { apiId: 'product', mode: 'single', urlPattern: '/p/{slug}' } };
+    const r = same(patterned, [props({ _detailPaths: detailPaths }), props()]);
+    const html2 = html(r.ejected, props({ _detailPaths: detailPaths }));
+    expect(html2).toContain('href="/p/main-product"');
+    expect(html2).toContain('href="/products/related-two"');
+    expect(r.ejected.detailLinks).toEqual(['product']);
   });
 });
 
