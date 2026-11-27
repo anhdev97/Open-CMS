@@ -80,7 +80,27 @@ export interface ProductL10nTable {
   description: unknown | null;
 }
 
+export interface QuestionTable {
+  id: string;
+  document_id: string;
+  status: string;
+  created_at: Date;
+  updated_at: Date;
+  published_at: Date | null;
+  order: number | null;
+}
+
+export interface QuestionL10nTable {
+  entry_id: string;
+  locale: string;
+  status: string;
+  question: string | null;
+  answer: string | null;
+}
+
 export interface ContentDatabase {
+  ct_question: QuestionTable;
+  ct_question_l10n: QuestionL10nTable;
   ct_product: ProductTable;
   ct_product_l10n: ProductL10nTable;
   ct_order: OrderTable;

@@ -272,8 +272,9 @@ Until a page is published at `/`, the home shows a welcome page. Field kinds, pr
 and `pnpm --filter my-store seed:pages` publishes `/` (the storefront below, its featured products with photos uploaded
 to the media library, a banner carousel and an FAQ, English with a vi-VN translation), `/shop` (the composed blocks
 below; three sample products first when the catalogue is empty), the category pages `/shop/ao`, `/shop/quan` and
-`/shop/phu-kien` of the header's Shop menu, a page per product at `/products/<slug>` (tabs and a tooltip badge) and
-`/about`, all framed by the base page below, plus `/landing`. Existing pages are skipped;
+`/shop/phu-kien` of the header's Shop menu, the product detail template (every product at `/products/<slug>`: tabs
+and a tooltip badge), the Questions block on `/` (three seeded questions) and `/about`, all framed by the base page
+below, plus `/landing`. Existing pages are skipped;
 `pnpm --filter my-store seed:pages -- --force` replaces their content.
 
 ### Base pages, overlays and actions
@@ -354,9 +355,21 @@ native `<details>`, scroll-snap slides, native selects); the client runtimes com
 Áo / Quần / Phụ kiện) in `StoreHeader` and, expanding inline, in `MobileMenu`; the contact form layout in
 `ContactModal`; `HomeBanner` (carousel) and `Faq` (accordion) on the home page; `ProductTabs` (Description / Specs /
 Shipping, a tooltip on the delivery badge) and `ProductStrip` (clickable product cards in a carousel) on the product
-pages. `ProductStrip` cards link to `/products/{slug}`, but only `seed:pages` creates those pages: a product added
-later has no page until you create one (otherwise its card leads to a 404). Details:
-[`packages/core/README.md`](packages/core/README.md#builder-components).
+detail template. Details: [`packages/core/README.md`](packages/core/README.md#builder-components).
+
+### Collection lists and detail pages
+
+- **Collection list** (Block builder, "Data" category): a list inside a block. Its children repeat for each entry of
+  its content type (filters, sort, limit 1–50, grid / list / carousel layout, empty text, page-editor options), the
+  rest of the block renders once: my-store's `Questions` block shows its heading once and a Card per `question`.
+- **Slug fields** hold the entry id unless the field has a `pattern` (`{name}`, `{name}-{id6}`, …): then the slug is
+  generated accent-free (`Áo Thun Trắng` → `ao-thun-trang`), unique per type and locale, editable in the entry form
+  ("Regenerate" goes back to the pattern).
+- **Detail pages** (opt-in per content type, "Detail page" on the content type page): `detailPage: { path:
+  '/products/{slug}', slugField: 'slug' }` plus one template page ("New detail template" in Pages) render every
+  entry at its URL; unknown slugs, drafts and private entries are 404, and an exact page path always wins. `entryUrl`
+  links use the detail path when a block has no `urlPattern`. my-store: `product` has one, so products added later
+  get their page and their cards link to it. Details: [`packages/core/README.md`](packages/core/README.md#collection-lists-and-detail-pages).
 
 ## Users, groups and review
 

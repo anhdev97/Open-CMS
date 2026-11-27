@@ -225,13 +225,19 @@ export default defineContentType({
   id: 'ct_smokeproduct',
   apiId: 'product',
   displayName: 'Product',
+  detailPage: { path: '/products/{slug}', slugField: 'slug' },
   fields: {
     name: f.text({ id: 'fld_smprod_name', required: true }),
     active: f.boolean({ id: 'fld_smprod_active', indexed: true }),
+    slug: f.slug({ id: 'fld_smprod_slug', unique: true, pattern: '{name}' }),
   },
 });
 `,
   );
+  // The question type of examples/my-store (spec 2026-11-27: the Questions block lists its entries).
+  const questionRel = 'src/content-types/question/question.schema.ts';
+  mkdirSync(join(app, 'src/content-types/question'), { recursive: true });
+  writeFileSync(join(app, questionRel), readFileSync(join(repo, 'examples/my-store', questionRel), 'utf8').replace("group: 'shop',", ''));
   // The private order type of examples/my-store (readOnly items/total, a PDF invoice in private storage).
   const orderRel = 'src/content-types/order/order.schema.ts';
   mkdirSync(join(app, 'src/content-types/order'), { recursive: true });
@@ -251,7 +257,7 @@ export default defineContentType({
   assert(readFileSync(join(app, 'src/generated/registry.ts'), 'utf8').match(/"?review"?: true/), 'generated registry lacks review: true for article');
   assert(readFileSync(join(app, 'migrations/_snapshot.json'), 'utf8').includes('"article"'), 'migrations/_snapshot.json lacks article');
   assert(readFileSync(join(app, 'src/generated/registry.ts'), 'utf8').match(/"?private"?: true/), 'generated registry lacks private: true for order');
-  ok('article (review: true) + product + order (private) schemas -> opencloudcms generate + opencloudcms migrate:create; local asset storage added');
+  ok('article (review: true) + product (detail page /products/{slug}) + question + order (private) schemas -> opencloudcms generate + opencloudcms migrate:create; local asset storage added');
 
   // A composed block, as the admin Block Builder writes it (production cannot run the builder: write it before the
   // build). Printed by the codegen printer, so the files are byte-identical to the builder's.
@@ -275,6 +281,19 @@ export default defineContentType({
   };
   mkdirSync(join(app, 'src/blocks/active-products'), { recursive: true });
   writeFileSync(join(app, 'src/blocks/active-products/active-products.block.ts'), codegen.printComposedBlockFile(activeProducts));
+  // Detail template block (spec 2026-11-27): a single product binding without a picked entry shows the URL's product.
+  const productDetail = {
+    id: 'blk_smokedetail',
+    name: 'SmokeProductDetail',
+    label: { 'en-US': 'Product detail' },
+    category: 'commerce',
+    version: 1,
+    binding: { apiId: 'product', mode: 'single' },
+    fields: {},
+    tree: { el: 'Box', children: [{ el: 'Heading', props: { level: 1 }, bind: { text: { from: 'entry', path: 'name' } } }] },
+  };
+  mkdirSync(join(app, 'src/blocks/smoke-product-detail'), { recursive: true });
+  writeFileSync(join(app, 'src/blocks/smoke-product-detail/smoke-product-detail.block.ts'), codegen.printComposedBlockFile(productDetail));
   // The my-store StoreHeader (style, responsive Stack, brand colors), as the Block Builder wrote it.
   const storeHeaderRel = 'src/blocks/store-header/store-header.block.ts';
   const storeHeaderSrc = readFileSync(join(repo, 'examples/my-store', storeHeaderRel), 'utf8');
@@ -282,7 +301,8 @@ export default defineContentType({
   writeFileSync(join(app, storeHeaderRel), storeHeaderSrc);
   // The base page and overlay blocks of examples/my-store: the StoreFrame layout, the contact modal, the menu drawer.
   // Builder components (spec 2026-11-26): the home banner carousel and the FAQ, both builder-format files.
-  const storeBlocks = { StoreFrame: 'store-frame', ContactModal: 'contact-modal', MobileMenu: 'mobile-menu', HomeBanner: 'home-banner', Faq: 'faq' };
+  // Collection list (spec 2026-11-27): the Questions block (heading once, a Card per question entry).
+  const storeBlocks = { StoreFrame: 'store-frame', ContactModal: 'contact-modal', MobileMenu: 'mobile-menu', HomeBanner: 'home-banner', Faq: 'faq', Questions: 'questions' };
   for (const dir of Object.values(storeBlocks)) {
     mkdirSync(join(app, 'src/blocks', dir), { recursive: true });
     writeFileSync(join(app, 'src/blocks', dir, `${dir}.block.ts`), readFileSync(join(repo, 'examples/my-store/src/blocks', dir, `${dir}.block.ts`), 'utf8'));
@@ -292,10 +312,11 @@ export default defineContentType({
     codegen.printComposedIndex([
       { name: 'ActiveProducts', importPath: './active-products/active-products.block' },
       { name: 'StoreHeader', importPath: './store-header/store-header.block' },
+      { name: 'SmokeProductDetail', importPath: './smoke-product-detail/smoke-product-detail.block' },
       ...Object.entries(storeBlocks).map(([name, dir]) => ({ name, importPath: `./${dir}/${dir}.block` })),
     ]),
   );
-  ok('composed blocks ActiveProducts (product, collection, fixed filter active = true, grid 4) + StoreHeader, StoreFrame, ContactModal, MobileMenu, HomeBanner, Faq (examples/my-store) written to src/blocks + composed.ts');
+  ok('composed blocks ActiveProducts (product, collection, fixed filter active = true, grid 4), SmokeProductDetail + StoreHeader, StoreFrame, ContactModal, MobileMenu, HomeBanner, Faq, Questions (examples/my-store) written to src/blocks + composed.ts');
 
   // Registry-install approximation: with symlinks preserved, @types/node must come from the project's own devDependencies.
   run('node', [join(app, 'node_modules/typescript/bin/tsc'), '-p', 'tsconfig.server.json', '--noEmit', '--preserveSymlinks'], { cwd: app });
@@ -716,6 +737,40 @@ export default defineContentType({
   const delBase = await call0(admin, 'DELETE', `${pageApi}/${baseDoc.documentId}`);
   assert(delBase.status === 409, `DELETE of the default base page -> ${delBase.status} ${delBase.text}`);
   ok('/smoke-landing replaces the header and hides the footer; base pages not in the public list; deleting the used default base -> 409');
+
+  // 4e2. Collection list and detail pages (spec 2026-11-27 §5).
+  // Questions: the heading renders once, each question entry once (a CollectionList sorted by `order`).
+  for (const [i, q] of ['Smoke question one?', 'Smoke question two?'].entries()) {
+    const created = (await api(admin, 'POST', '/api/admin/content/question', { question: q, answer: `Answer to ${q}`, order: i + 1 })).data;
+    await api(admin, 'POST', `/api/admin/content/question/${created.documentId}/publish`);
+  }
+  const questionsProps = await blockDefaults('Questions');
+  const qPage = (await api(admin, 'POST', `${pageApi}?locale=en-US`, { title: 'Questions', path: '/smoke-questions', content: puck([it('Questions', 'questions-1', questionsProps)]) })).data;
+  await api(admin, 'POST', `${pageApi}/${qPage.documentId}/publish`);
+  r = await page$(browser(), '/smoke-questions');
+  // Count rendered text only (`>text<`): the RSC payload in the same HTML repeats strings as JSON.
+  const rendered = (text) => r.text.split(`>${text}<`).length - 1;
+  const qHeading = String(questionsProps.heading);
+  const headingCount = rendered(qHeading);
+  assert(r.res.status === 200 && headingCount === 1, `GET /smoke-questions should show the Questions heading once, found ${headingCount} (${r.res.status})`);
+  assert(['Smoke question one?', 'Smoke question two?'].every((q) => rendered(q) === 1), 'GET /smoke-questions lacks a question or repeats one');
+  assert(r.text.indexOf('>Smoke question one?<') < r.text.indexOf('>Smoke question two?<'), 'GET /smoke-questions: questions not sorted by order');
+  // Detail pages: one template renders every product at /products/{slug}; a product created now gets its page.
+  const tpl = (await api(admin, 'POST', `${pageApi}?locale=en-US`, { title: 'Product detail', kind: 'detail', detailApiId: 'product', content: puck([it('SmokeProductDetail', 'detail-1', {})]) })).data;
+  await api(admin, 'POST', `${pageApi}/${tpl.documentId}/publish`);
+  const fresh = (await api(admin, 'POST', '/api/admin/content/product', { name: 'Smoke Detail Product' })).data;
+  assert(fresh.slug === 'smoke-detail-product', `product slug should be generated from the name, got ${fresh.slug}`);
+  await api(admin, 'POST', `/api/admin/content/product/${fresh.documentId}/publish`);
+  r = await page$(browser(), '/products/smoke-detail-product');
+  assert(r.res.status === 200 && r.text.includes('>Smoke Detail Product<'), `GET /products/smoke-detail-product -> ${r.res.status}, should render the template with the product`);
+  r = await page$(browser(), '/products/no-such-product');
+  assert(r.res.status === 404, `GET /products/no-such-product -> ${r.res.status}, expected 404`);
+  const draftProduct = (await api(admin, 'POST', '/api/admin/content/product', { name: 'Smoke Draft Only' })).data;
+  r = await page$(browser(), `/products/${draftProduct.slug}`);
+  assert(r.res.status === 404 && !r.text.includes('Smoke Draft Only'), `GET /products/${draftProduct.slug} (draft only, anonymous) -> ${r.res.status}, expected 404`);
+  const pubList = await (await browser().send('/api/content/opencloudcmsPage?limit=100')).json();
+  assert(pubList.data.every((p) => p.kind !== 'detail'), 'the public page list shows the detail template');
+  ok('Questions: heading once, each question once in order; /products/<slug> of a new product renders the template, unknown slug and a draft-only product -> 404; template not in the public list');
 
   // 4f. private content types + private files (spec §7): order is absent from the public API (also preflight),
   // readOnly fields are refused by the admin API, never published, and its invoice is a private file.

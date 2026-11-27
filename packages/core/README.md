@@ -216,7 +216,8 @@ export default defineBlocks([...coreBlocks, ...composedBlocks, ProductGrid]);
   Interactive and form elements (`Dropdown`, `Tooltip`, `Accordion`, `Tabs`, `Carousel`, `Icon`, `Input`, …), hover
   colors and clickable images and cards: see [Builder components](#builder-components).
 - **Bind sources** (`bind: { <prop>: source }`): `{ from: 'entry', path }`, `{ from: 'entryUrl' }` (from
-  `binding.urlPattern`, e.g. `/products/{slug}`), `{ from: 'field', name }` (a manual field), `{ from: 'const', value }`.
+  `binding.urlPattern`, e.g. `/products/{slug}`, else the type's detail path), `{ from: 'field', name }` (a manual
+  field), `{ from: 'const', value }`.
   Kinds must match: text props ← text/longText/slug/email, `Text.html` ← richText, `Image.src` ← asset/url, `Price` ←
   number/money, `Date` ← date/datetime, `Button.href` ← url. Reference, taxonomy and multiple fields cannot be bound.
   `showIf: { from: 'entry' | 'field', path | name, is: 'present' | 'absent' }` hides an element.
@@ -485,6 +486,30 @@ ignoring case and accents; Enter inserts the first match, `/` or Ctrl/Cmd+K focu
     // … shop2, shop3
   ] }] }
 ```
+
+### Collection lists and detail pages
+
+- **`CollectionList`** (element; "Data" in the Block builder palette): `props: { key, apiId, filter?, sort?, limit?,
+  layout?, emptyText?, urlPattern?, editor? }`; its children are the item template (`entry.*`, `entryUrl`), the rest
+  of the block renders once. Each list adds a `b.entries` field named after its `key` (`list`, `list2`, … on drop;
+  `<key>__layout` with `editor.layout`), resolved in the same batch as every other query. Limits: 4 lists per block,
+  limit 1–50 (default 12), no Slot, Carousel, Overlay, regions or nested list in an item template, and none in a block
+  with a collection binding.
+- **Slug fields:** no `pattern` → the value is the `documentId` (read-only). `pattern` (`{field}` of a text, longText,
+  number, email or taxonomy field, `{id}`, `{id6}`; legacy `from: 'x'` = `{x}`) → generated on create and when a
+  source changes while the slug was never edited by hand; `slugify` removes accents (`đ` → `d`), `&` → `va` / `and`,
+  cuts at a dash to `maxLength` (default 75). Unique per type and locale: generated duplicates get `-2`, `-3`…, a typed
+  duplicate is 422 `slug_taken`, publishing re-checks (409 `slug_taken`). An empty value (`''`) asks for the pattern
+  again. Old values are kept; their format is only checked when they change.
+- **Detail pages:** `detailPage: { path: '/products/{slug}', slugField: 'slug' }` (or `'/posts/{id}'`), off by
+  default, never on private types, no overlapping paths. One template page per type (`kind: 'detail'`,
+  `detailApiId`, no path of its own; hidden from public page lists). `by-path` resolves exact page paths first, then
+  detail patterns: published, non-private entries only (drafts in an authenticated preview), else 404. The response
+  carries `routeEntry`; composed blocks with a `single` binding of that type and no picked entry render it.
+  `GET /api/content/opencloudcmsPage/detail-paths` lists the usable detail paths (stamped as `_detailPaths` for
+  `entryUrl`); `GET /api/admin/content-types/:apiId/status` reports `detailTemplate`, `misconfigured` and
+  `duplicateSlugs`. The page editor previews a template with a chosen entry ("Preview entry"); website preview of a
+  template opens `/__opencloudcms/preview?page=<id>&locale=<l>&path=<entry URL>`.
 
 ### Wiring (written by `opencloudcms init`)
 

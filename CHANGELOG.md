@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Added
+
+- **Collection lists, slug patterns and entry detail pages** (spec 2026-11-27). A `CollectionList` element puts a
+  repeating list inside a block (the rest renders once): in the Block builder's "Data" category, with its content type,
+  filters, sort, limit, layout, empty text, page-editor options and a "List with heading" template. Slug fields hold
+  the entry id or, with a `pattern` (`{name}`, `{name}-{id6}`…), an accent-free generated slug, unique per type and
+  locale (`slug_taken`), editable in the entry form with "Regenerate". Content types can opt into a detail page
+  (`detailPage`, the "Detail page" section of the content type page) rendered from one template page per type ("New
+  detail template" in Pages, "Preview entry" in the page editor); `entryUrl` links use it when a block has no
+  `urlPattern`, and the page editor warns when a page's path hides a detail URL. my-store: `product` has
+  `/products/{slug}` and a template instead of one seeded page per product (`seed:pages -- --force` deletes the old
+  ones), `ProductStrip` drops its `urlPattern`, and a `question` type with the `Questions` block is on the home page
+  (migration `20261127090000_create_content_type_question`).
+
 ### Security
 
 - Next.js raised to `^16.4.6` (core, my-store and the `opencloudcms init` scaffold) for the 16.4.4 and earlier advisories (cache leaks across root params, image-optimizer SVG bypass).

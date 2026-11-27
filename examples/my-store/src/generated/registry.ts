@@ -149,7 +149,7 @@ export const productDefinition: ContentTypeDefinition = {
       "indexed": true,
       "unique": true,
       "options": {
-        "from": "name"
+        "pattern": "{name}"
       }
     },
     {
@@ -246,7 +246,53 @@ export const productDefinition: ContentTypeDefinition = {
     }
   ],
   "group": "shop",
-  "review": true
+  "review": true,
+  "detailPage": {
+    "path": "/products/{slug}",
+    "slugField": "slug"
+  }
 };
 
-export const contentTypes: ContentTypeDefinition[] = [brandDefinition, orderDefinition, productDefinition];
+export const questionDefinition: ContentTypeDefinition = {
+  "id": "ct_question01",
+  "apiId": "question",
+  "displayName": {
+    "en-US": "Question",
+    "vi-VN": "Câu hỏi"
+  },
+  "fields": [
+    {
+      "id": "fld_quest_question",
+      "name": "question",
+      "kind": "text",
+      "required": true,
+      "localizable": true,
+      "indexed": false,
+      "unique": false,
+      "options": {}
+    },
+    {
+      "id": "fld_quest_answer",
+      "name": "answer",
+      "kind": "longText",
+      "required": true,
+      "localizable": true,
+      "indexed": false,
+      "unique": false,
+      "options": {}
+    },
+    {
+      "id": "fld_quest_order",
+      "name": "order",
+      "kind": "number",
+      "required": false,
+      "localizable": false,
+      "indexed": true,
+      "unique": false,
+      "options": {}
+    }
+  ],
+  "group": "shop"
+};
+
+export const contentTypes: ContentTypeDefinition[] = [brandDefinition, orderDefinition, productDefinition, questionDefinition];

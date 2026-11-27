@@ -90,14 +90,32 @@ export interface ProductInput {
   active?: boolean | null;
 }
 
+/** Question (question) */
+export interface Question extends EntryMeta {
+  /** text, required, localizable */
+  question: string | null;
+  /** longText, required, localizable */
+  answer: string | null;
+  /** number, indexed */
+  order: number | null;
+}
+
+export interface QuestionInput {
+  question?: string | null;
+  answer?: string | null;
+  order?: number | null;
+}
+
 export interface ContentTypeMap {
   brand: Brand;
   order: Order;
   product: Product;
+  question: Question;
 }
 
 export interface ContentTypeInputMap {
   brand: BrandInput;
   order: OrderInput;
   product: ProductInput;
+  question: QuestionInput;
 }

@@ -18,7 +18,6 @@ export default defineComposedBlock({
     sort: { field: 'createdAt', direction: 'asc' },
     limit: 8,
     layout: { kind: 'carousel', columns: 3 },
-    urlPattern: '/products/{slug}',
     options: {
       emptyText: { 'en-US': 'No products on sale yet.', 'vi-VN': 'Chưa có sản phẩm đang bán.' },
     },

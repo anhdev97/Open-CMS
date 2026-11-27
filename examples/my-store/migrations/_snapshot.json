@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "lastMigration": "20261126000051_add_order_private",
+  "lastMigration": "20261127090000_create_content_type_question",
   "contentTypes": [
     {
       "id": "ct_brand0001",
@@ -144,7 +144,7 @@
           "indexed": true,
           "unique": true,
           "options": {
-            "from": "name"
+            "pattern": "{name}"
           }
         },
         {
@@ -241,7 +241,52 @@
         }
       ],
       "group": "shop",
-      "review": true
+      "review": true,
+      "detailPage": {
+        "path": "/products/{slug}",
+        "slugField": "slug"
+      }
+    },
+    {
+      "id": "ct_question01",
+      "apiId": "question",
+      "displayName": {
+        "en-US": "Question",
+        "vi-VN": "Câu hỏi"
+      },
+      "fields": [
+        {
+          "id": "fld_quest_question",
+          "name": "question",
+          "kind": "text",
+          "required": true,
+          "localizable": true,
+          "indexed": false,
+          "unique": false,
+          "options": {}
+        },
+        {
+          "id": "fld_quest_answer",
+          "name": "answer",
+          "kind": "longText",
+          "required": true,
+          "localizable": true,
+          "indexed": false,
+          "unique": false,
+          "options": {}
+        },
+        {
+          "id": "fld_quest_order",
+          "name": "order",
+          "kind": "number",
+          "required": false,
+          "localizable": false,
+          "indexed": true,
+          "unique": false,
+          "options": {}
+        }
+      ],
+      "group": "shop"
     }
   ]
 }

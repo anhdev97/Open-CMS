@@ -8,8 +8,12 @@
 // popup) and hides the footer.
 // Builder components (spec 2026-11-26): the header has a two-level "Shop" menu (Dropdown) whose links go to the
 // category pages `/shop/ao`, `/shop/quan`, `/shop/phu-kien`; the home page adds a banner carousel (HomeBanner) and an
-// FAQ (Faq); every published product gets a page `/products/<slug>` (ProductTabs: tabs and a tooltip on a badge, then
-// ProductStrip: clickable product cards in a carousel, linking to these pages). Placeholder copy only.
+// FAQ (Faq). Placeholder copy only.
+// Collection lists and detail pages (spec 2026-11-27): `product` has a detail page `/products/{slug}`, so the seed
+// creates one template page, "Product detail" (ProductTabs without a picked entry: it shows the product of the URL,
+// then ProductStrip, whose cards link there), instead of a page per product: products added later get a page too.
+// The home page also gets the Questions block (a heading once, then the `question` entries, seeded when there are
+// none). Pages `/products/<slug>` left by an earlier seed hide the template (an exact path wins): --force deletes them.
 // Without any product yet it first publishes three sample products (two on sale, one not), each with a photo uploaded to
 // the media library (scripts/seed-assets/*.webp, crops of public/files/store-editorial.webp). With --force, sample
 // products (by slug) that have no image yet get theirs too.
@@ -117,6 +121,22 @@ async function main() {
         console.log(`added photo to product ${slug} (${found.documentId})`);
       }
     }
+    // Sample questions for the Questions block (only when there are none), English with their vi-VN translation.
+    const questions: [string, string, string, string][] = [
+      ['How long does delivery take?', 'Orders arrive in 1 to 5 working days, depending on where you live.', 'Bao lâu thì nhận được hàng?', 'Hàng đến trong 1 đến 5 ngày làm việc, tuỳ nơi bạn ở.'],
+      ['Can I return an item?', 'Yes, unworn items with their tags can be returned within 30 days.', 'Tôi có thể trả hàng không?', 'Có, sản phẩm chưa mặc và còn nhãn được trả trong vòng 30 ngày.'],
+      ['How do I care for linen?', 'Wash at 30 °C, dry in the shade and iron while still slightly damp.', 'Bảo quản đồ linen thế nào?', 'Giặt ở 30 °C, phơi trong bóng râm và ủi khi vải còn hơi ẩm.'],
+    ];
+    const anyQuestion = await entries.list('question', { status: 'draft', limit: 1 });
+    if (anyQuestion.data.length === 0) {
+      for (const [i, [question, answer, viQuestion, viAnswer]] of questions.entries()) {
+        const { data: created } = await entries.create('question', { question, answer, order: i + 1 }, locale);
+        if ((config.locales ?? []).includes('vi-VN')) await entries.update('question', created.documentId as string, { question: viQuestion, answer: viAnswer }, 'vi-VN');
+        await entries.publish('question', created.documentId as string, admin);
+        console.log(`published question ${i + 1} (${created.documentId})`);
+      }
+    }
+
     const onSale = await entries.list('product', { status: 'published', locale, filter: { active: 'true' }, sort: 'createdAt:asc', limit: 1 });
     const pick = onSale.data[0]?.documentId;
 
@@ -275,29 +295,65 @@ async function main() {
       },
     }));
 
-    // A page per published product at /products/<slug> (the ProductStrip cards link there: its urlPattern).
-    const published = await entries.list('product', { status: 'published', locale, sort: 'createdAt:asc', limit: 50 });
-    const productPages = published.data
-      .filter((p) => typeof p.slug === 'string' && /^[a-z0-9-]+$/.test(p.slug))
-      .map((p) => ({
-        title: String(p.name ?? p.slug),
-        path: `/products/${p.slug as string}`,
-        seo: { title: `${String(p.name ?? p.slug)} - my-store` },
-        content: content(
-          item('ProductTabs', { entry: { documentId: p.documentId } }),
-          item('SectionHead', { heading: 'You may also like', linkLabel: 'All products →', slot: [item('ProductStrip')] }),
-        ),
-        translations: {
-          'vi-VN': {
-            title: String(p.name ?? p.slug),
-            seo: { title: `${String(p.name ?? p.slug)} - my-store` },
-            content: content(
-              item('ProductTabs', { entry: { documentId: p.documentId }, ...viTabs }),
-              item('SectionHead', { heading: 'Có thể bạn cũng thích', linkLabel: 'Tất cả sản phẩm →', slot: [item('ProductStrip')] }),
-            ),
-          },
+    // The product detail template (spec §3): one page renders every product at /products/<slug>. ProductTabs has no
+    // picked entry, so it shows the product of the URL; the ProductStrip cards link to the detail URLs.
+    const template = {
+      kind: 'detail',
+      detailApiId: 'product',
+      title: 'Product detail',
+      seo: { title: 'Product - my-store' },
+      content: content(
+        item('ProductTabs'),
+        item('SectionHead', { heading: 'You may also like', linkLabel: 'All products →', slot: [item('ProductStrip')] }),
+      ),
+      translations: {
+        'vi-VN': {
+          title: 'Chi tiết sản phẩm',
+          seo: { title: 'Sản phẩm - my-store' },
+          content: content(
+            item('ProductTabs', viTabs),
+            item('SectionHead', { heading: 'Có thể bạn cũng thích', linkLabel: 'Tất cả sản phẩm →', slot: [item('ProductStrip')] }),
+          ),
         },
-      }));
+      },
+    };
+    {
+      const { translations, ...tpl } = template;
+      const found = (await entries.list(PAGE_API_ID, { status: 'draft', locale, filter: { detailApiId: 'product' }, limit: 1 })).data[0];
+      let templateId = found?.documentId as string | undefined;
+      if (!templateId) {
+        templateId = (await entries.create(PAGE_API_ID, tpl, locale)).data.documentId as string;
+      } else if (force) {
+        const { kind: _kind, detailApiId: _type, ...edit } = tpl;
+        await entries.update(PAGE_API_ID, templateId, edit, locale);
+      }
+      if (!found || force) {
+        const done: string[] = [];
+        for (const [loc, t] of Object.entries(translations)) {
+          if (!locales.includes(loc)) continue;
+          await entries.update(PAGE_API_ID, templateId, t, loc);
+          done.push(loc);
+        }
+        await entries.publish(PAGE_API_ID, templateId, admin);
+        console.log(`${found ? 'replaced' : 'published'} product detail template (${templateId}${done.length ? `, + ${done.join(', ')}` : ''})`);
+      } else {
+        console.log('skip product detail template: it already exists (--force replaces it)');
+      }
+    }
+
+    // Pages `/products/<slug>` of an earlier seed (one page per product) win over the template: --force deletes them.
+    const published = await entries.list('product', { status: 'published', locale, sort: 'createdAt:asc', limit: 50 });
+    for (const pr of published.data) {
+      if (typeof pr.slug !== 'string') continue;
+      const old = (await entries.list(PAGE_API_ID, { status: 'draft', locale, filter: { path: `/products/${pr.slug}` }, limit: 1 })).data[0];
+      if (!old) continue;
+      if (force) {
+        await entries.remove(PAGE_API_ID, old.documentId as string);
+        console.log(`deleted /products/${pr.slug}: the product detail template renders it now`);
+      } else {
+        console.log(`hint: the page /products/${pr.slug} hides the product detail template; rerun with --force to delete it`);
+      }
+    }
 
     const pages = [
       {
@@ -306,7 +362,7 @@ async function main() {
         seo: { title: 'my-store', description: 'Clothing and accessories for every day.' },
         // Copy = the blocks' field defaults (English); the vi-VN translation below uses the mockup's Vietnamese copy.
         // StoreHeader and StoreFooter come from the base page "Store".
-        content: content(item('StoreHero'), item('SectionHead', { slot: [item('FeaturedProducts')] }), item('HomeBanner'), item('StoryBand'), item('Faq')),
+        content: content(item('StoreHero'), item('SectionHead', { slot: [item('FeaturedProducts')] }), item('HomeBanner'), item('StoryBand'), item('Faq'), item('Questions')),
         translations: {
           'vi-VN': {
             title: 'Trang chủ',
@@ -326,6 +382,11 @@ async function main() {
                 linkLabel: 'Đọc câu chuyện của cửa hàng →',
               }),
               item('Faq', viFaq),
+              item('Questions', {
+                heading: 'Khách hàng thường hỏi',
+                intro: 'Những câu hỏi chúng mình nhận được nhiều nhất. Còn thắc mắc khác? Hãy viết cho chúng mình.',
+                allLabel: 'Xem tất cả câu hỏi',
+              }),
             ),
           },
         },
@@ -340,7 +401,7 @@ async function main() {
           ...(pick ? [item('ProductCard', { badge: 'Staff pick', entry: { documentId: pick } })] : []),
           item('Heading', { text: 'On sale', level: 2 }),
           item('ActiveProducts'),
-          // Clickable product cards in a carousel (a collection with layout kind carousel), linking to /products/<slug>.
+          // Clickable product cards in a carousel (a collection with layout kind carousel), linking to the product detail pages.
           item('Heading', { text: 'Browse', level: 2 }),
           item('ProductStrip'),
         ),
@@ -392,7 +453,7 @@ async function main() {
       },
     ];
 
-    for (const { translations, ...page } of [...pages, ...categoryPages, ...productPages] as (Omit<(typeof pages)[number], 'translations' | 'layout'> & {
+    for (const { translations, ...page } of [...pages, ...categoryPages] as (Omit<(typeof pages)[number], 'translations' | 'layout'> & {
       layout?: Record<string, unknown>;
       translations?: Record<string, { title: string; seo: Record<string, string>; content: unknown }>;
     })[]) {

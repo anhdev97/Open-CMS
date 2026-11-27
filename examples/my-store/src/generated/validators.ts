@@ -4,7 +4,7 @@
 // ------------------------------------------------------------------
 
 import { buildEntryValidator } from '@opencloudcms/schema';
-import { brandDefinition, orderDefinition, productDefinition } from './registry';
+import { brandDefinition, orderDefinition, productDefinition, questionDefinition } from './registry';
 
 export const brandDraftSchema = buildEntryValidator(brandDefinition, 'draft');
 export const brandPublishSchema = buildEntryValidator(brandDefinition, 'publish');
@@ -12,3 +12,5 @@ export const orderDraftSchema = buildEntryValidator(orderDefinition, 'draft');
 export const orderPublishSchema = buildEntryValidator(orderDefinition, 'publish');
 export const productDraftSchema = buildEntryValidator(productDefinition, 'draft');
 export const productPublishSchema = buildEntryValidator(productDefinition, 'publish');
+export const questionDraftSchema = buildEntryValidator(questionDefinition, 'draft');
+export const questionPublishSchema = buildEntryValidator(questionDefinition, 'publish');

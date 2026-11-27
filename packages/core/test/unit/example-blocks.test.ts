@@ -11,7 +11,7 @@ describe('examples/my-store composed blocks', () => {
     const config = await loadConfig(root);
     const { specs, errors } = await loadComposedBlocks(config);
     expect(errors).toEqual([]);
-    expect(specs.map((s) => s.spec.name).sort()).toEqual(['ActiveProducts', 'ContactModal', 'Faq', 'FeaturedProducts', 'HomeBanner', 'MobileMenu', 'ProductCard', 'ProductStrip', 'ProductTabs', 'SectionHead', 'StoreFooter', 'StoreFrame', 'StoreHeader', 'StoreHero', 'StoryBand']);
+    expect(specs.map((s) => s.spec.name).sort()).toEqual(['ActiveProducts', 'ContactModal', 'Faq', 'FeaturedProducts', 'HomeBanner', 'MobileMenu', 'ProductCard', 'ProductStrip', 'ProductTabs', 'Questions', 'SectionHead', 'StoreFooter', 'StoreFrame', 'StoreHeader', 'StoreHero', 'StoryBand']);
     expect(isComposedIndexWired(config)).toBe(true);
 
     const types = (await loadDefinitions(config)).map((d) => d.def);
@@ -26,5 +26,15 @@ describe('examples/my-store composed blocks', () => {
     expect(specs.find((s) => s.spec.name === 'FeaturedProducts')!.spec.binding).toEqual({
       apiId: 'product', mode: 'collection', sort: { field: 'createdAt', direction: 'asc' }, limit: 3, layout: { kind: 'grid', columns: 3 },
     });
+    // Collection list spec 2026-11-27: product cards link through the product detail page (no urlPattern); the
+    // Questions block holds a CollectionList of `question` entries sorted by `order` (its heading renders once).
+    expect(types.find((t) => t.apiId === 'product')?.detailPage).toEqual({ path: '/products/{slug}', slugField: 'slug' });
+    expect(types.find((t) => t.apiId === 'product')?.fields.find((f) => f.name === 'slug')?.options).toEqual({ pattern: '{name}' });
+    expect(specs.find((s) => s.spec.name === 'ProductStrip')!.spec.binding?.urlPattern).toBeUndefined();
+    const questions = specs.find((s) => s.spec.name === 'Questions')!.spec;
+    const lists = (questions.tree.children ?? []).filter((n) => n.el === 'CollectionList');
+    expect(lists).toHaveLength(1);
+    expect(lists[0]!.props).toMatchObject({ key: 'questions', apiId: 'question', sort: { field: 'order', direction: 'asc' } });
+    expect(questions.tree.children!.map((n) => n.el)).toEqual(['Heading', 'Text', 'CollectionList', 'Button']);
   });
 });

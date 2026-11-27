@@ -9,9 +9,12 @@ export default defineContentType({
   group: 'shop',
   // Product entries go through review: a Contenter submits, a Reviewer approves and publishes.
   review: true,
+  // Every product has its own page at /products/<slug>, rendered from the "Product detail" template page.
+  detailPage: { path: '/products/{slug}', slugField: 'slug' },
   fields: {
     name: f.text({ id: 'fld_prod_name', required: true, localizable: true, indexed: true }),
-    slug: f.slug({ id: 'fld_prod_slug', required: true, unique: true, from: 'name' }),
+    // Generated from the name ("Áo thun trắng" → ao-thun-trang), unique; editors may type their own.
+    slug: f.slug({ id: 'fld_prod_slug', required: true, unique: true, pattern: '{name}' }),
     description: f.richText({ id: 'fld_prod_desc', localizable: true }),
     price: f.money({ id: 'fld_prod_price', currencyMode: 'market' }),
     featured: f.boolean({ id: 'fld_prod_featured', indexed: true }),
