@@ -2,7 +2,7 @@
 // primitives. Isomorphic (server components, editor canvas, CJS): no hooks, no browser or Node globals.
 import { Fragment, type ReactNode } from 'react';
 import type { ButtonVariant } from '../ui/tokens';
-import { localizedText, type BindSource, type Locale, type ComposedBlockSpec, type ComposedNode, type Responsive, type Track } from '@opencloudcms/schema';
+import { localizedText, type BindSource, type CollectionListProps, type Locale, type ComposedBlockSpec, type ComposedNode, type Responsive, type Track } from '@opencloudcms/schema';
 import type { ColorToken, SpacingToken } from '../types';
 import { Badge, Button, DateText, Divider, Heading, Image, Price, Spacer, Text, validAction } from '../ui/content';
 import { Box, Card, Columns, Grid, Stack } from '../ui/layout';
@@ -29,7 +29,8 @@ interface Ctx {
   props: Props;
   entry: Entry | null;
   locale: string;
-  urlPattern?: string;
+  /** `entryUrl` of an entry where the node sits (block binding or the enclosing CollectionList). */
+  link: (entry: Entry | null) => string | null;
   slots: WeakMap<ComposedNode, string>;
   /** Overlay blocks: the overlay name and the heading that names the dialog (gets `labelId`). */
   overlay?: { name: string; heading?: ComposedNode; labelId?: string };
@@ -39,7 +40,12 @@ interface Ctx {
   blockLabel: string;
   /** Inside a Tooltip: the target's first focusable node and the bubble id it is described by. */
   describe?: { node: ComposedNode; id: string };
+  block: { name: string; label: ComposedBlockSpec['label'] };
 }
+
+/** `entryUrl` resolution (spec §4): `urlPattern` when set, else the `apiId` detail path (`_detailPaths`), else none. */
+const linkFor = (ctx: Pick<Ctx, 'props' | 'get'>, urlPattern: string | undefined, apiId: string | undefined): Ctx['link'] =>
+  urlPattern ? (entry) => h.entryUrl(urlPattern, entry, ctx.get) : apiId ? (entry) => h.detailUrl(ctx.props, apiId, entry) : () => null;
 
 const entryValue = (ctx: Ctx, path: string): unknown => ctx.get(ctx.entry, path);
 
@@ -48,7 +54,7 @@ function source(ctx: Ctx, s: BindSource): unknown {
     case 'entry':
       return entryValue(ctx, s.path);
     case 'entryUrl':
-      return ctx.urlPattern ? h.entryUrl(ctx.urlPattern, ctx.entry, ctx.get) : null;
+      return ctx.link(ctx.entry);
     case 'field':
       return ctx.props[s.name];
     case 'const':
@@ -447,6 +453,30 @@ function renderNode(ctx: Ctx, n: ComposedNode, key?: number): ReactNode {
       return (
         <DateText key={key} id={id} value={h.date(val(ctx, n, 'value'))} locale={ctx.locale} format={p.format === 'long' ? 'long' : 'short'} timeZone={str(p.timeZone)} style={st} />
       );
+    case 'CollectionList': {
+      const lp = p as unknown as CollectionListProps;
+      // Inside the item template `entry` is the item and `entryUrl` uses only the list's urlPattern, else the list
+      // type's detail path (decision 9).
+      const link = linkFor(ctx, lp.urlPattern, lp.apiId);
+      return (
+        <Fragment key={key}>
+          {h.list(
+            ctx.props,
+            {
+              name: ctx.block.name,
+              label: ctx.block.label,
+              key: lp.key,
+              layout: layoutValue(lp.layout),
+              editorLayout: lp.editor?.layout === true,
+              emptyText: lp.emptyText,
+              id,
+              style: st,
+            },
+            (entry) => <>{(n.children ?? []).map((c, i) => renderNode({ ...ctx, entry, link }, c, i))}</>,
+          )}
+        </Fragment>
+      );
+    }
     case 'Divider':
       return <Divider key={key} id={id} style={st} />;
     case 'Spacer':
@@ -456,7 +486,7 @@ function renderNode(ctx: Ctx, n: ComposedNode, key?: number): ReactNode {
   }
 }
 
-/** `'list'`, `'grid-<2..6>'` or `'carousel-<1..6>'`: the stored value of the editor `layout` field. */
+/** `'list'`, `'grid-<2..6>'` or `'carousel-<1..6>'`: the stored value of the editor `layout` field (default grid 3). */
 export function layoutValue(l: NonNullable<ComposedBlockSpec['binding']>['layout']): string {
   if (l?.kind === 'list') return 'list';
   if (l?.kind === 'carousel') return `carousel-${l.columns ?? 3}`;
@@ -475,7 +505,8 @@ export function createComposedRender(spec: ComposedBlockSpec, slots: WeakMap<Com
   return (props) => {
     const locale = h.locale(props);
     const blockLabel = localizedText(spec.label, locale as Locale, spec.name) || spec.name;
-    const ctx = (entry: Entry | null): Ctx => ({ props, entry, locale, urlPattern: binding?.urlPattern, slots, overlay, get, blockLabel });
+    const link = linkFor({ props, get }, binding?.urlPattern, binding?.apiId);
+    const ctx = (entry: Entry | null): Ctx => ({ props, entry, locale, link, slots, overlay, get, blockLabel, block });
     let overlay: Ctx['overlay'];
     if (spec.tree.el === 'Overlay') {
       // Overlay blocks are never data-bound: visibility only reads fields.

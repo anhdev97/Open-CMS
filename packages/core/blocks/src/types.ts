@@ -231,7 +231,15 @@ export interface BlockDefinition<F extends Record<string, BlockField> = Record<s
    * by `{ id, url, alt, width, height }` (one `ContentFetcher.assets` call per page). Set by `defineComposedBlock`.
    */
   entryAssetPaths?: readonly string[];
+  /**
+   * Content types whose detail path this block's `entryUrl` uses (no `urlPattern` where the link is rendered): when a
+   * page has such a block, `resolvePage` stamps the reserved prop `_detailPaths`. Set by `defineComposedBlock`.
+   */
+  detailLinks?: readonly string[];
 }
+
+/** `{ [apiId]: { path, slugField? } }`: the usable detail pages (`GET /api/content/opencloudcmsPage/detail-paths`). */
+export type DetailPaths = Record<string, { path: string; slugField?: string }>;
 
 export interface BlockRegistry {
   readonly list: readonly BlockDefinition<any>[];

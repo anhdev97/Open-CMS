@@ -9,9 +9,9 @@ import { composeWithBase, containsInteractive } from '../base-page';
 import { isItem, isObj, mapData, mapSlots, readPageContent, type ItemFn } from '../content';
 import { adminFetcher, FetchError, publicFetcher } from '../fetchers';
 import { toPuckConfig } from '../puck-config';
-import { resolvePage, type ContentFetcher } from '../resolve';
+import { resolvePage, type ContentFetcher, type Entry } from '../resolve';
 import { richTextFieldTransforms } from '../richtext-render';
-import type { BlockRegistry, CustomFieldRenderers, PuckConfig, PuckData } from '../types';
+import type { BlockRegistry, CustomFieldRenderers, DetailPaths, PuckConfig, PuckData } from '../types';
 import { PreviewBar, type PreviewBarVariant } from './PreviewBar';
 import { OverlayRouteWatcher } from './overlay-route-watcher';
 import { Welcome } from './Welcome';
@@ -45,6 +45,8 @@ type Loaded =
       api: string;
       cookie?: string;
       bar?: Bar;
+      /** Detail template responses: the entry of the URL, its type, and the detail paths (SEO, links). */
+      route?: { apiId: string; entry: Entry; detailPaths?: DetailPaths };
     }
   | { found: false; draft: boolean; locale: Locale; bar?: Bar };
 
@@ -133,6 +135,70 @@ const entryOf = (g: Got): PageEntry | undefined => {
   return isObj(d) ? (d as PageEntry) : undefined;
 };
 
+/**
+ * A by-path detail response (`{ data: template, routeEntry, detail: { apiId } }`): its route entry; `null` when it is
+ * a detail response without a usable entry (rendered as 404, never as the bare template); `undefined` for pages.
+ */
+function routeOf(g: Got): { apiId: string; entry: Entry } | null | undefined {
+  const b = g.body as { routeEntry?: unknown; detail?: unknown } | null;
+  if (!isObj(b) || (b.detail === undefined && b.routeEntry === undefined)) return undefined;
+  const apiId = isObj(b.detail) && typeof b.detail.apiId === 'string' && b.detail.apiId ? b.detail.apiId : null;
+  const entry = isObj(b.routeEntry) && typeof b.routeEntry.documentId === 'string' ? (b.routeEntry as Entry) : null;
+  return apiId && entry ? { apiId, entry } : null;
+}
+
+/** Detail paths for a detail response (links and SEO); a failure only drops them (warned by `resolvePage` later). */
+async function withDetailPaths(route: { apiId: string; entry: Entry }, fetcher: ContentFetcher): Promise<NonNullable<Extract<Loaded, { found: true }>['route']>> {
+  let detailPaths: DetailPaths | undefined;
+  try {
+    detailPaths = fetcher.detailPaths ? await fetcher.detailPaths() : undefined;
+  } catch {
+    detailPaths = undefined;
+  }
+  return { ...route, ...(detailPaths ? { detailPaths } : {}) };
+}
+
+const SEO_SKIP = new Set(['documentId', 'id', 'locale', 'status', 'createdAt', 'updatedAt', 'publishedAt']);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}([T ][\d:.]+(Z|[+-]\d{2}:?\d{2})?)?$/;
+const DESCRIPTION_KEYS = ['description', 'summary', 'excerpt', 'intro'];
+const DESCRIPTION_MAX = 160;
+
+/** Plain text of a string value (tags removed, whitespace collapsed). */
+const plain = (v: string): string => v.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+/**
+ * SEO defaults of a detail page from its entry (spec §3): the title field (`title`, else `name`, else the first text
+ * value) and the first text field after it (`description`/`summary`/`excerpt`/`intro` first), cut to 160 characters.
+ * Ids, dates, URLs and the slug field are not text.
+ */
+function entrySeo(entry: Entry, slugField: string | undefined): { title?: string; description?: string } {
+  const texts = Object.entries(entry).filter(
+    ([k, v]) =>
+      !SEO_SKIP.has(k) && k !== slugField && typeof v === 'string' && plain(v) && !UUID_RE.test(v) && !ISO_DATE_RE.test(v) && !/^(https?:|\/)/i.test(v),
+  ) as [string, string][];
+  const titleKey = ['title', 'name'].find((k) => texts.some(([t]) => t === k)) ?? texts[0]?.[0];
+  const title = titleKey ? plain(entry[titleKey] as string) : undefined;
+  const descKey = DESCRIPTION_KEYS.find((k) => texts.some(([t]) => t === k)) ?? texts.find(([k]) => k !== titleKey)?.[0];
+  let description = descKey ? plain(entry[descKey] as string) : undefined;
+  if (description && description.length > DESCRIPTION_MAX) {
+    const cut = description.slice(0, DESCRIPTION_MAX - 1);
+    description = `${cut.slice(0, cut.lastIndexOf(' ') > 80 ? cut.lastIndexOf(' ') : cut.length)}…`;
+  }
+  return { title, description };
+}
+
+/** `{field}` placeholders of a template's SEO text filled from the entry (strings and numbers; others empty). */
+function fillSeo(template: string, entry: Entry): string {
+  return template
+    .replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, k: string) => {
+      const v = entry[k];
+      return typeof v === 'string' ? plain(v) : typeof v === 'number' && Number.isFinite(v) ? String(v) : '';
+    })
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 const byPathUrl = (base: string, prefix: string, path: string, locale?: Locale): string => {
   const qs = new URLSearchParams({ path });
   if (locale) qs.set('locale', locale);
@@ -146,6 +212,9 @@ const byPathUrl = (base: string, prefix: string, path: string, locale?: Locale):
  * - Draft mode on: the admin API with the request's session cookie, in the preview locale, data blocks resolved with
  *   the same session (drafts of entries); every fetch is `no-store`. If the admin API says 401/403, the published page
  *   is rendered with the "session expired" bar: a draft is never shown without a valid session.
+ * - Entry detail URLs (spec §3): by-path answers with the detail template and `routeEntry`; the template renders with
+ *   that entry (empty single-entry blocks of its type), SEO defaults come from the entry, a miss is `notFound()`. The
+ *   fetches and cache rules are the same as for pages.
  */
 export function createCmsPage(o: CreateCmsPageOptions): {
   Page(props: CmsPageProps): Promise<ReactNode>;
@@ -165,7 +234,19 @@ export function createCmsPage(o: CreateCmsPageOptions): {
     const entry = g.status === 200 ? entryOf(g) : undefined;
     const locale = asLocale(entry?.locale);
     if (!entry || !locale) fail(`GET page ${path}`, g);
-    return { found: true, draft: false, entry, locale, defaultLocale: locale, fetcher: publicFetcher(base), api: base };
+    const route = routeOf(g);
+    if (route === null) return { found: false, draft: false, locale: copyLocale(acceptLanguage) };
+    const fetcher = publicFetcher(base);
+    return {
+      found: true,
+      draft: false,
+      entry,
+      locale,
+      defaultLocale: locale,
+      fetcher,
+      api: base,
+      ...(route ? { route: await withDetailPaths(route, fetcher) } : {}),
+    };
   }
 
   /** `null` = the session is missing, expired or lacks `content.read`. */
@@ -186,7 +267,21 @@ export function createCmsPage(o: CreateCmsPageOptions): {
     if (g.status === 404) return { found: false, draft: true, locale, bar };
     const entry = g.status === 200 ? entryOf(g) : undefined;
     if (!entry) fail(`GET draft page ${path}`, g);
-    return { found: true, draft: true, entry, locale, defaultLocale, fetcher: adminFetcher(base, { cookie }), api: base, cookie, bar };
+    const route = routeOf(g);
+    if (route === null) return { found: false, draft: true, locale, bar };
+    const fetcher = adminFetcher(base, { cookie });
+    return {
+      found: true,
+      draft: true,
+      entry,
+      locale,
+      defaultLocale,
+      fetcher,
+      api: base,
+      cookie,
+      bar,
+      ...(route ? { route: await withDetailPaths(route, fetcher) } : {}),
+    };
   }
 
   async function load(path: string): Promise<Loaded> {
@@ -277,9 +372,12 @@ export function createCmsPage(o: CreateCmsPageOptions): {
         else content = composed;
       }
       // Data blocks of the base regions and of the page are resolved together.
+      // Detail templates: single-entry blocks of the route type show the route entry (spec §3).
       const data = await resolvePage(content, o.blocks, r.fetcher, {
         locale: r.locale,
         defaultLocale: r.defaultLocale,
+        ...(r.route ? { routeEntry: { apiId: r.route.apiId, entry: r.route.entry } } : {}),
+        ...(r.route?.detailPaths ? { detailPaths: r.route.detailPaths } : {}),
       });
       warnUnknownBlocks(data, o.blocks);
       body = (
@@ -308,9 +406,17 @@ export function createCmsPage(o: CreateCmsPageOptions): {
     const seo = isObj(r.entry.seo) ? r.entry.seo : {};
     const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v : undefined);
     const meta: Metadata = {};
-    const title = str(seo.title) ?? str(r.entry.title);
+    let title = str(seo.title) ?? str(r.entry.title);
+    let description = str(seo.description);
+    if (r.route) {
+      // Detail pages: the template's SEO texts with `{field}` filled from the entry, else the entry's own title and
+      // description; the template title is only the last resort.
+      const own = entrySeo(r.route.entry, r.route.detailPaths?.[r.route.apiId]?.slugField);
+      const fill = (v: unknown) => (str(v) ? str(fillSeo(v as string, r.route!.entry)) : undefined);
+      title = fill(seo.title) ?? own.title ?? str(r.entry.title);
+      description = fill(seo.description) ?? own.description;
+    }
     if (title) meta.title = title;
-    const description = str(seo.description);
     if (description) meta.description = description;
     const image = str(seo.image) ?? (isObj(seo.image) ? str(seo.image.src) : undefined);
     if (image) meta.openGraph = { images: [image] };

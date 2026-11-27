@@ -1,5 +1,18 @@
-import { composedKind, overlayDefaultName, validateComposedSpec, type ComposedBlockSpec, type ComposedField, type ComposedIssue, type ComposedNode, type LocalizedText } from '@opencloudcms/schema';
-import { formatIssuePath, REGION_FIELD_PREFIX } from '../define';
+import {
+  COLLECTION_LIST_DEFAULT_LIMIT,
+  collectionListsOf,
+  composedKind,
+  overlayDefaultName,
+  validateComposedSpec,
+  type CollectionListProps,
+  type ComposedBinding,
+  type ComposedBlockSpec,
+  type ComposedField,
+  type ComposedIssue,
+  type ComposedNode,
+  type LocalizedText,
+} from '@opencloudcms/schema';
+import { formatIssuePath, LIST_LAYOUT_SUFFIX, REGION_FIELD_PREFIX } from '../define';
 import { b } from '../fields';
 import type { BlockDefinition, BlockField } from '../types';
 import { createComposedRender, layoutValue } from './render';
@@ -53,6 +66,45 @@ function imageEntryPaths(n: ComposedNode, out = new Set<string>()): Set<string> 
   return out;
 }
 
+/**
+ * apiIds whose detail path an `entryUrl` of the tree uses: inside a CollectionList without its own `urlPattern` the
+ * list's type; elsewhere the binding's type when the binding has no `urlPattern` (decision 6, 9).
+ */
+function detailLinksOf(spec: ComposedBlockSpec): string[] {
+  const out = new Set<string>();
+  const walk = (n: ComposedNode, list: CollectionListProps | undefined) => {
+    const inList = n.el === 'CollectionList' ? (n.props as unknown as CollectionListProps) : list;
+    for (const s of Object.values(n.bind ?? {})) {
+      if (s.from !== 'entryUrl') continue;
+      if (list) {
+        if (!list.urlPattern && list.apiId) out.add(list.apiId);
+      } else if (spec.binding && !spec.binding.urlPattern) out.add(spec.binding.apiId);
+    }
+    for (const c of n.children ?? []) walk(c, inList);
+  };
+  walk(spec.tree, undefined);
+  return [...out];
+}
+
+/** Options of the editor `layout` select (carousel values only for a carousel spec layout). */
+function layoutOptions(layout: ComposedBinding['layout']) {
+  return [
+    { value: 'list', label: L('List', 'Danh sách', 'Liste', 'Daftar') },
+    ...([2, 3, 4, 5, 6] as const).map((n) => ({ value: `grid-${n}`, label: L(`Grid · ${n}`, `Lưới · ${n}`, `Grille · ${n}`, `Kisi · ${n}`) })),
+    // Carousel values only for a carousel spec (existing stored values keep their options).
+    ...(layout?.kind === 'carousel'
+      ? ([1, 2, 3, 4, 5, 6] as const).map((n) => ({
+          value: `carousel-${n}`,
+          label: L(`Carousel · ${n}`, `Băng chuyền · ${n}`, `Carrousel · ${n}`, `Karosel · ${n}`),
+        }))
+      : []),
+  ];
+}
+
+/** `"<key> · <label>"` in every locale: page-editor fields of a CollectionList say which list they belong to. */
+const prefixed = (key: string, label: LocalizedText): LocalizedText =>
+  Object.fromEntries(Object.entries(label).map(([l, t]) => [l, `${key} · ${t}`])) as LocalizedText;
+
 /** Region slot label: its `label` (text or localized), else its name. */
 function regionLabel(p: Record<string, unknown>): LocalizedText | string {
   if (typeof p.label === 'string' && p.label) return p.label;
@@ -71,7 +123,10 @@ function nodesOf(n: ComposedNode, els: readonly string[], out: ComposedNode[] = 
  * A page-builder block from a composed block spec (data written by the block builder). Fields: `name` (overlay blocks:
  * the overlay name, default the block name in kebab case), the manual fields by name, then `entry` (single) or
  * `entries` (+ `layout` when `editorLayout`), then `slot`, `slot2`, … per `Slot` node in tree order, then (layout
- * blocks) `region__<name>` per `Region` and `pageContent`, in tree order. `kind` is set from the tree. The fixed filter, sort and (unless `editorLimit`) limit are enforced by `resolvePage`.
+ * blocks) `region__<name>` per `Region` and `pageContent`, in tree order. Each `CollectionList` adds a `b.entries` field
+ * named after its `key` (after the binding fields, in tree order) and, with `editor.layout`, a `<key>__layout` select.
+ * `kind` is set from the tree. The fixed filter, sort and (unless `editorLimit` / `editor.limit`) limit are enforced by
+ * `resolvePage`.
  * Throws `ComposedBlockError` listing every issue when the spec is invalid.
  */
 export function defineComposedBlock(spec: ComposedBlockSpec): ComposedBlockDefinition {
@@ -101,18 +156,33 @@ export function defineComposedBlock(spec: ComposedBlockSpec): ComposedBlockDefin
     if (o.editorLayout) {
       generated.layout = b.select({
         label: L('Layout', 'Bố cục', 'Disposition', 'Tata letak'),
-        options: [
-          { value: 'list', label: L('List', 'Danh sách', 'Liste', 'Daftar') },
-          ...([2, 3, 4, 5, 6] as const).map((n) => ({ value: `grid-${n}`, label: L(`Grid · ${n}`, `Lưới · ${n}`, `Grille · ${n}`, `Kisi · ${n}`) })),
-          // Carousel values only for a carousel spec (existing stored values keep their options).
-          ...(binding.layout?.kind === 'carousel'
-            ? ([1, 2, 3, 4, 5, 6] as const).map((n) => ({
-                value: `carousel-${n}`,
-                label: L(`Carousel · ${n}`, `Băng chuyền · ${n}`, `Carrousel · ${n}`, `Karosel · ${n}`),
-              }))
-            : []),
-        ],
+        options: layoutOptions(binding.layout),
         default: layoutValue(binding.layout),
+      });
+    }
+  }
+  // CollectionLists: a `b.entries` field named after each key (+ `<key>__layout` when page editors pick the layout).
+  for (const { key, node } of collectionListsOf(spec)) {
+    const p = node.props as unknown as CollectionListProps;
+    const ed = p.editor ?? {};
+    const limit = p.limit ?? COLLECTION_LIST_DEFAULT_LIMIT;
+    const baseFilter = Object.fromEntries((p.filter ?? []).map((f) => [f.field, String(f.value)]));
+    const defaultSort = p.sort ? `${p.sort.field}:${p.sort.direction}` : undefined;
+    generated[key] = b.entries(p.apiId, {
+      label: prefixed(key, L('Entries', 'Danh sách mục', 'Entrées', 'Entri')),
+      limit,
+      sortable: ed.sort === true,
+      filterable: ed.filter === true,
+      ...(Object.keys(baseFilter).length ? { baseFilter } : {}),
+      ...(defaultSort ? { defaultSort } : {}),
+      lockLimit: ed.limit !== true,
+      default: { mode: 'query', limit, ...(defaultSort ? { sort: defaultSort } : {}) },
+    });
+    if (ed.layout === true) {
+      generated[`${key}${LIST_LAYOUT_SUFFIX}`] = b.select({
+        label: prefixed(key, L('Layout', 'Bố cục', 'Disposition', 'Tata letak')),
+        options: layoutOptions(p.layout),
+        default: layoutValue(p.layout),
       });
     }
   }
@@ -161,6 +231,7 @@ export function defineComposedBlock(spec: ComposedBlockSpec): ComposedBlockDefin
   Object.assign(fields, generated);
 
   const assetPaths = [...imageEntryPaths(spec.tree)];
+  const detailLinks = detailLinksOf(spec);
   return {
     name: spec.name,
     label: spec.label,
@@ -171,6 +242,7 @@ export function defineComposedBlock(spec: ComposedBlockSpec): ComposedBlockDefin
     fields,
     composed: true,
     ...(assetPaths.length ? { entryAssetPaths: assetPaths } : {}),
+    ...(detailLinks.length ? { detailLinks } : {}),
     spec,
     render: createComposedRender(spec, slots, defaultName) as BlockDefinition['render'],
   };

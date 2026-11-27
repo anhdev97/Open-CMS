@@ -1,4 +1,4 @@
-import { BLOCK_FIELD_KEY_RE, OVERLAY_NAME_RE, RESERVED_BLOCK_PROPS, validateButtonAction, validateComposedSpec, validateLocalizedText, type BlockManifest } from '@opencloudcms/schema';
+import { BLOCK_FIELD_KEY_RE, COLLECTION_LIST_KEY_RE, OVERLAY_NAME_RE, RESERVED_BLOCK_PROPS, validateButtonAction, validateComposedSpec, validateLocalizedText, type BlockManifest } from '@opencloudcms/schema';
 import { optionValue } from './fields';
 import { MAX_TRACKS, tracksValid } from './tracks';
 import { COLOR_TOKENS, SPACING_TOKENS, type BlockDefinition, type BlockField, type BlockRegistry } from './types';
@@ -16,6 +16,8 @@ export function defineBlock<F extends Record<string, BlockField>>(d: BlockDefini
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 /** Field name prefix of the slot of each `Region` of a layout block (`region__header`). */
 export const REGION_FIELD_PREFIX = 'region__';
+/** Field name suffix of the editor layout select of a CollectionList (`list__layout`); manual fields never use `__`. */
+export const LIST_LAYOUT_SUFFIX = '__layout';
 const BLOCK_KINDS = ['block', 'layout', 'overlay'];
 const show = (v: unknown) => JSON.stringify(v);
 /** `['tree', 'children', 0, 'el']` → `tree.children.0.el`. */
@@ -134,7 +136,9 @@ function validateFields(fields: Record<string, unknown>, block: string, prefix: 
     const at = `${block}: field "${path}"`;
     // `region__<name>` slots of layout blocks (region names are kebab case).
     const regionSlot = isObj(f) && f.kind === 'slot' && key.startsWith(REGION_FIELD_PREFIX) && OVERLAY_NAME_RE.test(key.slice(REGION_FIELD_PREFIX.length));
-    if (!FIELD_KEY_RE.test(key) && !regionSlot) issues.push(`${at}: invalid field name`);
+    // `<key>__layout` selects of CollectionLists.
+    const listLayout = isObj(f) && f.kind === 'select' && key.endsWith(LIST_LAYOUT_SUFFIX) && COLLECTION_LIST_KEY_RE.test(key.slice(0, -LIST_LAYOUT_SUFFIX.length));
+    if (!FIELD_KEY_RE.test(key) && !regionSlot && !listLayout) issues.push(`${at}: invalid field name`);
     else if (RESERVED_PROPS.includes(key)) issues.push(`${at}: "${key}" is reserved`);
     issues.push(...validateField(f, block, path, fields));
   }
@@ -159,6 +163,9 @@ function validateBlock(d: unknown, index: number): string[] {
   if (d.kind !== undefined && !BLOCK_KINDS.includes(d.kind as string)) issues.push(`${where}: kind must be one of ${BLOCK_KINDS.join(', ')}`);
   if (d.entryAssetPaths !== undefined && !(Array.isArray(d.entryAssetPaths) && d.entryAssetPaths.every((p) => typeof p === 'string' && p))) {
     issues.push(`${where}: entryAssetPaths must be an array of field names`);
+  }
+  if (d.detailLinks !== undefined && !(Array.isArray(d.detailLinks) && d.detailLinks.every((p) => typeof p === 'string' && p))) {
+    issues.push(`${where}: detailLinks must be an array of content type api ids`);
   }
   if (d.composed === true && 'spec' in d) {
     for (const i of validateComposedSpec(d.spec)) issues.push(`${where}: ${formatIssuePath(i.path)}: ${i.message}`);

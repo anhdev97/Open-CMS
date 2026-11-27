@@ -1,5 +1,6 @@
 import type { Locale } from '@opencloudcms/schema';
 import type { AssetRef, ContentFetcher, Entry } from './resolve';
+import type { DetailPaths } from './types';
 
 const MAX_IDS = 100;
 const PAGE_API_ID = 'opencloudcmsPage';
@@ -102,9 +103,26 @@ function createFetcher(baseUrl: string, mode: Mode): ContentFetcher {
         ))
     : undefined;
 
+  async function detailPaths(): Promise<DetailPaths> {
+    // Public endpoint for both modes: only usable detail pages of non-private types (no drafts involved).
+    const headers: Record<string, string> = { accept: 'application/json' };
+    const res = await fetch(`${root}/api/content/${PAGE_API_ID}/detail-paths`, { headers, ...(mode.draft ? { cache: 'no-store' as const } : {}) });
+    if (!res.ok) throw new FetchError(`${res.status} ${res.statusText}`.trim(), res.status);
+    const body = (await res.json()) as { data?: unknown };
+    const out: DetailPaths = {};
+    if (body?.data && typeof body.data === 'object' && !Array.isArray(body.data)) {
+      for (const [apiId, d] of Object.entries(body.data as Record<string, unknown>)) {
+        const v = d as { path?: unknown; slugField?: unknown } | null;
+        if (v && typeof v.path === 'string') out[apiId] = { path: v.path, ...(typeof v.slugField === 'string' ? { slugField: v.slugField } : {}) };
+      }
+    }
+    return out;
+  }
+
   return {
     byIds,
     assets,
+    detailPaths,
     ...(privateApiIds ? { privateApiIds } : {}),
     query(apiId, q, locale) {
       const params: [string, string][] = [['locale', locale], ['limit', String(q.limit)]];

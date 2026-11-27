@@ -149,14 +149,17 @@ function toRenderProps(fields: Record<string, BlockField>, props: Record<string,
 }
 
 /**
- * Reserved props of composed (and `usesLocale`) blocks: `_locale` stamped by `resolvePage`/the canvas (else the config's locale) and
- * `_editor` (canvas flag, or Puck's `isEditing`).
+ * Reserved props of composed (and `usesLocale`) blocks: `_locale` stamped by `resolvePage`/the canvas (else the config's locale),
+ * `_editor` (canvas flag, or Puck's `isEditing`) and, when stamped, `_detailPaths`.
  */
 function composedReserved(props: Record<string, unknown>, locale: Locale): Record<string, unknown> {
   const puck = props.puck as { isEditing?: unknown } | undefined;
+  const detailPaths = props._detailPaths;
   return {
     _locale: typeof props._locale === 'string' && props._locale ? props._locale : locale,
     _editor: props._editor === true || puck?.isEditing === true,
+    // Stamped by `resolvePage` for blocks with `detailLinks` (entry links through detail pages).
+    ...(detailPaths && typeof detailPaths === 'object' && !Array.isArray(detailPaths) ? { _detailPaths: detailPaths } : {}),
   };
 }
 

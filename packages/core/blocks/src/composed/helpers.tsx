@@ -1,12 +1,14 @@
 // Helpers shared by the composed block renderer and by blocks ejected to TSX (`composedHelpers`): value readers,
-// reserved props, the missing-field warning and the single/collection wrappers. Ejected blocks import them from
+// reserved props, the missing-field warning, detail links and the single/collection/list wrappers. Ejected blocks import them from
 // `@opencloudcms/core/blocks` so they render exactly like the composed block they came from.
 // Isomorphic: no hooks, no browser or Node globals.
 import { Fragment, type ReactNode } from 'react';
-import { localizedText, OVERLAY_NAME_RE, type Locale, type LocalizedText } from '@opencloudcms/schema';
+import { localizedText, OVERLAY_NAME_RE, parseDetailPath, SLUG_RE, type Locale, type LocalizedText, type NodeStyle } from '@opencloudcms/schema';
 import { Grid, Stack } from '../ui/layout';
 import { Text } from '../ui/content';
 import { Carousel } from '../client/Carousel';
+import { safeHref } from '../ui/href';
+import type { DetailPaths } from '../types';
 import { entryUrl, isPresent, readDate, readEntryImage, readEntryMoney, readHref, readText } from './values';
 
 type Entry = Record<string, unknown>;
@@ -118,6 +120,42 @@ export function collectionPerView(columns: number): { base: number; md: number; 
   return { base: Math.min(1.25, columns), md: Math.min(columns, columns >= 5 ? 3 : 2), lg: columns };
 }
 
+type EntriesBlock = Block & { layout: string; emptyText?: LocalizedText };
+
+/**
+ * `fn(entry)` per entry in a grid, list or carousel (`layout` already chosen); no entries → `emptyText` (in the
+ * locale), else an editor placeholder / nothing. `id`/`style` go on the container (CollectionList elements).
+ */
+function entriesIn(
+  props: object,
+  raw: unknown,
+  block: EntriesBlock,
+  layout: Layout,
+  fn: (entry: Entry) => ReactNode,
+  el: { id?: string; style?: NodeStyle } = {},
+): ReactNode {
+  const entries = Array.isArray(raw) ? raw.filter(isObj) : [];
+  const loc = locale(props);
+  if (!entries.length) {
+    const empty = block.emptyText ? localizedText(block.emptyText, loc as Locale) : '';
+    if (empty) return <Text id={el.id} text={empty} size="sm" color="muted" style={el.style} />;
+    return editor(props) ? <Placeholder text={`${blockLabel(block, loc)} · ${NO_ENTRIES[loc] ?? NO_ENTRIES[DEFAULT_LOCALE]}`} /> : null;
+  }
+  const items = entries.map((e, i) => <Fragment key={typeof e.documentId === 'string' ? e.documentId : i}>{fn(e)}</Fragment>);
+  if (layout.kind === 'carousel') {
+    return (
+      <Carousel id={el.id} perView={collectionPerView(layout.columns)} gap="6" dots={false} label={blockLabel(block, loc)} locale={loc} style={el.style}>
+        {items}
+      </Carousel>
+    );
+  }
+  return layout.kind === 'list' ? (
+    <Stack id={el.id} direction="vertical" gap="6" style={el.style}>{items}</Stack>
+  ) : (
+    <Grid id={el.id} columns={layout.columns} gap="6" style={el.style}>{items}</Grid>
+  );
+}
+
 /**
  * Collection block: `fn(entry)` per entry in a grid, list or carousel. `layout` is `'list'`, `'grid-<2..6>'` or
  * `'carousel-<1..6>'`; with
@@ -129,29 +167,49 @@ function collection(
   block: Block & { layout: string; editorLayout?: boolean; emptyText?: LocalizedText },
   fn: (entry: Entry) => ReactNode,
 ): ReactNode {
-  const raw = (props as { entries?: unknown }).entries;
-  const entries = Array.isArray(raw) ? raw.filter(isObj) : [];
-  const loc = locale(props);
-  if (!entries.length) {
-    const empty = block.emptyText ? localizedText(block.emptyText, loc as Locale) : '';
-    if (empty) return <Text text={empty} size="sm" color="muted" />;
-    return editor(props) ? <Placeholder text={`${blockLabel(block, loc)} · ${NO_ENTRIES[loc] ?? NO_ENTRIES[DEFAULT_LOCALE]}`} /> : null;
-  }
   const layout =
     (block.editorLayout ? parseLayout((props as { layout?: unknown }).layout) : null) ?? parseLayout(block.layout) ?? { kind: 'grid', columns: 3 };
-  const items = entries.map((e, i) => <Fragment key={typeof e.documentId === 'string' ? e.documentId : i}>{fn(e)}</Fragment>);
-  if (layout.kind === 'carousel') {
-    return (
-      <Carousel perView={collectionPerView(layout.columns)} gap="6" dots={false} label={blockLabel(block, loc)} locale={loc}>
-        {items}
-      </Carousel>
-    );
-  }
-  return layout.kind === 'list' ? (
-    <Stack direction="vertical" gap="6">{items}</Stack>
-  ) : (
-    <Grid columns={layout.columns} gap="6">{items}</Grid>
-  );
+  return entriesIn(props, (props as { entries?: unknown }).entries, block, layout, fn);
+}
+
+/**
+ * A `CollectionList` element: `fn(entry)` per entry of the block field `key`, laid out like a collection block
+ * (`layout`: `'list'`, `'grid-<2..6>'` or `'carousel-<1..6>'`; with `editorLayout` the page builder's `<key>__layout`
+ * prop wins). `id`/`style` go on the list's container (or its empty text).
+ */
+function list(
+  props: object,
+  block: EntriesBlock & { key: string; editorLayout?: boolean; id?: string; style?: NodeStyle },
+  fn: (entry: Entry) => ReactNode,
+): ReactNode {
+  const p = props as Record<string, unknown>;
+  const layout =
+    (block.editorLayout ? parseLayout(p[`${block.key}__layout`]) : null) ?? parseLayout(block.layout) ?? { kind: 'grid', columns: 3 };
+  return entriesIn(props, p[block.key], block, layout, fn, { id: block.id, style: block.style });
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** Reserved `_detailPaths` prop (stamped by `resolvePage`): the usable detail pages by apiId, or none. */
+function detailPaths(props: object): DetailPaths | undefined {
+  const d = (props as { _detailPaths?: unknown })._detailPaths;
+  return isObj(d) ? (d as DetailPaths) : undefined;
+}
+
+/**
+ * URL of `entry`'s detail page (spec §4 step 2): the `apiId` detail path of `_detailPaths` with `{slug}` filled from its
+ * slug field or `{id}` from `documentId`. Null when the type has no detail page, the entry is missing, or the value is
+ * not one detail routing matches (a slug outside `^[a-z0-9]+(-[a-z0-9]+)*$`, a non-uuid id): no dead links.
+ */
+function detailUrl(props: object, apiId: string, entry: object | null | undefined): string | null {
+  const d = entry ? detailPaths(props)?.[apiId] : undefined;
+  if (!d || typeof d.path !== 'string') return null;
+  const parsed = parseDetailPath(d.path);
+  if (!parsed) return null;
+  const e = entry as Entry;
+  const value = parsed.param === 'id' ? e.documentId : typeof d.slugField === 'string' ? e[d.slugField] : undefined;
+  if (typeof value !== 'string' || !(parsed.param === 'id' ? UUID_RE.test(value) : SLUG_RE.test(value))) return null;
+  return safeHref(`${parsed.prefix}/${value}`);
 }
 
 /** Overlay block `name` prop when it is a valid overlay name, else `fallback` (the block's default name). */
@@ -173,10 +231,13 @@ export const composedHelpers = {
   /** `urlPattern` with `{field}` placeholders filled from the entry (URL-encoded); null if any is missing. */
   entryUrl: (pattern: string, entry: object | null | undefined, get: (entry: object | null | undefined, path: string) => unknown): string | null =>
     entry ? entryUrl(pattern, (p) => get(entry, p)) : null,
+  /** The entry's detail page URL from the reserved `_detailPaths` prop (no `urlPattern`); null if it has none. */
+  detailUrl,
   when,
   blockLabel: labelOf,
   options,
   single,
   collection,
+  list,
   overlayName,
 };
