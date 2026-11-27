@@ -401,6 +401,23 @@ const frFR: Messages = {
     listLabel: 'Types de contenu',
   },
   pages: {
+    tabDetail: "Modèles de détail",
+    detail: {
+      new: "Nouveau modèle de détail",
+      description: "Une page modèle par type de contenu affiche chaque entrée à son URL de détail.",
+      emptyTitle: "Aucun modèle de détail",
+      emptyDescription: "Activez la page de détail d'un type de contenu, puis créez son modèle ici.",
+      typeColumn: "Type de contenu",
+      urlColumn: "URL",
+      noDetailPage: "Page de détail désactivée",
+      defaultTitle: "Détail {type}",
+      create: {
+        title: "Nouveau modèle de détail",
+        description: "Choisissez le type de contenu dont cette page affiche les entrées.",
+        noTypes: "Chaque type de contenu avec une page de détail a déjà un modèle.",
+        submit: "Créer le modèle",
+      },
+    },
     tabPages: "Pages",
     tabBases: "Pages de base",
     base: {
@@ -450,6 +467,8 @@ const frFR: Messages = {
       submitting: 'Création…',
     },
     errors: {
+      detailTemplateExists: "Ce type de contenu a déjà un modèle de détail.",
+      detailNotEnabled: "Activez d'abord la page de détail du type de contenu.",
       pathTaken: 'Ce chemin est déjà utilisé par une autre page.',
       invalidPath: 'Utilisez des minuscules, des chiffres et des tirets, en commençant par « / ».',
       pathReserved: 'Ce chemin est réservé par le système.',
@@ -465,6 +484,13 @@ const frFR: Messages = {
     },
   },
   pageEditor: {
+    detail: {
+      badge: "Modèle de détail",
+      noPattern: "pas de page de détail",
+      previewEntry: "Entrée d'aperçu",
+      noEntries: "Aucune entrée à prévisualiser",
+    },
+    hidesDetail: "Cette page masque la page de détail {pattern} de « {value} ».",
     back: "Pages",
     backAria: "Retour aux pages",
     loading: "Chargement de la page…",
@@ -577,6 +603,7 @@ const frFR: Messages = {
         remove: "Retirer l’image",
       },
       entry: {
+        fromUrl: "Entrée de la page (depuis l'URL)",
         search: "Rechercher des entrées",
         searchPlaceholder: "Tapez pour rechercher",
         selected: "Entrées sélectionnées",

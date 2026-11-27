@@ -13,6 +13,8 @@ import {
   readPageContent,
   type BlockDefinition,
   type BlockRegistry,
+  type DetailPaths,
+  type Entry,
   type PuckData,
 } from '@opencloudcms/core/blocks';
 import type { Locale, PageKind, PageLayout, ThemeDefinition } from '@opencloudcms/schema';
@@ -38,6 +40,7 @@ import {
   listBases,
   pageErrorMessageKey,
   pagePreviewUrl,
+  previewDetailUrl,
   publishPage,
   savePage,
   type PageEntry,
@@ -48,7 +51,8 @@ import { BaseFrame } from '../page-editor/BaseFrame';
 import { BlocksContext } from '../page-editor/blocks-context';
 import { ContentTypeField } from '../page-editor/ContentTypeField';
 import { PAGE_CUSTOM_FIELDS } from '../page-editor/custom-fields';
-import { invalidate, loadBase } from '../page-editor/data';
+import { entryLabel, invalidate, loadBase, loadContentType } from '../page-editor/data';
+import type { ContentTypeDefinition } from '../lib/types';
 import { buildEditorConfig, pageBuilderPalette } from '../page-editor/editor-config';
 import { PaletteContext, PaletteDrawer } from '../components/PaletteSearch';
 import { BaseContext, EditorInfoContext, ResolvedContext, type EditorInfo } from '../page-editor/editor-context';
@@ -72,6 +76,19 @@ const EMPTY: PuckData = { root: { props: {} }, content: [], zones: {} } as PuckD
 const READ_ONLY = { drag: false, duplicate: false, delete: false, edit: false, insert: false };
 const RESOLVE_DEBOUNCE_MS = 300;
 const fetcher = adminFetcher('');
+/** Entries offered by a detail template's "Preview entry" select. */
+const PREVIEW_ENTRIES = 20;
+
+/** Published entries first (newest first), then drafts: the default preview entry is the latest published one. */
+function previewOrder(rows: Entry[]): Entry[] {
+  const at = (e: Entry) => (typeof e.publishedAt === 'string' ? Date.parse(e.publishedAt) : NaN);
+  return [...rows].sort((a, b) => {
+    const pa = at(a);
+    const pb = at(b);
+    if (Number.isNaN(pa) !== Number.isNaN(pb)) return Number.isNaN(pa) ? 1 : -1;
+    return Number.isNaN(pa) ? 0 : pb - pa;
+  });
+}
 
 let coreRegistry: BlockRegistry | null = null;
 /** The project's blocks from `AdminApp`, else `defineBlocks(coreBlocks)` (built once). */
@@ -142,7 +159,8 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme, base
   const adminLocale = useLocale();
   const can = useCan();
   const navigate = useAdminNavigate();
-  const kind: PageKind = entry.kind === 'base' ? 'base' : 'page';
+  const kind: PageKind = entry.kind === 'base' ? 'base' : entry.kind === 'detail' ? 'detail' : 'page';
+  const detailApiId = kind === 'detail' && typeof entry.detailApiId === 'string' ? entry.detailApiId : null;
 
   // The server falls back to the default locale: then this locale has no translation yet.
   const missing = (entry.locale ?? locale) !== locale;
@@ -167,7 +185,7 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme, base
   const storedSeo = entry.seo as PageSeo | null | undefined;
   const lastBody = useRef(JSON.stringify(fromEditorData(initial, registry, storedSeo, kind)));
   // The page's base choice (document-level, saved with every locale), followed live for the canvas frame.
-  const [layout, setLayout] = useState<PageLayout>(kind === 'page' ? (entry.layout ?? null) : null);
+  const [layout, setLayout] = useState<PageLayout>(kind !== 'base' ? (entry.layout ?? null) : null);
   const lastLayout = useRef(JSON.stringify(layout));
   const base = useBasePage({ kind, layout, registry, fetcher, locale, defaultLocale, load: loadBase });
   // Region modes saved are those of the current base page once it is known (modes left from another base are dropped).
@@ -185,6 +203,35 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme, base
     };
   }, []);
 
+  // Detail paths: the template's URL pattern, and the warning on pages that hide a detail URL (spec §3 routing 4).
+  const [detailPaths, setDetailPaths] = useState<DetailPaths>({});
+  useEffect(() => {
+    let live = true;
+    void fetcher.detailPaths?.().then((p) => live && setDetailPaths(p), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  // Detail templates: the entry the canvas renders (default: the latest published one).
+  const [previewType, setPreviewType] = useState<ContentTypeDefinition | null>(null);
+  const [previewEntries, setPreviewEntries] = useState<Entry[]>([]);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!detailApiId) return;
+    let live = true;
+    void loadContentType(detailApiId).then((ct) => live && setPreviewType(ct), () => undefined);
+    void fetcher.query(detailApiId, { limit: PREVIEW_ENTRIES, sort: 'publishedAt:desc', filter: {} }, locale).then(
+      (rows) => live && setPreviewEntries(previewOrder(rows)),
+      () => live && setPreviewEntries([]),
+    );
+    return () => {
+      live = false;
+    };
+  }, [detailApiId, locale]);
+  const previewEntry = previewEntries.find((e) => e.documentId === previewId) ?? previewEntries[0] ?? null;
+  const routeEntry = useMemo(() => (detailApiId && previewEntry ? { apiId: detailApiId, entry: previewEntry } : null), [detailApiId, previewEntry]);
+
   const unknownTypes = useMemo(() => unknownBlockTypes(initial, registry), [initial, registry]);
 
   const { autosave, state: saveState } = useAutosave<PuckData>({
@@ -194,14 +241,14 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme, base
   });
 
   // Preview: resolve data fields through the admin API, 300 ms after the last data-field change.
-  const { resolved, schedule: scheduleResolve } = usePreviewResolution(registry, initial, fetcher, { locale, defaultLocale }, RESOLVE_DEBOUNCE_MS);
+  const { resolved, schedule: scheduleResolve } = usePreviewResolution(registry, initial, fetcher, { locale, defaultLocale, routeEntry }, RESOLVE_DEBOUNCE_MS);
 
   const onChange = useCallback(
     (data: Data) => {
       const d = data as PuckData;
       latest.current = d;
       scheduleResolve(d);
-      if (kind === 'page') {
+      if (kind !== 'base') {
         const next = rootPropsToLayout((d.root?.props ?? {}) as Record<string, unknown>);
         const key = JSON.stringify(next);
         if (key !== lastLayout.current) {
@@ -250,7 +297,7 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme, base
 
   // A base page the page points at that is no longer listed still shows in the select (the server refuses it on save).
   const baseOptions = useMemo(() => {
-    const id = kind === 'page' ? entry.layout?.baseId : null;
+    const id = kind !== 'base' ? entry.layout?.baseId : null;
     return id && !bases.some((b) => b.documentId === id) ? [...bases, { documentId: id, title: t('pageEditor.root.baseUnknown') }] : bases;
   }, [bases, entry, kind]);
 
@@ -363,7 +410,17 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme, base
     shadowedPaths,
     canPublish,
     publishing,
-    onBack: () => void leave(kind === 'base' ? '/pages?tab=base' : '/pages'),
+    detail: detailApiId
+      ? {
+          apiId: detailApiId,
+          pattern: detailPaths[detailApiId]?.path ?? null,
+          entries: previewEntries.map((e) => ({ id: String(e.documentId), label: entryLabel(e as never, previewType) })),
+          entryId: previewEntry ? String(previewEntry.documentId) : null,
+          onEntry: setPreviewId,
+        }
+      : null,
+    detailPaths,
+    onBack: () => void leave(kind === 'base' ? '/pages?tab=base' : kind === 'detail' ? '/pages?tab=detail' : '/pages'),
     onLocaleChange: (l) => void leave(`/pages/${documentId}?locale=${encodeURIComponent(l)}`),
     onSave: () => void autosave.flush(),
     onPublish: () => (kind === 'base' ? setConfirmPublish(true) : void publish()),
@@ -373,14 +430,19 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme, base
         if (autosave.state === 'error' || autosave.state === 'conflict') toast.warning(t('pageEditor.previewNotSaved'));
         if (!tab) return;
         tab.opener = null;
-        tab.location.href = pagePreviewUrl(documentId, locale);
+        // A detail template previews the chosen entry's detail URL.
+        const at = detailApiId && previewEntry ? previewDetailUrl(detailPaths[detailApiId], previewEntry) : null;
+        tab.location.href = pagePreviewUrl(documentId, locale, at ?? undefined);
       });
     },
     onPuck: useCallback((get: ReturnType<typeof useGetPuck>) => {
       getPuck.current = get;
     }, []),
   };
-  const info: EditorInfo = useMemo(() => ({ documentId, locale, defaultLocale, readOnly }), [documentId, locale, defaultLocale, readOnly]);
+  const info: EditorInfo = useMemo(
+    () => ({ documentId, locale, defaultLocale, readOnly, ...(detailApiId ? { routeApiId: detailApiId } : {}) }),
+    [documentId, locale, defaultLocale, readOnly, detailApiId],
+  );
 
   return (
     <div className="flex h-svh flex-col">

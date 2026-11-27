@@ -401,6 +401,23 @@ const viVN: Messages = {
     listLabel: 'Loại nội dung',
   },
   pages: {
+    tabDetail: "Trang mẫu chi tiết",
+    detail: {
+      new: "Trang mẫu chi tiết mới",
+      description: "Mỗi loại nội dung có một trang mẫu, dùng để hiển thị mọi bản ghi tại URL chi tiết của nó.",
+      emptyTitle: "Chưa có trang mẫu chi tiết",
+      emptyDescription: "Bật trang chi tiết cho một loại nội dung, rồi tạo trang mẫu tại đây.",
+      typeColumn: "Loại nội dung",
+      urlColumn: "URL",
+      noDetailPage: "Trang chi tiết đang tắt",
+      defaultTitle: "Chi tiết {type}",
+      create: {
+        title: "Trang mẫu chi tiết mới",
+        description: "Chọn loại nội dung mà trang này hiển thị.",
+        noTypes: "Mọi loại nội dung có trang chi tiết đều đã có trang mẫu.",
+        submit: "Tạo trang mẫu",
+      },
+    },
     tabPages: "Trang",
     tabBases: "Trang nền",
     base: {
@@ -450,6 +467,8 @@ const viVN: Messages = {
       submitting: 'Đang tạo…',
     },
     errors: {
+      detailTemplateExists: "Loại nội dung này đã có trang mẫu chi tiết.",
+      detailNotEnabled: "Hãy bật trang chi tiết của loại nội dung trước.",
       pathTaken: 'Đường dẫn này đã được trang khác sử dụng.',
       invalidPath: 'Dùng chữ thường, chữ số và dấu gạch ngang, bắt đầu bằng "/".',
       pathReserved: 'Đường dẫn này được hệ thống giữ lại.',
@@ -465,6 +484,13 @@ const viVN: Messages = {
     },
   },
   pageEditor: {
+    detail: {
+      badge: "Trang mẫu chi tiết",
+      noPattern: "chưa có trang chi tiết",
+      previewEntry: "Bản ghi xem trước",
+      noEntries: "Chưa có bản ghi để xem trước",
+    },
+    hidesDetail: "Trang này che trang chi tiết {pattern} của \"{value}\".",
     back: "Trang",
     backAria: "Quay lại danh sách trang",
     loading: "Đang tải trang…",
@@ -577,6 +603,7 @@ const viVN: Messages = {
         remove: "Gỡ ảnh",
       },
       entry: {
+        fromUrl: "Bản ghi của trang (lấy từ URL)",
         search: "Tìm mục nội dung",
         searchPlaceholder: "Gõ để tìm",
         selected: "Các mục đã chọn",

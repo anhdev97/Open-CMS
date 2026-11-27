@@ -18,7 +18,8 @@ const redirect = (location: string): Response =>
   new Response(null, { status: 307, headers: { location, 'cache-control': NO_STORE } });
 
 /**
- * `GET /__opencloudcms/preview?page=<documentId>&locale=<Locale>` (spec §8.2 step 2). Loads the draft through the
+ * `GET /__opencloudcms/preview?page=<documentId>&locale=<Locale>[&path=<entry URL>]` (spec §8.2 step 2; `path`: a
+ * detail template, which has no path of its own, opens at that entry's detail URL). Loads the draft through the
  * admin API with the caller's session cookie; only when that succeeds is draft mode enabled. There is no token: a
  * forwarded link only works for someone with a valid admin session and `content.read`.
  * `baseUrl` (default `http://127.0.0.1:${PORT ?? 4000}`): the request cookies (the admin session) are forwarded to it,
@@ -57,20 +58,22 @@ export function createPreviewRoute(o: { baseUrl?: string } = {}): { GET(req: Req
       if (res.status === 400) return errorPage(400, 'Invalid preview request');
       if (!res.ok) return errorPage(502, 'Preview unavailable');
 
-      let entry: { locale?: unknown; path?: unknown } | undefined;
+      let entry: { locale?: unknown; path?: unknown; kind?: unknown } | undefined;
       try {
-        entry = ((await res.json()) as { data?: { locale?: unknown; path?: unknown } }).data;
+        entry = ((await res.json()) as { data?: { locale?: unknown; path?: unknown; kind?: unknown } }).data;
       } catch {
         return errorPage(502, 'Preview unavailable');
       }
       const entryLocale = asLocale(entry?.locale);
       // The API falls back to the default locale; a draft that only exists there is not a draft of `locale`.
       if (!entryLocale || (locale && entryLocale !== locale)) return errorPage(404, 'No draft in this locale');
-      if (!isPagePath(entry?.path)) return errorPage(404, 'Page not found');
+      // A detail template is previewed at an entry's detail URL (given by the admin); routing renders the template.
+      const at = entry?.kind === 'detail' ? url.searchParams.get('path') : entry?.path;
+      if (!isPagePath(at)) return errorPage(404, 'Page not found');
 
       (await draftMode()).enable();
       (await cookies()).set(PREVIEW_LOCALE_COOKIE, entryLocale, { httpOnly: true, sameSite: 'lax', path: '/' });
-      return redirect(entry.path);
+      return redirect(at);
     },
   };
 }

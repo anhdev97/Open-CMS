@@ -12,6 +12,8 @@ export interface EditorInfo {
   locale: Locale;
   defaultLocale: Locale;
   readOnly: boolean;
+  /** Detail templates: the content type of the URL's entry (single-entry blocks of it default to that entry). */
+  routeApiId?: string;
 }
 
 export const EditorInfoContext = createContext<EditorInfo>({ documentId: '', locale: 'en-US', defaultLocale: 'en-US', readOnly: true });

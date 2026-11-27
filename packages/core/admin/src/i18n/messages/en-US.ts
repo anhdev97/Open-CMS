@@ -452,6 +452,23 @@ export const enUS = {
     listLabel: "Content types",
   },
   pages: {
+    tabDetail: "Detail templates",
+    detail: {
+      new: "New detail template",
+      description: "One template page per content type renders every entry at its detail URL.",
+      emptyTitle: "No detail templates yet",
+      emptyDescription: "Turn on a content type's detail page, then create its template here.",
+      typeColumn: "Content type",
+      urlColumn: "URL",
+      noDetailPage: "Detail page off",
+      defaultTitle: "{type} detail",
+      create: {
+        title: "New detail template",
+        description: "Pick the content type whose entries this page renders.",
+        noTypes: "Every content type with a detail page already has a template.",
+        submit: "Create template",
+      },
+    },
     tabPages: "Pages",
     tabBases: "Base pages",
     base: {
@@ -501,6 +518,8 @@ export const enUS = {
       submitting: "Creating…",
     },
     errors: {
+      detailTemplateExists: "This content type already has a detail template.",
+      detailNotEnabled: "Turn on the content type's detail page first.",
       pathTaken: "This path is already used by another page.",
       invalidPath: "Use lowercase letters, digits and hyphens, starting with \"/\".",
       pathReserved: "This path is reserved by the system.",
@@ -516,6 +535,13 @@ export const enUS = {
     },
   },
   pageEditor: {
+    detail: {
+      badge: "Detail template",
+      noPattern: "no detail page",
+      previewEntry: "Preview entry",
+      noEntries: "No entries to preview",
+    },
+    hidesDetail: "This page hides the detail page {pattern} of \"{value}\".",
     back: "Pages",
     backAria: "Back to pages",
     loading: "Loading page…",
@@ -628,6 +654,7 @@ export const enUS = {
         remove: "Remove image",
       },
       entry: {
+        fromUrl: "Page entry (from URL)",
         search: "Search entries",
         searchPlaceholder: "Type to search",
         selected: "Selected entries",

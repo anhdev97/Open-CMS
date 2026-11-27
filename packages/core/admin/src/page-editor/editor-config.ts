@@ -72,7 +72,8 @@ function rootFields(kind: PageKind, registry: BlockRegistry, bases: readonly Bas
   for (const r of registryRegionNames(registry)) regions[`${REGION_PREFIX}${r}`] = regionSlotField(layouts, regionLabel(registry, r, locale));
   return {
     title: { type: 'text', label: t('pageEditor.root.title') },
-    path: { type: 'text', label: t('pageEditor.root.path') },
+    // A detail template has no path of its own: it is served at the content type's detail path.
+    ...(kind === 'detail' ? {} : { path: { type: 'text', label: t('pageEditor.root.path') } as Field }),
     seoTitle: { type: 'text', label: t('pageEditor.root.seoTitle') },
     seoDescription: { type: 'textarea', label: t('pageEditor.root.seoDescription') },
     seoNoindex: {
@@ -125,7 +126,7 @@ export function buildEditorConfig(registry: BlockRegistry, opts: EditorConfigOpt
   }
   // Puck lists uncategorized components (the unknown placeholders) under `other`: hide it unless a project category uses that name.
   const categories: NonNullable<PuckConfig['categories']> = { ...(base.categories ?? {}), ...(base.categories?.other ? {} : { other: { visible: false } }) };
-  if (kind === 'page' && layouts.length) {
+  if (kind !== 'base' && layouts.length) {
     // Layout blocks are not offered on pages (only as the root of a base page).
     for (const [key, cat] of Object.entries(categories)) {
       if (!cat.components) continue;
@@ -146,7 +147,7 @@ export function buildEditorConfig(registry: BlockRegistry, opts: EditorConfigOpt
           render: (p: { children?: ReactNode; puck?: { renderDropZone?: ComponentType<any> } }) => createElement(Fragment, null, dropZone(p, { allow: layouts })),
         }
       : {
-          fields: rootFields('page', registry, opts.bases ?? [], layouts, opts.locale),
+          fields: rootFields(kind, registry, opts.bases ?? [], layouts, opts.locale),
           resolveFields: pageRootResolveFields({ regionsOf: opts.regionsOf ?? (async () => null), registry, locale: opts.locale }),
           render: (p: Record<string, unknown> & { children?: ReactNode; puck?: { renderDropZone?: ComponentType<any> } }) => {
             const zone = dropZone(p, layouts.length ? { disallow: layouts } : {});

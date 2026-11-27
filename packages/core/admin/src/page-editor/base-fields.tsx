@@ -175,7 +175,8 @@ export function structureViolation(kind: PageKind, data: PuckData, registry: Blo
   walkItems(data, registry, (it) => {
     if (layouts.has(it.type)) count++;
   });
-  if (kind === 'page') return count ? 'pageEditor.layoutMisplaced' : null;
+  // Pages and detail templates hold no layout block (a base page frames them).
+  if (kind !== 'base') return count ? 'pageEditor.layoutMisplaced' : null;
   const root = Array.isArray(data.content) ? (data.content as unknown[]) : [];
   if (root.length > 1) return 'pageEditor.base.oneLayout';
   const top = root[0];

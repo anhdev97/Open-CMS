@@ -162,6 +162,9 @@ export function canvasProps(
   if (def.composed || def.usesLocale) {
     out._locale = locale;
     out._editor = true;
+    // Entry links through detail pages (stamped by `resolvePage` for blocks with `detailLinks`).
+    const paths = resolved?.props._detailPaths;
+    if (paths && typeof paths === 'object') out._detailPaths = paths;
   }
   return out;
 }
@@ -369,7 +372,7 @@ export function toEditorData(
       ? { title: page.title ?? '' }
       : {
           title: page.title ?? '',
-          path: page.path ?? '',
+          ...(kind === 'detail' ? {} : { path: page.path ?? '' }),
           seoTitle: seo.title ?? '',
           seoDescription: seo.description ?? '',
           seoNoindex: seo.noindex === true,
@@ -422,5 +425,6 @@ export function fromEditorData(
   if (str(props.seoTitle).trim()) seo.title = str(props.seoTitle).trim();
   if (str(props.seoDescription).trim()) seo.description = str(props.seoDescription).trim();
   if (props.seoNoindex === true) seo.noindex = true;
-  return { title: str(props.title), path: str(props.path), seo, layout: rootPropsToLayout(props, regions), content };
+  // A detail template has no path (the server refuses one).
+  return { title: str(props.title), ...(kind === 'detail' ? {} : { path: str(props.path) }), seo, layout: rootPropsToLayout(props, regions), content };
 }

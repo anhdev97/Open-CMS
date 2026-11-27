@@ -1,4 +1,4 @@
-import { PAGE_API_ID, type PageKind, type PageLayout } from '@opencloudcms/schema';
+import { PAGE_API_ID, SLUG_RE, type PageKind, type PageLayout } from '@opencloudcms/schema';
 import { t } from '../i18n';
 import { api } from './api';
 import { ApiError } from './api-error';
@@ -17,17 +17,51 @@ export interface PageEntry {
   kind?: PageKind | null;
   /** Base pages: the default base page. */
   isDefault?: boolean | null;
+  /** Detail templates: the content type whose entries they render. */
+  detailApiId?: string | null;
   /** Pages: the base page choice (`null` = the default base page). */
   layout?: PageLayout;
   [k: string]: unknown;
 }
 
-/** Pages tab of `/pages` (`?tab=base` = base pages). */
-export type PagesTab = 'pages' | 'base';
-export const pagesTab = (tab: string | null | undefined): PagesTab => (tab === 'base' ? 'base' : 'pages');
+/** Pages tab of `/pages` (`?tab=base` = base pages, `?tab=detail` = detail templates). */
+export type PagesTab = 'pages' | 'base' | 'detail';
+export const pagesTab = (tab: string | null | undefined): PagesTab => (tab === 'base' ? 'base' : tab === 'detail' ? 'detail' : 'pages');
 
-/** Rows of the admin page list that are pages (the list also holds base pages, which have their own tab). */
-export const splitPagesList = <T extends { kind?: unknown }>(rows: readonly T[]): T[] => rows.filter((p) => p.kind !== 'base');
+/**
+ * Rows of the admin page list that are pages (the list also holds base pages and detail templates, which have their
+ * own tabs).
+ */
+export const splitPagesList = <T extends { kind?: unknown }>(rows: readonly T[]): T[] => rows.filter((p) => p.kind !== 'base' && p.kind !== 'detail');
+
+/** Detail templates of the admin page list (spec §3: listed in admin, never in public page lists). */
+export const detailTemplatesOf = <T extends { kind?: unknown }>(rows: readonly T[]): T[] => rows.filter((p) => p.kind === 'detail');
+
+/** Content types offered by "New detail template": a usable detail page and no template yet. */
+export function typesWithoutTemplate<T extends { apiId: string; private?: boolean; detailPage?: { path: string } }>(
+  types: readonly T[],
+  templates: readonly { detailApiId?: unknown }[],
+): T[] {
+  const taken = new Set(templates.map((p) => p.detailApiId).filter((x): x is string => typeof x === 'string'));
+  return types.filter((ty) => !ty.private && !!ty.detailPage && !taken.has(ty.apiId));
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * The detail pattern an ordinary page's path matches (spec §3 routing 4: the page wins and hides that entry's detail
+ * page), or null. `paths`: the usable detail pages by apiId (`GET …/detail-paths`).
+ */
+export function pageHidesDetail(paths: Record<string, { path: string; slugField?: string }>, pagePath: string | null | undefined): { apiId: string; pattern: string; value: string } | null {
+  if (!pagePath) return null;
+  for (const [apiId, d] of Object.entries(paths)) {
+    const m = /^(\/.+)\/\{(slug|id)\}$/.exec(d.path);
+    if (!m || !pagePath.startsWith(`${m[1]}/`)) continue;
+    const value = pagePath.slice(m[1]!.length + 1);
+    if (m[2] === 'id' ? UUID_RE.test(value) : SLUG_RE.test(value)) return { apiId, pattern: d.path, value };
+  }
+  return null;
+}
 
 const base = `/api/admin/content/${PAGE_API_ID}`;
 const ts = (v: string | Date) => new Date(v).getTime();
@@ -59,9 +93,16 @@ export function listTruncation(shown: number, total: number): { shown: number; t
   return total > shown ? { shown, total } : null;
 }
 
-/** Creates a page at `path`, or (`kind: 'base'`) a base page, which has no path. */
-export async function createPage(input: { title: string; locale: string } & ({ path: string; kind?: 'page' } | { kind: 'base'; path?: undefined })): Promise<PageEntry> {
-  const json = input.kind === 'base' ? { title: input.title, kind: 'base' } : { title: input.title, path: input.path };
+/** Creates a page at `path`, a base page (`kind: 'base'`, no path) or a type's detail template (`kind: 'detail'`, no path). */
+export async function createPage(
+  input: { title: string; locale: string } & ({ path: string; kind?: 'page' } | { kind: 'base'; path?: undefined } | { kind: 'detail'; detailApiId: string; path?: undefined }),
+): Promise<PageEntry> {
+  const json =
+    input.kind === 'base'
+      ? { title: input.title, kind: 'base' }
+      : input.kind === 'detail'
+        ? { title: input.title, kind: 'detail', detailApiId: input.detailApiId }
+        : { title: input.title, path: input.path };
   const r = await api<{ data: PageEntry }>(`${base}?locale=${encodeURIComponent(input.locale)}`, { method: 'POST', json });
   return r.data;
 }
@@ -87,6 +128,8 @@ export function pageErrorMessageKey(e: unknown): string | null {
   if (e.code === 'invalid_path') return 'pages.errors.invalidPath';
   if (e.code === 'path_reserved') return 'pages.errors.pathReserved';
   if (e.code === 'unique_violation') return 'pages.errors.pathTaken';
+  if (e.code === 'detail_template_exists') return 'pages.errors.detailTemplateExists';
+  if (e.code === 'detail_not_enabled') return 'pages.errors.detailNotEnabled';
   return null;
 }
 
@@ -166,9 +209,21 @@ export function baseErrorMessage(e: unknown): string | null {
   return key ? t(key) : null;
 }
 
-/** Website preview of the draft (draft mode, admin session only). */
-export function pagePreviewUrl(id: string, locale: string): string {
-  return `/__opencloudcms/preview?page=${encodeURIComponent(id)}&locale=${encodeURIComponent(locale)}`;
+/**
+ * Website preview of the draft (draft mode, admin session only). `path`: for a detail template, the entry URL to open
+ * (a template has no path of its own).
+ */
+export function pagePreviewUrl(id: string, locale: string, path?: string): string {
+  const at = path ? `&path=${encodeURIComponent(path)}` : '';
+  return `/__opencloudcms/preview?page=${encodeURIComponent(id)}&locale=${encodeURIComponent(locale)}${at}`;
+}
+
+/** Detail URL of `entry` (`/products/{slug}` filled from its slug field, `{id}` from its documentId), or null. */
+export function previewDetailUrl(d: { path: string; slugField?: string } | undefined, entry: Record<string, unknown>): string | null {
+  const m = d ? /^(\/.+)\/\{(slug|id)\}$/.exec(d.path) : null;
+  if (!m) return null;
+  const value = m[2] === 'id' ? entry.documentId : d!.slugField ? entry[d!.slugField] : undefined;
+  return typeof value === 'string' && value ? `${m[1]}/${value}` : null;
 }
 
 let shadowed: Promise<string[]> | null = null;

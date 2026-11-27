@@ -2,7 +2,7 @@ import { CopyIcon, FileTextIcon, LayoutTemplateIcon, PlusIcon, Trash2Icon } from
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { slugToPath, validatePagePath } from '@opencloudcms/schema';
+import { localizedText, slugToPath, validatePagePath } from '@opencloudcms/schema';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorAlert } from '../components/ErrorAlert';
@@ -19,7 +19,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useCan } from '../lib/can';
-import { t } from '../i18n';
+import { getActiveLocale, t } from '../i18n';
 import { useFormat } from '../i18n/hooks';
 import { api } from '../lib/api';
 import { ApiError } from '../lib/api-error';
@@ -29,6 +29,7 @@ import {
   baseErrorMessage,
   createPage,
   deletePage,
+  detailTemplatesOf,
   duplicatePage,
   getBaseUsage,
   getShadowedPaths,
@@ -41,10 +42,107 @@ import {
   pageStatus,
   setDefaultBase,
   splitPagesList,
+  typesWithoutTemplate,
   unpublishPage,
   type PageEntry,
 } from '../lib/pages';
-import type { Meta } from '../lib/types';
+import type { ContentTypeDefinition, Meta } from '../lib/types';
+
+const typeLabel = (ct: ContentTypeDefinition) => localizedText(ct.displayName as never, getActiveLocale(), ct.apiId);
+
+/**
+ * "New detail template" (spec §3): one template page per content type with a detail page; the types offered are
+ * those without one. `initial`: a type to preselect (`/pages?tab=detail&newDetail=<apiId>`).
+ */
+function CreateDetailDialog({ locale, types, initial, onOpenChange, onCreated }: {
+  locale: string;
+  types: ContentTypeDefinition[];
+  initial: string | null;
+  onOpenChange: (open: boolean) => void;
+  onCreated: (p: PageEntry) => void;
+}) {
+  const [apiId, setApiId] = useState(() => (initial && types.some((ty) => ty.apiId === initial) ? initial : (types[0]?.apiId ?? '')));
+  const chosen = types.find((ty) => ty.apiId === apiId);
+  const [title, setTitle] = useState(() => (chosen ? t('pages.detail.defaultTitle', { type: typeLabel(chosen) }) : ''));
+  const [titleEdited, setTitleEdited] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!apiId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      onCreated(await createPage({ title: title.trim(), kind: 'detail', detailApiId: apiId, locale }));
+    } catch (err) {
+      const key = pageErrorMessageKey(err);
+      setError(key ? new Error(t(key)) : err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent>
+        <form onSubmit={submit} className="space-y-4" noValidate>
+          <DialogHeader>
+            <DialogTitle>{t('pages.detail.create.title')}</DialogTitle>
+            <DialogDescription>{t('pages.detail.create.description')}</DialogDescription>
+          </DialogHeader>
+          <ErrorAlert error={error} />
+          {types.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t('pages.detail.create.noTypes')}</p>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="detail-type">{t('pages.detail.typeColumn')}</Label>
+                <Select
+                  value={apiId}
+                  onValueChange={(v) => {
+                    setApiId(v);
+                    const ct = types.find((ty) => ty.apiId === v);
+                    if (!titleEdited && ct) setTitle(t('pages.detail.defaultTitle', { type: typeLabel(ct) }));
+                  }}
+                >
+                  <SelectTrigger id="detail-type" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {types.map((ty) => (
+                      <SelectItem key={ty.apiId} value={ty.apiId}>
+                        {typeLabel(ty)} <span className="font-mono text-xs text-muted-foreground">{ty.detailPage?.path}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="detail-title">{t('pages.create.titleLabel')}</Label>
+                <Input
+                  id="detail-title"
+                  value={title}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    setTitleEdited(true);
+                  }}
+                  required
+                />
+              </div>
+            </>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" disabled={busy || !apiId || !title.trim()}>
+              {busy ? t('pages.create.submitting') : t('pages.detail.create.submit')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function CreatePageDialog({ locale, onOpenChange, onCreated }: { locale: string; onOpenChange: (open: boolean) => void; onCreated: (p: PageEntry) => void }) {
   const [title, setTitle] = useState('');
@@ -197,7 +295,11 @@ export function Pages() {
   const [error, setError] = useState<Error | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<PageEntry | null>(null);
-  const tab = pagesTab(useSearchParams().get('tab'));
+  const search = useSearchParams();
+  const newDetail = search.get('newDetail');
+  const tab = newDetail ? 'detail' : pagesTab(search.get('tab'));
+  const [templates, setTemplates] = useState<PageEntry[] | null>(null);
+  const [types, setTypes] = useState<ContentTypeDefinition[]>([]);
   const [bases, setBases] = useState<PageEntry[] | null>(null);
   const [usage, setUsage] = useState<Record<string, number | null>>({});
   const [forcing, setForcing] = useState<{ entry: PageEntry; message: string } | null>(null);
@@ -210,18 +312,30 @@ export function Pages() {
           setLocale((l) => pickEditorLocale(l, m.locales, m.defaultLocale));
         })
         .catch(setError);
+    const loadTypes = () => api<{ data: ContentTypeDefinition[] }>('/api/admin/content-types').then((r) => setTypes(r.data), () => undefined);
     loadMeta();
+    void loadTypes();
     window.addEventListener('opencloudcms:schema-changed', loadMeta);
-    return () => window.removeEventListener('opencloudcms:schema-changed', loadMeta);
+    window.addEventListener('opencloudcms:schema-changed', loadTypes);
+    return () => {
+      window.removeEventListener('opencloudcms:schema-changed', loadMeta);
+      window.removeEventListener('opencloudcms:schema-changed', loadTypes);
+    };
   }, []);
+  // `?newDetail=<apiId>` (from a content type page) opens "New detail template" with that type.
+  useEffect(() => {
+    if (newDetail && can('content.create')) setCreating(true);
+  }, [newDetail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reload = useCallback(() => {
     if (!locale) return;
     // The page list also holds base pages: they are listed on their own tab (from the bases endpoint).
     Promise.all([listPages(locale), listBases()]).then(([r, b]) => {
       const own = splitPagesList(r.data);
+      const tpl = detailTemplatesOf(r.data);
       setPages(own);
-      setTotal(Math.max(own.length, r.total - b.length));
+      setTemplates(tpl);
+      setTotal(Math.max(own.length, r.total - b.length - tpl.length));
       setBases(b);
       void Promise.all(b.map((x) => getBaseUsage(x.documentId).then((u) => u.count, () => null))).then((counts) =>
         setUsage(Object.fromEntries(b.map((x, i) => [x.documentId, counts[i] ?? null]))),
@@ -257,6 +371,9 @@ export function Pages() {
 
   const editorHref = (id: string) => `/pages/${id}?locale=${locale}`;
   const isBaseTab = tab === 'base';
+  const isDetailTab = tab === 'detail';
+  const typeOf = (apiId: unknown) => types.find((ty) => ty.apiId === apiId);
+  const freeTypes = typesWithoutTemplate(types, templates ?? []);
 
   return (
     <div className="space-y-6">
@@ -280,20 +397,95 @@ export function Pages() {
             {can('content.create') && (
               <Button size="sm" onClick={() => setCreating(true)} disabled={!locale}>
                 <PlusIcon aria-hidden="true" />
-                {isBaseTab ? t('pages.base.new') : t('pages.new')}
+                {isBaseTab ? t('pages.base.new') : isDetailTab ? t('pages.detail.new') : t('pages.new')}
               </Button>
             )}
           </>
         }
       />
-      <Tabs value={tab} onValueChange={(v) => navigate(v === 'base' ? '/pages?tab=base' : '/pages')}>
+      <Tabs value={tab} onValueChange={(v) => navigate(v === 'base' ? '/pages?tab=base' : v === 'detail' ? '/pages?tab=detail' : '/pages')}>
         <TabsList>
           <TabsTrigger value="pages">{t('pages.tabPages')}</TabsTrigger>
           <TabsTrigger value="base">{t('pages.tabBases')}</TabsTrigger>
+          <TabsTrigger value="detail">{t('pages.tabDetail')}</TabsTrigger>
         </TabsList>
       </Tabs>
       <ErrorAlert error={error} />
-      {isBaseTab ? (
+      {isDetailTab ? (
+        <>
+          <p className="text-sm text-muted-foreground">{t('pages.detail.description')}</p>
+          <Card className="py-0">
+            <CardContent className="px-0">
+              {templates === null ? (
+                <div className="space-y-2 p-4" aria-hidden="true">
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              ) : templates.length === 0 ? (
+                <div className="p-4">
+                  <EmptyState
+                    icon={LayoutTemplateIcon}
+                    title={t('pages.detail.emptyTitle')}
+                    description={t('pages.detail.emptyDescription')}
+                    action={
+                      can('content.create') && freeTypes.length ? (
+                        <Button size="sm" onClick={() => setCreating(true)}>
+                          {t('pages.detail.new')}
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t('pages.titleColumn')}</TableHead>
+                      <TableHead>{t('pages.detail.typeColumn')}</TableHead>
+                      <TableHead>{t('pages.detail.urlColumn')}</TableHead>
+                      <TableHead>{t('content.statusColumn')}</TableHead>
+                      <TableHead>{t('content.updatedColumn')}</TableHead>
+                      <TableHead className="text-right">{t('pages.actionsColumn')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {templates.map((p) => {
+                      const status = pageStatus(p, p.publishedAt ? { publishedAt: p.publishedAt } : null);
+                      const label = p.title || t('content.untitled');
+                      const ct = typeOf(p.detailApiId);
+                      return (
+                        <TableRow key={p.documentId}>
+                          <TableCell>
+                            <Link to={editorHref(p.documentId)} className="font-medium underline-offset-4 hover:underline">
+                              {label}
+                            </Link>
+                          </TableCell>
+                          <TableCell>{ct ? typeLabel(ct) : <span className="font-mono">{String(p.detailApiId ?? '')}</span>}</TableCell>
+                          <TableCell className="font-mono text-muted-foreground">
+                            {ct?.detailPage?.path ?? <span className="text-warning">{t('pages.detail.noDetailPage')}</span>}
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge status={status} />
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">{formatDateTime(p.updatedAt)}</TableCell>
+                          <TableCell>
+                            <div className="flex justify-end gap-1">
+                              {can('content.delete') && (
+                                <Button variant="ghost" size="icon" aria-label={t('pages.deleteAria', { title: label })} onClick={() => setDeleting(p)}>
+                                  <Trash2Icon aria-hidden="true" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      ) : isBaseTab ? (
         <>
           <p className="text-sm text-muted-foreground">{t('pages.base.description')}</p>
           <Card className="py-0">
@@ -468,7 +660,7 @@ export function Pages() {
           </CardContent>
         </Card>
       )}
-      {!isBaseTab && pages && listTruncation(pages.length, total) && (
+      {!isBaseTab && !isDetailTab && pages && listTruncation(pages.length, total) && (
         <p className="text-sm text-muted-foreground">{t('pages.showing', { shown: pages.length, total })}</p>
       )}
 
@@ -482,7 +674,23 @@ export function Pages() {
           }}
         />
       )}
-      {creating && !isBaseTab && (
+      {creating && isDetailTab && (
+        <CreateDetailDialog
+          locale={locale}
+          types={freeTypes}
+          initial={newDetail}
+          onOpenChange={(o) => {
+            if (o) return;
+            setCreating(false);
+            if (newDetail) navigate('/pages?tab=detail', { replace: true });
+          }}
+          onCreated={(p) => {
+            setCreating(false);
+            navigate(editorHref(p.documentId));
+          }}
+        />
+      )}
+      {creating && !isBaseTab && !isDetailTab && (
         <CreatePageDialog
           locale={locale}
           onOpenChange={(o) => !o && setCreating(false)}

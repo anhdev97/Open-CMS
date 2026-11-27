@@ -401,6 +401,23 @@ const idID: Messages = {
     listLabel: 'Tipe konten',
   },
   pages: {
+    tabDetail: "Templat detail",
+    detail: {
+      new: "Templat detail baru",
+      description: "Satu halaman templat per tipe konten menampilkan setiap entri di URL detailnya.",
+      emptyTitle: "Belum ada templat detail",
+      emptyDescription: "Aktifkan halaman detail sebuah tipe konten, lalu buat templatnya di sini.",
+      typeColumn: "Tipe konten",
+      urlColumn: "URL",
+      noDetailPage: "Halaman detail nonaktif",
+      defaultTitle: "Detail {type}",
+      create: {
+        title: "Templat detail baru",
+        description: "Pilih tipe konten yang entrinya ditampilkan halaman ini.",
+        noTypes: "Setiap tipe konten dengan halaman detail sudah punya templat.",
+        submit: "Buat templat",
+      },
+    },
     tabPages: "Halaman",
     tabBases: "Halaman dasar",
     base: {
@@ -450,6 +467,8 @@ const idID: Messages = {
       submitting: 'Membuat…',
     },
     errors: {
+      detailTemplateExists: "Tipe konten ini sudah punya templat detail.",
+      detailNotEnabled: "Aktifkan halaman detail tipe konten terlebih dahulu.",
       pathTaken: 'Path ini sudah dipakai halaman lain.',
       invalidPath: 'Gunakan huruf kecil, angka, dan tanda hubung, diawali "/".',
       pathReserved: 'Path ini dicadangkan oleh sistem.',
@@ -465,6 +484,13 @@ const idID: Messages = {
     },
   },
   pageEditor: {
+    detail: {
+      badge: "Templat detail",
+      noPattern: "tidak ada halaman detail",
+      previewEntry: "Entri pratinjau",
+      noEntries: "Tidak ada entri untuk dipratinjau",
+    },
+    hidesDetail: "Halaman ini menutupi halaman detail {pattern} untuk \"{value}\".",
     back: "Halaman",
     backAria: "Kembali ke halaman",
     loading: "Memuat halaman…",
@@ -577,6 +603,7 @@ const idID: Messages = {
         remove: "Hapus gambar",
       },
       entry: {
+        fromUrl: "Entri halaman (dari URL)",
         search: "Cari entri",
         searchPlaceholder: "Ketik untuk mencari",
         selected: "Entri terpilih",

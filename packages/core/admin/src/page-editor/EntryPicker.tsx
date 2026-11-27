@@ -152,8 +152,16 @@ export function EntryPicker({ id, apiId, displayField, selected, multiple, readO
 /** `b.entry(apiId)`: one entry, stored as `{ documentId }`. */
 export const EntryField: CustomFieldRender<StoredEntry | null> = ({ field, name, id, value, onChange, readOnly }) => {
   const bf = field.metadata?.blockField as EntryBlockField;
+  const info = useEditorInfo();
+  // On a detail template an empty entry of the template's type is the URL's entry (spec §3).
+  const fromUrl = !value?.documentId && !!info.routeApiId && info.routeApiId === bf.apiId;
   return (
     <FieldShell id={id} label={fieldLabel(field, name)}>
+      {fromUrl && (
+        <p data-route-entry="" className="rounded-md border border-dashed px-2 py-1 text-sm text-muted-foreground">
+          {t('pageEditor.fields.entry.fromUrl')}
+        </p>
+      )}
       <EntryPicker
         id={id}
         apiId={bf.apiId}

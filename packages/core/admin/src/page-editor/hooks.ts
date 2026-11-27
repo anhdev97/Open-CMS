@@ -1,6 +1,6 @@
 // React hooks of the page editor. Both are safe under StrictMode (mount → cleanup → mount keeps working).
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { resolvePage, writePageContent, type BlockRegistry, type ContentFetcher, type PuckData } from '@opencloudcms/core/blocks';
+import { resolvePage, writePageContent, type BlockRegistry, type ContentFetcher, type Entry, type PuckData } from '@opencloudcms/core/blocks';
 import type { Locale, PageKind, PageLayout } from '@opencloudcms/schema';
 import { createAutosave, type Autosave, type AutosaveOptions, type AutosaveState } from './autosave';
 import { loadBaseFrame } from './BaseFrame';
@@ -37,24 +37,33 @@ export function useAutosave<T>(opts: AutosaveOptions<T>): { autosave: Autosave<T
 
 /**
  * Resolved data-field values for the canvas: `schedule(data)` resolves 300 ms after the last change that touches a
- * data field (see `dataSignature`); `initial` is resolved on mount. Stale responses are dropped.
+ * data field (see `dataSignature`); `initial` is resolved on mount. Stale responses are dropped. `routeEntry` (detail
+ * templates): the preview entry, which fills the template's single-entry blocks of its type (as the URL's entry does on
+ * the website); choosing another one resolves again.
  */
 export function usePreviewResolution(
   registry: BlockRegistry,
   initial: PuckData,
   fetcher: ContentFetcher,
-  o: { locale: Locale; defaultLocale: Locale },
+  o: { locale: Locale; defaultLocale: Locale; routeEntry?: { apiId: string; entry: Entry } | null },
   debounceMs = 300,
 ): { resolved: ReadonlyMap<string, ResolvedItem>; schedule: (data: PuckData) => void } {
   const [resolved, setResolved] = useState<ReadonlyMap<string, ResolvedItem>>(() => new Map());
   const signature = useRef('');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seq = useRef(0);
+  const latestData = useRef<PuckData>(initial);
   const { locale, defaultLocale } = o;
+  // Read at resolve time (a ref keeps `schedule` stable, so choosing an entry never re-runs the mount effect).
+  const routeRef = useRef(o.routeEntry ?? null);
+  routeRef.current = o.routeEntry ?? null;
+  const keyOf = () => (routeRef.current ? `${routeRef.current.apiId}:${String(routeRef.current.entry.documentId ?? '')}` : '');
+  const routeKey = keyOf();
 
   const schedule = useCallback(
     (data: PuckData) => {
-      const sig = dataSignature(data, registry);
+      latestData.current = data;
+      const sig = `${dataSignature(data, registry)}|${keyOf()}`;
       if (sig === signature.current) return;
       signature.current = sig;
       if (timer.current) clearTimeout(timer.current);
@@ -62,7 +71,8 @@ export function usePreviewResolution(
         timer.current = null;
         const n = ++seq.current;
         const content = writePageContent(regionsIntoContent(data), registry);
-        void resolvePage(content, registry, fetcher, { locale, defaultLocale }).then(
+        const route = routeRef.current;
+        void resolvePage(content, registry, fetcher, { locale, defaultLocale, ...(route ? { routeEntry: route } : {}) }).then(
           (out) => n === seq.current && setResolved(indexResolved(content.data as PuckData, out, registry)),
           () => undefined,
         );
@@ -70,6 +80,11 @@ export function usePreviewResolution(
     },
     [registry, fetcher, locale, defaultLocale, debounceMs],
   );
+
+  // Another preview entry: resolve the current data again.
+  useEffect(() => {
+    if (routeKey) schedule(latestData.current);
+  }, [routeKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     schedule(initial);
