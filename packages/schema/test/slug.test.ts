@@ -97,6 +97,10 @@ describe('slug patterns', () => {
     const s = renderSlugPattern('{name}-{id6}', { name }, ID, 'en', 20);
     expect(s).toBe('word-word-3f9a2c');
     expect(renderSlugPattern('{name}', { name }, ID, 'en', 20)).toBe('word-word-word-word');
+    expect(renderSlugPattern('{id}', { name }, ID, 'en', 20)).toBe(ID);
+    expect(renderSlugPattern('{name}-{id}', { name }, ID, 'en', 37)).toBe(ID);
+    expect(renderSlugPattern('{name}-{id}', { name }, ID, 'en', 45)).toBe(`word-${ID}`);
+    expect(renderSlugPattern('{id6}', { name }, ID, 'en', 4, 8)).toBe('3f9a2c1e');
   });
 });
 
@@ -109,6 +113,17 @@ describe('content type validation of slug options', () => {
     expect(collectSchemaIssues([product({ pattern: 3 })])).toEqual([
       'content type "product", field "slug": pattern must be a string',
     ]);
+  });
+  it('requires room for the id part', () => {
+    expect(collectSchemaIssues([product({ pattern: '{name}-{id}', maxLength: 36 })])).toEqual([]);
+    expect(collectSchemaIssues([product({ pattern: '{name}-{id}', maxLength: 35 })])).toEqual([
+      'content type "product", field "slug": {id} needs maxLength of at least 36',
+    ]);
+    expect(collectSchemaIssues([product({ pattern: '{id6}', maxLength: 8 })])).toEqual([]);
+    expect(collectSchemaIssues([product({ pattern: '{name}-{id6}', maxLength: 7 })])).toEqual([
+      'content type "product", field "slug": {id6} needs maxLength of at least 8',
+    ]);
+    expect(parseSlugPattern('{id}', product(), 20).issues).toEqual(['{id} needs maxLength of at least 36']);
   });
   it('keeps the legacy from check unchanged', () => {
     expect(collectSchemaIssues([product({ from: 'name' })])).toEqual([]);

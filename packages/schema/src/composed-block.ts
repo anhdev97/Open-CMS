@@ -134,7 +134,10 @@ export const COMPOSED_RESERVED_PROPS: readonly string[] = ['_locale', '_editor']
  * Field names `defineComposedBlock` may generate (`entry`, `entries`, `layout`, `slot`, `slot2`, …). Manual fields
  * never use them, whatever the binding and tree, so a later binding or Slot cannot clash with stored content.
  */
-export const COMPOSED_GENERATED_FIELD_RE = /^(entry|entries|layout|slot\d*|list\d*)$/;
+export const COMPOSED_GENERATED_FIELD_RE = /^(entry|entries|layout|slot\d*)$/;
+// CollectionList keys (`list`, `list2`, … by default) are generated field names too, but only reserved against the
+// keys a spec actually has: a clash is reported on the list's `props.key`, never on a manual field (older specs may
+// have a manual field named `list`).
 
 /** `key` of a `CollectionList` (its generated block field name). */
 export const COLLECTION_LIST_KEY_RE = /^[a-z][a-zA-Z0-9]{0,31}$/;
@@ -597,7 +600,7 @@ export function validateComposedSpec(spec: unknown, opts: ValidateComposedOption
         const key = n.props.key;
         const kp = [...pp, 'key'];
         if (listKeys.has(key)) add(kp, `duplicate CollectionList key "${key}"`);
-        else if (fieldNames.has(key)) add(kp, `key "${key}" is already a field name`);
+        else if (fieldNames.has(key)) add(kp, `key collides with field "${key}"`);
         else if (RESERVED_LIST_KEY_RE.test(key) || RESERVED_BLOCK_PROPS.includes(key) || key in Object.prototype
           || (specKind === 'overlay' && key === 'name') || (specKind === 'layout' && key === 'pageContent')) {
           add(kp, `"${key}" is reserved`);

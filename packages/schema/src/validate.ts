@@ -121,7 +121,7 @@ export function collectSchemaIssues(defs: ContentTypeDefinition[], groups?: Cont
       }
       if (field.kind === 'slug' && o.pattern !== undefined) {
         if (typeof o.pattern !== 'string') issues.push(`${at}: pattern must be a string`);
-        else for (const m of parseSlugPattern(o.pattern, def).issues) issues.push(`${at}: ${m}`);
+        else for (const m of parseSlugPattern(o.pattern, def, Number.isInteger(o.maxLength) ? o.maxLength : undefined).issues) issues.push(`${at}: ${m}`);
       }
     }
     if (snake(def.apiId).length > 40) issues.push(`${where}: apiId is too long`);

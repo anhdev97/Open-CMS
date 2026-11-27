@@ -51,6 +51,10 @@ export type SlugPatternPart =
   | { kind: 'id' }
   | { kind: 'id6' };
 
+/** Length of a documentId (`{id}`) and the longest `{id6}` (8 hex characters on a collision). */
+const ID_LENGTH = 36;
+const ID6_MAX_LENGTH = 8;
+
 /** Field kinds a slug pattern may use as `{field}` (taxonomy: the term name). */
 export const SLUG_PATTERN_FIELD_KINDS: readonly FieldKind[] = ['text', 'longText', 'number', 'email', 'taxonomy'];
 
@@ -88,9 +92,12 @@ function tokenize(src: string): { tokens: Token[]; issues: string[] } {
 /**
  * Splits a slug pattern into parts and reports its problems (messages without a location prefix): `{field}` must
  * name a text, longText, number, email or taxonomy field of `def`; `{id}` and `{id6}` are the documentId and its first
- * hex characters; text between placeholders uses lowercase letters, digits and dashes; at least one placeholder.
+ * hex characters; text between placeholders uses lowercase letters, digits and dashes; at least one placeholder;
+ * `{id}` needs `maxLength` >= 36 and `{id6}` >= 8 (the id part is never cut).
  */
-export function parseSlugPattern(pattern: string, def: Pick<ContentTypeDefinition, 'fields'>): { parts: SlugPatternPart[]; issues: string[] } {
+export function parseSlugPattern(
+  pattern: string, def: Pick<ContentTypeDefinition, 'fields'>, maxLength = SLUG_MAX_LENGTH,
+): { parts: SlugPatternPart[]; issues: string[] } {
   const { tokens, issues } = tokenize(typeof pattern === 'string' ? pattern : '');
   const parts: SlugPatternPart[] = [];
   for (const t of tokens) {
@@ -105,6 +112,9 @@ export function parseSlugPattern(pattern: string, def: Pick<ContentTypeDefinitio
     }
   }
   if (!issues.length && !parts.some((p) => p.kind !== 'text')) issues.push('pattern needs at least one placeholder such as {name} or {id}');
+  // The id part is never cut, so it must fit: a full documentId (36) or up to 8 hex characters for `{id6}`.
+  if (parts.some((p) => p.kind === 'id') && maxLength < ID_LENGTH) issues.push(`{id} needs maxLength of at least ${ID_LENGTH}`);
+  if (parts.some((p) => p.kind === 'id6') && maxLength < ID6_MAX_LENGTH) issues.push(`{id6} needs maxLength of at least ${ID6_MAX_LENGTH}`);
   return { parts, issues };
 }
 
@@ -147,7 +157,9 @@ export function renderSlugPattern(
     }
     out = join();
   }
-  return cutSlug(out, maxLength);
+  // `{id}` / `{id6}` are never cut (uniqueness and id lookup rely on them); `parseSlugPattern` with a maxLength
+  // reports patterns whose id part cannot fit.
+  return parts.some((p) => p.kind === 'id' || p.kind === 'id6') ? out : cutSlug(out, maxLength);
 }
 
 export type DetailParam = 'slug' | 'id';

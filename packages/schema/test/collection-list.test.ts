@@ -152,11 +152,20 @@ describe('collectionListsOf', () => {
   });
 });
 
-describe('generated list field names', () => {
-  it('reserves list, list2, …', () => {
-    expect(composedFieldNameIssue('list')).toMatch(/generated/);
-    expect(composedFieldNameIssue('list2')).toMatch(/generated/);
-    expect(composedFieldNameIssue('listing')).toBeNull();
+describe('generated list field names (grandfathered)', () => {
+  const old = (): ComposedBlockSpec => mut(questions(), (x) => {
+    x.fields.list = { kind: 'text' };
+    x.tree.children.splice(1, 1);
+  });
+  it('keeps a manual field named list valid when no list uses the key', () => {
+    expect(composedFieldNameIssue('list')).toBeNull();
+    expect(composedFieldNameIssue('list2')).toBeNull();
+    expect(validateComposedSpec(old())).toEqual([]);
+  });
+  it('reports a clashing list key on the key, never on the field', () => {
+    const s = mut(old(), (x) => x.tree.children.push(list('list')));
+    expect(validateComposedSpec(s)).toEqual([{ path: ['tree', 'children', 2, 'props', 'key'], message: 'key collides with field "list"' }]);
+    expect(validateComposedSpec(mut(old(), (x) => x.tree.children.push(list('list2'))))).toEqual([]);
   });
 });
 
