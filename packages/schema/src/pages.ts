@@ -119,8 +119,12 @@ export function collectBlockNames(c: StoredPageContent | null | undefined): Map<
   return out;
 }
 
-/** Kinds of page documents: `page` is served at its path; `base` frames pages (never served on its own). */
-export type PageKind = 'page' | 'base';
+/**
+ * Kinds of page documents: `page` is served at its path; `base` frames pages (never served on its own); `detail` is
+ * the template of a content type's entry detail pages (no path of its own). `PAGE_KINDS` (what the page API accepts
+ * today) gains `detail` with the server support for templates.
+ */
+export type PageKind = 'page' | 'base' | 'detail';
 export const PAGE_KINDS: readonly PageKind[] = ['page', 'base'];
 
 export type RegionMode = 'default' | 'replace' | 'hide';

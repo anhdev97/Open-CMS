@@ -13,7 +13,7 @@ export type ComposedElement =
   | 'Box' | 'Stack' | 'Columns' | 'Grid' | 'Card' | 'Slot' | 'Heading' | 'Text'
   | 'Image' | 'Button' | 'Badge' | 'Price' | 'Date' | 'Divider' | 'Spacer' | 'Region' | 'PageContent' | 'Overlay'
   | 'Dropdown' | 'Tooltip' | 'Accordion' | 'AccordionItem' | 'Tabs' | 'TabPanel' | 'Carousel' | 'Icon'
-  | FormControlElement;
+  | 'CollectionList' | FormControlElement;
 
 export const FORM_CONTROL_ELEMENTS: readonly FormControlElement[] = ['Input', 'Textarea', 'Select', 'Combobox', 'Radio', 'Checkbox', 'Switch'];
 
@@ -21,13 +21,13 @@ export const COMPOSED_ELEMENTS: readonly ComposedElement[] = [
   'Box', 'Stack', 'Columns', 'Grid', 'Card', 'Slot', 'Heading', 'Text',
   'Image', 'Button', 'Badge', 'Price', 'Date', 'Divider', 'Spacer', 'Region', 'PageContent', 'Overlay',
   'Dropdown', 'Tooltip', 'Accordion', 'AccordionItem', 'Tabs', 'TabPanel', 'Carousel', 'Icon',
-  ...FORM_CONTROL_ELEMENTS,
+  'CollectionList', ...FORM_CONTROL_ELEMENTS,
 ];
 
 /** Props of each element that may be bound to data (everything else takes design tokens only). */
 export const ELEMENT_BINDABLE: Record<ComposedElement, readonly string[]> = {
   Stack: [], Columns: [], Grid: [], Slot: [], Divider: [], Spacer: [], Region: [], PageContent: [], Overlay: [],
-  Accordion: [], Tabs: [], Carousel: [],
+  Accordion: [], Tabs: [], Carousel: [], CollectionList: [],
   Box: ['href'],
   Card: ['href'],
   Heading: ['text'],
@@ -134,7 +134,32 @@ export const COMPOSED_RESERVED_PROPS: readonly string[] = ['_locale', '_editor']
  * Field names `defineComposedBlock` may generate (`entry`, `entries`, `layout`, `slot`, `slot2`, …). Manual fields
  * never use them, whatever the binding and tree, so a later binding or Slot cannot clash with stored content.
  */
-export const COMPOSED_GENERATED_FIELD_RE = /^(entry|entries|layout|slot\d*)$/;
+export const COMPOSED_GENERATED_FIELD_RE = /^(entry|entries|layout|slot\d*|list\d*)$/;
+
+/** `key` of a `CollectionList` (its generated block field name). */
+export const COLLECTION_LIST_KEY_RE = /^[a-z][a-zA-Z0-9]{0,31}$/;
+/** Max `CollectionList`s per block. */
+export const MAX_COLLECTION_LISTS = 4;
+/** Max `limit` of a `CollectionList`. */
+export const COLLECTION_LIST_MAX_LIMIT = 50;
+/** Default `limit` of a `CollectionList`. */
+export const COLLECTION_LIST_DEFAULT_LIMIT = 12;
+
+/** Props of a `CollectionList` node (its children are the item template). */
+export interface CollectionListProps {
+  key: string;
+  apiId: string;
+  filter?: { field: string; value: unknown }[];
+  sort?: { field: string; direction: 'asc' | 'desc' };
+  /** 1-50, default 12. */
+  limit?: number;
+  /** `columns`: 2-6 for grid, the desktop per-view count 1-6 for carousel. Default `{ kind: 'grid', columns: 3 }`. */
+  layout?: { kind: 'grid' | 'list' | 'carousel'; columns?: number };
+  emptyText?: LocalizedText;
+  urlPattern?: string;
+  /** Options page editors may change. */
+  editor?: { filter?: boolean; sort?: boolean; limit?: boolean; layout?: boolean };
+}
 
 /** Why `name` cannot be a manual field of a composed block (null when it can). */
 export function composedFieldNameIssue(name: string): string | null {
@@ -229,6 +254,46 @@ const checkboxValue: PropCheck = (v, p, add) => {
   if (typeof v !== 'string' || !v || v.length > MAX_OPTION_VALUE) add(p, `value must be a non-empty string of at most ${MAX_OPTION_VALUE} characters`);
 };
 
+/** Checks a query `filter` (block binding and CollectionList). */
+const filterCheck: PropCheck = (v, p, add) => {
+  if (!Array.isArray(v)) return add(p, 'filter must be an array');
+  v.forEach((f, i) => {
+    if (!isObj(f) || typeof f.field !== 'string' || !f.field) add([...p, i, 'field'], 'filter field is required');
+    else if (!('value' in f)) add([...p, i, 'value'], 'filter value is required');
+    else if (!['string', 'number', 'boolean'].includes(typeof f.value) || (typeof f.value === 'number' && !Number.isFinite(f.value))) {
+      add([...p, i, 'value'], 'filter value must be a string, number or boolean');
+    }
+  });
+};
+const sortCheck: PropCheck = (v, p, add) => {
+  if (!isObj(v) || typeof v.field !== 'string' || !v.field) add([...p, 'field'], 'sort field is required');
+  else if (v.field.includes(':')) add([...p, 'field'], 'sort field must not contain ":"');
+  else if (v.direction !== 'asc' && v.direction !== 'desc') add([...p, 'direction'], "direction must be 'asc' or 'desc'");
+};
+const layoutCheck: PropCheck = (v, p, add) => {
+  if (!isObj(v) || !['grid', 'list', 'carousel'].includes(v.kind as string)) return add([...p, 'kind'], "layout kind must be 'grid', 'list' or 'carousel'");
+  const min = v.kind === 'carousel' ? 1 : 2;
+  if (v.columns !== undefined && (!Number.isInteger(v.columns) || (v.columns as number) < min || (v.columns as number) > 6)) {
+    add([...p, 'columns'], `columns must be an integer between ${min} and 6`);
+  }
+};
+const urlPatternCheck: PropCheck = (v, p, add) => { if (typeof v !== 'string' || !v) add(p, 'urlPattern must be a non-empty string'); };
+const emptyTextCheck: PropCheck = (v, p, add) => {
+  if (!isObj(v) || typeof v['en-US'] !== 'string') add([...p, 'en-US'], 'emptyText requires an en-US text');
+};
+const LIST_EDITOR_KEYS = ['filter', 'sort', 'limit', 'layout'];
+const listEditorCheck: PropCheck = (v, p, add) => {
+  if (!isObj(v)) return add(p, 'editor must be an object');
+  for (const [k, x] of Object.entries(v)) {
+    if (!LIST_EDITOR_KEYS.includes(k)) add([...p, k], `editor has no option "${k}"`);
+    else if (x !== undefined && typeof x !== 'boolean') add([...p, k], `${k} must be a boolean`);
+  }
+};
+const listKeyCheck: PropCheck = (v, p, add) => {
+  if (typeof v !== 'string' || !COLLECTION_LIST_KEY_RE.test(v)) add(p, 'key must match ^[a-z][a-zA-Z0-9]{0,31}$');
+};
+const apiIdCheck: PropCheck = (v, p, add) => { if (typeof v !== 'string' || !v) add(p, 'apiId is required'); };
+
 /** Same list as `ButtonVariant` in `@opencloudcms/blocks`. */
 const BUTTON_VARIANTS = ['default', 'secondary', 'outline', 'ghost', 'link'] as const;
 const CONTROL = { name: controlName, required: bool, disabled: bool };
@@ -252,6 +317,10 @@ const COMPONENT_PROPS: Partial<Record<ComposedElement, Record<string, PropCheck>
     perView: responsive(intIn(1, 6)), gap: oneOf(STYLE_SPACING_TOKENS), arrows: bool, dots: bool, loop: bool, autoplay,
   },
   Icon: { name: iconName, size: oneOf(['sm', 'md', 'lg', 'xl']) },
+  CollectionList: {
+    key: listKeyCheck, apiId: apiIdCheck, filter: filterCheck, sort: sortCheck, limit: intIn(1, COLLECTION_LIST_MAX_LIMIT),
+    layout: layoutCheck, emptyText: emptyTextCheck, urlPattern: urlPatternCheck, editor: listEditorCheck,
+  },
   Input: { ...CONTROL, type: oneOf(INPUT_TYPES), autocomplete: oneOf(AUTOCOMPLETE_TOKENS) },
   Textarea: { ...CONTROL, rows: intIn(2, 12) },
   Select: CHOICE,
@@ -261,7 +330,7 @@ const COMPONENT_PROPS: Partial<Record<ComposedElement, Record<string, PropCheck>
   Switch: { name: controlName, defaultChecked: bool, disabled: bool },
 };
 const REQUIRED_PROPS: Partial<Record<ComposedElement, readonly string[]>> = {
-  Icon: ['name'], Input: ['name'], Textarea: ['name'], Select: ['name', 'options'], Combobox: ['name', 'options'],
+  Icon: ['name'], CollectionList: ['key', 'apiId'], Input: ['name'], Textarea: ['name'], Select: ['name', 'options'], Combobox: ['name', 'options'],
   Radio: ['name', 'options'], Checkbox: ['name'], Switch: ['name'],
 };
 /** New props of existing elements (checked when present; other props stay unchecked). */
@@ -305,10 +374,24 @@ export function isClickable(node: unknown): boolean {
 const childEl = (c: unknown): unknown => (isObj(c) ? c.el : undefined);
 const constText = (s: unknown): string | undefined => (isObj(s) && s.from === 'const' && typeof s.value === 'string' ? s.value : undefined);
 
-/** Where a node sits, for the rules of the new elements. */
-type WalkCtx = { parent?: unknown; inDropdown: boolean; inClickable: boolean };
+/**
+ * Where a node sits, for the rules of the new elements. `list`: the enclosing CollectionList (its children are an
+ * item template).
+ */
+type WalkCtx = { parent?: unknown; inDropdown: boolean; inClickable: boolean; list?: { apiId: unknown; urlPattern: unknown } };
 
-export function validateComposedSpec(spec: unknown): ComposedIssue[] {
+export interface ValidateComposedOptions {
+  /**
+   * apiIds of the content types with a detail page. When given, `entryUrl` without a `urlPattern` is an issue unless
+   * the bound type is in the set; when absent (no type context), such an `entryUrl` is accepted.
+   */
+  detailTypes?: ReadonlySet<string>;
+}
+
+/** Key names a CollectionList may not take (besides manual field names and the other lists' keys). */
+const RESERVED_LIST_KEY_RE = /^(entry|entries|layout|slot\d*)$/;
+
+export function validateComposedSpec(spec: unknown, opts: ValidateComposedOptions = {}): ComposedIssue[] {
   const issues: ComposedIssue[] = [];
   const add = (path: (string | number)[], message: string) => issues.push({ path, message });
   if (!isObj(spec)) return [{ path: [], message: 'Spec must be an object' }];
@@ -334,35 +417,13 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
       if (b.mode === 'single') {
         for (const k of ['filter', 'sort', 'limit', 'layout']) if (b[k] !== undefined) add(['binding', k], `${k} is only allowed in collection mode`);
       }
-      if (b.filter !== undefined) {
-        if (!Array.isArray(b.filter)) add(['binding', 'filter'], 'filter must be an array');
-        else b.filter.forEach((f, i) => {
-          if (!isObj(f) || typeof f.field !== 'string' || !f.field) add(['binding', 'filter', i, 'field'], 'filter field is required');
-          else if (!('value' in f)) add(['binding', 'filter', i, 'value'], 'filter value is required');
-          else if (!['string', 'number', 'boolean'].includes(typeof f.value) || (typeof f.value === 'number' && !Number.isFinite(f.value))) {
-            add(['binding', 'filter', i, 'value'], 'filter value must be a string, number or boolean');
-          }
-        });
-      }
-      if (b.sort !== undefined) {
-        if (!isObj(b.sort) || typeof b.sort.field !== 'string' || !b.sort.field) add(['binding', 'sort', 'field'], 'sort field is required');
-        else if (b.sort.field.includes(':')) add(['binding', 'sort', 'field'], 'sort field must not contain ":"');
-        else if (b.sort.direction !== 'asc' && b.sort.direction !== 'desc') add(['binding', 'sort', 'direction'], "direction must be 'asc' or 'desc'");
-      }
+      if (b.filter !== undefined) filterCheck(b.filter, ['binding', 'filter'], add);
+      if (b.sort !== undefined) sortCheck(b.sort, ['binding', 'sort'], add);
       if (b.limit !== undefined && (!Number.isInteger(b.limit) || (b.limit as number) < 1 || (b.limit as number) > 100)) {
         add(['binding', 'limit'], 'limit must be an integer between 1 and 100');
       }
-      if (b.layout !== undefined) {
-        if (!isObj(b.layout) || !['grid', 'list', 'carousel'].includes(b.layout.kind as string)) {
-          add(['binding', 'layout', 'kind'], "layout kind must be 'grid', 'list' or 'carousel'");
-        } else {
-          const min = b.layout.kind === 'carousel' ? 1 : 2;
-          if (b.layout.columns !== undefined && (!Number.isInteger(b.layout.columns) || (b.layout.columns as number) < min || (b.layout.columns as number) > 6)) {
-            add(['binding', 'layout', 'columns'], `columns must be an integer between ${min} and 6`);
-          }
-        }
-      }
-      if (b.urlPattern !== undefined && (typeof b.urlPattern !== 'string' || !b.urlPattern)) add(['binding', 'urlPattern'], 'urlPattern must be a non-empty string');
+      if (b.layout !== undefined) layoutCheck(b.layout, ['binding', 'layout'], add);
+      if (b.urlPattern !== undefined) urlPatternCheck(b.urlPattern, ['binding', 'urlPattern'], add);
       if (b.options !== undefined) {
         if (!isObj(b.options)) add(['binding', 'options'], 'options must be an object');
         else {
@@ -372,9 +433,7 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
             if (typeof o[k] !== 'boolean') add(['binding', 'options', k], `${k} must be a boolean`);
             else if (o[k] && b.mode !== 'collection') add(['binding', 'options', k], `${k} is only allowed in collection mode`);
           }
-          if (o.emptyText !== undefined && (!isObj(o.emptyText) || typeof o.emptyText['en-US'] !== 'string')) {
-            add(['binding', 'options', 'emptyText', 'en-US'], 'emptyText requires an en-US text');
-          }
+          if (o.emptyText !== undefined) emptyTextCheck(o.emptyText, ['binding', 'options', 'emptyText'], add);
         }
       }
     }
@@ -422,16 +481,23 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
   // tree
   const collection = binding?.mode === 'collection';
   const hasBinding = binding !== undefined;
-  const checkSource = (s: unknown, path: (string | number)[]) => {
+  const hasDetail = (apiId: unknown) => !opts.detailTypes || (typeof apiId === 'string' && opts.detailTypes.has(apiId));
+  const checkSource = (s: unknown, path: (string | number)[], ctx: WalkCtx) => {
     if (!isObj(s)) return add(path, 'bind source must be an object');
     switch (s.from) {
       case 'entry':
         if (typeof s.path !== 'string' || !s.path) add([...path, 'path'], 'entry path is required');
-        if (!hasBinding) add(path, "'entry' requires a binding");
+        if (!hasBinding && !ctx.list) add(path, "'entry' requires a binding");
         break;
       case 'entryUrl':
-        if (!hasBinding) add(path, "'entryUrl' requires a binding");
-        else if (typeof binding!.urlPattern !== 'string' || !binding!.urlPattern) add(path, "'entryUrl' requires binding.urlPattern");
+        if (ctx.list) {
+          if ((typeof ctx.list.urlPattern !== 'string' || !ctx.list.urlPattern) && !hasDetail(ctx.list.apiId)) {
+            add(path, "'entryUrl' requires the CollectionList urlPattern or a content type with a detail page");
+          }
+        } else if (!hasBinding) add(path, "'entryUrl' requires a binding");
+        else if ((typeof binding!.urlPattern !== 'string' || !binding!.urlPattern) && !hasDetail(binding!.apiId)) {
+          add(path, "'entryUrl' requires binding.urlPattern or a content type with a detail page");
+        }
         break;
       case 'field':
         if (typeof s.name !== 'string' || !fieldNames.has(s.name)) add([...path, 'name'], `unknown field "${String(s.name)}"`);
@@ -447,6 +513,9 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
   const regionNamesSeen = new Set<string>();
   let pageContents = 0;
   let layoutNodes = 0;
+  let lists = 0;
+  const listKeys = new Set<string>();
+  const specKind = isObj(spec.tree) ? composedKind(spec as unknown as ComposedBlockSpec) : 'block';
   const walk = (n: unknown, path: (string | number)[], ctx: WalkCtx) => {
     if (!isObj(n)) return add(path, 'node must be an object');
     const el = n.el as ComposedElement;
@@ -454,10 +523,16 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
     let flaggedInClickable = false;
     if (!COMPOSED_ELEMENTS.includes(el)) {
       at(`unknown element "${String(n.el)}"`);
-    } else if (el === 'Slot' && collection) {
+    } else if (el === 'Slot' && (collection || ctx.list)) {
       at('Slot is not allowed inside a collection item template');
-    } else if (el === 'Carousel' && collection) {
+    } else if (el === 'Carousel' && (collection || ctx.list)) {
       at('Carousel is not allowed inside a collection item template');
+    } else if (el === 'CollectionList' && ctx.list) {
+      at('a CollectionList cannot contain a CollectionList');
+    } else if (el === 'CollectionList' && collection) {
+      at('a CollectionList is not allowed in a block with a collection binding');
+    } else if (el === 'CollectionList' && ++lists > MAX_COLLECTION_LISTS) {
+      at(`a block can have at most ${MAX_COLLECTION_LISTS} CollectionLists`);
     } else if (el === 'AccordionItem' && ctx.parent !== 'Accordion') {
       at('AccordionItem is only allowed directly inside an Accordion');
     } else if (el === 'TabPanel' && ctx.parent !== 'Tabs') {
@@ -473,7 +548,9 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
       flaggedInClickable = true;
       add([...path, 'el'], `${String(el)} is not allowed inside a clickable Box or Card`);
     }
-    if (el === 'Region' || el === 'PageContent') {
+    if ((el === 'Region' || el === 'PageContent') && ctx.list) {
+      add([...path, 'el'], `${el} is not allowed inside a collection item template`);
+    } else if (el === 'Region' || el === 'PageContent') {
       layoutNodes++;
       if (collection) add([...path, 'el'], `${el} is not allowed in a block with a collection binding`);
       if (rootIsOverlay) add([...path, 'el'], `${el} is not allowed in an overlay block`);
@@ -516,6 +593,17 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
         if (ACTION_ELEMENTS.includes(el)) for (const i of validateButtonAction(n.props.action, [...pp, 'action'])) add(i.path, i.message);
         else add([...pp, 'action'], 'action is only allowed on Button, Image, Box and Card');
       }
+      if (el === 'CollectionList' && typeof n.props.key === 'string' && COLLECTION_LIST_KEY_RE.test(n.props.key)) {
+        const key = n.props.key;
+        const kp = [...pp, 'key'];
+        if (listKeys.has(key)) add(kp, `duplicate CollectionList key "${key}"`);
+        else if (fieldNames.has(key)) add(kp, `key "${key}" is already a field name`);
+        else if (RESERVED_LIST_KEY_RE.test(key) || RESERVED_BLOCK_PROPS.includes(key) || key in Object.prototype
+          || (specKind === 'overlay' && key === 'name') || (specKind === 'layout' && key === 'pageContent')) {
+          add(kp, `"${key}" is reserved`);
+        }
+        listKeys.add(key);
+      }
       if (el === 'Dropdown' && n.props.chevron === false && isObj(n.bind) && n.bind.href !== undefined) {
         add([...pp, 'chevron'], 'a Dropdown with a link must keep its chevron (it opens the panel)');
       }
@@ -533,7 +621,7 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
         if (COMPOSED_ELEMENTS.includes(el) && !ELEMENT_BINDABLE[el].includes(k)) {
           add([...path, 'bind', k], `${String(el)} has no bindable prop "${k}"`);
         }
-        checkSource(s, [...path, 'bind', k]);
+        checkSource(s, [...path, 'bind', k], ctx);
       }
     }
     if (n.showIf !== undefined) {
@@ -543,7 +631,7 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
       else {
         if (s.is !== 'present' && s.is !== 'absent') add([...sp, 'is'], "is must be 'present' or 'absent'");
         if (s.from === 'entry') {
-          if (!hasBinding) add(sp, "'entry' requires a binding");
+          if (!hasBinding && !ctx.list) add(sp, "'entry' requires a binding");
           if (typeof s.path !== 'string' || !s.path) add([...sp, 'path'], 'path is required');
         } else if (s.from === 'field') {
           if (typeof s.name !== 'string' || !fieldNames.has(s.name)) add([...sp, 'name'], `unknown field "${String(s.name)}"`);
@@ -574,6 +662,7 @@ export function validateComposedSpec(spec: unknown): ComposedIssue[] {
           parent: el,
           inDropdown: ctx.inDropdown || el === 'Dropdown',
           inClickable: (ctx.inClickable && !flaggedInClickable) || ((el === 'Box' || el === 'Card') && isClickable(n)),
+          list: el === 'CollectionList' ? { apiId: isObj(n.props) ? n.props.apiId : undefined, urlPattern: isObj(n.props) ? n.props.urlPattern : undefined } : ctx.list,
         };
         n.children.forEach((c, i) => walk(c, [...path, 'children', i], next));
       }
@@ -663,8 +752,32 @@ export function regionNames(spec: Pick<ComposedBlockSpec, 'tree'> | undefined): 
   return out;
 }
 
+/**
+ * The `CollectionList`s of `spec` with a valid, first-seen `key`, in tree order (each one's key is its generated
+ * `b.entries` block field).
+ */
+export function collectionListsOf(spec: Pick<ComposedBlockSpec, 'tree'> | undefined): { key: string; node: ComposedNode }[] {
+  const out: { key: string; node: ComposedNode }[] = [];
+  const walk = (n: unknown) => {
+    if (!isObj(n)) return;
+    const key = isObj(n.props) ? n.props.key : undefined;
+    if (n.el === 'CollectionList' && typeof key === 'string' && COLLECTION_LIST_KEY_RE.test(key) && !out.some((l) => l.key === key)) {
+      out.push({ key, node: n as unknown as ComposedNode });
+    }
+    if (Array.isArray(n.children)) n.children.forEach(walk);
+  };
+  walk(spec?.tree);
+  return out;
+}
+
 export function isBreakingChange(prev: ComposedBlockSpec, next: ComposedBlockSpec): boolean {
   if (slotsChanged(prev, next)) return true;
+  // Stored list content lives in a field named after the key: a removed key or another type drops it.
+  const nextLists = collectionListsOf(next);
+  for (const l of collectionListsOf(prev)) {
+    const n = nextLists.find((x) => x.key === l.key);
+    if (!n || n.node.props?.apiId !== l.node.props?.apiId) return true;
+  }
   if (composedKind(prev) !== composedKind(next)) return true;
   if (regionNames(prev).join('\n') !== regionNames(next).join('\n')) return true;
   for (const [name, f] of Object.entries(prev.fields ?? {})) {

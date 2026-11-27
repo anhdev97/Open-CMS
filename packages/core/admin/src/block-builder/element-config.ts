@@ -105,6 +105,8 @@ export const ELEMENT_PROPS: Record<ComposedElement, readonly PropDef[]> = {
     { ...select('autoplay', ['off', ...range(3, 10)]), seconds: true },
   ],
   Icon: [{ name: 'name', kind: 'icon', labelKey: 'icon' }, select('size', ['sm', 'md', 'lg', 'xl'])],
+  // Placeholder: the CollectionList props panel is built in its own task (type picker, query, layout, editor toggles).
+  CollectionList: [],
   Input: [CONTROL_NAME, { ...select('type', INPUT_TYPES), labelKey: 'inputType' }, REQUIRED, DISABLED, { ...select('autocomplete', AUTOCOMPLETE_TOKENS), optional: true }],
   Textarea: [CONTROL_NAME, select('rows', range(2, 12)), REQUIRED, DISABLED],
   Select: [CONTROL_NAME, OPTIONS, DEFAULT_VALUE, REQUIRED, DISABLED],
@@ -192,6 +194,7 @@ export const STYLE_SECTIONS: Record<ComposedElement, readonly StyleSection[]> = 
   // Builder component elements. AccordionItem / TabPanel render no box of their own (their parent lays them out).
   Dropdown: PLAIN, Tooltip: PLAIN, Accordion: WIDE, AccordionItem: [], Tabs: WIDE, TabPanel: [], Carousel: WIDE,
   Icon: ['margin', 'textColor', 'visibility', 'span'],
+  CollectionList: WIDE, // like Carousel; revisit with the CollectionList builder task
   Input: WIDE, Textarea: WIDE, Select: WIDE, Combobox: WIDE, Radio: WIDE, Checkbox: WIDE, Switch: WIDE,
 };
 
@@ -205,7 +208,9 @@ export const FORM_PALETTE: readonly ComposedElement[] = FORM_CONTROL_ELEMENTS;
 export const CONTENT_ELEMENTS: readonly ComposedElement[] = COMPOSED_ELEMENTS.filter(
   (e) =>
     !LAYOUT_ELEMENTS.includes(e) && !REGION_ELEMENTS.includes(e) && e !== 'Overlay'
-    && !INTERACTIVE_PALETTE.includes(e) && !FORM_PALETTE.includes(e) && !ITEM_ELEMENTS.includes(e),
+    && !INTERACTIVE_PALETTE.includes(e) && !FORM_PALETTE.includes(e) && !ITEM_ELEMENTS.includes(e)
+    // Offered in the "Data" category once the builder supports it.
+    && e !== 'CollectionList',
 );
 
 /** Translated label, or `fallback` when the key is missing. */

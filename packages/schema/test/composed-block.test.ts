@@ -39,7 +39,10 @@ describe('validateComposedSpec', () => {
     expect(paths(mut(single(), (s) => (s.tree.children[1].bind.label.name = 'x')))).toEqual(['tree.children.1.bind.label.name']);
     expect(paths(mut(unbound(), (s) => (s.tree.children[0].bind = { text: { from: 'entry', path: 'a' } })))).toEqual(['tree.children.0.bind.text']);
     expect(paths(mut(unbound(), (s) => (s.tree.children[0].bind = { text: { from: 'entryUrl' } })))).toEqual(['tree.children.0.bind.text']);
-    expect(paths(mut(single(), (s) => delete s.binding.urlPattern))).toEqual(['tree.children.1.bind.href']);
+    // Spec §4: without urlPattern, entryUrl needs a type with a detail page (unknown without type context).
+    expect(validateComposedSpec(mut(single(), (s) => delete s.binding.urlPattern))).toEqual([]);
+    expect(validateComposedSpec(mut(single(), (s) => delete s.binding.urlPattern), { detailTypes: new Set() }).map((i) => i.path.join('.')))
+      .toEqual(['tree.children.1.bind.href']);
     expect(paths(mut(collection(), (s) => s.tree.children.push({ el: 'Slot' })))).toEqual(['tree.children.1.el']);
     expect(paths(mut(single(), (s) => (s.binding.options = { editorFilter: true })))).toEqual(['binding.options.editorFilter']);
     expect(paths(mut(collection(), (s) => (s.binding.limit = 0)))).toEqual(['binding.limit']);
