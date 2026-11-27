@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { defineContentType, f } from '@opencloudcms/schema';
 import { loginAs } from '../../../oauth2/test/support/login';
+import { ContentRegistry } from '../../src/registry.service';
 import { SchemaWriteQueue } from '../../src/schema-write-queue';
 import { createCoreTestApp, type CoreTestApp } from '../support/core-app';
 
@@ -427,6 +428,47 @@ describe('blocks API (editable)', () => {
     expect(thrown).toBe(true);
     expect(tree(t.root)).toEqual(before);
     expect((await call(`${BLOCKS}/PromoTwo`)).status).toBe(200);
+  });
+
+  // Spec §4: `entryUrl` without a urlPattern needs a content type with a detail page (server checks know the types).
+  it('entryUrl without urlPattern -> 422 unless the type has a usable detail page', async () => {
+    const binding = { apiId: 'product', mode: 'collection', limit: 8 };
+    const spec = tile({ id: 'blk_tile09', name: 'AutoLinkTile', binding });
+    const r = await put('AutoLinkTile', { spec });
+    expect(r.status).toBe(422);
+    expect(r.body.error.issues).toEqual([
+      { path: ['tree', 'children', 1, 'bind', 'href'], message: "'entryUrl' requires binding.urlPattern or a content type with a detail page" },
+    ]);
+    const registry = t.app.get(ContentRegistry);
+    const defs = registry.all().filter((d) => d.apiId !== 'opencloudcmsPage');
+    registry.reload(defs.map((d) => (d.apiId === 'product' ? { ...d, detailPage: { path: '/products/{slug}', slugField: 'slug' } } : d)));
+    try {
+      expect((await put('AutoLinkTile', { spec })).status).toBe(200);
+    } finally {
+      registry.reload(defs);
+    }
+    expect((await call(`${BLOCKS}/AutoLinkTile?force=1`, { method: 'DELETE' })).status).toBe(200);
+  });
+
+  it('a CollectionList of an unknown type -> 422; its item paths are checked against the list type', async () => {
+    const spec = (apiId: string, path = 'name') => ({
+      ...banner('ListBanner', 'blk_lstb01'),
+      tree: {
+        el: 'Box',
+        children: [
+          { el: 'Heading', bind: { text: { from: 'field', name: 'title' } } },
+          { el: 'CollectionList', props: { key: 'list', apiId, urlPattern: '/p/{slug}' }, children: [{ el: 'Heading', bind: { text: { from: 'entry', path } } }] },
+        ],
+      },
+    });
+    const unknown = await put('ListBanner', { spec: spec('nope') });
+    expect(unknown.status).toBe(422);
+    expect(unknown.body.error.issues).toEqual([{ path: ['tree', 'children', 1, 'props', 'apiId'], message: 'unknown content type "nope"' }]);
+    const badPath = await put('ListBanner', { spec: spec('product', 'missing') });
+    expect(badPath.status).toBe(422);
+    expect(badPath.body.error.issues).toEqual([
+      { path: ['tree', 'children', 1, 'children', 0, 'bind', 'text', 'path'], message: 'field "missing" does not exist on "product"' },
+    ]);
   });
 });
 

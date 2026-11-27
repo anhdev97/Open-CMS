@@ -31,6 +31,7 @@ import {
   type LocalizedText,
 } from '@opencloudcms/schema';
 import { OPENCLOUDCMS_OPTIONS, type ResolvedOpenCloudCmsOptions } from '../options';
+import { detailPaths } from '../pages/detail';
 import { PagesService } from '../pages/pages.service';
 import { ContentRegistry } from '../registry.service';
 import { SchemaBuilderService } from '../schema-builder';
@@ -189,7 +190,9 @@ export class BlocksService {
 
   save(name: string, body: { spec?: unknown; confirmBreaking?: boolean } | undefined) {
     this.builder.assertEditable();
-    const issues = validateComposedSpec(body?.spec);
+    // `entryUrl` without a urlPattern needs a content type with a usable detail page (spec §4).
+    const detailTypes = new Set(Object.keys(detailPaths(this.registry.all())));
+    const issues = validateComposedSpec(body?.spec, { detailTypes });
     if (issues.length) throw invalid(issues);
     const spec = body!.spec as ComposedBlockSpec;
     const config = this.options.config;
