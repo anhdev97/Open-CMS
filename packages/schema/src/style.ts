@@ -37,7 +37,18 @@ export interface NodeStyle {
   hidden?: Partial<Record<Breakpoint, boolean>>;
   /** Column span inside Columns/Grid: 1-12 or 'full'. */
   span?: Responsive<number | 'full'>;
+  /** Colors on hover (Box, Card and Button only). */
+  hover?: HoverStyle;
 }
+
+export interface HoverStyle {
+  background?: ColorValue;
+  color?: ColorValue;
+  borderColor?: ColorValue;
+}
+
+/** Elements whose style may carry `hover`. */
+export const HOVER_ELEMENTS: readonly string[] = ['Box', 'Card', 'Button'];
 
 const CUSTOM_LENGTH_RE = /^(-?\d+(?:\.\d+)?)(px|rem|em|%|vw|vh)$/;
 const BRAND_RE = /^[a-z][a-z0-9-]{0,31}$/;
@@ -130,7 +141,11 @@ function sidesLeaf(add: (p: Path, m: string) => void, opts: { negative?: boolean
   };
 }
 
-export function validateNodeStyle(style: unknown, path: Path): ComposedIssue[] {
+/**
+ * Issues of a node style. With `el`, `hover` is an issue unless the element is in `HOVER_ELEMENTS`; without it,
+ * `hover` is only checked for its colors.
+ */
+export function validateNodeStyle(style: unknown, path: Path, el?: string): ComposedIssue[] {
   const issues: ComposedIssue[] = [];
   const add = (p: Path, message: string) => issues.push({ path: p, message });
   if (style === undefined) return issues;
@@ -172,6 +187,14 @@ export function validateNodeStyle(style: unknown, path: Path): ComposedIssue[] {
         checkResponsive(v, p, (x, q) => {
           if (!(x === 'full' || (Number.isInteger(x) && (x as number) >= 1 && (x as number) <= 12))) add(q, "span must be an integer 1-12 or 'full'");
         });
+        break;
+      case 'hover':
+        if (el !== undefined && !HOVER_ELEMENTS.includes(el)) add(p, 'hover is only allowed on Box, Card and Button');
+        else if (!isObj(v)) add(p, 'hover must be an object');
+        else for (const [hk, hv] of Object.entries(v)) {
+          if (hk === 'background' || hk === 'color' || hk === 'borderColor') { if (hv !== undefined) color(hv, [...p, hk]); }
+          else add([...p, hk], `unknown hover property "${hk}" (background, color, borderColor)`);
+        }
         break;
       default: add(p, `unknown style property "${k}"`);
     }

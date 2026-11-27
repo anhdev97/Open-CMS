@@ -105,8 +105,55 @@ const contactOverlay = base({
   },
 });
 
+// Every builder component element, with props, bindings, hover and clickable containers.
+const components = base({
+  name: 'Components',
+  tree: {
+    el: 'Stack',
+    props: { direction: 'vertical' },
+    children: [
+      {
+        el: 'Dropdown',
+        props: { openOn: 'click', placement: 'bottom-end', display: { base: 'inline', md: 'popover' }, triggerVariant: 'ghost', chevron: true },
+        bind: { label: { from: 'const', value: 'Shop' }, href: { from: 'const', value: '/shop' } },
+        children: [{ el: 'Button', props: { variant: 'link', icon: 'star', iconPosition: 'end' }, bind: { label: { from: 'const', value: 'All' } } }],
+      },
+      { el: 'Tooltip', props: { side: 'bottom' }, bind: { text: { from: 'const', value: 'Hi' } }, children: [{ el: 'Icon', props: { name: 'info', size: 'lg' } }] },
+      {
+        el: 'Accordion',
+        props: { single: true, defaultOpen: 'first' },
+        children: [{ el: 'AccordionItem', bind: { title: { from: 'const', value: 'Q1' } }, children: [{ el: 'Text', bind: { text: { from: 'const', value: 'A1' } } }] }],
+      },
+      {
+        el: 'Tabs',
+        props: { variant: 'pills', align: 'stretch' },
+        children: [
+          { el: 'TabPanel', props: { anchorId: 'spec' }, bind: { label: { from: 'const', value: 'Tab 1' } }, children: [{ el: 'Text' }] },
+          { el: 'TabPanel', bind: { label: { from: 'const', value: 'Tab 2' } } },
+        ],
+      },
+      { el: 'Carousel', props: { perView: { base: 1, md: 3 }, gap: '4', arrows: true, dots: false, loop: true, autoplay: 5 }, children: [{ el: 'Image' }, { el: 'Image' }] },
+      { el: 'Input', props: { name: 'email', type: 'email', required: true, autocomplete: 'email' }, bind: { label: { from: 'const', value: 'Email' }, help: { from: 'const', value: 'We reply' } } },
+      { el: 'Textarea', props: { name: 'message', rows: 6 } },
+      { el: 'Select', props: { name: 'topic', options: [{ value: 'a', label: 'A' }, { value: 'b', label: { 'en-US': 'B', 'vi-VN': 'B vi' } }], defaultValue: 'b' } },
+      { el: 'Combobox', props: { name: 'city', options: [{ value: 'hn', label: 'Hà Nội' }] } },
+      { el: 'Radio', props: { name: 'size', options: [{ value: 's', label: 'S' }], orientation: 'horizontal' } },
+      { el: 'Checkbox', props: { name: 'news', value: 'yes', defaultChecked: true } },
+      { el: 'Switch', props: { name: 'dark', disabled: true } },
+      {
+        el: 'Card',
+        props: { action: { type: 'overlay', op: 'open', target: 'cart' }, ariaLabel: 'Open cart' },
+        style: { hover: { background: 'muted', color: 'brand:ink', borderColor: '#ff0000' } },
+        children: [{ el: 'Image', props: { action: { type: 'scroll', target: 'top' } } }],
+      },
+      { el: 'Box', bind: { href: { from: 'entryUrl' } }, children: [{ el: 'Heading' }] },
+    ],
+  },
+});
+
 describe('tree ⇄ Puck', () => {
   it.each([
+    ['every builder component element', components],
     ['single', productCard],
     ['collection', productGrid],
     ['unbound with slots', landing],
@@ -131,7 +178,7 @@ describe('tree ⇄ Puck', () => {
     };
     walk(data.content as never);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(CONTAINER_ELEMENTS).toEqual(['Box', 'Stack', 'Columns', 'Grid', 'Card', 'Overlay']);
+    expect(CONTAINER_ELEMENTS).toEqual(['Box', 'Stack', 'Columns', 'Grid', 'Card', 'Overlay', 'Dropdown', 'Tooltip', 'Accordion', 'AccordionItem', 'Tabs', 'TabPanel', 'Carousel']);
   });
 
   it('drops undefined props and empty children; several top-level items become a vertical Stack; none → empty Box', () => {
@@ -195,6 +242,9 @@ describe('layout and overlay elements in the canvas data', () => {
     expect(isEmptyTree({ el: 'Card', children: [{ el: 'Heading' }] })).toBe(false);
     expect(isEmptyTree({ el: 'Heading' })).toBe(false);
     expect(isEmptyTree({ el: 'Overlay' })).toBe(false);
+    // An interactive container without children is not an empty design (only layout containers are).
+    expect(isEmptyTree({ el: 'Tabs', children: [] })).toBe(false);
+    expect(isEmptyTree({ el: 'Dropdown' })).toBe(false);
   });
 
   it('an Overlay dropped next to an empty root becomes the root', () => {

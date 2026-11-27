@@ -4,6 +4,7 @@ import type { ComponentConfig, CustomFieldRender, Field } from '@puckeditor/core
 import type { Locale, PageKind } from '@opencloudcms/schema';
 import { toPuckConfig, type BlockField, type BlockRegistry, type CustomFieldRenderers, type PuckConfig } from '@opencloudcms/core/blocks';
 import { t } from '../i18n';
+import { type PaletteCategory, type PaletteModel } from '../components/PaletteSearch';
 import { BASE_FIELD, ROOT_ZONE, basePageField, layoutBlockNames, pageRootResolveFields, regionLabel, regionSlotField, registryRegionNames, type BaseOption } from './base-fields';
 import { OverlayChip, PageContentPlaceholder } from './BaseFrame';
 import { REGION_PREFIX } from './field-logic';
@@ -153,4 +154,28 @@ export function buildEditorConfig(registry: BlockRegistry, opts: EditorConfigOpt
           },
         };
   return { components, categories, root: root as never } as PuckConfig;
+}
+
+/**
+ * The palette search model of the Page builder block list: the config's categories, the translated labels and the
+ * blocks' English labels; Enter adds the block at the end of the page content when the page root takes it (a base
+ * page: layout blocks only; a page: no layout block).
+ */
+export function pageBuilderPalette(config: Pick<PuckConfig, 'components' | 'categories'>, registry: BlockRegistry, kind: PageKind = 'page'): PaletteModel {
+  const layouts = layoutBlockNames(registry);
+  return {
+    categories: (config.categories ?? {}) as Record<string, PaletteCategory>,
+    label: t('paletteSearch.labelPageBuilder'),
+    describe: (name) => {
+      const label = (config.components[name] as { label?: string } | undefined)?.label ?? name;
+      const own = registry.has(name) ? registry.get(name)!.label : undefined;
+      const english = typeof own === 'string' ? own : ((own as Record<string, string> | undefined)?.['en-US'] ?? name);
+      return { label, english };
+    },
+    target: (name, get) => {
+      if (!registry.has(name) || (kind === 'base') !== layouts.includes(name)) return null;
+      const content = (get().appState.data as { content?: unknown[] }).content ?? [];
+      return { zone: ROOT_ZONE, index: content.length };
+    },
+  };
 }

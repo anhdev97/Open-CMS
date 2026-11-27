@@ -5,9 +5,10 @@ import * as path from 'node:path';
 import { createJiti } from 'jiti';
 import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resolveConfig, type ComposedBlockSpec } from '@opencloudcms/schema';
+import { resolveConfig, type ComposedBlockSpec, type ComposedNode } from '@opencloudcms/schema';
 // The real blocks package (source) and React, both from @opencloudcms/core.
 import * as blocks from '../../core/blocks/src/index';
+import { clickableSpec, componentsSpec, tooltipSpec } from './fixtures/components';
 import { composedBlockFile, ejectComposedBlock, EjectTargetExistsError, loadComposedBlocks, printComposedBlockFile, printEjectedBlockTsx, writeComposedBlocks } from '../src';
 
 const coreRequire = createRequire(path.resolve(__dirname, '../../core/package.json'));
@@ -160,14 +161,21 @@ const entry = (id: string, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-function same(spec: ComposedBlockSpec, propsList: Record<string, unknown>[]) {
+/** React `useId` values (`_R_…_`) renamed by order of first appearance: they depend on the component depth only. */
+const sameIds = (s: string) => {
+  const seen = new Map<string, string>();
+  return s.replace(/_R_[A-Za-z0-9]+_/g, (m) => seen.get(m) ?? (seen.set(m, `_id${seen.size}_`), `_id${seen.size - 1}_`));
+};
+
+function same(spec: ComposedBlockSpec, propsList: Record<string, unknown>[], opts: { ids?: 'renamed' } = {}) {
   const source = printEjectedBlockTsx(spec);
   const composed = blocks.defineComposedBlock(spec);
   const ejected = loadEjected(source);
+  const norm = opts.ids === 'renamed' ? sameIds : (s: string) => s;
   for (const props of propsList) {
     const a = html(composed, props);
     expect(a.length).toBeGreaterThan(0);
-    expect(html(ejected, props)).toBe(a);
+    expect(norm(html(ejected, props))).toBe(norm(a));
   }
   return { source, composed, ejected };
 }
@@ -202,6 +210,23 @@ describe('printEjectedBlockTsx', () => {
     expect(html(loadEjected(source), { ctaLabel: 'Buy', entry: null })).toBe('');
     expect(source).toContain("<ui.Heading level={3} text={h.text(get(entry, 'name'))} align=\"center\" />");
     expect(source).toContain("h.single(props, { name, label }, (entry) =>");
+  });
+
+  it('collection carousel layout: same fields (carousel options) and identical rendering', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const spec: ComposedBlockSpec = {
+      ...collectionSpec,
+      id: 'blk_strip001',
+      name: 'Strip',
+      binding: { ...collectionSpec.binding!, mode: 'collection', layout: { kind: 'carousel', columns: 4 } } as ComposedBlockSpec['binding'],
+    };
+    const { composed, ejected } = same(spec, [
+      { badge: 'new', entries: [entry('a'), entry('b')] },
+      { badge: 'new', entries: [entry('a')], layout: 'carousel-2' },
+      { badge: 'new', entries: [entry('a')], layout: 'grid-3' },
+    ]);
+    expect(ejected.fields).toEqual(composed.fields);
+    expect((ejected.fields.layout as { default?: string }).default).toBe('carousel-4');
   });
 
   it('collection: renders identically (grid, editor layout, empty text, placeholder, missing field)', () => {
@@ -344,16 +369,18 @@ describe('printEjectedBlockTsx: my-store composed blocks', () => {
     entry('p2', { price: { amount: 150000, currency: 'VND' } }),
     entry('p3'),
   ];
-  for (const name of ['store-header', 'store-hero', 'section-head', 'story-band', 'store-footer', 'featured-products', 'store-frame', 'contact-modal', 'mobile-menu']) {
+  for (const name of ['store-header', 'store-hero', 'section-head', 'story-band', 'store-footer', 'featured-products', 'store-frame', 'contact-modal', 'mobile-menu', 'home-banner', 'faq', 'product-tabs', 'product-strip']) {
     it(`${name} renders the same HTML ejected as composed`, () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       const spec = loadSpec(name);
-      const base = { ...sampleProps(spec), ...(spec.binding?.mode === 'collection' ? { entries: products } : {}) };
+      const base = { ...sampleProps(spec), ...(spec.binding?.mode === 'collection' ? { entries: products } : {}), ...(spec.binding?.mode === 'single' ? { entry: products[1] } : {}) };
       const { source } = same(spec, [
         { ...base, _locale: 'en-US' },
         { ...base, _locale: 'vi-VN', _editor: true },
         ...(spec.binding?.mode === 'collection' ? [{ ...base, entries: [], _locale: 'en-US', _editor: true }] : []),
-      ]);
+        // Overlay blocks reach their form controls and dropdowns through one more component level when composed, so
+        // React's useId values differ; the markup must match with the ids renamed consistently.
+      ], { ids: 'renamed' });
       // Every styled node of the spec keeps its style in the ejected source.
       const styled = (n: ComposedBlockSpec['tree']): number => (n.style && Object.keys(n.style).length ? 1 : 0) + (n.children ?? []).reduce((a, c) => a + styled(c), 0);
       expect((source.match(/ style=\{/g) ?? []).length).toBe(styled(spec.tree));
@@ -438,6 +465,8 @@ describe('printEjectedBlockTsx: layout and overlay blocks', () => {
       expect(source).toContain('<ui.Overlay');
       expect(source).toContain("const overlay = h.overlayName(props.name, 'lien-he');");
       expect(source).toContain("action={{ type: 'overlay', op: 'open', target: 'menu' }}");
+      // Pre-sprint attribute order (action before style): re-ejecting an existing block does not reorder its file.
+      expect(source).toMatch(/action=\{\{ type: 'overlay', op: 'close' \}\}\s+style=/);
     }
     const out = html(loadEjected(printEjectedBlockTsx(overlaySpec({}))), { name: 'lien-he', title: 'T' });
     expect(out).toContain('aria-labelledby="lien-he-title"');
@@ -485,6 +514,72 @@ describe('printEjectedBlockTsx: overlay label heading', () => {
     expect(a).toContain('aria-labelledby="lien-he-title"');
     expect(a.match(/id="lien-he-title"/g)).toHaveLength(1);
     expect(a).toMatch(/<h2 id="lien-he-title"[^>]*>Intro/);
+  });
+});
+
+describe('printEjectedBlockTsx: builder component elements', () => {
+  const locales = [{ _locale: 'en-US' }, { _locale: 'vi-VN' }, { _locale: 'fr-FR', _editor: true }, { _locale: 'en-US', showTab: 'x', menu: 'Menu "q"' }];
+
+  it('every new element, hover, button icons and clickable images render identically', () => {
+    const { source } = same(componentsSpec, locales);
+    for (const tag of ['Dropdown', 'Tooltip', 'Accordion', 'AccordionItem', 'Tabs', 'Carousel', 'Icon', 'Input', 'Textarea', 'Select', 'Combobox', 'Radio', 'Checkbox', 'Switch']) {
+      expect(source).toContain(`<ui.${tag}`);
+    }
+    expect(source).toContain("hover: { color: 'primary', borderColor: '#cfcab9' }");
+    expect(source).toContain('icon="arrow-right" iconPosition="end"');
+    expect(source).toContain('iconOnly');
+  });
+
+  it('the ejected tabs and tooltip react to showIf and locale', () => {
+    const { ejected } = same(componentsSpec, locales);
+    const shown = html(ejected, { _locale: 'en-US', showTab: 'x' });
+    expect(shown).toContain('Beta');
+    expect(html(ejected, { _locale: 'en-US' })).not.toContain('Beta');
+    expect(html(ejected, { _locale: 'vi-VN' })).toContain('Táo');
+  });
+
+  it('carousel collection with a clickable card: same fields and html', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { composed, ejected, source } = same(clickableSpec, [
+      { entries: [entry('a'), entry('b', { subtitle: 'Sub' })] },
+      { entries: [entry('a')], layout: 'carousel-2', _locale: 'fr-FR' },
+      { entries: [] },
+      { entries: [], _editor: true },
+    ]);
+    expect(ejected.fields).toEqual(composed.fields);
+    expect(source).toContain('href={h.href(h.entryUrl(');
+    expect(source).toContain('ariaLabel="Open product"');
+  });
+
+  it('clickable images fall back to the block label; the tooltip describes the first focusable node at run time', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const e = (extra: Record<string, unknown> = {}) => entry('a', extra);
+    const { source, ejected } = same(tooltipSpec, [
+      { entry: e() },
+      { entry: e({ subtitle: 'Sub' }) },
+      { entry: e({ link: '/to', subtitle: 'Sub' }) },
+      { entry: e({ link: '/to', image: null }) },
+      { entry: e({ image: null }), _editor: true },
+      { _editor: true, _locale: 'vi-VN' },
+    ]);
+    expect(source).toContain('.indexOf(true)');
+    expect(html(ejected, { entry: e() })).toContain('aria-describedby');
+    // The unlinked tooltip child has no focusable node: the wrapper takes the focus.
+    expect(html(ejected, { entry: e() })).toContain('tabindex="0"');
+  });
+});
+
+describe('printEjectedBlockTsx: tooltip with a hidden child', () => {
+  const spec = (children: ComposedNode[]): ComposedBlockSpec => ({
+    ...unboundSpec,
+    fields: { badge: { kind: 'text', default: '' } },
+    tree: { el: 'Box', children: [{ el: 'Tooltip', bind: { text: { from: 'const', value: 'Tip' } }, children }] },
+  });
+  it('renders nothing when the child is hidden by showIf, like the renderer', () => {
+    const { ejected } = same(spec([{ el: 'Badge', props: { text: 'Free' }, showIf: { from: 'field', name: 'badge', is: 'present' } }]), [{ badge: 'x' }, { badge: '' }, {}], { ids: 'renamed' });
+    expect(html(ejected, { badge: 'x' })).toContain('tabindex="0"');
+    expect(html(ejected, { badge: '' })).not.toContain('tooltip');
+    expect(html(ejected, { badge: '' })).not.toContain('tabindex');
   });
 });
 

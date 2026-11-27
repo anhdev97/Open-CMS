@@ -1,4 +1,7 @@
+import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
+import { RootPreview } from '../../admin/src/block-builder/Canvas';
+import { CanvasContext } from '../../admin/src/block-builder/context';
 import { describe, expect, it } from 'vitest';
 import {
   PUCK_FORMAT_VERSION,
@@ -250,6 +253,37 @@ describe('buildEditorConfig', () => {
     expect(config.components.Gone).toMatchObject({ fields: {}, permissions: { edit: false, duplicate: false, insert: false, delete: true } });
     expect(Object.values(config.categories ?? {}).flatMap((c) => c.components ?? [])).not.toContain('Gone');
     expect(config.categories?.other).toMatchObject({ visible: false });
+  });
+
+  it('the collection layout field offers carousel-<n> (1-6) only for a carousel binding (spec §1.3)', () => {
+    const strip = (name: string, layout: { kind: 'grid' | 'list' | 'carousel'; columns?: number }) =>
+      defineComposedBlock({
+        id: `blk_${name.toLowerCase()}000000`, name, version: 1, label: { 'en-US': name }, category: 'data', fields: {},
+        binding: { apiId: 'product', mode: 'collection', layout, options: { editorLayout: true } },
+        tree: { el: 'Card', children: [{ el: 'Heading', bind: { text: { from: 'entry', path: 'name' } } }] },
+      } as never);
+    const reg = defineBlocks([strip('Strip', { kind: 'carousel', columns: 4 }), strip('Tiles', { kind: 'grid', columns: 3 }), strip('Rows', { kind: 'list' })]);
+    const config = buildEditorConfig(reg, { locale: 'vi-VN', ...renderers }, []);
+    const values = (name: string) => ((config.components[name]!.fields!.layout as { options: { value: string }[] }).options ?? []).map((o) => o.value);
+    const labels = (name: string) => ((config.components[name]!.fields!.layout as { options: { label: string }[] }).options ?? []).map((o) => o.label);
+    const carousel = [1, 2, 3, 4, 5, 6].map((n) => `carousel-${n}`);
+    expect(values('Strip')).toEqual(['list', 'grid-2', 'grid-3', 'grid-4', 'grid-5', 'grid-6', ...carousel]);
+    expect(labels('Strip')).toContain('Băng chuyền · 4');
+    for (const n of ['Tiles', 'Rows']) for (const v of carousel) expect(values(n)).not.toContain(v);
+    expect(config.components.Strip!.defaultProps).toMatchObject({ layout: 'carousel-4' });
+  });
+
+  it('the block builder canvas lays a carousel collection out as a track (1.25 in view on mobile, columns on desktop)', () => {
+    const canvas = (layout: object) =>
+      renderToString(
+        createElement(CanvasContext.Provider, { value: { binding: { apiId: 'product', mode: 'collection', layout }, repeats: [] } as never }, createElement(RootPreview, null, 'card')),
+      );
+    const html = canvas({ kind: 'carousel', columns: 4 });
+    expect(html).toContain('data-collection-carousel');
+    expect(html).toContain('--ocms-pv:1.25');
+    expect(html).toContain('--ocms-pv-md:2');
+    expect(html).toContain('--ocms-pv-lg:4');
+    expect(canvas({ kind: 'grid', columns: 3 })).not.toContain('data-collection-carousel');
   });
 
   it('works for the core block library (EntryList gets a content type select)', () => {

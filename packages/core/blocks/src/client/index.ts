@@ -3,3 +3,10 @@ export { isOverlayOpen, openOverlay, closeOverlay, toggleOverlay, closeAllOverla
 export { useOverlay } from './useOverlay';
 export { OverlayTrigger } from './OverlayTrigger';
 export { ActionButton } from './ActionButton';
+export { closeAllDropdowns } from './dropdown-store';
+export { Dropdown, type DropdownProps, type DropdownDisplay, type DropdownPlacement } from './Dropdown';
+export { Tabs, type TabsProps, type TabsPanel, type TabsVariant, type TabsAlign } from './Tabs';
+export { Carousel, type CarouselProps } from './Carousel';
+export { Combobox, filterOptions, type ComboboxProps } from './Combobox';
+export { AccordionSingle } from './AccordionSingle';
+export { TooltipBubble, clampShift, type TooltipBubbleProps } from './TooltipBubble';

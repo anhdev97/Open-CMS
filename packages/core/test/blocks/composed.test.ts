@@ -24,6 +24,8 @@ import { composedKind, validateComposedSpec, validateTheme } from '@opencloudcms
 import { loadComposedBlocks, loadConfig, loadTheme, printComposedBlockFile, printThemeFile } from '@opencloudcms/codegen';
 import { readEntryImage, readEntryMoney } from '../../blocks/src/composed/values';
 import { GRID_N } from '../../blocks/src/ui/tokens';
+import { layoutValue } from '../../blocks/src/composed/render';
+import { collectionPerView } from '../../blocks/src/composed/helpers';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -224,6 +226,37 @@ describe('defineComposedBlock: render', () => {
     expect(list).not.toContain(GRID_N[4]);
     expect(list).toContain('flex-col');
     expect(render(def, { entries: [product('a')], layout: 'grid-2' })).toContain(GRID_N[2]);
+  });
+
+  it('collection carousel layout: entries in a carousel track (1.25 per view on mobile, columns on desktop)', () => {
+    const def = defineComposedBlock(productGrid({ layout: { kind: 'carousel', columns: 4 } }, 'Strip'));
+    const out = render(def, { entries: [product('a'), product('b'), product('c'), product('d'), product('e')] });
+    expect(out).toContain('aria-roledescription="carousel"');
+    expect(out).toContain('data-ocms-carousel-track');
+    expect(out).toContain('--ocms-pv:1.25;--ocms-pv-md:2;--ocms-pv-lg:4');
+    for (const id of ['a', 'b', 'c', 'd', 'e']) expect(out).toContain(`Name ${id}`);
+    expect(out.match(/aria-roledescription="slide"/g)).toHaveLength(5);
+    expect(out).not.toContain(GRID_N[4]);
+    expect(layoutValue({ kind: 'carousel', columns: 4 })).toBe('carousel-4');
+    expect(collectionPerView(1)).toEqual({ base: 1, md: 1, lg: 1 });
+    expect(collectionPerView(6)).toEqual({ base: 1.25, md: 3, lg: 6 });
+  });
+
+  it('collection layout field: carousel options only for a carousel spec; stored grid-3 / list render as before', () => {
+    const grid = defineComposedBlock(productGrid({ options: { editorLayout: true } }));
+    const values = (d: typeof grid) => (d.fields.layout as { options: { value: string }[] }).options.map((o) => o.value);
+    expect(values(grid)).toEqual(['list', 'grid-2', 'grid-3', 'grid-4', 'grid-5', 'grid-6']);
+    expect(render(grid, { entries: [product('a')], layout: 'grid-3' })).toContain(GRID_N[3]);
+    expect(render(grid, { entries: [product('a')], layout: 'list' })).toContain('flex-col');
+    // A stored carousel value on a grid spec is not one of its options, but still renders as a carousel.
+    expect(render(grid, { entries: [product('a')], layout: 'carousel-2' })).toContain('aria-roledescription="carousel"');
+
+    const strip = defineComposedBlock(productGrid({ layout: { kind: 'carousel', columns: 3 }, options: { editorLayout: true } }, 'Strip2'));
+    expect(values(strip)).toEqual(['list', 'grid-2', 'grid-3', 'grid-4', 'grid-5', 'grid-6', 'carousel-1', 'carousel-2', 'carousel-3', 'carousel-4', 'carousel-5', 'carousel-6']);
+    expect(strip.fields.layout).toMatchObject({ default: 'carousel-3' });
+    expect(render(strip, { entries: [product('a')], layout: 'grid-3' })).toContain(GRID_N[3]);
+    expect(render(strip, { entries: [product('a')] })).toContain('--ocms-pv-lg:3');
+    expect(render(strip, { entries: [product('a')], layout: 'carousel-5' })).toContain('--ocms-pv-lg:5');
   });
 
   it('unbound: manual field values and const, showIf present/absent', () => {
@@ -688,8 +721,8 @@ describe('defineComposedBlock: style', () => {
 // Block Builder files and a theme. Every file must validate, render, and survive a builder/Theme save unchanged.
 describe('examples/my-store storefront', () => {
   const root = path.resolve(__dirname, '../../../../examples/my-store');
-  const STORE = ['StoreHeader', 'StoreHero', 'SectionHead', 'StoryBand', 'StoreFooter', 'StoreFrame', 'ContactModal', 'MobileMenu'];
-  const ALL = [...STORE, 'FeaturedProducts'];
+  const STORE = ['StoreHeader', 'StoreHero', 'SectionHead', 'StoryBand', 'StoreFooter', 'StoreFrame', 'ContactModal', 'MobileMenu', 'HomeBanner', 'Faq'];
+  const ALL = [...STORE, 'FeaturedProducts', 'ProductTabs', 'ProductStrip'];
   const load = async () => {
     const config = await loadConfig(root);
     return { config, ...(await loadComposedBlocks(config)) };
@@ -728,14 +761,16 @@ describe('examples/my-store storefront', () => {
   it('StoreHeader and StoreHero: base (mobile) and md layouts', async () => {
     const header = await renderStore('StoreHeader');
     // One row at every width; the nav links are hidden on mobile (the ☰ drawer holds them).
-    expect(header).toContain('flex-row');
-    expect(header).not.toContain('flex-col');
+    expect(header).toMatch(/^<div class="flex flex-row/);
+    // The only column is the Shop dropdown panel (its three links).
+    expect(header.match(/flex-col/g)).toHaveLength(1);
+    expect(header).toMatch(/role="group"[^>]*><div class="flex flex-col/);
     expect(header).toContain('hidden md:flex');
     expect(header).toContain('justify-between');
     expect(header).toContain('--ocms-minh:76px');
     expect(header).toContain('--ocms-pl:5%');
     expect(header).toContain('--ocms-bc:var(--ocms-color-line)');
-    expect(header).toContain('>my-store<');
+    expect(header).toMatch(/<a [^>]*href="\/"[^>]*><img [^>]*alt="my-store"/);
     expect(header).toContain('href="/shop"');
 
     const hero = await renderStore('StoreHero');
@@ -822,6 +857,120 @@ describe('examples/my-store storefront', () => {
     expect(out).toContain('☰');
     const footer = await buttons('StoreFooter');
     expect(footer.some((b) => isEqual(b.props?.action, { type: 'overlay', op: 'open', target: 'lien-he' }))).toBe(true);
+  });
+
+  // Builder components (spec 2026-11-26): the two-level nav, the contact form layout, the banner carousel, the FAQ,
+  // the product tabs with a tooltip badge and the clickable product cards.
+  const SHOP_LINKS = ['/shop/ao', '/shop/quan', '/shop/phu-kien'];
+  const one = (n: ComposedBlockSpec['tree'], el: string) => nodes(n).filter((x) => x.el === el);
+
+  it('StoreHeader: the logo is an Image linking to / with the brand as alt; nav = Buttons + a Shop Dropdown with hover colors', async () => {
+    const s = await spec('StoreHeader');
+    const [logo] = one(s.tree, 'Image');
+    expect(logo.bind).toMatchObject({ href: { from: 'const', value: '/' }, alt: { from: 'field', name: 'brand' } });
+    const [shop] = one(s.tree, 'Dropdown');
+    expect(shop.props).toMatchObject({ openOn: 'hover', display: { base: 'popover' }, chevron: true });
+    expect(shop.bind).toMatchObject({ label: { from: 'field', name: 'nav2Label' }, href: { from: 'field', name: 'nav2Link' } });
+    const panel = one(shop, 'Button');
+    expect(panel).toHaveLength(3);
+    const navButtons = one(s.tree, 'Button').filter((b) => b.props?.variant === 'link');
+    expect(navButtons.length).toBeGreaterThanOrEqual(5);
+    for (const b of navButtons) expect(b.style?.hover?.color, JSON.stringify(b.bind)).toBeDefined();
+    const out = await renderStore('StoreHeader');
+    expect(out).toContain('data-ocms-dropdown');
+    expect(out).toMatch(/role="group"/);
+    for (const href of ['/', '/shop', '/about', ...SHOP_LINKS]) expect(out).toContain(`href="${href}"`);
+    expect(out).toContain('hover:text-(--ocms-hover-fg)');
+    expect(out).toContain('>Tops<');
+  });
+
+  it('MobileMenu: the same menu, the Shop Dropdown inline (opens in the drawer on tap)', async () => {
+    const s = await spec('MobileMenu');
+    const [shop] = one(s.tree, 'Dropdown');
+    expect(shop.props).toMatchObject({ openOn: 'click', display: { base: 'inline' }, chevron: true });
+    expect(one(shop, 'Button')).toHaveLength(3);
+    const out = render(defineComposedBlock(s), { ...defaults(s), name: 'menu-mobile' });
+    for (const href of ['/', '/shop', '/about', ...SHOP_LINKS]) expect(out).toContain(`href="${href}"`);
+    expect(out).toContain('data-ocms-dropdown');
+  });
+
+  it('ContactModal: a contact form layout (name, email, tel, topic, message, newsletter, Send) that does not submit', async () => {
+    const s = await spec('ContactModal');
+    const controls = nodes(s.tree).filter((n) => ['Input', 'Select', 'Textarea', 'Checkbox'].includes(n.el));
+    expect(controls.map((n) => [n.el, n.props?.name, n.props?.type])).toEqual([
+      ['Input', 'name', 'text'],
+      ['Input', 'email', 'email'],
+      ['Input', 'phone', 'tel'],
+      ['Select', 'topic', undefined],
+      ['Textarea', 'message', undefined],
+      ['Checkbox', 'newsletter', undefined],
+    ]);
+    const send = (await buttons('ContactModal')).find((b) => b.bind?.label && 'name' in b.bind.label && b.bind.label.name === 'sendLabel');
+    expect(send).toBeDefined();
+    expect(send!.props?.action).toBeUndefined();
+    expect(send!.bind?.href).toBeUndefined();
+    // Inert (layout only): no hover style, so it does not look clickable.
+    expect(send!.style?.hover).toBeUndefined();
+    const out = render(defineComposedBlock(s), { ...defaults(s), name: 'lien-he', _locale: 'vi-VN' });
+    expect(out).toContain('name="name"');
+    expect(out).toMatch(/type="email"[^>]*name="email"|name="email"[^>]*type="email"/);
+    expect(out).toMatch(/type="tel"/);
+    expect(out).toMatch(/<select[^>]*name="topic"/);
+    expect(out).toMatch(/<textarea[^>]*name="message"/);
+    expect(out).toMatch(/type="checkbox"[^>]*name="newsletter"|name="newsletter"[^>]*type="checkbox"/);
+    expect(out).toContain('Đơn hàng');
+    expect(out).not.toContain('<form');
+  });
+
+  it('HomeBanner: a Carousel of 3 slides with autoplay; all slides in the server HTML', async () => {
+    const s = await spec('HomeBanner');
+    const [carousel] = one(s.tree, 'Carousel');
+    expect(carousel.props).toMatchObject({ perView: { base: 1 }, arrows: true, dots: true, autoplay: 5 });
+    expect(carousel.children).toHaveLength(3);
+    const out = await renderStore('HomeBanner');
+    expect(out).toContain('aria-roledescription="carousel"');
+    expect(out.match(/aria-roledescription="slide"/g)).toHaveLength(3);
+    expect(out.match(/<h2/g)).toHaveLength(3);
+  });
+
+  it('Faq: a heading and an Accordion of 4 items rendered as <details>', async () => {
+    const s = await spec('Faq');
+    const [acc] = one(s.tree, 'Accordion');
+    expect(acc.children?.map((c) => c.el)).toEqual(['AccordionItem', 'AccordionItem', 'AccordionItem', 'AccordionItem']);
+    const out = await renderStore('Faq');
+    expect(out.match(/<details/g)).toHaveLength(4);
+    expect(out.match(/<summary/g)).toHaveLength(4);
+    expect(out).toContain('<h2');
+  });
+
+  it('ProductTabs: one product with a tooltip on its badge and Description / Specs / Shipping tabs', async () => {
+    const s = await spec('ProductTabs');
+    expect(s.binding).toMatchObject({ apiId: 'product', mode: 'single' });
+    const [tip] = one(s.tree, 'Tooltip');
+    expect(tip.children?.map((c) => c.el)).toEqual(['Badge']);
+    const [tabs] = one(s.tree, 'Tabs');
+    expect(tabs.children).toHaveLength(3);
+    const entry = { documentId: 'p1', name: 'Linen shirt', slug: 'linen-shirt', price: { amount: 390000, currency: 'VND' }, description: '<p>Soft linen.</p>' };
+    const out = render(defineComposedBlock(s), { ...defaults(s), entry });
+    expect(out).toContain('role="tablist"');
+    expect(out.match(/role="tab"/g)).toHaveLength(3);
+    expect(out.match(/role="tabpanel"/g)).toHaveLength(3);
+    for (const label of ['Description', 'Specs', 'Shipping']) expect(out).toContain(`>${label}<`);
+    expect(out).toContain('role="tooltip"');
+    expect(out).toMatch(/tabindex="0"[^>]*aria-describedby|aria-describedby="[^"]+"[^>]*tabindex="0"/);
+    expect(out).toContain('Soft linen.');
+  });
+
+  it('ProductStrip: a carousel collection of clickable product cards linking to the entry URL', async () => {
+    const s = await spec('ProductStrip');
+    expect(s.binding).toMatchObject({ apiId: 'product', mode: 'collection', layout: { kind: 'carousel', columns: 3 }, urlPattern: '/products/{slug}' });
+    expect(s.tree.el).toBe('Card');
+    expect(s.tree.bind?.href).toEqual({ from: 'entryUrl' });
+    const product = (n: number, slug: string) => ({ documentId: `p${n}`, name: slug, slug, price: { amount: 1000, currency: 'VND' }, images: { id: `a${n}`, url: `/media/p${n}.webp`, alt: '' } });
+    const out = render(defineComposedBlock(s), { entries: [product(1, 'linen-shirt'), product(2, 'canvas-tote')] });
+    expect(out).toContain('aria-roledescription="carousel"');
+    expect(out).toMatch(/<a [^>]*href="\/products\/linen-shirt"/);
+    expect(out).toMatch(/<a [^>]*href="\/products\/canvas-tote"/);
   });
 
   it('src/theme.ts: the three palettes of the mockup, valid, printed exactly as the Theme screen writes it', async () => {
@@ -979,5 +1128,21 @@ describe('layout and overlay blocks, button actions', () => {
     const out = render(defineComposedBlock(base({ tree: { el: 'Box', props: { anchorId: 'gioi-thieu' }, children: [{ el: 'Heading', props: { text: 'Hi', anchorId: 'h1' } }] } })), {});
     expect(out).toMatch(/^<div id="gioi-thieu"/);
     expect(out).toContain('<h2 id="h1"');
+  });
+});
+
+describe('composedHelpers: options and blockLabel (shared with ejected blocks)', () => {
+  it('options localizes labels and tolerates non-arrays', async () => {
+    const { composedHelpers: h } = await import('../../blocks/src/composed/helpers');
+    const o = [{ value: 'a', label: { 'en-US': 'Apple', 'vi-VN': 'Táo' } }, { value: 'b', label: 'Plain' }];
+    expect(h.options(o, 'vi-VN')).toEqual([{ value: 'a', label: 'Táo' }, { value: 'b', label: 'Plain' }]);
+    expect(h.options(o, 'fr-FR')[0].label).toBe('Apple');
+    expect(h.options(undefined, 'en-US')).toEqual([]);
+  });
+
+  it('blockLabel falls back to the block name', async () => {
+    const { composedHelpers: h } = await import('../../blocks/src/composed/helpers');
+    expect(h.blockLabel({ 'en-US': 'Strip' }, 'Strip2', 'en-US')).toBe('Strip');
+    expect(h.blockLabel({}, 'Strip2', 'en-US')).toBe('Strip2');
   });
 });

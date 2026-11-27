@@ -1,15 +1,16 @@
 // Isomorphic content primitives. Rich text only through RichTextHtml (sanitized); numbers/dates via Intl.
-import { createElement, isValidElement } from 'react';
+import { createElement, isValidElement, type ReactNode } from 'react';
 import { validateButtonAction, type ButtonAction, type NodeStyle, type Responsive } from '@opencloudcms/schema';
 import { ActionButton } from '../client/ActionButton';
 import { safeHref } from './href';
 import type { ColorToken, SpacingToken } from '../types';
 import { RichTextHtml } from '../richtext-render';
 import {
-  ALIGN, BADGE_VARIANT, BUTTON_BASE, BUTTON_SIZE, BUTTON_VARIANT, BUTTON_VARIANT_STYLED_BG, H, HEADING, IMAGE_ASPECT, OBJECT_FIT, RATIO, TEXT_COLOR, TEXT_SIZE, cn,
+  ALIGN, BADGE_VARIANT, BUTTON_BASE, BUTTON_ICON_SIZE, BUTTON_SIZE, CLICKABLE, CLICKABLE_BUTTON, BUTTON_VARIANT, BUTTON_VARIANT_STYLED_BG, H, HEADING, IMAGE_ASPECT, OBJECT_FIT, RATIO, TEXT_COLOR, TEXT_SIZE, cn,
   type BadgeVariant, type ButtonSize, type ButtonVariant, type ImageAspect,
 } from './tokens';
 import { bpClasses, setsBackground, styleAttr, styleProps } from './style';
+import { ICON_COMPONENTS, Icon } from './icon';
 
 type Styled = { style?: NodeStyle; /** Element id (scroll target, `aria-labelledby`). */ id?: string };
 
@@ -37,37 +38,76 @@ type ImageProps = Styled & {
   fit?: 'cover' | 'contain';
   /** Responsive aspect ratio; takes over from `ratio` when it yields a class. */
   aspect?: Responsive<ImageAspect>;
+  /** Makes the image a link (`<a>`); `action` wins over it. */
+  href?: string | null;
+  /** Makes the image a `<button type="button">` running the action. */
+  action?: ButtonAction | null;
+  /** `aria-describedby` of the link or button (a Tooltip around a clickable image). */
+  describedBy?: string;
 };
 
 /** A style `height` (e.g. `100%`, to fill a column) or `width` replaces `h-auto` / `w-full` (`cn` drops them); `fit` sets object-fit. */
-export function Image({ src, alt, ratio, rounded, fit, aspect, style, id }: ImageProps) {
+export function Image({ src, alt, ratio, rounded, fit, aspect, style, id, href, action, describedBy }: ImageProps) {
   if (!src) return null;
   const sp = styleProps(style, 'block');
   const asp = aspect === undefined ? [] : bpClasses<ImageAspect>(aspect, IMAGE_ASPECT);
   const cls = cn('w-full', OBJECT_FIT[fit as 'cover'] ?? OBJECT_FIT.cover, asp.length ? asp : RATIO[ratio as 'auto'] ?? RATIO.auto, rounded ? 'rounded-xl' : undefined, sp.className);
-  return <img id={id} src={src} alt={alt ?? ''} loading="lazy" className={cls} style={styleAttr(sp)} />;
+  const act = validAction(action);
+  const safe = act ? null : safeHref(href);
+  if (!act && !safe) return <img id={id} src={src} alt={alt ?? ''} loading="lazy" className={cls} style={styleAttr(sp)} />;
+  // Clickable: the link/button is the laid-out element (it takes the id and every style class and variable: span,
+  // width, height, margin, hidden, ...); the image fills it and keeps object-fit, aspect and rounding.
+  const fill = cn('w-full', OBJECT_FIT[fit as 'cover'] ?? OBJECT_FIT.cover, asp.length ? asp : RATIO[ratio as 'auto'] ?? RATIO.auto, rounded ? 'rounded-xl' : undefined, setsHeight(sp) ? 'h-full' : undefined);
+  const img = <img src={src} alt={alt ?? ''} loading="lazy" className={fill} />;
+  const wrap = (button: boolean) => cn('block overflow-hidden', CLICKABLE, button ? CLICKABLE_BUTTON : undefined, rounded ? 'rounded-xl' : undefined, sp.className);
+  if (act) return <ActionButton action={act} id={id} className={wrap(true)} style={styleAttr(sp)} aria-describedby={describedBy}>{img}</ActionButton>;
+  return <a id={id} href={safe!} className={wrap(false)} style={styleAttr(sp)} aria-describedby={describedBy}>{img}</a>;
 }
+
+/** Whether a style sets a height at any breakpoint. */
+const setsHeight = (sp: { style: object }) => Object.keys(sp.style).some((k) => /^--ocms-h(-md|-lg)?$/.test(k));
 
 /** `action` when it is a valid `ButtonAction`, else undefined (the button stays a link). */
 export function validAction(action: unknown): ButtonAction | undefined {
   return action !== undefined && action !== null && validateButtonAction(action, []).length === 0 ? (action as ButtonAction) : undefined;
 }
 
+type IconPosition = 'start' | 'end';
+
 /**
  * A link button; with a valid `action` a `<button type="button">` (client `ActionButton`) with the same classes and
- * style that runs the action instead (`href` is ignored).
+ * style that runs the action instead (`href` is ignored). `icon` adds a curated icon before (or, with `iconPosition:
+ * 'end'`, after) the label; `iconOnly` shows the icon alone and makes the label the `aria-label`.
  */
 export function Button({
-  label, href, variant, size, style, id, action,
-}: Styled & { label: string; href: string | null | undefined; variant?: ButtonVariant; size?: ButtonSize; action?: ButtonAction | null }) {
+  label, href, variant, size, style, id, action, icon, iconPosition, iconOnly, describedBy,
+}: Styled & {
+  label: string;
+  href: string | null | undefined;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  action?: ButtonAction | null;
+  icon?: string;
+  iconPosition?: IconPosition;
+  iconOnly?: boolean;
+  /** `aria-describedby` (a Tooltip around the button). */
+  describedBy?: string;
+}) {
   const sp = styleProps(style, 'inline-flex');
   const variants = setsBackground(sp) ? BUTTON_VARIANT_STYLED_BG : BUTTON_VARIANT;
-  const cls = cn(BUTTON_BASE, variants[variant as ButtonVariant] ?? variants.default, BUTTON_SIZE[size as ButtonSize] ?? BUTTON_SIZE.default, sp.className);
+  const glyph = typeof icon === 'string' && Object.hasOwn(ICON_COMPONENTS, icon) ? <Icon name={icon} size="sm" /> : null;
+  const only = !!glyph && iconOnly === true;
+  const sizes = only ? BUTTON_ICON_SIZE : BUTTON_SIZE;
+  const cls = cn(BUTTON_BASE, variants[variant as ButtonVariant] ?? variants.default, sizes[size as ButtonSize] ?? sizes.default, sp.className);
   const st = styleAttr(sp);
+  const aria = only ? label : undefined;
+  const content: ReactNode = !glyph ? label : only ? glyph : iconPosition === 'end' ? <>{label}{glyph}</> : <>{glyph}{label}</>;
   const act = validAction(action);
-  if (act) return <ActionButton action={act} id={id} className={cls} style={st}>{label}</ActionButton>;
+  if (act) return <ActionButton action={act} id={id} className={cls} style={st} aria-label={aria} aria-describedby={describedBy}>{content}</ActionButton>;
   const safe = safeHref(href);
-  return safe ? <a id={id} data-slot="button" href={safe} className={cls} style={st}>{label}</a> : <span id={id} data-slot="button" className={cls} style={st}>{label}</span>;
+  return safe
+    ? <a id={id} data-slot="button" href={safe} className={cls} style={st} aria-label={aria} aria-describedby={describedBy}>{content}</a>
+    : <span id={id} data-slot="button" className={cls} style={st} aria-label={aria}>{content}</span>;
 }
 
 export function Badge({ text, variant, style, id }: Styled & { text: string; variant?: BadgeVariant }) {

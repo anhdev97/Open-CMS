@@ -33,22 +33,51 @@ export function bindableTypes(types: readonly ContentTypeDefinition[]): ContentT
 export const ENTRY_PROP_KINDS: Partial<Record<ComposedElement, Record<string, readonly FieldKind[]>>> = {
   Heading: { text: TEXT },
   Text: { text: TEXT, html: ['richText'] },
-  Image: { src: ['asset', 'url'], alt: [...TEXT, 'asset'] },
   Button: { label: TEXT, href: ['url'] },
   Badge: { text: TEXT },
   Price: { value: ['number', 'money'] },
   Date: { value: ['date', 'datetime'] },
+  // Builder component elements (spec §1 table) and the clickable Image/Box/Card `href`.
+  Image: { src: ['asset', 'url'], alt: [...TEXT, 'asset'], href: ['url'] },
+  Box: { href: ['url'] },
+  Card: { href: ['url'] },
+  Dropdown: { label: TEXT, href: ['url'] },
+  Tooltip: { text: TEXT },
+  AccordionItem: { title: TEXT },
+  TabPanel: { label: TEXT },
+  Icon: { label: TEXT },
+  Input: { label: TEXT, placeholder: TEXT, help: TEXT },
+  Textarea: { label: TEXT, placeholder: TEXT, help: TEXT },
+  Select: { label: TEXT, placeholder: TEXT, help: TEXT },
+  Combobox: { label: TEXT, placeholder: TEXT, help: TEXT },
+  Radio: { label: TEXT, help: TEXT },
+  Checkbox: { label: TEXT, help: TEXT },
+  Switch: { label: TEXT, help: TEXT },
 };
 
 /** Manual (block) field kinds each bindable element prop accepts. */
 export const MANUAL_PROP_KINDS: Partial<Record<ComposedElement, Record<string, readonly ComposedFieldKind[]>>> = {
   Heading: { text: ['text', 'longText', 'select'] },
   Text: { text: ['text', 'longText', 'select'], html: ['richText'] },
-  Image: { src: ['image'], alt: ['text', 'longText'] },
   Button: { label: ['text', 'select'], href: ['link'] },
   Badge: { text: ['text', 'select'] },
   Price: { value: ['number'] },
   Date: { value: [] },
+  Image: { src: ['image'], alt: ['text', 'longText'], href: ['link'] },
+  Box: { href: ['link'] },
+  Card: { href: ['link'] },
+  Dropdown: { label: ['text', 'select'], href: ['link'] },
+  Tooltip: { text: ['text', 'longText'] },
+  AccordionItem: { title: ['text', 'select'] },
+  TabPanel: { label: ['text', 'select'] },
+  Icon: { label: ['text'] },
+  Input: { label: ['text'], placeholder: ['text'], help: ['text', 'longText'] },
+  Textarea: { label: ['text'], placeholder: ['text'], help: ['text', 'longText'] },
+  Select: { label: ['text'], placeholder: ['text'], help: ['text', 'longText'] },
+  Combobox: { label: ['text'], placeholder: ['text'], help: ['text', 'longText'] },
+  Radio: { label: ['text'], help: ['text', 'longText'] },
+  Checkbox: { label: ['text'], help: ['text', 'longText'] },
+  Switch: { label: ['text'], help: ['text', 'longText'] },
 };
 
 /** The manual field kind a new field gets when created from a prop's source picker. */
@@ -103,7 +132,8 @@ export function sourceOptions(
   const manual = Object.entries(ctx.fields)
     .filter(([, f]) => mk.includes(f.kind))
     .map(([n]) => n);
-  const entryUrl = !!ctx.type && target.el === 'Button' && target.prop === 'href' && !!ctx.urlPattern;
+  // "Link to the entry's page": any bindable href (Button, Dropdown, clickable Image/Box/Card).
+  const entryUrl = !!ctx.type && target.prop === 'href' && !!ctx.urlPattern;
   return { entry, manual, entryUrl };
 }
 
@@ -235,7 +265,10 @@ export function cleanBinding(b: ComposedBinding): ComposedBinding {
   if (b.filter?.length) out.filter = b.filter.map((f) => ({ field: f.field, value: f.value }));
   if (b.sort?.field) out.sort = { field: b.sort.field, direction: b.sort.direction };
   if (b.limit !== undefined) out.limit = b.limit;
-  if (b.layout) out.layout = b.layout.kind === 'list' ? { kind: 'list' } : { kind: 'grid', ...(b.layout.columns ? { columns: b.layout.columns } : {}) };
+  if (b.layout) {
+    const kind = b.layout.kind === 'carousel' ? 'carousel' : 'grid';
+    out.layout = b.layout.kind === 'list' ? { kind: 'list' } : { kind, ...(b.layout.columns ? { columns: b.layout.columns } : {}) };
+  }
   const o = b.options ?? {};
   const options: NonNullable<ComposedBinding['options']> = {};
   for (const k of ['editorFilter', 'editorSort', 'editorLimit', 'editorLayout'] as const) if (o[k] === true) options[k] = true;

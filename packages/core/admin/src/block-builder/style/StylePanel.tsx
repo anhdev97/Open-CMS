@@ -3,15 +3,15 @@
 // The style of one element (`ComposedNode.style`), in collapsible sections chosen by `STYLE_SECTIONS` (spec table).
 // `StyleField` is its Puck custom field: it shows a node's old padding as style until the first change migrates it,
 // and edits a Box/Card's semantic `background` prop in the Colors section.
-import { EyeOffIcon } from 'lucide-react';
-import { useId, type ReactNode } from 'react';
+import { EyeIcon, EyeOffIcon } from 'lucide-react';
+import { useContext, useId, type ReactNode } from 'react';
 import { createUsePuck, useGetPuck, type CustomFieldRender } from '@puckeditor/core';
 import {
   BORDER_SIDES, BORDER_WIDTH_TOKENS, BREAKPOINTS, RADIUS_TOKENS, STYLE_COLOR_TOKENS,
-  type ComposedElement, type NodeStyle, type Responsive, type Sides, type ThemeDefinition,
+  type ComposedElement, type HoverStyle, type NodeStyle, type Responsive, type Sides, type ThemeDefinition,
 } from '@opencloudcms/schema';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { useBuilder } from '../context';
+import { HoverPreview, useBuilder } from '../context';
 import { STYLE_SECTIONS, type StyleSection } from '../element-config';
 import { ColorField, LengthField, ResponsiveSelect, SidesField, Swatch } from './fields';
 import { hasLegacyProps, migrateLegacyProps } from './migrate';
@@ -43,6 +43,8 @@ export interface StylePanelProps {
   legacyBackground?: { value: string | undefined; onChange: (v: string | undefined) => void };
   /** Overlay props choosing its size fields: width and max width (modal), width (left/right drawer), height (top/bottom). */
   overlay?: { variant?: unknown; side?: unknown };
+  /** "Show hover" of the On hover section: whether the canvas draws this element's hover colours. */
+  hoverPreview?: { on: boolean; onToggle: () => void };
 }
 
 function Section({ id, children }: { id: StyleSection; children: ReactNode }) {
@@ -97,7 +99,10 @@ function Toggle({ on, onClick, children, readOnly, ...data }: { on: boolean; onC
   );
 }
 
-export function StylePanel({ el, value, onChange, theme, parent, readOnly, legacyBackground, overlay }: StylePanelProps) {
+const HOVER_KEYS = ['background', 'color', 'borderColor'] as const;
+const HOVER_LABEL: Record<(typeof HOVER_KEYS)[number], string> = { background: 'background', color: 'color', borderColor: 'borderColor' };
+
+export function StylePanel({ el, value, onChange, theme, parent, readOnly, legacyBackground, overlay, hoverPreview }: StylePanelProps) {
   const s = value ?? {};
   const put = <K extends keyof NodeStyle>(key: K, v: NodeStyle[K] | undefined) => {
     const next: NodeStyle = { ...s };
@@ -159,6 +164,32 @@ export function StylePanel({ el, value, onChange, theme, parent, readOnly, legac
           </>
         )}
         <LengthField label={f('radius')} value={s.radius} onChange={on('radius')} responsive={false} tokens={RADIUS_TOKENS} units={['px']} validate={pxOr(RADIUS_TOKENS)} {...common} />
+      </>
+    ),
+    hover: () => (
+      <>
+        {HOVER_KEYS.map((k) => (
+          <div key={k} data-hover={k}>
+            <ColorField
+              label={f(HOVER_LABEL[k])}
+              value={s.hover?.[k]}
+              onChange={(v) => {
+                const next: HoverStyle = { ...(s.hover ?? {}) };
+                if (v === undefined) delete next[k];
+                else next[k] = v;
+                put('hover', Object.keys(next).length ? next : undefined);
+              }}
+              theme={theme}
+              {...common}
+            />
+          </div>
+        ))}
+        {hoverPreview && (
+          <Toggle data-show-hover="" on={hoverPreview.on} onClick={hoverPreview.onToggle}>
+            <EyeIcon aria-hidden="true" className="size-3.5" />
+            <span title={styleText('showHoverHint')}>{styleText('showHover')}</span>
+          </Toggle>
+        )}
       </>
     ),
     textColor: () => <ColorField label={f('color')} value={s.color} onChange={on('color')} theme={theme} {...common} />,
@@ -230,6 +261,7 @@ export const StyleField: CustomFieldRender<unknown> = ({ field, value, onChange,
   const m = useBuilder();
   const { theme } = useTheme();
   const getPuck = useGetPuck();
+  const hover = useContext(HoverPreview);
   const item = usePuck((s) => s.selectedItem);
   const parent = usePuck((s) => (s.selectedItem ? s.getParentById(String(s.selectedItem.props.id))?.type : undefined));
   const props = (item?.props ?? {}) as Record<string, unknown>;
@@ -258,6 +290,11 @@ export const StyleField: CustomFieldRender<unknown> = ({ field, value, onChange,
         readOnly={readOnly || m.readOnly}
         legacyBackground={el === 'Box' || el === 'Card' ? { value: props.background as string | undefined, onChange: (v) => writeProp('background', v) } : undefined}
         overlay={el === 'Overlay' ? { variant: props.variant, side: props.side } : undefined}
+        hoverPreview={
+          STYLE_SECTIONS[el].includes('hover') && item
+            ? { on: hover.id === String(item.props.id), onToggle: () => hover.set(hover.id === String(item.props.id) ? null : String(item.props.id)) }
+            : undefined
+        }
       />
     </fieldset>
   );

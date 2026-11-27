@@ -18,7 +18,8 @@ const q = (s: string) => printLiteral(s);
 const has = (o: object | undefined, k: string) => !!o && Object.prototype.hasOwnProperty.call(o, k);
 
 /** Same as `layoutValue` of the composed renderer. */
-const layoutValue = (l: NonNullable<ComposedBlockSpec['binding']>['layout']) => (l?.kind === 'list' ? 'list' : `grid-${l?.columns ?? 3}`);
+const layoutValue = (l: NonNullable<ComposedBlockSpec['binding']>['layout']) =>
+  l?.kind === 'list' ? 'list' : l?.kind === 'carousel' ? `carousel-${l.columns ?? 3}` : `grid-${l?.columns ?? 3}`;
 
 /** Nodes of the elements `els`, in tree order (depth first). */
 function nodesOf(n: ComposedNode, els: readonly string[], out: ComposedNode[] = []): ComposedNode[] {
@@ -117,6 +118,9 @@ function printFields(spec: ComposedBlockSpec, indent: string): string[] {
         options: [
           { value: 'list', label: L('List', 'Danh sách', 'Liste', 'Daftar') },
           ...[2, 3, 4, 5, 6].map((n) => ({ value: `grid-${n}`, label: L(`Grid · ${n}`, `Lưới · ${n}`, `Grille · ${n}`, `Kisi · ${n}`) })),
+          ...(binding.layout?.kind === 'carousel'
+            ? [1, 2, 3, 4, 5, 6].map((n) => ({ value: `carousel-${n}`, label: L(`Carousel · ${n}`, `Băng chuyền · ${n}`, `Carrousel · ${n}`, `Karosel · ${n}`) }))
+            : []),
         ],
         default: layoutValue(binding.layout),
       };
@@ -154,6 +158,12 @@ interface Gen {
   urlPattern?: string;
   slots: Map<ComposedNode, string>;
   usesLocale: boolean;
+  /** The block label is read (clickable image alt, carousel name): `const blockLabel` is printed. */
+  usesBlockLabel: boolean;
+  /** Counter of the tooltips printed so far (names their `target` and `tip` variables). */
+  tooltips: number;
+  /** Node → expression that gives it `aria-describedby` (the innermost tooltip whose target it may be). */
+  describe: Map<ComposedNode, string>;
   /**
    * Overlay blocks: the headings that may name the dialog (the first one shown wins, as in the renderer). With a single
    * always-shown candidate the ids are static; otherwise a `labelled` index picks one at render time.
@@ -224,6 +234,30 @@ function strings(p: Record<string, unknown>, keys: string[]): string[] {
   return keys.filter((k) => typeof p[k] === 'string' && p[k] !== '').map((k) => attrLit(k, p[k]));
 }
 
+/** The text of a bound/fixed value as a JS expression (`h.text(…)` or a string literal). */
+function textCode(v: Val): string {
+  if ('expr' in v) return `h.text(${v.expr})`;
+  return q(typeof v.lit === 'string' ? v.lit : typeof v.lit === 'number' && Number.isFinite(v.lit) ? String(v.lit) : '');
+}
+
+/** Boolean props as the renderer's `bool`: nothing when unset. */
+const bools = (p: Record<string, unknown>, keys: string[]): string[] => keys.filter((k) => typeof p[k] === 'boolean').map((k) => attrLit(k, p[k]));
+
+/** Expression of the bound `href` of a clickable Image/Box/Card (a fixed `props.href` does not make one clickable). */
+const boundHref = (g: Gen, n: ComposedNode): string | null => (n.bind && has(n.bind, 'href') ? `h.href(${source(g, n.bind.href)})` : null);
+
+const describedAttr = (g: Gen, n: ComposedNode): string[] => {
+  const d = g.describe.get(n);
+  return d ? [attrExpr('describedBy', d)] : [];
+};
+
+/** Attributes that make an Image/Box/Card clickable: bound `href`, `action`, `ariaLabel` (Box/Card) and the tooltip link. */
+function clickAttrs(g: Gen, n: ComposedNode, aria: boolean): string[] {
+  const p = n.props ?? {};
+  const href = boundHref(g, n);
+  return [...(href ? [attrExpr('href', href)] : []), ...(isObj(p.action) ? [attrLit('action', p.action)] : []), ...(aria ? strings(p, ['ariaLabel']) : []), ...describedAttr(g, n)];
+}
+
 function element(tag: string, attrs: string[], children: Out[] | null, indent: string): string {
   const open = `<${tag}${attrs.length ? ' ' + attrs.join(' ') : ''}`;
   if (!children) return `${open} />`;
@@ -236,6 +270,92 @@ function element(tag: string, attrs: string[], children: Out[] | null, indent: s
 /** `id` attribute from `anchorId`, as the renderer's `str(p.anchorId)`. */
 const idAttr = (p: Record<string, unknown>) => (typeof p.anchorId === 'string' && p.anchorId ? [attrLit('id', p.anchorId)] : []);
 
+/** A node that may take the focus a tooltip describes, with the `showIf` chain that must pass for it to render. */
+type FocusCandidate = { node: ComposedNode; conds: NonNullable<ComposedNode['showIf']>[]; test: string };
+
+/** JS test of "this node itself is a link or button", or null when it never is (as the renderer's `focusableSelf`). */
+function focusTest(g: Gen, n: ComposedNode): string | null {
+  const p = n.props ?? {};
+  const action = isObj(p.action);
+  const href = boundHref(g, n);
+  switch (n.el) {
+    case 'Button':
+      return action ? 'true' : `!!ui.safeHref(h.href(${code(val(g, n, 'href'))}))`;
+    case 'Image': {
+      const img = `!!h.image(${[code(val(g, n, 'src')), ...(n.bind?.alt || p.alt !== undefined ? [code(val(g, n, 'alt'))] : [])].join(', ')})`;
+      return action ? img : href ? `${img} && !!${href}` : null;
+    }
+    case 'Box':
+    case 'Card':
+      return action ? 'true' : href ? `!!${href}` : null;
+    default:
+      return null;
+  }
+}
+
+/** Focus candidates of the subtree `n` in depth-first order (the first whose test and conditions pass wins). */
+function focusCandidates(g: Gen, n: ComposedNode, conds: FocusCandidate['conds'] = [], out: FocusCandidate[] = []): FocusCandidate[] {
+  const c = n.showIf ? [...conds, n.showIf] : conds;
+  const test = focusTest(g, n);
+  if (test) out.push({ node: n, conds: c, test });
+  for (const k of n.children ?? []) focusCandidates(g, k, c, out);
+  return out;
+}
+
+/**
+ * Tooltip: the node that takes `aria-describedby` is the first rendered link/button of the child, which depends on the
+ * data, so a `target` index is computed at run time (`indexOf(true)` over the candidates, -1: the wrapper takes the focus).
+ */
+function tooltip(g: Gen, n: ComposedNode, indent: string): Out {
+  const p = n.props ?? {};
+  const child = n.children?.[0];
+  // Same as the renderer: no child, or one hidden by its showIf, renders no tooltip at all.
+  if (!child) return { jsx: false, code: 'null' };
+  const shown = child.showIf ? condition(g, child.showIf) : undefined;
+  const ind = shown ? indent + '  ' : indent;
+  const cands = focusCandidates(g, child);
+  const id = ++g.tooltips;
+  const t = `target${id}`;
+  const tip = `tip${id}`;
+  cands.forEach((c, i) => g.describe.set(c.node, `${t} === ${i} ? ${tip} : undefined`));
+  const inner = ind + (cands.length ? '  ' : '');
+  const content: Out = shown ? body(g, child, inner + '    ') : node(g, child, inner + '    ');
+  const attrs = [...idAttr(p), textAttr('text', val(g, n, 'text')), ...tokens(p, ['side']), cands.length ? attrExpr('focusWrapper', `${t} < 0`) : 'focusWrapper', ...styleAttr(n)];
+  const render = `(${cands.length ? tip : ''}) => ${content.code.includes('\n') ? `(\n${inner}    ${content.code}\n${inner}  )` : content.code}`;
+  const el = element('ui.Tooltip', attrs, [{ jsx: false, code: render }], inner);
+  const tests = cands.map((c) => [...c.conds.map((x) => condition(g, x)), c.test].join(' && '));
+  const out: Out = cands.length ? { jsx: false, code: `((${t}) => (\n${inner}  ${el}\n${inner}))([${tests.join(', ')}].indexOf(true))` } : { jsx: true, code: el };
+  if (!shown) return out;
+  return { jsx: false, code: `${shown} ? (\n${indent}  ${out.code}\n${indent}) : null` };
+}
+
+/** Attributes of a form control from its props, in the renderer's terms. */
+function control(g: Gen, n: ComposedNode): string[] {
+  const p = n.props ?? {};
+  const tx = (keys: string[]) => keys.map((k) => textAttr(k, val(g, n, k)));
+  const opt = () => {
+    g.usesLocale = true;
+    return [attrExpr('options', `h.options(${printLiteral(Array.isArray(p.options) ? p.options : [], '      ')}, locale)`)];
+  };
+  const name = attrLit('name', typeof p.name === 'string' && p.name ? p.name : '');
+  switch (n.el) {
+    case 'Input':
+      return [name, ...tokens(p, ['type']), ...tx(['label', 'placeholder', 'help']), ...bools(p, ['required', 'disabled']), ...strings(p, ['autocomplete'])];
+    case 'Textarea':
+      return [name, ...(typeof p.rows === 'number' ? [attrLit('rows', p.rows)] : []), ...tx(['label', 'placeholder', 'help']), ...bools(p, ['required', 'disabled'])];
+    case 'Select':
+      return [name, ...opt(), ...strings(p, ['defaultValue']), ...tx(['label', 'placeholder', 'help']), ...bools(p, ['required', 'disabled'])];
+    case 'Combobox':
+      return [name, ...opt(), ...strings(p, ['defaultValue']), ...tx(['label', 'placeholder', 'help']), ...bools(p, ['required', 'disabled']), 'locale={locale}'];
+    case 'Radio':
+      return [name, ...opt(), ...strings(p, ['defaultValue']), attrLit('orientation', p.orientation === 'horizontal' ? 'horizontal' : 'vertical'), ...tx(['label', 'help']), ...bools(p, ['required', 'disabled'])];
+    case 'Checkbox':
+      return [name, ...strings(p, ['value']), ...bools(p, ['defaultChecked']), ...tx(['label', 'help']), ...bools(p, ['required', 'disabled'])];
+    default:
+      return [name, ...bools(p, ['defaultChecked']), ...tx(['label', 'help']), ...bools(p, ['disabled'])];
+  }
+}
+
 function body(g: Gen, n: ComposedNode, indent: string): Out {
   const p = n.props ?? {};
   const st = [...idAttr(p), ...styleAttr(n)];
@@ -244,7 +364,7 @@ function body(g: Gen, n: ComposedNode, indent: string): Out {
   // Same props as the composed renderer (composed/render.tsx), in the same order, then `style`.
   switch (n.el) {
     case 'Box':
-      return jsx(element('ui.Box', [...tokens(p, ['padding', 'background']), ...st], kids(), indent));
+      return jsx(element('ui.Box', [...tokens(p, ['padding', 'background']), ...st, ...clickAttrs(g, n, true)], kids(), indent));
     case 'Stack': {
       const direction = isObj(p.direction) ? p.direction : p.direction === 'horizontal' ? 'horizontal' : 'vertical';
       const wrap = typeof p.wrap === 'boolean' ? [attrLit('wrap', p.wrap)] : [];
@@ -255,7 +375,7 @@ function body(g: Gen, n: ComposedNode, indent: string): Out {
     case 'Grid':
       return jsx(element('ui.Grid', [...tokens(p, ['columns', 'gap']), ...st], kids(), indent));
     case 'Card':
-      return jsx(element('ui.Card', [...tokens(p, ['padding', 'background']), ...(p.bordered === false ? ['bordered={false}'] : []), ...st], kids(), indent));
+      return jsx(element('ui.Card', [...tokens(p, ['padding', 'background']), ...(p.bordered === false ? ['bordered={false}'] : []), ...st, ...clickAttrs(g, n, true)], kids(), indent));
     case 'Slot':
     case 'Region':
     case 'PageContent': {
@@ -288,14 +408,80 @@ function body(g: Gen, n: ComposedNode, indent: string): Out {
     case 'Image': {
       const explicitAlt = !!n.bind?.alt || p.alt !== undefined;
       const args = [code(val(g, n, 'src')), ...(explicitAlt ? [code(val(g, n, 'alt'))] : [])];
-      const attrs = ['src={img.src}', 'alt={img.alt}', ...tokens(p, ['ratio']), ...(p.rounded === true ? ['rounded'] : []), ...tokens(p, ['fit', 'aspect']), ...st];
+      // A clickable image is its link's name: a missing alt falls back to the block label.
+      const href = boundHref(g, n);
+      const clickable = isObj(p.action) ? 'true' : href;
+      if (clickable) g.usesBlockLabel = true;
+      const alt = clickable ? `alt={${clickable === 'true' ? '' : `${clickable} && `}!img.alt.trim() ? blockLabel : img.alt}` : 'alt={img.alt}';
+      const attrs = ['src={img.src}', alt, ...tokens(p, ['ratio']), ...(p.rounded === true ? ['rounded'] : []), ...tokens(p, ['fit', 'aspect']), ...st, ...clickAttrs(g, n, false)];
       const img = element('ui.Image', attrs, null, indent);
       return { jsx: false, code: `h.when(h.image(${args.join(', ')}), (img) => ${img})` };
     }
     case 'Button': {
       const action = isObj(p.action) ? [attrLit('action', p.action)] : [];
-      return jsx(element('ui.Button', [textAttr('label', val(g, n, 'label')), attrExpr('href', `h.href(${code(val(g, n, 'href'))})`), ...tokens(p, ['variant', 'size']), ...action, ...st], null, indent));
+      const icon = [...strings(p, ['icon']), ...(p.iconPosition === 'end' ? ['iconPosition="end"'] : []), ...(p.iconOnly === true ? ['iconOnly'] : [])];
+      return jsx(element('ui.Button', [textAttr('label', val(g, n, 'label')), attrExpr('href', `h.href(${code(val(g, n, 'href'))})`), ...tokens(p, ['variant', 'size']), ...action, ...st, ...icon, ...describedAttr(g, n)], null, indent));
     }
+    case 'Icon':
+      return jsx(element('ui.Icon', [...idAttr(p), attrLit('name', typeof p.name === 'string' ? p.name : ''), ...tokens(p, ['size']), textAttr('label', val(g, n, 'label')), ...styleAttr(n)], null, indent));
+    case 'Tooltip':
+      return tooltip(g, n, indent);
+    case 'Accordion':
+      return jsx(element('ui.Accordion', [...idAttr(p), ...(p.single === true ? ['single'] : []), ...(p.defaultOpen === 'first' ? ['defaultOpen="first"'] : []), ...styleAttr(n)], kids(), indent));
+    case 'AccordionItem':
+      return jsx(element('ui.AccordionItem', [...idAttr(p), textAttr('title', val(g, n, 'title'))], kids(), indent));
+    case 'Dropdown': {
+      g.usesLocale = true;
+      const href = boundHref(g, n);
+      const attrs = [
+        ...idAttr(p),
+        textAttr('label', val(g, n, 'label')),
+        ...(href ? [attrExpr('href', href)] : []),
+        attrLit('openOn', p.openOn === 'click' ? 'click' : 'hover'),
+        ...tokens(p, ['placement', 'display', 'triggerVariant']),
+        ...(p.chevron === false ? ['chevron={false}'] : []),
+        'locale={locale}',
+        ...styleAttr(n),
+      ];
+      return jsx(element('ui.Dropdown', attrs, kids(), indent));
+    }
+    case 'Tabs': {
+      const inner = indent + '  ';
+      const panels = (n.children ?? [])
+        .filter((c) => c.el === 'TabPanel')
+        .map((c) => {
+          const content = element('', [], (c.children ?? []).map((k) => node(g, k, inner + '    ')), inner + '    ');
+          const fields = [`label: ${textCode(val(g, c, 'label'))}`, ...(typeof c.props?.anchorId === 'string' && c.props.anchorId ? [`id: ${q(c.props.anchorId)}`] : []), `content: ${content}`];
+          const o = `{ ${fields.join(', ')} }`;
+          return c.showIf ? `...(${condition(g, c.showIf)} ? [${o}] : [])` : o;
+        });
+      const list = panels.length ? `[\n${panels.map((x) => `${inner}  ${x},`).join('\n')}\n${inner}]` : '[]';
+      return jsx(element('ui.Tabs', [...idAttr(p), attrExpr('panels', list), ...tokens(p, ['variant', 'align']), ...styleAttr(n)], null, indent));
+    }
+    case 'Carousel': {
+      g.usesLocale = true;
+      g.usesBlockLabel = true;
+      const attrs = [
+        ...idAttr(p),
+        ...tokens(p, ['perView', 'gap']),
+        ...(p.arrows === false ? ['arrows={false}'] : []),
+        ...(p.dots === false ? ['dots={false}'] : []),
+        ...(p.loop === true ? ['loop'] : []),
+        ...(typeof p.autoplay === 'number' ? [attrLit('autoplay', p.autoplay)] : []),
+        'label={blockLabel}',
+        'locale={locale}',
+        ...styleAttr(n),
+      ];
+      return jsx(element('ui.Carousel', attrs, kids(), indent));
+    }
+    case 'Input':
+    case 'Textarea':
+    case 'Select':
+    case 'Combobox':
+    case 'Radio':
+    case 'Checkbox':
+    case 'Switch':
+      return jsx(element(`ui.${n.el}`, [...idAttr(p), ...control(g, n), ...styleAttr(n)], null, indent));
     case 'Badge':
       return jsx(element('ui.Badge', [textAttr('text', val(g, n, 'text')), ...tokens(p, ['variant']), ...st], null, indent));
     case 'Price': {
@@ -368,7 +554,7 @@ function node(g: Gen, n: ComposedNode, indent: string): Out {
 export function printEjectedBlockTsx(spec: ComposedBlockSpec): string {
   const binding = spec.binding;
   const kind = composedKind(spec);
-  const g: Gen = { bound: !!binding, urlPattern: binding?.urlPattern, slots: slotNames(spec.tree), usesLocale: false };
+  const g: Gen = { bound: !!binding, urlPattern: binding?.urlPattern, slots: slotNames(spec.tree), usesLocale: false, usesBlockLabel: false, tooltips: 0, describe: new Map() };
   let labelledLine: string[] = [];
   if (kind === 'overlay') {
     // Same choice as the renderer: the first Heading whose own and ancestors' showIf pass.
@@ -402,7 +588,8 @@ export function printEjectedBlockTsx(spec: ComposedBlockSpec): string {
     ret = `return h.collection(props, ${cfg}, (entry) => ${treeCode});`;
   }
   const renderLines = [
-    ...(g.usesLocale ? ['    const locale = h.locale(props);'] : []),
+    ...(g.usesLocale || g.usesBlockLabel ? ['    const locale = h.locale(props);'] : []),
+    ...(g.usesBlockLabel ? ['    const blockLabel = h.blockLabel(label, name, locale);'] : []),
     ...(kind === 'overlay' ? [`    const overlay = h.overlayName(props.name, ${q(overlayDefaultName(spec.name))});`] : []),
     ...labelledLine,
     `    ${ret}`,

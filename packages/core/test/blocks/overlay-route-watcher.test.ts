@@ -11,6 +11,12 @@ vi.mock('../../blocks/src/client/overlay-store', async (orig) => ({
   closeAllOverlays: closeAll,
 }));
 
+const closeDropdowns = vi.hoisted(() => vi.fn());
+vi.mock('../../blocks/src/client/dropdown-store', async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  closeAllDropdowns: closeDropdowns,
+}));
+
 import { OverlayRouteWatcher } from '../../blocks/src/next/overlay-route-watcher';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -21,6 +27,7 @@ beforeEach(() => {
   document.body.appendChild(el);
   root = createRoot(el);
   closeAll.mockClear();
+  closeDropdowns.mockClear();
   nav.pathname = '/a';
 });
 let mounted = true;
@@ -47,5 +54,16 @@ describe('OverlayRouteWatcher', () => {
     act(() => root.unmount());
     mounted = false;
     expect(closeAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes every Dropdown too, on pathname change and on unmount', () => {
+    act(() => root.render(createElement(OverlayRouteWatcher)));
+    expect(closeDropdowns).not.toHaveBeenCalled();
+    nav.pathname = '/b';
+    act(() => root.render(createElement(OverlayRouteWatcher)));
+    expect(closeDropdowns).toHaveBeenCalledTimes(1);
+    act(() => root.unmount());
+    mounted = false;
+    expect(closeDropdowns).toHaveBeenCalledTimes(2);
   });
 });

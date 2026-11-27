@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="132" height="32" viewBox="0 0 132 32" role="img" aria-label="my-store">
+  <!-- Placeholder logo of the my-store example: a leaf mark and the wordmark. -->
+  <path d="M6 26C6 14 13 6 26 6c0 13-8 20-20 20Z" fill="#3d462c"/>
+  <path d="M8 24 20 12" stroke="#fbf8ef" stroke-width="2" stroke-linecap="round"/>
+  <text x="34" y="22" font-family="Georgia, 'Times New Roman', serif" font-size="19" fill="#28291e">my-store</text>
+</svg>

@@ -1,13 +1,17 @@
 // Isomorphic layout primitives (no hooks, no browser globals). Unknown token values fall back to the default class.
-import type { ReactNode } from 'react';
-import { isLength, type NodeStyle, type Responsive, type Track } from '@opencloudcms/schema';
+import type { CSSProperties, ReactNode } from 'react';
+import { isLength, validateButtonAction, type ButtonAction, type NodeStyle, type Responsive, type Track } from '@opencloudcms/schema';
+import { ActionButton } from '../client/ActionButton';
+import { safeHref } from './href';
 import type { ColorToken, SpacingToken } from '../types';
 import {
-  BG, COLS, FLEX_WRAP, GAP, GRID_N, P, PY, STACK_ALIGN, STACK_ALIGN_BP, STACK_DIRECTION, STACK_JUSTIFY, STYLE_CLASS, STYLE_SINGLE, cn,
+  BG, CLICKABLE, CLICKABLE_BUTTON, COLS, FLEX_WRAP, GAP, GRID_N, P, PY, STACK_ALIGN, STACK_ALIGN_BP, STACK_DIRECTION, STACK_JUSTIFY, STYLE_CLASS, STYLE_SINGLE, cn,
 } from './tokens';
 import { bpClasses, cssLength, resolveTracks, setsBackground, setsPadding, styleAttr, styleProps, type StyleResult } from './style';
 
 type Children = { children?: ReactNode; /** Element id (scroll target). */ id?: string };
+/** Box and Card as a whole link (`href`) or button (`action`, which wins); `ariaLabel` overrides the text content name. */
+type Clickable = { href?: string | null; action?: ButtonAction | null; ariaLabel?: string; /** `aria-describedby` of the link or button. */ describedBy?: string };
 type Styled = { style?: NodeStyle };
 type Align = 'start' | 'center' | 'end' | 'stretch';
 type Direction = 'vertical' | 'horizontal';
@@ -131,9 +135,26 @@ export const layoutStyle = {
   Card: (p: CardProps) => styleAttr(layout.Card(p)),
 };
 
-export function Box({ children, id, ...p }: BoxProps & Children) {
-  const l = layout.Box(p);
-  return <div id={id} className={l.className} style={styleAttr(l)}>{children}</div>;
+/**
+ * The element of a Box or Card: a `<div>`, or with a safe `href` an `<a>`, or with a valid `action` a `<button
+ * type="button">`, all with the same classes (`display` is the element's own, put first so style `hidden` still wins).
+ */
+function container(
+  l: StyleResult, display: 'block' | 'flex', { href, action, ariaLabel, describedBy }: Clickable, id: string | undefined, children: ReactNode, slot?: string,
+) {
+  const style: CSSProperties | undefined = styleAttr(l);
+  const act = action !== undefined && action !== null && validateButtonAction(action, []).length === 0 ? action : undefined;
+  const safe = act ? null : safeHref(href);
+  const label = typeof ariaLabel === 'string' && ariaLabel.trim() ? ariaLabel : undefined;
+  if (act) {
+    return <ActionButton action={act} id={id} className={cn(display, CLICKABLE_BUTTON, CLICKABLE, l.className)} style={style} aria-label={label} aria-describedby={describedBy}>{children}</ActionButton>;
+  }
+  if (safe) return <a id={id} data-slot={slot} href={safe} aria-label={label} aria-describedby={describedBy} className={cn(display, CLICKABLE, l.className)} style={style}>{children}</a>;
+  return <div id={id} data-slot={slot} className={l.className} style={style}>{children}</div>;
+}
+
+export function Box({ children, id, href, action, ariaLabel, describedBy, ...p }: BoxProps & Children & Clickable) {
+  return container(layout.Box(p), 'block', { href, action, ariaLabel, describedBy }, id, children);
 }
 
 export function Stack({ children, id, ...p }: StackProps & Children) {
@@ -151,11 +172,6 @@ export function Grid({ children, id, ...p }: GridProps & Children) {
   return <div id={id} className={l.className} style={styleAttr(l)}>{children}</div>;
 }
 
-export function Card({ children, id, ...p }: CardProps & Children) {
-  const l = layout.Card(p);
-  return (
-    <div id={id} data-slot="card" className={l.className} style={styleAttr(l)}>
-      {children}
-    </div>
-  );
+export function Card({ children, id, href, action, ariaLabel, describedBy, ...p }: CardProps & Children & Clickable) {
+  return container(layout.Card(p), 'flex', { href, action, ariaLabel, describedBy }, id, children, 'card');
 }

@@ -362,6 +362,16 @@ describe('buildSpec', () => {
       options: { editorSort: true },
     });
   });
+
+  it('a carousel collection layout is kept (spec §1.3)', () => {
+    const draft = {
+      id: 'blk_abcdef', name: 'Strip', label: { 'en-US': 'Strip' }, category: 'data', version: 1, fields: {},
+      binding: { apiId: 'product', mode: 'collection' as const, layout: { kind: 'carousel' as const, columns: 1 } },
+    };
+    const s = buildSpec(draft, { el: 'Card' });
+    expect(s.binding?.layout).toEqual({ kind: 'carousel', columns: 1 });
+    expect(validateComposedSpec(s)).toEqual([]);
+  });
 });
 
 describe('fieldUsage', () => {
@@ -468,7 +478,8 @@ describe('style sections per element (spec table)', () => {
     expect(STYLE_SECTIONS.Image).not.toContain('colors');
     expect(STYLE_SECTIONS.Divider).not.toContain('size');
     for (const [el, sections] of Object.entries(STYLE_SECTIONS)) {
-      if (!['Region', 'PageContent', 'Overlay'].includes(el)) expect(sections).toContain('span');
+      // AccordionItem / TabPanel are laid out by their Accordion / Tabs: no style of their own.
+      if (!['Region', 'PageContent', 'Overlay', 'AccordionItem', 'TabPanel'].includes(el)) expect(sections).toContain('span');
     }
   });
   it('Region and PageContent have no style; the Overlay frame gets spacing, size and colors (no visibility or span)', () => {
@@ -494,7 +505,7 @@ describe('builder Puck config and the style system', () => {
 
   it('one style field per element; new layout fields; Box/Card padding and background move into the style panel', () => {
     for (const el of Object.keys(config.components)) {
-      if (el === 'Region' || el === 'PageContent') expect(comp(el).fields).not.toHaveProperty('style');
+      if (['Region', 'PageContent', 'AccordionItem', 'TabPanel'].includes(el)) expect(comp(el).fields).not.toHaveProperty('style');
       else expect(comp(el).fields).toHaveProperty('style');
     }
     expect(Object.keys(comp('Columns').fields)).toEqual(expect.arrayContaining(['tracks', 'alignY', 'gapX', 'gapY']));

@@ -154,6 +154,38 @@
 
 ### Added
 
+- **Builder components** (spec 2026-11-26). New Block Builder elements, validated strictly on save (unknown props are
+  issues on these elements only): `Dropdown` (`openOn`, `placement`, responsive `display: popover | inline`,
+  `triggerVariant`, `chevron`; bindable `label`, `href`; no Dropdown inside a Dropdown), `Tooltip` (one target;
+  `side`; `text` ≤ 200), `Accordion` (1–30 `AccordionItem`; `single`, `defaultOpen`), `Tabs` (1–12 `TabPanel`;
+  `variant`, `align`), `Carousel` (1–20 slides; responsive `perView` 1–6, `gap`, `arrows`, `dots`, `loop`,
+  `autoplay` off or 3–10 s), `Icon` (`ICON_NAMES`, 70 lucide icons, in `@opencloudcms/schema`; `size`; `label`), and
+  the form controls `Input`, `Textarea`, `Select`, `Combobox`, `Radio`, `Checkbox`, `Switch` (`name`, `options`,
+  `required`, `disabled`, defaults; bindable `label`, `placeholder`, `help`). **Form controls are UI only: nothing
+  submits yet.** Button gains `icon`, `iconPosition`, `iconOnly`; `style.hover` (`background`, `color`,
+  `borderColor`) on Box, Card and Button; Image, Box and Card become links (bound `href`, e.g. `entryUrl`) or action
+  buttons (`action`), with `ariaLabel` on Box/Card; collection `layout.kind: 'carousel'` (page-editor values
+  `carousel-<n>`). Everything renders on the server with all content in the HTML (CSS hover/focus menus, native
+  `<details>`, scroll-snap carousels, native `<select>` for the Combobox); `@opencloudcms/core/blocks/client` adds
+  the runtimes `Dropdown`, `Tabs`, `Carousel`, `Combobox`, `AccordionSingle` and `closeAllDropdowns`. Keyboard, touch
+  and ARIA roles per pattern; the carousel has a Pause button when autoplaying. Printer and Export as TSX support
+  every element (`ui.Icon`, `ui.Tooltip`, `ui.Accordion`, `ui.Dropdown`, `ui.Tabs`, `ui.Carousel`, the form
+  controls). Blocks without the new elements render byte-identically.
+- **Block Builder:** "Interactive" and "Form" palette categories, "Add item" / "Add tab" on Accordion and Tabs, the
+  field kinds options list, icon picker and field name, an "On hover" style section with a "Show hover" preview, and
+  canvas visibility for hidden parts (selected dropdown panel or tooltip, selected tab, open accordion items,
+  side-by-side slides). A **Templates** palette section inserts a two-level nav menu, a mobile nav, an FAQ, product
+  tabs, a banner carousel and a contact form layout (placeholder copy in en-US, vi-VN, fr-FR, id-ID). **Palette
+  search** in the Block Builder palette and the Page builder block list (case- and accent-insensitive; Enter inserts
+  the first match; `/` or Ctrl/Cmd+K focuses it; Esc clears it). A collection block can pick the Carousel layout.
+- **examples/my-store:** `StoreHeader` has a logo (`/files/store-logo.svg`, placeholder) linking to `/` and a
+  two-level menu (a "Shop" Dropdown: Tops / Trousers / Accessories, Áo / Quần / Phụ kiện in vi-VN) with hover colors;
+  `MobileMenu` has the same menu inline; `ContactModal` has a contact form layout (name, email, phone, topic, message,
+  newsletter, Send; it does not submit). New blocks `HomeBanner` (carousel), `Faq` (accordion), `ProductTabs` (tabs and
+  a tooltip badge) and `ProductStrip` (carousel collection of clickable cards linking to `/products/<slug>`).
+  `seed:pages` adds them to `/`, `/shop`, the category pages `/shop/ao`, `/shop/quan`, `/shop/phu-kien` and a page per
+  product at `/products/<slug>`; rerun with `-- --force` to update existing pages.
+
 - **Base pages.** Rows of the page type with `kind: 'base'` (core migration `0007_page_kind`: `kind`, `is_default`,
   `layout`), edited in **Page builder > Pages > Base pages** with drafts, publish, versions, locales and permissions.
   A base page's content is one **layout block** (a composed block with `Region` elements, slot fields

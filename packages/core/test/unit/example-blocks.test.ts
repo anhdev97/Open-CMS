@@ -11,7 +11,7 @@ describe('examples/my-store composed blocks', () => {
     const config = await loadConfig(root);
     const { specs, errors } = await loadComposedBlocks(config);
     expect(errors).toEqual([]);
-    expect(specs.map((s) => s.spec.name).sort()).toEqual(['ActiveProducts', 'ContactModal', 'FeaturedProducts', 'MobileMenu', 'ProductCard', 'SectionHead', 'StoreFooter', 'StoreFrame', 'StoreHeader', 'StoreHero', 'StoryBand']);
+    expect(specs.map((s) => s.spec.name).sort()).toEqual(['ActiveProducts', 'ContactModal', 'Faq', 'FeaturedProducts', 'HomeBanner', 'MobileMenu', 'ProductCard', 'ProductStrip', 'ProductTabs', 'SectionHead', 'StoreFooter', 'StoreFrame', 'StoreHeader', 'StoreHero', 'StoryBand']);
     expect(isComposedIndexWired(config)).toBe(true);
 
     const types = (await loadDefinitions(config)).map((d) => d.def);

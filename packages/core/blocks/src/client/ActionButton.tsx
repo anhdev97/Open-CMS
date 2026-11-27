@@ -9,6 +9,7 @@ export function ActionButton({
   className,
   style,
   'aria-label': ariaLabel,
+  'aria-describedby': describedBy,
   children,
 }: {
   action: ButtonAction;
@@ -16,6 +17,7 @@ export function ActionButton({
   className?: string;
   style?: CSSProperties;
   'aria-label'?: string;
+  'aria-describedby'?: string;
   children?: ReactNode;
 }) {
   const run = (e: { currentTarget: HTMLElement }) => {
@@ -30,7 +32,7 @@ export function ActionButton({
     closeOverlay(own?.getAttribute('data-ocms-overlay') ?? undefined);
   };
   return (
-    <button type="button" id={id} className={className} style={style} aria-label={ariaLabel} onClick={run}>
+    <button type="button" id={id} className={className} style={style} aria-label={ariaLabel} aria-describedby={describedBy} onClick={run}>
       {children}
     </button>
   );

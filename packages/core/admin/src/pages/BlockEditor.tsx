@@ -26,10 +26,14 @@ import { fieldTypes } from '../page-editor/puck-fields';
 import { TokenField } from '../page-editor/TokenField';
 import { BlockPanel } from '../block-builder/BlockPanel';
 import { BuilderHeader, BuilderHeaderContext, type BuilderHeaderModel } from '../block-builder/BuilderHeader';
-import { elementRender, RootPreview } from '../block-builder/Canvas';
-import { BuilderContext, CanvasContext, type BuilderModel, type CanvasModel } from '../block-builder/context';
+import { CanvasSelectionProvider, elementRender, RootPreview } from '../block-builder/Canvas';
+import { ChildItemsField } from '../block-builder/ChildItemsField';
+import { BuilderContext, CanvasContext, HoverPreview, type BuilderModel, type CanvasModel, type HoverPreviewModel } from '../block-builder/context';
+import { IconField } from '../block-builder/IconPicker';
+import { OptionsField } from '../block-builder/OptionsField';
 import { ComposedActionField, treeAnchorIds } from '../block-builder/ActionField';
-import { REGION_ELEMENTS, buildBuilderConfig, paletteCategories } from '../block-builder/element-config';
+import { REGION_ELEMENTS, blockBuilderPalette, buildBuilderConfig, paletteCategories } from '../block-builder/element-config';
+import { PaletteContext, PaletteDrawer } from '../components/PaletteSearch';
 import { AllowField, PatternField, RegionLabelField, ShowIfField, SourcesField } from '../block-builder/ElementPanel';
 import { StyleField } from '../block-builder/style/StylePanel';
 import { LengthPuckField, ResponsiveSelectPuckField, TracksPuckField } from '../block-builder/style/puck-fields';
@@ -51,6 +55,7 @@ import {
   type ResetNote,
 } from '../block-builder/logic';
 import { canvasFieldValues, imageEntryPaths, loadSamples, placeholderEntry } from '../block-builder/sample-data';
+import { expandTemplates } from '../block-builder/templates';
 import { hoistOverlay, isEmptyTree, keepOverlayRoot, puckRegionNames, puckToTree, treeToPuck, type BuilderPuckData } from '../block-builder/tree-puck';
 
 const READ_ONLY = { drag: false, duplicate: false, delete: false, edit: false, insert: false };
@@ -116,6 +121,9 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
   const [draft, setDraftState] = useState<BlockDraft>(() => draftOf(initialSpec));
   const [tree, setTree] = useState<ComposedNode>(initialSpec.tree);
   const [locale, setLocale] = useState<string>(meta.defaultLocale);
+  // "Show hover" of the style panel: the item the canvas draws with its hover colours.
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const hoverPreview = useMemo<HoverPreviewModel>(() => ({ id: hoverId, set: setHoverId }), [hoverId]);
   const getPuck = useRef<ReturnType<typeof useGetPuck> | null>(null);
   const setDraft = useCallback((u: (d: BlockDraft) => BlockDraft) => setDraftState(u), []);
 
@@ -212,6 +220,9 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
         action: ComposedActionField,
         pattern: PatternField,
         regionLabel: RegionLabelField,
+        options: OptionsField,
+        icon: IconField,
+        childItems: ChildItemsField,
         regionNames: (exceptId) => puckRegionNames(latest.current, exceptId),
         palette: { overlayRoot, emptyRoot },
         render: elementRender,
@@ -233,9 +244,12 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
   const overrides = useMemo(
     () => ({
       header: () => createElement(BuilderHeader),
-      puck: ViewportBreakpoint,
+      // The canvas selection drives the component elements' editor-only visibility (open panels, shown tab).
+      puck: ({ children }: { children: ReactNode }) => createElement(ViewportBreakpoint, null, createElement(CanvasSelectionProvider, null, children)),
       iframe: CanvasFrame,
       fieldTypes,
+      // Palette search above the elements and templates (spec §3).
+      drawer: PaletteDrawer,
       fields: ({ children, itemSelector }: { children: ReactNode; itemSelector?: unknown }) => (itemSelector ? children : createElement(BlockPanel)),
       // Region / Page content cannot be inserted in a list block (Puck disables the drag): say why.
       drawerItem: ({ children, name }: { children: ReactNode; name: string }) =>
@@ -260,22 +274,20 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
     const next = data as unknown as BuilderPuckData;
     // An Overlay dropped next to an empty root becomes the root (it is only allowed there); elements dropped next to
     // an Overlay root go inside it.
-    const fixed = hoistOverlay(next) ?? keepOverlayRoot(prev, next);
+    // A template dropped from the palette becomes its root element (same id and position).
+    const expanded = expandTemplates(next);
+    const fixed = (expanded ? (hoistOverlay(expanded) ?? keepOverlayRoot(prev, expanded) ?? expanded) : null) ?? hoistOverlay(next) ?? keepOverlayRoot(prev, next);
     latest.current = fixed ?? next;
     setTree(puckToTree(latest.current));
     if (fixed) queueMicrotask(() => getPuck.current?.().dispatch({ type: 'setData', data: fixed as unknown as Data }));
   }, []);
 
-  // The palette follows the tree: the layout regions hide in an overlay block; Overlay is offered on an empty root.
-  useEffect(() => {
-    const get = getPuck.current;
-    if (!get) return;
-    const api = get();
-    const cur = (api.appState.ui.componentList ?? {}) as Record<string, object>;
-    const cats = paletteCategories({ collection, overlayRoot, emptyRoot });
-    const componentList = Object.fromEntries(Object.entries(cats).map(([k, c]) => [k, { ...(cur[k] ?? {}), ...c }]));
-    api.dispatch({ type: 'setUi', ui: { componentList } as never });
-  }, [overlayRoot, emptyRoot]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The palette follows the tree (the layout regions hide in an overlay block; Overlay is offered on an empty root);
+  // the palette search above Puck's drawer applies it (and its filter) to Puck's `ui.componentList`.
+  const palette = useMemo(
+    () => blockBuilderPalette(paletteCategories({ collection, overlayRoot, emptyRoot }), collection),
+    [collection, overlayRoot, emptyRoot, adminLocale], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   // ---- save ----
   const spec = useMemo(() => buildSpec(draft, tree), [draft, tree]);
@@ -537,21 +549,25 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
           <DeviceMemory.Provider value={device}>
             <BuilderContext.Provider value={model}>
               <CanvasContext.Provider value={canvas}>
-                <BuilderHeaderContext.Provider value={header}>
-                  <Puck
-                    key={mount.key}
-                    config={config}
-                    data={mount.data as unknown as Data}
-                    onChange={onChange}
-                    overrides={overrides as never}
-                    permissions={readOnly ? READ_ONLY : undefined}
-                    iframe={{ enabled: true, syncHostStyles: true, waitForStyles: true }}
-                    viewports={viewports}
-                    ui={ui}
-                    dictionary={dictionary}
-                    height="100%"
-                  />
-                </BuilderHeaderContext.Provider>
+                <HoverPreview.Provider value={hoverPreview}>
+                  <BuilderHeaderContext.Provider value={header}>
+                    <PaletteContext.Provider value={palette}>
+                      <Puck
+                        key={mount.key}
+                        config={config}
+                        data={mount.data as unknown as Data}
+                        onChange={onChange}
+                        overrides={overrides as never}
+                        permissions={readOnly ? READ_ONLY : undefined}
+                        iframe={{ enabled: true, syncHostStyles: true, waitForStyles: true }}
+                        viewports={viewports}
+                        ui={ui}
+                        dictionary={dictionary}
+                        height="100%"
+                      />
+                    </PaletteContext.Provider>
+                  </BuilderHeaderContext.Provider>
+                </HoverPreview.Provider>
               </CanvasContext.Provider>
             </BuilderContext.Provider>
           </DeviceMemory.Provider>

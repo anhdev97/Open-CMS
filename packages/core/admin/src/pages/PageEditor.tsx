@@ -49,7 +49,8 @@ import { BlocksContext } from '../page-editor/blocks-context';
 import { ContentTypeField } from '../page-editor/ContentTypeField';
 import { PAGE_CUSTOM_FIELDS } from '../page-editor/custom-fields';
 import { invalidate, loadBase } from '../page-editor/data';
-import { buildEditorConfig } from '../page-editor/editor-config';
+import { buildEditorConfig, pageBuilderPalette } from '../page-editor/editor-config';
+import { PaletteContext, PaletteDrawer } from '../components/PaletteSearch';
 import { BaseContext, EditorInfoContext, ResolvedContext, type EditorInfo } from '../page-editor/editor-context';
 import { EditorHeader, HeaderContext, type HeaderModel } from '../page-editor/EditorHeader';
 import {
@@ -290,7 +291,12 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme, base
     return c;
   }, [registry, adminLocale, locale, unknownTypes, kind, baseOptions, regionsOf]);
 
-  const overrides = useMemo(() => ({ header: () => createElement(EditorHeader), puck: ViewportBreakpoint, iframe: CanvasFrame, fieldTypes }), []);
+  // Palette search above the block list (spec §3).
+  const palette = useMemo(() => pageBuilderPalette(config, registry, kind), [config, registry, kind]);
+  const overrides = useMemo(
+    () => ({ header: () => createElement(EditorHeader), puck: ViewportBreakpoint, iframe: CanvasFrame, fieldTypes, drawer: PaletteDrawer }),
+    [],
+  );
   const dictionary = useMemo(() => puckDictionary(), [adminLocale]); // eslint-disable-line react-hooks/exhaustive-deps
   const viewports = useMemo(() => deviceViewports(), [adminLocale]); // eslint-disable-line react-hooks/exhaustive-deps
   // The device chosen last, so a remount ("copy from default") keeps the canvas width.
@@ -444,20 +450,22 @@ function Editor({ documentId, locale, defaultLocale, locales, entry, theme, base
               <BaseContext.Provider value={base}>
                 <ResolvedContext.Provider value={resolved}>
                   <HeaderContext.Provider value={header}>
-                    <Puck
-                      key={puckKey}
-                      config={config}
-                      data={initial}
-                      onChange={onChange}
-                      onAction={onAction as never}
-                      overrides={overrides as never}
-                      permissions={readOnly ? READ_ONLY : undefined}
-                      iframe={{ enabled: true, syncHostStyles: true, waitForStyles: true }}
-                      viewports={viewports}
-                      ui={ui}
-                      dictionary={dictionary}
-                      height="100%"
-                    />
+                    <PaletteContext.Provider value={palette}>
+                      <Puck
+                        key={puckKey}
+                        config={config}
+                        data={initial}
+                        onChange={onChange}
+                        onAction={onAction as never}
+                        overrides={overrides as never}
+                        permissions={readOnly ? READ_ONLY : undefined}
+                        iframe={{ enabled: true, syncHostStyles: true, waitForStyles: true }}
+                        viewports={viewports}
+                        ui={ui}
+                        dictionary={dictionary}
+                        height="100%"
+                      />
+                    </PaletteContext.Provider>
                   </HeaderContext.Provider>
                 </ResolvedContext.Provider>
               </BaseContext.Provider>

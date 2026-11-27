@@ -2,7 +2,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { resolveConfig, type ComposedBlockSpec } from '@opencloudcms/schema';
+import { resolveConfig, validateComposedSpec, type ComposedBlockSpec } from '@opencloudcms/schema';
+import { clickableSpec, componentsSpec, tooltipSpec } from './fixtures/components';
 import {
   blocksDir,
   captureProjectFiles,
@@ -338,5 +339,36 @@ describe('composed block files: layout and overlay blocks', () => {
     // Specs without the new props print as before (insertion order of other props kept).
     const plain = spec();
     expect(printComposedBlockFile(plain)).toContain("props: { padding: 'md' }");
+  });
+});
+
+describe('printComposedBlockFile: builder component elements', () => {
+  it('fixtures are valid specs', () => {
+    for (const s of [componentsSpec, clickableSpec, tooltipSpec]) expect(validateComposedSpec(s)).toEqual([]);
+  });
+
+  it('prints every new element, hover, button icon props, clickable containers and the carousel layout (round trip)', async () => {
+    for (const s of [componentsSpec, clickableSpec, tooltipSpec]) {
+      const root = tmp();
+      const text = printComposedBlockFile(s);
+      project(root, { 'x/x.block.ts': text });
+      const { specs, errors } = await loadComposedBlocks(cfg(root));
+      expect(errors).toEqual([]);
+      expect(specs[0].spec).toEqual(s);
+      expect(printComposedBlockFile(specs[0].spec)).toBe(text);
+    }
+    const text = printComposedBlockFile(componentsSpec);
+    for (const el of ['Dropdown', 'Tooltip', 'Accordion', 'AccordionItem', 'Tabs', 'TabPanel', 'Carousel', 'Icon', 'Input', 'Textarea', 'Select', 'Combobox', 'Radio', 'Checkbox', 'Switch']) {
+      expect(text).toContain(`el: '${el}'`);
+    }
+    expect(text).toContain("hover: { color: 'primary', borderColor: '#cfcab9' }");
+    expect(printComposedBlockFile(clickableSpec)).toContain("layout: { kind: 'carousel', columns: 3 }");
+  });
+
+  it('prints props in insertion order with anchorId and action last, whatever the input order', () => {
+    const s = structuredClone(componentsSpec);
+    s.tree.children![1].props = { anchorId: 'tt', side: 'bottom' };
+    const text = printComposedBlockFile(s);
+    expect(text).toContain("props: { side: 'bottom', anchorId: 'tt' }");
   });
 });

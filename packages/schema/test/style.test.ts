@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isColorValue, isLength, isTrack, resolveResponsive, setAt, valueAt, validateNodeStyle } from '../src/style';
+import { validateComposedSpec } from '../src/composed-block';
 
 describe('isLength', () => {
   it('accepts tokens and custom lengths', () => {
@@ -86,5 +87,18 @@ describe('validateNodeStyle', () => {
   });
   it('flags a mixed-key responsive object', () => {
     expect(validateNodeStyle({ width: { base: '4', foo: 'x' } }, ['s']).map((i) => i.path)).toContainEqual(['s', 'width']);
+  });
+  it('allows hover colors on Box, Card and Button only', () => {
+    for (const el of ['Box', 'Card', 'Button']) {
+      expect(validateNodeStyle({ hover: { background: 'primary', color: '#fff', borderColor: 'brand:ink' } }, ['s'], el), el).toEqual([]);
+    }
+    expect(validateNodeStyle({ hover: { background: 'primary' } }, ['s'], 'Text').map((i) => i.path.join('.'))).toEqual(['s.hover']);
+    expect(validateNodeStyle({ hover: { background: 'red;x', radius: 'sm' } }, ['s'], 'Button').map((i) => i.path.join('.'))).toEqual(['s.hover.background', 's.hover.radius']);
+    expect(validateNodeStyle({ hover: 'primary' }, ['s'], 'Button').map((i) => i.path.join('.'))).toEqual(['s.hover']);
+  });
+  it('checks hover through validateComposedSpec', () => {
+    const spec = (el: string) => ({ id: 'blk_hover001', name: 'H', label: { 'en-US': 'H' }, category: 'c', version: 1, fields: {}, tree: { el, style: { hover: { background: 'primary' } } } });
+    expect(validateComposedSpec(spec('Button'))).toEqual([]);
+    expect(validateComposedSpec(spec('Text')).map((i) => i.path.join('.'))).toEqual(['tree.style.hover']);
   });
 });
