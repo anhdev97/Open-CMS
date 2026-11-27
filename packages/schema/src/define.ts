@@ -74,6 +74,7 @@ export function defineContentType(input: ContentTypeInput): ContentTypeDefinitio
   if (input.description) def.description = input.description;
   if (input.review) def.review = true;
   if (input.private) def.private = true;
+  if (input.detailPage) def.detailPage = { ...input.detailPage };
   return def;
 }
 
@@ -91,6 +92,7 @@ export function normalizeDefinition(raw: ContentTypeDefinition): ContentTypeDefi
   if (raw.description) def.description = raw.description;
   if (raw.review) def.review = true;
   if (raw.private) def.private = true;
+  if (raw.detailPage) def.detailPage = typeof raw.detailPage === 'object' ? { ...raw.detailPage } : raw.detailPage;
   return def;
 }
 

@@ -28,7 +28,11 @@ export interface FieldOptionsMap {
   text: { maxLength?: number };
   longText: {};
   richText: {};
-  slug: { from?: string; maxLength?: number };
+  /**
+   * No `pattern`: the value is the entry's documentId. `pattern`: generated from `{field}`, `{id}`, `{id6}`
+   * placeholders (see `renderSlugPattern`). `from: 'x'` (legacy) is read as `pattern: '{x}'`. `maxLength` default 75.
+   */
+  slug: { from?: string; pattern?: string; maxLength?: number };
   email: {};
   url: {};
   number: { format?: 'integer' | 'decimal'; precision?: number; scale?: number };
@@ -95,7 +99,16 @@ export interface ContentTypeDefinition {
   review?: boolean;
   /** Server-only entries: never published, never on the public API. Stored only when true. */
   private?: true;
+  /** Opt-in entry detail URL: `path` ends with `{slug}` (with `slugField`) or `{id}`. Not on private types. */
+  detailPage?: DetailPageOptions;
   fields: FieldDefinition[];
+}
+
+export interface DetailPageOptions {
+  /** `/products/{slug}` or `/posts/{id}` (see `parseDetailPath`). */
+  path: string;
+  /** A `slug` field of the type; required with `{slug}`. */
+  slugField?: string;
 }
 
 export interface ContentTypeInput {
@@ -106,6 +119,7 @@ export interface ContentTypeInput {
   description?: string;
   review?: boolean;
   private?: boolean;
+  detailPage?: DetailPageOptions;
   fields: Record<string, FieldSpec>;
 }
 

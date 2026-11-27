@@ -1,6 +1,7 @@
 import { fieldColumns, isMultiRelation, snake } from './physical';
 import { GROUP_KEY_RE, validateLocalizedText } from './groups';
 import type { ContentGroupDefinition } from './groups';
+import { detailPatternsOverlap, parseDetailPath, parseSlugPattern } from './slug';
 import type { ContentTypeDefinition, FieldKind } from './types';
 
 export const FIELD_KINDS: FieldKind[] = [
@@ -118,10 +119,42 @@ export function collectSchemaIssues(defs: ContentTypeDefinition[], groups?: Cont
       if (field.kind === 'slug' && o.from && !def.fields.some((x) => x.name === o.from)) {
         issues.push(`${at}: slug source field "${o.from}" does not exist`);
       }
+      if (field.kind === 'slug' && o.pattern !== undefined) {
+        if (typeof o.pattern !== 'string') issues.push(`${at}: pattern must be a string`);
+        else for (const m of parseSlugPattern(o.pattern, def).issues) issues.push(`${at}: ${m}`);
+      }
     }
     if (snake(def.apiId).length > 40) issues.push(`${where}: apiId is too long`);
+    if (def.detailPage !== undefined) issues.push(...detailPageIssues(def, where));
   }
+  // Two types cannot claim the same detail URLs.
+  const withDetail = defs.filter((d) => d.detailPage && typeof d.detailPage === 'object' && parseDetailPath(d.detailPage.path));
+  withDetail.forEach((d, i) => {
+    const other = withDetail.slice(0, i).find((o) => detailPatternsOverlap(o.detailPage!.path, d.detailPage!.path));
+    if (other) issues.push(`content type "${d.apiId}": detailPage.path overlaps the detail page of "${other.apiId}"`);
+  });
   return issues;
+}
+
+function detailPageIssues(def: ContentTypeDefinition, where: string): string[] {
+  const dp = def.detailPage as unknown;
+  if (!dp || typeof dp !== 'object' || Array.isArray(dp) || typeof (dp as { path?: unknown }).path !== 'string') {
+    return [`${where}: detailPage must be an object with a path`];
+  }
+  const { path, slugField } = dp as { path: string; slugField?: unknown };
+  const out: string[] = [];
+  if (def.private) out.push(`${where}: a private type cannot have a detail page`);
+  const parsed = parseDetailPath(path);
+  if (!parsed) {
+    out.push(`${where}: detailPage.path must start with "/" and end with one {slug} or {id} segment after valid page path segments`);
+  } else if (parsed.param === 'slug' && slugField === undefined) {
+    out.push(`${where}: detailPage with {slug} requires slugField`);
+  }
+  if (slugField !== undefined) {
+    const field = def.fields.find((x) => x.name === slugField);
+    if (!field || field.kind !== 'slug') out.push(`${where}: detailPage.slugField "${String(slugField)}" must be a slug field of the type`);
+  }
+  return out;
 }
 
 export function assertValidSchema(defs: ContentTypeDefinition[], groups?: ContentGroupDefinition[]): void {

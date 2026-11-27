@@ -20,3 +20,4 @@ export * from './icons';
 export * from './form-controls';
 export * from './theme';
 export * from './search';
+export * from './slug';
