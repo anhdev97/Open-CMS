@@ -43,13 +43,15 @@ function withIds(type: string, props: Record<string, unknown>): PuckItem {
 }
 
 describe('BUILDER_TEMPLATES', () => {
-  it('the six templates of spec §3', () => {
-    expect(BUILDER_TEMPLATES.map((t) => t.id)).toEqual(['nav-menu', 'mobile-nav', 'faq', 'product-tabs', 'banner-carousel', 'contact-form']);
+  it('the six templates of spec §3 and the list with heading (collection list spec §1)', () => {
+    expect(BUILDER_TEMPLATES.map((t) => t.id)).toEqual(['nav-menu', 'mobile-nav', 'faq', 'product-tabs', 'banner-carousel', 'contact-form', 'list-with-heading']);
   });
 
   it.each(LOCALES)('%s: every template tree passes validateComposedSpec in a block spec', (locale) => {
     for (const tpl of BUILDER_TEMPLATES) {
-      const spec = { ...emptySpec(), name: 'Tpl', label: { 'en-US': 'Tpl' }, tree: tpl.tree(locale) };
+      // A CollectionList gets its content type when inserted (`fillListDefaults`).
+      const tree = JSON.parse(JSON.stringify(tpl.tree(locale)).replace('"apiId":""', '"apiId":"post"'));
+      const spec = { ...emptySpec(), name: 'Tpl', label: { 'en-US': 'Tpl' }, tree };
       expect(validateComposedSpec(spec).map((i) => `${i.path.join('.')}: ${i.message}`), `${tpl.id} (${locale})`).toEqual([]);
     }
   });
@@ -118,7 +120,10 @@ describe('Templates palette section', () => {
   it('a "Templates" category with the six templates (no banner carousel in a list block)', () => {
     const cats = paletteCategories({ collection: false, overlayRoot: false, emptyRoot: false });
     expect(cats.templates).toEqual({ title: 'Templates', components: BUILDER_TEMPLATES.map((t) => templateName(t.id)) });
-    expect(paletteCategories({ collection: true, overlayRoot: false, emptyRoot: false }).templates.components).not.toContain(templateName('banner-carousel'));
+    const inList = paletteCategories({ collection: true, overlayRoot: false, emptyRoot: false }).templates.components;
+    expect(inList).not.toContain(templateName('banner-carousel'));
+    // One model per block: no Collection list in a collection-bound block.
+    expect(inList).not.toContain(templateName('list-with-heading'));
   });
 
   it('each template is a Puck component: the root element config with the template as default props, label translated', () => {

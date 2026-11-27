@@ -935,6 +935,7 @@ const viVN: Messages = {
       collection: "Danh sách",
     },
     templates: {
+      listWithHeading: "Danh sách có tiêu đề",
       navMenu: "Menu điều hướng (2 cấp)",
       mobileNav: "Menu di động",
       faq: "Câu hỏi thường gặp",
@@ -943,6 +944,7 @@ const viVN: Messages = {
       contactForm: "Biểu mẫu liên hệ",
     },
     categories: {
+      data: "Dữ liệu",
       interactive: "Tương tác",
       templates: "Mẫu dựng sẵn",
       form: "Biểu mẫu",
@@ -952,6 +954,7 @@ const viVN: Messages = {
       overlay: "Lớp phủ",
     },
     elements: {
+      CollectionList: "Danh sách nội dung",
       Dropdown: "Menu thả xuống",
       Tooltip: "Chú thích nổi",
       Accordion: "Khối thu gọn",
@@ -987,6 +990,15 @@ const viVN: Messages = {
       Overlay: "Lớp phủ",
     },
     props: {
+      listKey: "Khoá",
+      listType: "Loại nội dung",
+      listFilter: "Bộ lọc cố định",
+      listSort: "Sắp xếp",
+      listLimit: "Số mục hiển thị",
+      listLayout: "Bố cục",
+      listEmptyText: "Chữ hiển thị khi trống",
+      listUrlPattern: "Mẫu URL của mục",
+      listEditor: "Người sửa trang được đổi",
       openOn: "Mở khi",
       placement: "Vị trí",
       display: "Cách hiển thị",
@@ -1298,6 +1310,18 @@ const viVN: Messages = {
       newLabel: "Nhãn field mới",
       newLabelPlaceholder: "Nhãn nút",
       add: "Thêm field",
+    },
+    list: {
+      keyHint: "Tên trường của danh sách trên trang (chữ và số, bắt đầu bằng chữ thường).",
+      keyInvalid: "Bắt đầu bằng chữ thường, sau đó là chữ hoặc số (tối đa 32 ký tự).",
+      keyTaken: "Đã có danh sách khác trong khối này tên \"{key}\".",
+      keyField: "\"{key}\" là một trường của khối: hãy chọn khoá khác.",
+      typeNone: "Chọn loại nội dung",
+      limitHint: "Từ 1 đến {max} mục.",
+      urlPatternHint: "Để trống để liên kết tới trang chi tiết của mục.",
+      noDetail: "Loại nội dung này chưa có trang chi tiết: hãy đặt mẫu URL nếu các mục cần liên kết.",
+      noType: "Chọn loại nội dung của danh sách ở bảng bên phải.",
+      canvasHint: "Danh sách \"{key}\": mục được lặp lại cho mỗi bản ghi {type}.",
     },
     binding: {
       title: "Nội dung",

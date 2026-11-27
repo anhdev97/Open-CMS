@@ -30,6 +30,8 @@ export interface ContentTypeDefinition {
   review?: boolean;
   /** Server-only entries: never published, absent from page and block builder pickers (only `true` is stored). */
   private?: boolean;
+  /** Opt-in entry detail URL (`/products/{slug}` with `slugField`, or `/posts/{id}`); never on private types. */
+  detailPage?: { path: string; slugField?: string };
   fields: FieldDefinition[];
 }
 

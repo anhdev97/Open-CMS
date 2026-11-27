@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSepa
 import { t } from '../i18n';
 import { useLocale } from '../i18n/hooks';
 import { FieldShell, fieldLabel } from '../page-editor/FieldShell';
-import { useBuilder } from './context';
+import { useBindScope, useBuilder } from './context';
 import { isListy } from './logic';
 import { SourcePicker } from './SourcePicker';
 
@@ -51,7 +51,8 @@ export const ShowIfField: CustomFieldRender<unknown> = ({ field, name, value, on
   const condId = useId();
   const srcId = useId();
   const s = (value && typeof value === 'object' ? value : null) as ShowIf | null;
-  const entryFields = m.type ? m.type.fields.filter((f) => !isListy(f)) : [];
+  const scope = useBindScope();
+  const entryFields = scope.type ? scope.type.fields.filter((f) => !isListy(f)) : [];
   const manual = Object.keys(m.draft.fields);
   const src = s ? (s.from === 'entry' ? `entry:${s.path ?? ''}` : `field:${s.name ?? ''}`) : '';
   const firstSource = entryFields[0] ? `entry:${entryFields[0].name}` : manual[0] ? `field:${manual[0]}` : null;
@@ -92,7 +93,7 @@ export const ShowIfField: CustomFieldRender<unknown> = ({ field, name, value, on
               <SelectContent>
                 {entryFields.length > 0 && (
                   <SelectGroup>
-                    <SelectLabel>{t('blockBuilder.source.contentGroup', { type: m.type?.apiId ?? '' })}</SelectLabel>
+                    <SelectLabel>{t('blockBuilder.source.contentGroup', { type: scope.apiId })}</SelectLabel>
                     {entryFields.map((f) => (
                       <SelectItem key={f.name} value={`entry:${f.name}`}>
                         {f.label || f.name}

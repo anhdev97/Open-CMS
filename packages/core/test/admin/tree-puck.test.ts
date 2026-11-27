@@ -178,7 +178,7 @@ describe('tree ⇄ Puck', () => {
     };
     walk(data.content as never);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(CONTAINER_ELEMENTS).toEqual(['Box', 'Stack', 'Columns', 'Grid', 'Card', 'Overlay', 'Dropdown', 'Tooltip', 'Accordion', 'AccordionItem', 'Tabs', 'TabPanel', 'Carousel']);
+    expect(CONTAINER_ELEMENTS).toEqual(['Box', 'Stack', 'Columns', 'Grid', 'Card', 'Overlay', 'Dropdown', 'Tooltip', 'Accordion', 'AccordionItem', 'Tabs', 'TabPanel', 'Carousel', 'CollectionList']);
   });
 
   it('drops undefined props and empty children; several top-level items become a vertical Stack; none → empty Box', () => {

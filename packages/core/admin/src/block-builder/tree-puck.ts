@@ -6,9 +6,26 @@ import type { BindSource, ComposedBlockSpec, ComposedElement, ComposedNode, Node
 /** Elements that hold other elements (their Puck `children` slot). */
 export const CONTAINER_ELEMENTS: readonly ComposedElement[] = [
   'Box', 'Stack', 'Columns', 'Grid', 'Card', 'Overlay', 'Dropdown', 'Tooltip', 'Accordion', 'AccordionItem', 'Tabs', 'TabPanel', 'Carousel',
+  'CollectionList',
 ];
 /** Layout containers: an empty one as the root is "nothing designed yet". */
 const LAYOUT_CONTAINERS: readonly string[] = ['Box', 'Stack', 'Columns', 'Grid', 'Card'];
+
+/**
+ * A CollectionList's `key` prop is `listKey` in Puck data: Puck spreads item props onto React elements, where `key`
+ * is taken by React and never reaches the render or the field panel.
+ */
+export const LIST_KEY_PROP = 'listKey';
+
+/** Node props → Puck props (the CollectionList `key` renamed). */
+export function puckPropsOf(el: string, props: Props | undefined): Props {
+  const out: Props = { ...(props ?? {}) };
+  if (el === 'CollectionList' && 'key' in out) {
+    out[LIST_KEY_PROP] = out.key;
+    delete out.key;
+  }
+  return out;
+}
 
 /** Puck prop names that are not node props. */
 export const RESERVED_ITEM_KEYS = ['id', 'bind', 'showIf', 'style', 'children'] as const;
@@ -31,7 +48,7 @@ export const isContainer = (el: string) => (CONTAINER_ELEMENTS as readonly strin
 export function treeToPuck(spec: Pick<ComposedBlockSpec, 'tree'>): { data: BuilderPuckData } {
   let n = 0;
   const item = (node: ComposedNode): PuckItem => {
-    const props: Props & { id: string } = { ...(node.props ?? {}), id: `${node.el}-${++n}` };
+    const props: Props & { id: string } = { ...puckPropsOf(node.el, node.props), id: `${node.el}-${++n}` };
     if (node.bind) props.bind = structuredClone(node.bind);
     if (node.showIf) props.showIf = { ...node.showIf };
     if (isObj(node.style) && Object.keys(node.style).length) props.style = structuredClone(node.style);
@@ -47,7 +64,7 @@ export function itemToNode(it: PuckItem): ComposedNode {
   const props: Props = {};
   for (const [k, v] of Object.entries(it.props ?? {})) {
     if ((RESERVED_ITEM_KEYS as readonly string[]).includes(k) || v === undefined) continue;
-    props[k] = v;
+    props[it.type === 'CollectionList' && k === LIST_KEY_PROP ? 'key' : k] = v;
   }
   if (Object.keys(props).length) out.props = props;
   const bind = it.props?.bind;

@@ -106,7 +106,7 @@ export interface SourceOptions {
   entry: EntryFieldOption[];
   /** Manual fields of the block that fit the prop. */
   manual: string[];
-  /** "Link to the entry page" (Button.href when the binding has a URL pattern). */
+  /** "Link to the entry page" (an href when there is a URL pattern or the type has a detail page). */
   entryUrl: boolean;
 }
 
@@ -132,8 +132,9 @@ export function sourceOptions(
   const manual = Object.entries(ctx.fields)
     .filter(([, f]) => mk.includes(f.kind))
     .map(([n]) => n);
-  // "Link to the entry's page": any bindable href (Button, Dropdown, clickable Image/Box/Card).
-  const entryUrl = !!ctx.type && target.prop === 'href' && !!ctx.urlPattern;
+  // "Link to the entry's page": any bindable href (Button, Dropdown, clickable Image/Box/Card), from the URL pattern or
+  // else the content type's detail page (spec §4).
+  const entryUrl = !!ctx.type && target.prop === 'href' && (!!ctx.urlPattern || !!ctx.type.detailPage);
   return { entry, manual, entryUrl };
 }
 

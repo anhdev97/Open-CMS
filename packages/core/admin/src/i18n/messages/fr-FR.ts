@@ -935,6 +935,7 @@ const frFR: Messages = {
       collection: "Une liste",
     },
     templates: {
+      listWithHeading: "Liste avec titre",
       navMenu: "Menu de navigation (2 niveaux)",
       mobileNav: "Menu mobile",
       faq: "FAQ",
@@ -943,6 +944,7 @@ const frFR: Messages = {
       contactForm: "Formulaire de contact",
     },
     categories: {
+      data: "Données",
       interactive: "Interactif",
       templates: "Modèles",
       form: "Formulaire",
@@ -952,6 +954,7 @@ const frFR: Messages = {
       overlay: "Superposition",
     },
     elements: {
+      CollectionList: "Liste de contenus",
       Dropdown: "Menu déroulant",
       Tooltip: "Infobulle",
       Accordion: "Accordéon",
@@ -987,6 +990,15 @@ const frFR: Messages = {
       Overlay: "Superposition",
     },
     props: {
+      listKey: "Clé",
+      listType: "Type de contenu",
+      listFilter: "Filtres fixes",
+      listSort: "Tri",
+      listLimit: "Entrées affichées",
+      listLayout: "Disposition",
+      listEmptyText: "Texte si vide",
+      listUrlPattern: "Modèle d'URL de l'entrée",
+      listEditor: "Modifiable par les éditeurs de page",
       openOn: "S'ouvre",
       placement: "Position",
       display: "Affichage",
@@ -1298,6 +1310,18 @@ const frFR: Messages = {
       newLabel: "Libellé du nouveau champ",
       newLabelPlaceholder: "Libellé du bouton",
       add: "Ajouter un champ",
+    },
+    list: {
+      keyHint: "Nom du champ de la liste sur les pages (lettres et chiffres, commençant par une minuscule).",
+      keyInvalid: "Commencez par une minuscule, puis des lettres ou des chiffres (32 au plus).",
+      keyTaken: "Une autre liste de ce bloc s'appelle déjà « {key} ».",
+      keyField: "« {key} » est un champ du bloc : choisissez une autre clé.",
+      typeNone: "Choisissez un type de contenu",
+      limitHint: "De 1 à {max} entrées.",
+      urlPatternHint: "Laissez vide pour lier la page de détail de l'entrée.",
+      noDetail: "Ce type de contenu n'a pas de page de détail : indiquez un modèle d'URL si les éléments doivent être des liens.",
+      noType: "Choisissez le type de contenu de la liste dans le panneau.",
+      canvasHint: "Liste « {key} » : l'élément se répète pour chaque entrée {type}.",
     },
     binding: {
       title: "Contenu",

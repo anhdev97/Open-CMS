@@ -2,9 +2,10 @@
 
 import { createContext, useContext } from 'react';
 import type { ComposedBinding, ComposedBlockKind, ComposedField, ComposedNode } from '@opencloudcms/schema';
-import type { Entry } from '@opencloudcms/core/blocks';
+import type { DetailPaths, Entry } from '@opencloudcms/core/blocks';
 import type { ContentTypeDefinition } from '../lib/types';
 import type { BlockDraft } from './logic';
+import type { BindScope } from './collection-list';
 
 /** What the panels and custom fields of the builder read and change (outside Puck's data). */
 export interface BuilderModel {
@@ -31,6 +32,10 @@ export interface BuilderModel {
   anchors: readonly string[];
   /** Regions of the tree named `name`. */
   regionCount: (name: string) => number;
+  /** What item `id`'s bindings read: its CollectionList's type, else the block binding's (default: the block's). */
+  scope?: (id: string | null) => BindScope;
+  /** Keys of the CollectionLists in the canvas, but item `exceptId`'s. */
+  listKeys?: (exceptId: string) => string[];
 }
 
 export const BuilderContext = createContext<BuilderModel | null>(null);
@@ -54,6 +59,15 @@ export interface CanvasModel {
   locale: string;
   /** Preview values of the manual fields. */
   fieldValues: Record<string, unknown>;
+  /** Samples of each CollectionList by key: the editable item's entry and the read-only repeats. */
+  lists?: Record<string, ListSample>;
+  /** Usable detail pages by apiId (stamped as `_detailPaths`, so `entryUrl` links like on the site). */
+  detailPaths?: DetailPaths;
+}
+
+export interface ListSample {
+  entry: Entry | null;
+  repeats: readonly Entry[];
 }
 
 export const CanvasContext = createContext<CanvasModel>({ fields: {}, tree: { el: 'Box' }, entry: null, repeats: [], locale: 'en-US', fieldValues: {} });
@@ -79,6 +93,15 @@ export interface CanvasSelectionModel {
 }
 
 export const CanvasSelection = createContext<CanvasSelectionModel>({ selectedId: null, path: [], children: () => [], select: () => {} });
+
+/** What the selected item's bindings read (its CollectionList's type inside an item template, else the block's). */
+export function useBindScope(): BindScope {
+  const m = useBuilder();
+  const { selectedId } = useContext(CanvasSelection);
+  if (m.scope) return m.scope(selectedId);
+  const b = m.draft.binding;
+  return { inList: false, apiId: b?.apiId ?? '', type: m.type, ...(b?.urlPattern ? { urlPattern: b.urlPattern } : {}) };
+}
 
 /** "Show hover" of the style panel: the item drawn with its hover colours (or none). */
 export interface HoverPreviewModel {

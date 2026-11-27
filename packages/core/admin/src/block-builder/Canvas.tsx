@@ -10,7 +10,7 @@
 // while it or something inside is selected, Tabs showing the selected TabPanel, Accordion items open and a static
 // Carousel whose slides (the slot's items) sit side by side. The page builder and the website never set them.
 import {
-  createContext, createElement, useContext, useEffect, useMemo, useRef, useState,
+  createContext, createElement, Fragment, useContext, useEffect, useMemo, useRef, useState,
   type CSSProperties, type MouseEvent, type ReactElement, type ReactNode,
 } from 'react';
 import { createUsePuck, registerOverlayPortal, useGetPuck, type SlotComponent } from '@puckeditor/core';
@@ -25,7 +25,8 @@ import { useBreakpoint } from './style/breakpoint';
 import { bpLabel } from './style/shared';
 import { CHILD_ITEM, elementLabel, slotRules } from './element-config';
 import { templatesRefused } from './templates';
-import { indexPuck, itemToNode, pathOf, type BuilderPuckData, type PuckItem } from './tree-puck';
+import { IN_LIST_REFUSED } from './collection-list';
+import { indexPuck, itemToNode, LIST_KEY_PROP, pathOf, type BuilderPuckData, type PuckItem } from './tree-puck';
 
 type Props = Record<string, unknown>;
 const PUCK_RENDER_KEYS = new Set(['puck', 'editMode', 'children']);
@@ -63,8 +64,15 @@ function definition(c: CanvasModel, tree: ComposedNode): ComposedBlockDefinition
 }
 
 function renderWith(c: CanvasModel, d: ComposedBlockDefinition, entry: unknown): ReactNode {
-  return d.render({ ...c.fieldValues, entry, _locale: c.locale, _editor: true } as never) as ReactNode;
+  return d.render({ ...c.fieldValues, entry, _locale: c.locale, _editor: true, ...(c.detailPaths ? { _detailPaths: c.detailPaths } : {}) } as never) as ReactNode;
 }
+
+/** Inside a CollectionList's item template: slots refuse what an item template refuses (spec §1). */
+const InList = createContext(false);
+/** Elements and templates a slot inside an item template refuses. */
+const LIST_DISALLOW: string[] = [...IN_LIST_REFUSED, ...templatesRefused(IN_LIST_REFUSED, IN_LIST_REFUSED)];
+/** `disallow` of a slot drawn inside an item template (none elsewhere). */
+const useListDisallow = (): { disallow?: string[] } => (useContext(InList) ? { disallow: LIST_DISALLOW } : {});
 
 function Hint({ children, tone = 'muted' }: { children: ReactNode; tone?: 'muted' | 'warning' }) {
   return (
@@ -186,17 +194,22 @@ type LayoutEl = 'Box' | 'Stack' | 'Columns' | 'Grid' | 'Card';
 
 function ContainerPreview({ el, props }: { el: LayoutEl; props: Props }) {
   const c = useContext(CanvasContext);
+  const inList = useContext(InList);
   const bp = useBreakpoint();
   const Slot = props.children as SlotComponent | undefined;
   const node = useNode(el, props);
   const cs = canvasStyle(node.style, bp);
   const p = { ...props, direction: props.direction ?? 'vertical', style: cs.inner };
+  const itemRules = c.binding?.mode === 'collection' || inList;
   const cls = (ui.layoutClass[el] as (p: Props) => string)(p);
   const style = (ui.layoutStyle[el] as (p: Props) => CSSProperties | undefined)(p);
   // A clickable Box/Card (bound href or an action) refuses interactive elements while it is one (spec §1).
+  const own = slotRules(el, itemRules).disallow ?? [];
   const clickable = isClickable(node)
-    ? { disallow: [...(slotRules(el, c.binding?.mode === 'collection').disallow ?? []), ...INTERACTIVE_ELEMENTS, ...templatesRefused([], INTERACTIVE_ELEMENTS)] }
-    : {};
+    ? { disallow: [...own, ...(inList ? LIST_DISALLOW : []), ...INTERACTIVE_ELEMENTS, ...templatesRefused([], INTERACTIVE_ELEMENTS)] }
+    : inList
+      ? { disallow: [...own, ...LIST_DISALLOW] }
+      : {};
   const zone = Slot ? createElement(Slot, { className: cls, style, minEmptyHeight: 64, ...clickable } as never) : <div className={cls} style={style} />;
   return (
     <Dim reasons={[cs.hidden && hiddenTitle(bp), !shown(c, node) && t('blockBuilder.canvas.hiddenBySample')]} fill={relativeHeight(props.style as NodeStyle | undefined)}>
@@ -345,7 +358,8 @@ function boundValue(c: CanvasModel, n: ComposedNode, prop: string): unknown {
     case 'entry':
       return (c.entry as Props | null)?.[s.path];
     case 'entryUrl':
-      return c.binding?.urlPattern ? composedHelpers.entryUrl(c.binding.urlPattern, c.entry, (e, path) => (e as Props | null)?.[path]) : null;
+      if (c.binding?.urlPattern) return composedHelpers.entryUrl(c.binding.urlPattern, c.entry, (e, path) => (e as Props | null)?.[path]);
+      return c.binding ? composedHelpers.detailUrl({ _detailPaths: c.detailPaths }, c.binding.apiId, c.entry) : null;
   }
 }
 const boundText = (c: CanvasModel, n: ComposedNode, prop: string) => composedHelpers.text(boundValue(c, n, prop));
@@ -355,7 +369,7 @@ const boundHref = (c: CanvasModel, n: ComposedNode): string | null => (n.bind?.h
 const useInSelection = (id: unknown) => useContext(CanvasSelection).path.includes(String(id));
 
 /** The Puck slot of a container (a plain box outside Puck). */
-function zone(props: Props, dz: { className?: string; style?: CSSProperties; minEmptyHeight?: number; collisionAxis?: 'x' | 'y' }): ReactNode {
+function zone(props: Props, dz: { className?: string; style?: CSSProperties; minEmptyHeight?: number; collisionAxis?: 'x' | 'y'; disallow?: string[] }): ReactNode {
   const Slot = props.children as SlotComponent | undefined;
   return Slot ? createElement(Slot, dz as never) : <div className={dz.className} style={dz.style} />;
 }
@@ -399,6 +413,7 @@ function DropdownPreview({ props }: { props: Props }) {
   const cs = canvasStyle(node.style, useBreakpoint());
   const p = node.props ?? {};
   const open = useInSelection(props.id);
+  const listRules = useListDisallow();
   return (
     <ComponentDim node={node} hidden={cs.hidden}>
       <ui.Dropdown
@@ -413,7 +428,7 @@ function DropdownPreview({ props }: { props: Props }) {
         style={cs.inner}
         editor={{ open }}
       >
-        {zone(props, { className: 'flex flex-col gap-1', minEmptyHeight: 48 })}
+        {zone(props, { className: 'flex flex-col gap-1', minEmptyHeight: 48, ...listRules })}
       </ui.Dropdown>
     </ComponentDim>
   );
@@ -424,10 +439,11 @@ function TooltipPreview({ props }: { props: Props }) {
   const node = useNode('Tooltip', props);
   const cs = canvasStyle(node.style, useBreakpoint());
   const open = useInSelection(props.id);
+  const listRules = useListDisallow();
   return (
     <ComponentDim node={node} hidden={cs.hidden}>
       <ui.Tooltip text={boundText(c, node, 'text')} side={(node.props?.side as never) ?? 'top'} style={cs.inner} editor={{ open }}>
-        {zone(props, { minEmptyHeight: 40 })}
+        {zone(props, { minEmptyHeight: 40, ...listRules })}
       </ui.Tooltip>
     </ComponentDim>
   );
@@ -455,11 +471,12 @@ const keepOpen = (e: MouseEvent) => {
 function AccordionItemPreview({ props }: { props: Props }) {
   const c = useContext(CanvasContext);
   const node = nodeOf('AccordionItem', props);
+  const listRules = useListDisallow();
   return (
     <ComponentDim node={node} hidden={false}>
       <div onClickCapture={keepOpen}>
         <ui.AccordionItem title={boundText(c, node, 'title')} editor={{ open: true }}>
-          {zone(props, { minEmptyHeight: 48 })}
+          {zone(props, { minEmptyHeight: 48, ...listRules })}
         </ui.AccordionItem>
       </div>
     </ComponentDim>
@@ -526,7 +543,82 @@ function TabsPreview({ props }: { props: Props }) {
 }
 
 function TabPanelPreview({ props }: { props: Props }) {
-  return <ComponentDim node={nodeOf('TabPanel', props)} hidden={false}>{zone(props, { minEmptyHeight: 64 })}</ComponentDim>;
+  const listRules = useListDisallow();
+  return <ComponentDim node={nodeOf('TabPanel', props)} hidden={false}>{zone(props, { minEmptyHeight: 64, ...listRules })}</ComponentDim>;
+}
+
+/** Layout classes of a CollectionList (as `composedHelpers.list` lays it out on the site). */
+function listLayoutClass(layout: unknown): { cls: string; carousel?: number } {
+  const l = (isObj(layout) ? layout : {}) as { kind?: unknown; columns?: unknown };
+  const cols = typeof l.columns === 'number' ? l.columns : 3;
+  if (l.kind === 'list') return { cls: ui.layoutClass.Stack({ direction: 'vertical', gap: '6' }) };
+  if (l.kind === 'carousel') return { cls: ui.CAROUSEL_TRACK, carousel: Math.min(Math.max(cols, 1), 6) };
+  return { cls: ui.layoutClass.Grid({ columns: Math.min(Math.max(cols, 2), 6) as 3, gap: '6' }) };
+}
+
+/** A further sample of a list: its item template drawn read-only with that entry. */
+function ListRepeat({ entry, items }: { entry: unknown; items: readonly CanvasItem[] }) {
+  const c = useContext(CanvasContext);
+  const nodes = useMemo(() => items.map((it) => itemToNode(it as PuckItem)), [items]);
+  return (
+    <div inert aria-hidden="true" className="pointer-events-none select-none">
+      {nodes.map((n, i) => {
+        const d = definition(c, n);
+        return d instanceof Error ? null : <Fragment key={i}>{renderWith(c, d, entry)}</Fragment>;
+      })}
+    </div>
+  );
+}
+
+/**
+ * A CollectionList (spec §1): its slot is the item template, drawn with the list's first sample entry and laid out
+ * like the site (grid, list or carousel), the other samples drawn read-only after it. Inside, bindings read the
+ * list's type and slots refuse what an item template refuses.
+ */
+function CollectionListPreview({ props }: { props: Props }) {
+  const c = useContext(CanvasContext);
+  const sel = useContext(CanvasSelection);
+  const node = useNode('CollectionList', props);
+  const cs = canvasStyle(node.style, useBreakpoint());
+  const key = typeof props[LIST_KEY_PROP] === 'string' ? (props[LIST_KEY_PROP] as string) : '';
+  const apiId = typeof props.apiId === 'string' ? props.apiId : '';
+  const sample = c.lists?.[key];
+  const items = sel.children(String(props.id));
+  const urlPattern = typeof props.urlPattern === 'string' && props.urlPattern ? props.urlPattern : undefined;
+  // The item template sees one entry of the list's type (as a single binding), never the block's own entry.
+  const inner = useMemo<CanvasModel>(
+    () => ({
+      ...c,
+      binding: apiId ? { apiId, mode: 'single', ...(urlPattern ? { urlPattern } : {}) } : undefined,
+      entry: sample?.entry ?? null,
+      repeats: [],
+    }),
+    [c, apiId, urlPattern, sample],
+  );
+  const { cls, carousel } = listLayoutClass(props.layout);
+  const sp = ui.styleProps(cs.inner);
+  const vars = carousel ? perViewVars({ base: Math.min(1.25, carousel), md: Math.min(carousel, carousel >= 5 ? 3 : 2), lg: carousel }, '6') : undefined;
+  const cell = carousel ? ui.CAROUSEL_SLIDE : undefined;
+  return (
+    <ComponentDim node={node} hidden={cs.hidden}>
+      <div data-collection-list={key} className={sp.className || undefined} style={sp.style}>
+        {!apiId && <Hint tone="warning">{t('blockBuilder.list.noType')}</Hint>}
+        <CanvasContext.Provider value={inner}>
+          <InList.Provider value={true}>
+            <div className={cls} style={vars}>
+              <div className={cell}>{zone(props, { minEmptyHeight: 64, disallow: LIST_DISALLOW })}</div>
+              {(sample?.repeats ?? []).map((e, i) => (
+                <div key={String((e as Props).documentId ?? i)} className={cell}>
+                  <ListRepeat entry={e} items={items} />
+                </div>
+              ))}
+            </div>
+          </InList.Provider>
+        </CanvasContext.Provider>
+        {apiId && <p className="mt-2 text-xs text-muted-foreground">{t('blockBuilder.list.canvasHint', { key, type: apiId })}</p>}
+      </div>
+    </ComponentDim>
+  );
 }
 
 const PER_VIEW = (x: unknown): x is number => typeof x === 'number' && x >= 1 && x <= 6;
@@ -564,6 +656,7 @@ const COMPONENT_PREVIEWS: Partial<Record<ComposedElement, (p: { props: Props }) 
   Tabs: TabsPreview,
   TabPanel: TabPanelPreview,
   Carousel: CarouselPreview,
+  CollectionList: CollectionListPreview,
 };
 
 /** A TabPanel frame: hidden unless its Tabs show it. */

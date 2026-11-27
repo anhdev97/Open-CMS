@@ -28,7 +28,7 @@ import { BlockPanel } from '../block-builder/BlockPanel';
 import { BuilderHeader, BuilderHeaderContext, type BuilderHeaderModel } from '../block-builder/BuilderHeader';
 import { CanvasSelectionProvider, elementRender, RootPreview } from '../block-builder/Canvas';
 import { ChildItemsField } from '../block-builder/ChildItemsField';
-import { BuilderContext, CanvasContext, HoverPreview, type BuilderModel, type CanvasModel, type HoverPreviewModel } from '../block-builder/context';
+import { BuilderContext, CanvasContext, HoverPreview, type BuilderModel, type CanvasModel, type HoverPreviewModel, type ListSample } from '../block-builder/context';
 import { IconField } from '../block-builder/IconPicker';
 import { OptionsField } from '../block-builder/OptionsField';
 import { ComposedActionField, treeAnchorIds } from '../block-builder/ActionField';
@@ -56,6 +56,9 @@ import {
 } from '../block-builder/logic';
 import { canvasFieldValues, imageEntryPaths, loadSamples, placeholderEntry } from '../block-builder/sample-data';
 import { expandTemplates } from '../block-builder/templates';
+import { ListField } from '../block-builder/ListField';
+import { bindScope, detailPathsOf, detailTypesOf, fillListDefaults, listSampleBinding, puckLists, treeLists } from '../block-builder/collection-list';
+import { LIST_KEY_PROP } from '../block-builder/tree-puck';
 import { hoistOverlay, isEmptyTree, keepOverlayRoot, puckRegionNames, puckToTree, treeToPuck, type BuilderPuckData } from '../block-builder/tree-puck';
 
 const READ_ONLY = { drag: false, duplicate: false, delete: false, edit: false, insert: false };
@@ -130,8 +133,6 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
   const type = draft.binding ? (types.find((ct) => ct.apiId === draft.binding!.apiId) ?? null) : null;
   // A binding stored before its type became private: it renders nothing on pages (spec §7).
   const privateBinding = draft.binding && allTypes.some((ct) => ct.apiId === draft.binding!.apiId && ct.private) ? draft.binding.apiId : null;
-  const typeRef = useRef(type);
-  typeRef.current = type;
 
   const pageBlocks = useMemo(() => {
     const names = registry ? registry.list.map((d) => d.name) : (coreRegistryNames ??= defineBlocks(coreBlocks).list.map((d) => d.name));
@@ -166,9 +167,49 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
   const entry: Entry | null = !b ? null : real ? (b.mode === 'single' ? (rows.find((r) => r.documentId === sampleId) ?? rows[0]!) : rows[0]!) : placeholder;
   const repeats = b?.mode === 'collection' && real ? rows.slice(1) : [];
 
+  // ---- CollectionList samples (one query per list, keyed by its query) ----
+  const lists = useMemo(() => treeLists(tree).filter((l) => types.some((ct) => ct.apiId === l.apiId)), [tree, types]);
+  const listQueries = useMemo(
+    () => lists.map((l) => ({ key: l.key, sig: JSON.stringify([l.apiId, l.filter ?? [], l.sort ?? null, l.limit ?? null, locale, assetPaths]), binding: listSampleBinding(l) })),
+    [lists, locale, assetPaths],
+  );
+  const listSig = JSON.stringify(listQueries.map((q) => [q.key, q.sig]));
+  const [listRows, setListRows] = useState<Record<string, { sig: string; rows: Entry[] }>>({});
+  useEffect(() => {
+    if (!listQueries.length) return;
+    let live = true;
+    const timer = setTimeout(() => {
+      for (const q of listQueries) {
+        if (listRows[q.key]?.sig === q.sig) continue;
+        loadSamples(fetcher, q.binding, locale, assetPaths).then(
+          (r) => live && setListRows((s) => ({ ...s, [q.key]: { sig: q.sig, rows: r } })),
+          () => live && setListRows((s) => ({ ...s, [q.key]: { sig: q.sig, rows: [] } })),
+        );
+      }
+    }, SAMPLE_DEBOUNCE_MS);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [listSig]); // eslint-disable-line react-hooks/exhaustive-deps
+  const listSamples = useMemo(() => {
+    const out: Record<string, ListSample> = {};
+    for (const q of listQueries) {
+      const got = listRows[q.key]?.sig === q.sig ? listRows[q.key]!.rows : null;
+      const ct = types.find((x) => x.apiId === q.binding.apiId)!;
+      // No entries (or still loading): one placeholder entry, so the template shows something.
+      out[q.key] = got && got.length ? { entry: got[0]!, repeats: got.slice(1) } : { entry: placeholderEntry(ct, locale), repeats: [] };
+    }
+    return out;
+  }, [listQueries, listRows, types, locale]);
+  const detailPaths = useMemo(() => detailPathsOf(allTypes), [allTypes]);
+
   const canvas: CanvasModel = useMemo(
-    () => ({ binding: draft.binding, fields: draft.fields, tree, entry, repeats, locale, fieldValues: canvasFieldValues(draft.fields, locale) }),
-    [draft.binding, draft.fields, tree, entry, repeats, locale],
+    () => ({
+      binding: draft.binding, fields: draft.fields, tree, entry, repeats, locale, fieldValues: canvasFieldValues(draft.fields, locale),
+      lists: listSamples, detailPaths,
+    }),
+    [draft.binding, draft.fields, tree, entry, repeats, locale, listSamples, detailPaths],
   );
 
   // ---- builder model ----
@@ -197,7 +238,14 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
     kind: composedKind({ tree }),
     anchors,
     regionCount: (name) => regionNamesAll.filter((n) => n === name).length,
+    scope: (id) => bindScope(latest.current, id, types, draft.binding, type),
+    listKeys: (exceptId) => puckLists(latest.current).filter((it) => String(it.props.id) !== exceptId).map((it) => String(it.props[LIST_KEY_PROP] ?? '')),
   };
+  const scopeRef = useRef(model.scope!);
+  scopeRef.current = model.scope!;
+  // New lists take the first content type (dropped from the palette or inside a template).
+  const listDefaults = useRef({ fields: draft.fields as Record<string, unknown>, apiId: types[0]?.apiId });
+  listDefaults.current = { fields: draft.fields, apiId: types[0]?.apiId };
 
   // ---- Puck ----
   const collection = draft.binding?.mode === 'collection';
@@ -223,6 +271,7 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
         options: OptionsField,
         icon: IconField,
         childItems: ChildItemsField,
+        list: ListField,
         regionNames: (exceptId) => puckRegionNames(latest.current, exceptId),
         palette: { overlayRoot, emptyRoot },
         render: elementRender,
@@ -233,7 +282,8 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
           const src = (next.bind as Record<string, { from: string; path?: string }> | undefined)?.value;
           const before = (prev?.bind as Record<string, unknown> | undefined)?.value;
           if (src?.from !== 'entry' || JSON.stringify(src) === JSON.stringify(before)) return null;
-          const f = typeRef.current?.fields.find((x) => x.name === src.path);
+          // Inside a CollectionList the bound field is one of the list's type.
+          const f = scopeRef.current(String(next.id ?? '')).type?.fields.find((x) => x.name === src.path);
           const show = f ? showCurrencyFor(f) : undefined;
           return show === undefined || show === next.showCurrency ? null : { showCurrency: show };
         },
@@ -276,7 +326,9 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
     // an Overlay root go inside it.
     // A template dropped from the palette becomes its root element (same id and position).
     const expanded = expandTemplates(next);
-    const fixed = (expanded ? (hoistOverlay(expanded) ?? keepOverlayRoot(prev, expanded) ?? expanded) : null) ?? hoistOverlay(next) ?? keepOverlayRoot(prev, next);
+    const placed = (expanded ? (hoistOverlay(expanded) ?? keepOverlayRoot(prev, expanded) ?? expanded) : null) ?? hoistOverlay(next) ?? keepOverlayRoot(prev, next);
+    // New CollectionLists get a free key (`list`, `list2`, …) and a content type.
+    const fixed = fillListDefaults(prev, placed ?? next, listDefaults.current.fields, listDefaults.current.apiId) ?? placed;
     latest.current = fixed ?? next;
     setTree(puckToTree(latest.current));
     if (fixed) queueMicrotask(() => getPuck.current?.().dispatch({ type: 'setData', data: fixed as unknown as Data }));
@@ -297,7 +349,8 @@ function Builder({ meta, types: allTypes, detail, theme, startKind = 'block' }: 
   const pending = useRef<ComposedBlockSpec | null>(null);
 
   const openSave = () => {
-    const issues = validateComposedSpec(spec).map((i) => formatIssue(i));
+    // `entryUrl` without a URL pattern needs a content type with a detail page (spec §4).
+    const issues = validateComposedSpec(spec, { detailTypes: detailTypesOf(allTypes) }).map((i) => formatIssue(i));
     setReview({ issues, summary: changeSummary(stored, spec), breaking: breakingNotes(stored, spec) });
   };
 

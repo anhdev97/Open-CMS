@@ -2,9 +2,9 @@
 // of existing elements, inserted with constant text in the admin's current locale and edited freely afterwards.
 // Inserting a template adds no block fields. Relative imports only (root vitest).
 import type { ComposedElement, ComposedNode, NodeStyle } from '@opencloudcms/schema';
-import type { BuilderPuckData, PuckItem } from './tree-puck';
+import { puckPropsOf, type BuilderPuckData, type PuckItem } from './tree-puck';
 
-export type TemplateId = 'nav-menu' | 'mobile-nav' | 'faq' | 'product-tabs' | 'banner-carousel' | 'contact-form';
+export type TemplateId = 'nav-menu' | 'mobile-nav' | 'faq' | 'product-tabs' | 'banner-carousel' | 'contact-form' | 'list-with-heading';
 
 export interface BuilderTemplate {
   id: TemplateId;
@@ -27,6 +27,7 @@ interface Copy {
     name: string; email: string; phone: string; topic: string; topicPlaceholder: string;
     topics: { general: string; order: string; other: string }; message: string; messagePlaceholder: string; newsletter: string; send: string;
   };
+  list: { heading: string; intro: string; item: string; itemText: string; all: string };
 }
 
 /** Placeholder copy of the templates in the 4 admin locales. */
@@ -56,6 +57,7 @@ const COPY: Record<'en-US' | 'vi-VN' | 'fr-FR' | 'id-ID', Copy> = {
       topics: { general: 'General question', order: 'My order', other: 'Something else' },
       message: 'Message', messagePlaceholder: 'How can we help?', newsletter: 'Send me the newsletter', send: 'Send',
     },
+    list: { heading: 'Latest from us', intro: 'A short introduction to the list below.', item: 'Item title', itemText: 'Item summary', all: 'See all' },
   },
   'vi-VN': {
     nav: { home: 'Trang chủ', shop: 'Cửa hàng', shopItems: ['Hàng mới về', 'Bán chạy', 'Khuyến mãi'], about: 'Giới thiệu', contact: 'Liên hệ' },
@@ -82,6 +84,7 @@ const COPY: Record<'en-US' | 'vi-VN' | 'fr-FR' | 'id-ID', Copy> = {
       topics: { general: 'Câu hỏi chung', order: 'Đơn hàng của tôi', other: 'Vấn đề khác' },
       message: 'Lời nhắn', messagePlaceholder: 'Chúng tôi có thể giúp gì?', newsletter: 'Gửi bản tin cho tôi', send: 'Gửi',
     },
+    list: { heading: 'Mới nhất', intro: 'Đoạn giới thiệu ngắn cho danh sách bên dưới.', item: 'Tiêu đề mục', itemText: 'Tóm tắt mục', all: 'Xem tất cả' },
   },
   'fr-FR': {
     nav: { home: 'Accueil', shop: 'Boutique', shopItems: ['Nouveautés', 'Meilleures ventes', 'Soldes'], about: 'À propos', contact: 'Contact' },
@@ -108,6 +111,7 @@ const COPY: Record<'en-US' | 'vi-VN' | 'fr-FR' | 'id-ID', Copy> = {
       topics: { general: 'Question générale', order: 'Ma commande', other: 'Autre chose' },
       message: 'Message', messagePlaceholder: 'Comment pouvons-nous vous aider ?', newsletter: 'Recevoir la newsletter', send: 'Envoyer',
     },
+    list: { heading: 'Nos dernières nouveautés', intro: 'Une courte introduction à la liste ci-dessous.', item: 'Titre de l’élément', itemText: 'Résumé de l’élément', all: 'Tout voir' },
   },
   'id-ID': {
     nav: { home: 'Beranda', shop: 'Toko', shopItems: ['Produk baru', 'Terlaris', 'Diskon'], about: 'Tentang kami', contact: 'Kontak' },
@@ -134,6 +138,7 @@ const COPY: Record<'en-US' | 'vi-VN' | 'fr-FR' | 'id-ID', Copy> = {
       topics: { general: 'Pertanyaan umum', order: 'Pesanan saya', other: 'Lainnya' },
       message: 'Pesan', messagePlaceholder: 'Apa yang bisa kami bantu?', newsletter: 'Kirimi saya buletin', send: 'Kirim',
     },
+    list: { heading: 'Terbaru dari kami', intro: 'Pengantar singkat untuk daftar di bawah ini.', item: 'Judul item', itemText: 'Ringkasan item', all: 'Lihat semua' },
   },
 };
 
@@ -247,6 +252,31 @@ export const BUILDER_TEMPLATES: readonly BuilderTemplate[] = [
       });
     },
   },
+  {
+    // A common heading and button around a Collection list (spec §1): the title renders once, the Card per entry. The
+    // list's content type is filled when it is inserted (`fillListDefaults`).
+    id: 'list-with-heading',
+    label: 'blockBuilder.templates.listWithHeading',
+    tree: (l) => {
+      const c = copyOf(l).list;
+      return node('Stack', {
+        props: { direction: 'vertical', gap: '6' },
+        children: [
+          node('Heading', { props: { level: 2 }, bind: { text: text(c.heading) } }),
+          paragraph(c.intro),
+          node('CollectionList', {
+            props: { key: 'list', apiId: '', limit: 6, layout: { kind: 'grid', columns: 3 } },
+            children: [
+              node('Card', {
+                children: [node('Heading', { props: { level: 3 }, bind: { text: text(c.item) } }), paragraph(c.itemText)],
+              }),
+            ],
+          }),
+          node('Button', { props: { variant: 'outline' }, bind: { label: text(c.all), href: text('/') } }),
+        ],
+      });
+    },
+  },
 ];
 
 const BY_NAME = new Map(BUILDER_TEMPLATES.map((t) => [templateName(t.id), t]));
@@ -258,7 +288,7 @@ export const templateRootEl = (name: string): ComposedElement | undefined => ROO
 
 /** Puck props of a node without ids (Puck's `populateIds` gives every inserted item a fresh one). */
 export function templatePuckProps(n: ComposedNode): Record<string, unknown> {
-  const props: Record<string, unknown> = { ...structuredClone(n.props ?? {}) };
+  const props: Record<string, unknown> = puckPropsOf(n.el, structuredClone(n.props ?? {}));
   if (n.bind) props.bind = structuredClone(n.bind);
   if (n.showIf) props.showIf = structuredClone(n.showIf);
   if (n.style && Object.keys(n.style).length) props.style = structuredClone(n.style);

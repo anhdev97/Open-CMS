@@ -993,6 +993,7 @@ export const enUS = {
       collection: "A list",
     },
     templates: {
+      listWithHeading: "List with heading",
       navMenu: "Nav menu (2 levels)",
       mobileNav: "Mobile nav",
       faq: "FAQ",
@@ -1001,6 +1002,7 @@ export const enUS = {
       contactForm: "Contact form",
     },
     categories: {
+      data: "Data",
       interactive: "Interactive",
       templates: "Templates",
       form: "Form",
@@ -1010,6 +1012,7 @@ export const enUS = {
       overlay: "Overlay",
     },
     elements: {
+      CollectionList: "Collection list",
       Dropdown: "Dropdown menu",
       Tooltip: "Tooltip",
       Accordion: "Accordion",
@@ -1045,6 +1048,15 @@ export const enUS = {
       Overlay: "Overlay",
     },
     props: {
+      listKey: "Key",
+      listType: "Content type",
+      listFilter: "Fixed filters",
+      listSort: "Sort",
+      listLimit: "Entries shown",
+      listLayout: "Layout",
+      listEmptyText: "Text when empty",
+      listUrlPattern: "Entry URL pattern",
+      listEditor: "Page editors may change",
       openOn: "Opens on",
       placement: "Placement",
       display: "Display",
@@ -1356,6 +1368,18 @@ export const enUS = {
       newLabel: "New field label",
       newLabelPlaceholder: "Button label",
       add: "Add field",
+    },
+    list: {
+      keyHint: "Name of the list's field on pages (letters and digits, starting with a lowercase letter).",
+      keyInvalid: "Use a lowercase letter, then letters or digits (at most 32).",
+      keyTaken: "Another list in this block is already called \"{key}\".",
+      keyField: "\"{key}\" is a field of the block: choose another key.",
+      typeNone: "Choose a content type",
+      limitHint: "From 1 to {max} entries.",
+      urlPatternHint: "Leave empty to link to the entry's detail page.",
+      noDetail: "This content type has no detail page: set a URL pattern if items link to their entry.",
+      noType: "Choose the list's content type in the panel.",
+      canvasHint: "List \"{key}\": the item repeats for each {type} entry.",
     },
     binding: {
       title: "Content",

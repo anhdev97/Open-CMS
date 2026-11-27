@@ -935,6 +935,7 @@ const idID: Messages = {
       collection: "Daftar",
     },
     templates: {
+      listWithHeading: "Daftar dengan judul",
       navMenu: "Menu navigasi (2 tingkat)",
       mobileNav: "Menu seluler",
       faq: "FAQ",
@@ -943,6 +944,7 @@ const idID: Messages = {
       contactForm: "Formulir kontak",
     },
     categories: {
+      data: "Data",
       interactive: "Interaktif",
       templates: "Templat",
       form: "Formulir",
@@ -952,6 +954,7 @@ const idID: Messages = {
       overlay: "Overlay",
     },
     elements: {
+      CollectionList: "Daftar konten",
       Dropdown: "Menu tarik-turun",
       Tooltip: "Keterangan alat",
       Accordion: "Akordeon",
@@ -987,6 +990,15 @@ const idID: Messages = {
       Overlay: "Overlay",
     },
     props: {
+      listKey: "Kunci",
+      listType: "Tipe konten",
+      listFilter: "Filter tetap",
+      listSort: "Urutan",
+      listLimit: "Entri ditampilkan",
+      listLayout: "Tata letak",
+      listEmptyText: "Teks saat kosong",
+      listUrlPattern: "Pola URL entri",
+      listEditor: "Editor halaman boleh mengubah",
       openOn: "Terbuka saat",
       placement: "Posisi",
       display: "Tampilan",
@@ -1298,6 +1310,18 @@ const idID: Messages = {
       newLabel: "Label field baru",
       newLabelPlaceholder: "Label tombol",
       add: "Tambah field",
+    },
+    list: {
+      keyHint: "Nama field daftar di halaman (huruf dan angka, diawali huruf kecil).",
+      keyInvalid: "Awali dengan huruf kecil, lalu huruf atau angka (maksimal 32).",
+      keyTaken: "Daftar lain di blok ini sudah bernama \"{key}\".",
+      keyField: "\"{key}\" adalah field blok: pilih kunci lain.",
+      typeNone: "Pilih tipe konten",
+      limitHint: "Dari 1 sampai {max} entri.",
+      urlPatternHint: "Kosongkan untuk menautkan ke halaman detail entri.",
+      noDetail: "Tipe konten ini belum punya halaman detail: isi pola URL jika item perlu ditautkan.",
+      noType: "Pilih tipe konten daftar di panel.",
+      canvasHint: "Daftar \"{key}\": item diulang untuk setiap entri {type}.",
     },
     binding: {
       title: "Konten",

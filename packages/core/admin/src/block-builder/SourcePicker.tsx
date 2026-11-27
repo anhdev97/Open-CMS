@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSepa
 import { Textarea } from '../components/ui/textarea';
 import { enUS, t } from '../i18n';
 import { ImageField } from '../page-editor/ImageField';
-import { useBuilder } from './context';
+import { useBindScope, useBuilder } from './context';
 import { propLabel } from './element-config';
 import { manualKindFor, sourceOptions, suggestFieldName } from './logic';
 
@@ -102,10 +102,12 @@ export function SourcePicker({ el, prop, value, onChange }: SourcePickerProps) {
   const m = useBuilder();
   const selectId = useId();
   const fixedId = useId();
-  const opts = sourceOptions({ el, prop }, { type: m.type, fields: m.draft.fields, urlPattern: m.draft.binding?.urlPattern });
+  // Inside a CollectionList the entry is the list's item (its type), elsewhere the block binding's entry.
+  const scope = useBindScope();
+  const opts = sourceOptions({ el, prop }, { type: scope.type, fields: m.draft.fields, urlPattern: scope.urlPattern });
   const current = encode(value);
   const newKind = manualKindFor(el, prop);
-  const typeName = m.draft.binding?.apiId ?? '';
+  const typeName = scope.apiId;
 
   // A bound field the current options do not offer (removed, renamed, wrong kind): shown so the user sees it.
   const stale =
@@ -159,7 +161,7 @@ export function SourcePicker({ el, prop, value, onChange }: SourcePickerProps) {
               {opts.entryUrl && <SelectItem value={URL_SRC}>{t('blockBuilder.source.entryUrl')}</SelectItem>}
             </SelectGroup>
           )}
-          {m.type && opts.entry.length === 0 && (
+          {scope.type && opts.entry.length === 0 && (
             <SelectGroup>
               <SelectSeparator />
               <SelectLabel>{t('blockBuilder.source.noCompatible', { type: typeName })}</SelectLabel>

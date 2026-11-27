@@ -10,13 +10,14 @@ import {
 import type { ReactElement, ReactNode } from 'react';
 import { getActiveLocale, t, tEnglish } from '../i18n';
 import { type PaletteCategory as SearchCategory, type PaletteModel } from '../components/PaletteSearch';
+import { IN_LIST_REFUSED } from './collection-list';
 import { BUILDER_TEMPLATES, templateName, templateOf, templatePuckProps, templateRootEl, templatesRefused } from './templates';
 import { hasLegacyProps, migrateLegacyProps } from './style/migrate';
 import { indexPuck, isContainer, itemToNode, pathOf, uniqueRegionName, type BuilderPuckData } from './tree-puck';
 
 export type PropKind =
   | 'color' | 'spacing' | 'select' | 'boolean' | 'text' | 'number' | 'allow' | 'tracks' | 'length' | 'responsiveSelect' | 'pattern' | 'action' | 'regionLabel'
-  | 'options' | 'icon' | 'name';
+  | 'options' | 'icon' | 'name' | 'list';
 export interface PropDef {
   name: string;
   kind: PropKind;
@@ -105,8 +106,14 @@ export const ELEMENT_PROPS: Record<ComposedElement, readonly PropDef[]> = {
     { ...select('autoplay', ['off', ...range(3, 10)]), seconds: true },
   ],
   Icon: [{ name: 'name', kind: 'icon', labelKey: 'icon' }, select('size', ['sm', 'md', 'lg', 'xl'])],
-  // Placeholder: the CollectionList props panel is built in its own task (type picker, query, layout, editor toggles).
-  CollectionList: [],
+  // The list's settings (`ListField`, one part per prop); `listKey` is the node's `key` in Puck data (see tree-puck).
+  CollectionList: [
+    { name: 'listKey', kind: 'list', labelKey: 'listKey' }, { name: 'apiId', kind: 'list', labelKey: 'listType' },
+    { name: 'filter', kind: 'list', labelKey: 'listFilter' }, { name: 'sort', kind: 'list', labelKey: 'listSort' },
+    { name: 'limit', kind: 'list', labelKey: 'listLimit' }, { name: 'layout', kind: 'list', labelKey: 'listLayout' },
+    { name: 'emptyText', kind: 'list', labelKey: 'listEmptyText' }, { name: 'urlPattern', kind: 'list', labelKey: 'listUrlPattern' },
+    { name: 'editor', kind: 'list', labelKey: 'listEditor' },
+  ],
   Input: [CONTROL_NAME, { ...select('type', INPUT_TYPES), labelKey: 'inputType' }, REQUIRED, DISABLED, { ...select('autocomplete', AUTOCOMPLETE_TOKENS), optional: true }],
   Textarea: [CONTROL_NAME, select('rows', range(2, 12)), REQUIRED, DISABLED],
   Select: [CONTROL_NAME, OPTIONS, DEFAULT_VALUE, REQUIRED, DISABLED],
@@ -164,6 +171,12 @@ export const ELEMENT_DEFAULTS: Partial<Record<ComposedElement, Record<string, un
   Radio: { name: 'choice', options: OPTION_DEFAULTS, orientation: 'vertical', bind: { label: text('Choose') } },
   Checkbox: { name: 'agree', value: 'on', bind: { label: text('Checkbox') } },
   Switch: { name: 'enabled', bind: { label: text('Switch') } },
+  // The key and the content type are filled when it is dropped (`fillListDefaults`); the item template is a Card.
+  CollectionList: {
+    limit: 12,
+    layout: { kind: 'grid', columns: 3 },
+    children: [{ type: 'Card', props: { children: [{ type: 'Heading', props: { level: 3, bind: { text: text('Item title') } } }] } }],
+  },
 };
 
 export type StyleSection = 'layout' | 'spacing' | 'margin' | 'size' | 'maxWidth' | 'colors' | 'hover' | 'textColor' | 'visibility' | 'span';
@@ -194,7 +207,7 @@ export const STYLE_SECTIONS: Record<ComposedElement, readonly StyleSection[]> = 
   // Builder component elements. AccordionItem / TabPanel render no box of their own (their parent lays them out).
   Dropdown: PLAIN, Tooltip: PLAIN, Accordion: WIDE, AccordionItem: [], Tabs: WIDE, TabPanel: [], Carousel: WIDE,
   Icon: ['margin', 'textColor', 'visibility', 'span'],
-  CollectionList: WIDE, // like Carousel; revisit with the CollectionList builder task
+  CollectionList: WIDE,
   Input: WIDE, Textarea: WIDE, Select: WIDE, Combobox: WIDE, Radio: WIDE, Checkbox: WIDE, Switch: WIDE,
 };
 
@@ -205,12 +218,13 @@ export const REGION_ELEMENTS: readonly ComposedElement[] = ['Region', 'PageConte
 export const INTERACTIVE_PALETTE: readonly ComposedElement[] = ['Dropdown', 'Tooltip', 'Accordion', 'Tabs', 'Carousel', 'Icon'];
 /** The "Form" palette category: the 7 form controls. */
 export const FORM_PALETTE: readonly ComposedElement[] = FORM_CONTROL_ELEMENTS;
+/** The "Data" palette category (hidden in a collection-bound block: one model per block). */
+export const DATA_PALETTE: readonly ComposedElement[] = ['CollectionList'];
 export const CONTENT_ELEMENTS: readonly ComposedElement[] = COMPOSED_ELEMENTS.filter(
   (e) =>
     !LAYOUT_ELEMENTS.includes(e) && !REGION_ELEMENTS.includes(e) && e !== 'Overlay'
     && !INTERACTIVE_PALETTE.includes(e) && !FORM_PALETTE.includes(e) && !ITEM_ELEMENTS.includes(e)
-    // Offered in the "Data" category once the builder supports it.
-    && e !== 'CollectionList',
+    && !DATA_PALETTE.includes(e),
 );
 
 /** Translated label, or `fallback` when the key is missing. */
@@ -256,6 +270,8 @@ export interface BuilderConfigOptions {
   icon: CustomFieldRender<unknown>;
   /** "Add item" / "Add tab" of Accordion / Tabs (`metadata.item`: the item element). */
   childItems: CustomFieldRender<unknown>;
+  /** A CollectionList setting (`metadata.part`: the prop it edits). */
+  list?: CustomFieldRender<unknown>;
   /** Region names in the canvas, but item `exceptId`'s (a new Region gets a free name). */
   regionNames?: (exceptId: string) => string[];
   /** Palette state at mount (later changes go through `paletteCategories` and Puck's `setUi`). */
@@ -321,6 +337,8 @@ function propField(p: PropDef, opts: BuilderConfigOptions): Field {
       return { type: 'custom', label, render: opts.icon, metadata: { icon: true, optional: p.optional === true } } as Field;
     case 'name':
       return { type: 'custom', label, render: opts.pattern, metadata: { pattern: 'control', required: true } } as Field;
+    case 'list':
+      return { type: 'custom', label, render: opts.list ?? (() => null), metadata: { part: p.name } } as unknown as Field;
   }
 }
 
@@ -347,7 +365,8 @@ export function elementFields(el: ComposedElement, opts: BuilderConfigOptions): 
 export function slotRules(el: ComposedElement, collection: boolean): { allow?: string[]; disallow?: string[] } {
   const item = CHILD_ITEM[el];
   if (item) return { allow: [item] };
-  const out: string[] = collection ? ['Slot', ...REGION_ELEMENTS, 'Overlay', 'Carousel'] : ['Overlay'];
+  // A list's item template (and a collection-bound block) refuses the same elements; no CollectionList in either.
+  const out: string[] = collection || el === 'CollectionList' ? [...IN_LIST_REFUSED] : ['Overlay'];
   const add = (els: readonly string[]) => {
     for (const e of els) if (!out.includes(e)) out.push(e);
   };
@@ -356,7 +375,7 @@ export function slotRules(el: ComposedElement, collection: boolean): { allow?: s
   if (el === 'Dropdown') add(['Dropdown', ...REGION_ELEMENTS]);
   if (el === 'Tooltip') add(['Tooltip', 'Dropdown', ...FORM_CONTROL_ELEMENTS]);
   // Templates: refused when their root breaks a direct-child rule or they contain an element refused at any depth.
-  const deep: string[] = [...(collection ? ['Slot', ...REGION_ELEMENTS, 'Carousel'] : []), ...(el === 'Dropdown' ? ['Dropdown'] : [])];
+  const deep: string[] = [...(collection || el === 'CollectionList' ? IN_LIST_REFUSED : []), ...(el === 'Dropdown' ? ['Dropdown'] : [])];
   add(templatesRefused(out, deep));
   return { disallow: out };
 }
@@ -374,20 +393,22 @@ type PaletteCategory = { title?: string; components: string[]; visible?: boolean
 
 /** Template component names offered in the palette. */
 function templateNames(collection: boolean): string[] {
-  const refused = collection ? templatesRefused([], ['Slot', ...REGION_ELEMENTS, 'Carousel']) : [];
+  const refused = collection ? templatesRefused([], IN_LIST_REFUSED) : [];
   return BUILDER_TEMPLATES.map((tpl) => templateName(tpl.id)).filter((n) => !refused.includes(n));
 }
 
 /** The palette (Puck categories) for the block's current state. */
 export function paletteCategories(
   s: PaletteState,
-): Record<'layout' | 'content' | 'interactive' | 'form' | 'templates' | 'regions' | 'overlay', PaletteCategory> & { other: { visible: false } } {
+): Record<'layout' | 'content' | 'data' | 'interactive' | 'form' | 'templates' | 'regions' | 'overlay', PaletteCategory> & { other: { visible: false } } {
   const layout = s.collection ? LAYOUT_ELEMENTS.filter((e) => e !== 'Slot') : LAYOUT_ELEMENTS;
   // No Carousel in a collection item template (spec §1 rules).
   const interactive = s.collection ? INTERACTIVE_PALETTE.filter((e) => e !== 'Carousel') : INTERACTIVE_PALETTE;
   return {
     layout: { title: t('blockBuilder.categories.layout'), components: [...layout] },
     content: { title: t('blockBuilder.categories.content'), components: [...CONTENT_ELEMENTS] },
+    // Collection list: not in a collection-bound block (one model per block, spec §1).
+    data: { title: t('blockBuilder.categories.data'), components: [...DATA_PALETTE], visible: !s.collection },
     interactive: { title: t('blockBuilder.categories.interactive'), components: [...interactive] },
     form: { title: t('blockBuilder.categories.form'), components: [...FORM_PALETTE] },
     // Starter templates (spec §3); no banner carousel in a collection item template.
@@ -426,6 +447,11 @@ function ownChange(
   }
   if (trigger === 'load') return null;
   const out: Record<string, unknown> = {};
+  // Another content type: the fixed filters and sort named the old type's fields.
+  if (el === 'CollectionList' && prev && prev.apiId !== props.apiId && trigger !== 'insert') {
+    if (props.filter !== undefined) out.filter = undefined;
+    if (props.sort !== undefined) out.sort = undefined;
+  }
   // An emptied optional select / text drops the prop (the schema refuses empty values).
   for (const p of ELEMENT_PROPS[el]) if (p.optional && props[p.name] === '') out[p.name] = undefined;
   // A default value that is no longer one of the options is dropped.
@@ -515,9 +541,12 @@ export function paletteInsertTarget(data: BuilderPuckData, selectedId: string | 
   const top = Array.isArray(data.content) ? data.content : [];
   const candidates = pathOf(index, selectedId);
   if (top.length === 1 && !candidates.includes(String(top[0]!.props.id))) candidates.push(String(top[0]!.props.id));
+  const inList = (id: string) => pathOf(index, id).some((a) => index.get(a)!.item.type === 'CollectionList');
+  const listRefused = [...IN_LIST_REFUSED, ...templatesRefused(IN_LIST_REFUSED, IN_LIST_REFUSED)];
   for (const id of candidates) {
     const it = index.get(id)!.item;
     if (!isContainer(templateRootEl(it.type) ?? it.type) || !slotTakes(it, name, collection)) continue;
+    if (inList(id) && listRefused.includes(name)) continue;
     const kids = Array.isArray(it.props.children) ? it.props.children : [];
     return { zone: `${id}:children`, index: kids.length };
   }
