@@ -179,6 +179,21 @@ describe('CollectionList: resolve and render', () => {
     expect(r.html.indexOf('a question 3?')).toBeLessThan(r.html.indexOf('b question 1?'));
   });
 
+  it('an unlocked list limit is clamped to 50 (CollectionList max); block-level collections keep 100', async () => {
+    const def = defineComposedBlock(questions({ editor: { limit: true } }));
+    expect(def.fields.list).toMatchObject({ maxLimit: 50 });
+    const { f, calls } = fake();
+    await renderPage(def, { list: { mode: 'query', limit: 80 } }, f);
+    expect((calls.query[0][1] as { limit: number }).limit).toBe(50);
+    const block = defineComposedBlock(
+      base({ name: 'Coll', binding: { apiId: 'question', mode: 'collection', options: { editorLimit: true } }, tree: card() }),
+    );
+    expect((block.fields.entries as { maxLimit?: number }).maxLimit).toBeUndefined();
+    const other = fake();
+    await renderPage(block, { entries: { mode: 'query', limit: 80 } }, other.f);
+    expect((other.calls.query[0][1] as { limit: number }).limit).toBe(80);
+  });
+
   it('an empty list shows emptyText in _locale; without emptyText nothing (editor: a placeholder)', async () => {
     const empty = fake({ query: async () => [] }).f;
     const withText = defineComposedBlock(questions({ emptyText: { 'en-US': 'No questions yet', 'vi-VN': 'Chưa có câu hỏi' } }));

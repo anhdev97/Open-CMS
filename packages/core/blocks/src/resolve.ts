@@ -41,8 +41,8 @@ export interface ResolvePageOptions {
   locale: Locale;
   defaultLocale: Locale;
   /**
-   * Detail template pages: the entry of the URL (`routeEntry` of the by-path response) and its type. Single-entry
-   * fields (`b.entry`, not in list rows) of that type whose stored value is empty get it; a picked entry wins.
+   * Detail template pages: the entry of the URL (`routeEntry` of the by-path response) and its type. Composed blocks
+   * with a block-level `single` binding of that type and no picked entry get it as `entry`; a picked entry wins.
    */
   routeEntry?: { apiId: string; entry: Entry };
   /** Detail paths by apiId; when absent and a block needs them, they are read once from `f.detailPaths`. */
@@ -63,7 +63,7 @@ type EntriesField = Extract<BlockField, { kind: 'entries' }>;
 
 /**
  * Query of a stored `{ mode: 'query' }` value. The field's `baseFilter` is merged over the stored filter (base wins),
- * `lockLimit` replaces the stored limit by the field's, `defaultSort` applies when nothing is stored or the field is
+ * `lockLimit` replaces the stored limit by the field's, the limit is clamped to 1..`maxLimit` (default 100), `defaultSort` applies when nothing is stored or the field is
  * not `sortable`.
  */
 function querySpec(apiId: string, v: Record<string, unknown>, field?: EntriesField): QuerySpec {
@@ -76,7 +76,7 @@ function querySpec(apiId: string, v: Record<string, unknown>, field?: EntriesFie
     apiId,
     ...(Object.keys(filter).length ? { filter } : {}),
     ...(sort ? { sort } : {}),
-    limit: Math.min(Math.max(raw, 1), MAX_LIMIT),
+    limit: Math.min(Math.max(raw, 1), Math.min(field?.maxLimit ?? MAX_LIMIT, MAX_LIMIT)),
   };
 }
 
@@ -100,6 +100,15 @@ const queryKey = (q: QuerySpec) => JSON.stringify([q.apiId, q.filter ? Object.en
 const filterKey = (q: QuerySpec) => JSON.stringify([q.apiId, q.filter ? Object.entries(q.filter).sort() : null]);
 
 /**
+ * Whether the route entry fills `def`: a composed block whose block-level binding is `single` on `apiId` (its generated
+ * `entry` field). Hand-written and ejected blocks never are (no opt-in exists).
+ */
+function routeBlock(def: BlockDefinition<any>, apiId: string): boolean {
+  const spec = (def as { spec?: ComposedBlockSpec }).spec;
+  return def.composed === true && spec?.binding?.mode === 'single' && spec.binding.apiId === apiId && def.fields.entry?.kind === 'entry';
+}
+
+/**
  * Props with the default query of each CollectionList field the stored props lack (a page saved before the list was
  * added to its block still shows the list).
  */
@@ -120,18 +129,17 @@ function withListDefaults(def: BlockDefinition<any>, props: Record<string, unkno
 function mapFieldValues(
   fields: Record<string, BlockField>,
   props: Record<string, unknown>,
-  fn: (field: DataField, value: unknown, apiId: string | null, inRow: boolean) => unknown,
-  inRow = false,
+  fn: (field: DataField, value: unknown, apiId: string | null) => unknown,
 ): Record<string, unknown> {
   const out = { ...props };
   for (const [k, f] of Object.entries(fields)) {
     if (!Object.prototype.hasOwnProperty.call(props, k)) continue;
     const v = props[k];
     if (f.kind === 'list') {
-      if (Array.isArray(v)) out[k] = v.map((row) => (isObj(row) ? mapFieldValues(f.fields, row, fn, true) : row));
+      if (Array.isArray(v)) out[k] = v.map((row) => (isObj(row) ? mapFieldValues(f.fields, row, fn) : row));
     } else if (f.kind === 'entry' || f.kind === 'entries' || f.kind === 'link' || f.kind === 'image') {
       const apiId = f.kind === 'entries' && f.apiIdFrom ? str(props[f.apiIdFrom]) : 'apiId' in f ? str(f.apiId) : null;
-      out[k] = fn(f, v, apiId, inRow);
+      out[k] = fn(f, v, apiId);
     }
   }
   return out;
@@ -146,8 +154,8 @@ function mapFieldValues(
  * composed (and `usesLocale`) blocks get the reserved props `_locale` (= `o.locale`) and `_editor: false`, plus
  * `_detailPaths` for blocks with `detailLinks` (from `o.detailPaths`, else one `f.detailPaths` call).
  * CollectionList fields (`b.entries` named after each list key) are queries like any other and batched with them;
- * a missing stored value uses the list's default query. With `o.routeEntry`, empty single-entry fields of its type
- * render the route entry.
+ * a missing stored value uses the list's default query. With `o.routeEntry`, composed single-binding blocks of its type
+ * without a picked entry render the route entry.
  */
 export async function resolvePage(
   content: StoredPageContent,
@@ -163,12 +171,16 @@ export async function resolvePage(
   let detailPaths: DetailPaths | undefined = o.detailPaths;
   let route = o.routeEntry && isObj(o.routeEntry.entry) && str(o.routeEntry.apiId) ? o.routeEntry : undefined;
 
-  const walk = (fn: (field: DataField, value: unknown, apiId: string | null, inRow: boolean) => unknown, stamp = false): ItemFn => {
+  const walk = (fn: (field: DataField, value: unknown, apiId: string | null) => unknown, stamp = false): ItemFn => {
     const visit: ItemFn = (item) => {
       if (!isItem(item)) return item;
       const def = r.get(item.type);
       if (!def) return item;
-      const props = mapFieldValues(def.fields, withRouteKeys(def.fields, withListDefaults(def, item.props)), fn);
+      const props = mapFieldValues(def.fields, withListDefaults(def, item.props), fn);
+      // Detail templates (spec §3): composed blocks with a `single` binding of the route type and no picked entry.
+      if (stamp && route && routeBlock(def, route.apiId) && !(isObj(item.props.entry) && str(item.props.entry.documentId))) {
+        props.entry = route.entry;
+      }
       // Reserved, never stored: composed blocks format prices/dates and pick texts for the rendered locale.
       // `_editor: false` overrides any stored value, so editor-only output never reaches the website.
       if (stamp && (def.composed || def.usesLocale)) {
@@ -181,17 +193,6 @@ export async function resolvePage(
     };
     return visit;
   };
-  /** A route entry also fills a single-entry field that was never stored (key absent). */
-  const withRouteKeys = (fields: Record<string, BlockField>, props: Record<string, unknown>): Record<string, unknown> => {
-    if (!route) return props;
-    const missing = Object.entries(fields).filter(
-      ([k, fd]) => fd.kind === 'entry' && fd.apiId === route!.apiId && !Object.prototype.hasOwnProperty.call(props, k),
-    );
-    return missing.length ? { ...props, ...Object.fromEntries(missing.map(([k]) => [k, null])) } : props;
-  };
-  /** Top-level `b.entry` fields of the route entry's type with an empty stored value. */
-  const routeFilled = (field: DataField, v: unknown, apiId: string | null, inRow: boolean): boolean =>
-    !!route && !inRow && field.kind === 'entry' && apiId === route.apiId && !(isObj(v) && str(v.documentId));
   const idSet = (apiId: string) => {
     let s = ids.get(apiId);
     if (!s) ids.set(apiId, (s = new Set()));
@@ -199,8 +200,7 @@ export async function resolvePage(
   };
 
   // Pass 1: collect.
-  const collect = walk((field, v, apiId, inRow) => {
-    if (routeFilled(field, v, apiId, inRow)) return v;
+  const collect = walk((field, v, apiId) => {
     if (field.kind === 'entry' && apiId && isObj(v) && str(v.documentId)) idSet(apiId).add(v.documentId as string);
     else if (field.kind === 'entries' && apiId && isObj(v)) {
       if (v.mode === 'pick' && Array.isArray(v.ids)) for (const id of v.ids) if (str(id)) idSet(apiId).add(id);
@@ -263,10 +263,9 @@ export async function resolvePage(
   ]);
 
   // Pass 2: substitute.
-  const substitute = walk((field, v, apiId, inRow) => {
+  const substitute = walk((field, v, apiId) => {
     switch (field.kind) {
       case 'entry': {
-        if (routeFilled(field, v, apiId, inRow)) return route!.entry;
         const id = isObj(v) ? str(v.documentId) : null;
         return (id && apiId && byId.get(apiId)?.get(id)) || null;
       }

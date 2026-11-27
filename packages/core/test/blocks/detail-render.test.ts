@@ -29,7 +29,9 @@ vi.mock('next/server', () => ({ connection: vi.fn(async () => undefined) }));
 
 import {
   PUCK_FORMAT_VERSION,
+  b,
   coreBlocks,
+  defineBlock,
   defineBlocks,
   defineComposedBlock,
   resolvePage,
@@ -64,7 +66,15 @@ const spec = (over: Partial<ComposedBlockSpec>): ComposedBlockSpec => ({
 const hero = defineComposedBlock(spec({}));
 const eventCard = defineComposedBlock(spec({ id: 'blk_detail2', name: 'EventCard', binding: { apiId: 'event', mode: 'single' } }));
 const patterned = defineComposedBlock(spec({ id: 'blk_detail3', name: 'Patterned', binding: { apiId: 'product', mode: 'single', urlPattern: '/shop/{slug}' } }));
-const reg = defineBlocks([...coreBlocks, hero, eventCard, patterned]);
+// Hand-written: two `b.entry` fields of the route type. The route entry is only for composed single bindings.
+const handPicked = defineBlock({
+  name: 'HandPicked',
+  label: 'Hand picked',
+  category: 'data',
+  fields: { first: b.entry('product'), second: b.entry('product') },
+  render: (p) => `${(p.first as Entry | null)?.name ?? 'none'}/${(p.second as Entry | null)?.name ?? 'none'}`,
+});
+const reg = defineBlocks([...coreBlocks, hero, eventCard, patterned, handPicked]);
 
 const DP = { product: { path: '/products/{slug}', slugField: 'slug' }, event: { path: '/events/{id}' } };
 const product = (id: string, name: string, extra: Record<string, unknown> = {}): Entry => ({ documentId: id, name, slug: name.toLowerCase().replace(/\s+/g, '-'), ...extra });
@@ -103,6 +113,14 @@ describe('resolvePage: route entry', () => {
     const [a, b] = await resolved([item('ProductHero', { entry: { documentId: P2 } }, 'a'), item('EventCard', { entry: null }, 'b')], { routeEntry: route });
     expect((a.props.entry as Entry).documentId).toBe(P2);
     expect(b.props.entry).toBeNull();
+  });
+
+  it('hand-written blocks with empty b.entry fields of the route type stay empty', async () => {
+    const [a, c] = await resolved([item('HandPicked', { first: null }, 'a'), item('HandPicked', { first: { documentId: P2 } }, 'c')], { routeEntry: route });
+    expect(a.props.first).toBeNull();
+    expect(a.props.second).toBeUndefined();
+    expect(renderItem(a)).toBe('none/none');
+    expect((c.props.first as Entry).documentId).toBe(P2);
   });
 
   it('without a route entry an empty block stays empty (pages render as before)', async () => {

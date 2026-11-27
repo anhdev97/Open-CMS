@@ -84,6 +84,12 @@ describe('CollectionList element', () => {
     expect(paths(mut(questions(), (x) => delete x.tree.children[1].props.key))).toEqual(['tree.children.1.props.key']);
   });
 
+  it('reserves the key region (its <key>__layout field would be region__layout, a Region slot name)', () => {
+    const s = mut(questions(), (x) => (x.tree.children[1].props = { key: 'region', apiId: 'question', editor: { layout: true } }));
+    expect(validateComposedSpec(s)).toEqual([{ path: ['tree', 'children', 1, 'props', 'key'], message: '"region" is reserved' }]);
+    expect(validateComposedSpec(mut(questions(), (x) => (x.tree.children[1].props.key = 'regions')))).toEqual([]);
+  });
+
   it('rejects a CollectionList in a collection-bound block', () => {
     const s = mut(questions(), (x) => {
       x.binding = { apiId: 'product', mode: 'collection' };

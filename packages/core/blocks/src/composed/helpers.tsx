@@ -8,6 +8,7 @@ import { Grid, Stack } from '../ui/layout';
 import { Text } from '../ui/content';
 import { Carousel } from '../client/Carousel';
 import { safeHref } from '../ui/href';
+import { LIST_LAYOUT_SUFFIX } from '../define';
 import type { DetailPaths } from '../types';
 import { entryUrl, isPresent, readDate, readEntryImage, readEntryMoney, readHref, readText } from './values';
 
@@ -184,7 +185,7 @@ function list(
 ): ReactNode {
   const p = props as Record<string, unknown>;
   const layout =
-    (block.editorLayout ? parseLayout(p[`${block.key}__layout`]) : null) ?? parseLayout(block.layout) ?? { kind: 'grid', columns: 3 };
+    (block.editorLayout ? parseLayout(p[`${block.key}${LIST_LAYOUT_SUFFIX}`]) : null) ?? parseLayout(block.layout) ?? { kind: 'grid', columns: 3 };
   return entriesIn(props, p[block.key], block, layout, fn, { id: block.id, style: block.style });
 }
 

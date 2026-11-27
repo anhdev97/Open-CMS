@@ -99,6 +99,8 @@ export interface EntriesBlockField extends FieldBase {
   defaultSort?: string;
   /** `resolvePage` uses `limit` whatever the stored value (and caps picks to it). */
   lockLimit?: boolean;
+  /** Highest query limit `resolvePage` uses (stored limits above it are clamped); default and at most 100. */
+  maxLimit?: number;
   /** Value when the block is inserted. Default `{ mode: 'pick', ids: [] }`. */
   default?: StoredEntries;
 }

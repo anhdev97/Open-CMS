@@ -106,6 +106,7 @@ function validateField(f: unknown, block: string, path: string, siblings: Record
           issues.push(`${where}: defaultSort must be "field:asc" or "field:desc"`);
         }
         if (f.lockLimit !== undefined && typeof f.lockLimit !== 'boolean') issues.push(`${where}: lockLimit must be a boolean`);
+        if (f.maxLimit !== undefined && !(Number.isInteger(f.maxLimit) && (f.maxLimit as number) > 0)) issues.push(`${where}: maxLimit must be a positive integer`);
         if (d !== undefined && !(isObj(d) && (d.mode === 'pick' || d.mode === 'query'))) bad("a { mode: 'pick' | 'query' } value");
       }
       break;

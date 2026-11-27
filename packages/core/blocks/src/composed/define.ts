@@ -1,5 +1,6 @@
 import {
   COLLECTION_LIST_DEFAULT_LIMIT,
+  COLLECTION_LIST_MAX_LIMIT,
   collectionListsOf,
   composedKind,
   overlayDefaultName,
@@ -176,6 +177,7 @@ export function defineComposedBlock(spec: ComposedBlockSpec): ComposedBlockDefin
       ...(Object.keys(baseFilter).length ? { baseFilter } : {}),
       ...(defaultSort ? { defaultSort } : {}),
       lockLimit: ed.limit !== true,
+      maxLimit: COLLECTION_LIST_MAX_LIMIT,
       default: { mode: 'query', limit, ...(defaultSort ? { sort: defaultSort } : {}) },
     });
     if (ed.layout === true) {

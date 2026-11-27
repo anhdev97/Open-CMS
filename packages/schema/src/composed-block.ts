@@ -392,7 +392,7 @@ export interface ValidateComposedOptions {
 }
 
 /** Key names a CollectionList may not take (besides manual field names and the other lists' keys). */
-const RESERVED_LIST_KEY_RE = /^(entry|entries|layout|slot\d*)$/;
+const RESERVED_LIST_KEY_RE = /^(entry|entries|layout|slot\d*|region)$/;
 
 export function validateComposedSpec(spec: unknown, opts: ValidateComposedOptions = {}): ComposedIssue[] {
   const issues: ComposedIssue[] = [];
