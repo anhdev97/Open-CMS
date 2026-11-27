@@ -122,8 +122,8 @@ export class PagesService implements OnModuleInit {
 
   /**
    * Document id of the `status` entry that a detail URL value names. `{id}` paths: the documentId. `{slug}` paths: an
-   * exact slug match (a localized slug in `loc` only; with old duplicate values the oldest entry); when there is none
-   * and the slug pattern ends with `{id}` / `{id6}`, the trailing id part: the full documentId, or a documentId
+   * exact slug match (a localized slug in `loc` only; with old duplicate values the most recently published entry,
+   * spec §2); when there is none and the slug pattern ends with `{id}` / `{id6}`, the trailing id part: the full documentId, or a documentId
    * prefix of 6–8 hex that exactly one entry has (a slug whose other parts changed still resolves).
    */
   private async routeEntryId(def: ContentTypeDefinition, param: DetailParam, value: string, status: 'draft' | 'published', loc: string): Promise<string | null> {
@@ -142,10 +142,10 @@ export class PagesService implements OnModuleInit {
       ? await sql<{ document_id: string }>`
           select m.document_id from ${main} m join ${sql.table(l10nTable(def))} l on l.entry_id = m.id
           where m.status = ${status} and l.locale = ${loc} and l.${col} = ${value}
-          order by m.created_at, m.id limit 1`.execute(this.db)
+          order by m.published_at desc nulls last, m.updated_at desc, m.id desc limit 1`.execute(this.db)
       : await sql<{ document_id: string }>`
           select document_id from ${main} where status = ${status} and ${col} = ${value}
-          order by created_at, id limit 1`.execute(this.db);
+          order by published_at desc nulls last, updated_at desc, id desc limit 1`.execute(this.db);
     if (exact.rows[0]) return exact.rows[0].document_id;
 
     const pattern = slugPattern(field);

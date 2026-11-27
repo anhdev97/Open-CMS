@@ -321,6 +321,13 @@ describe('entry detail pages (spec §3)', () => {
       // Written outside the API (old data): two published rows with the same slug.
       await t.db.updateTable('ct_product_l10n').set({ slug: a.slug }).where('entry_id', 'in', t.db.selectFrom('ct_product').select('id').where('document_id', '=', b.documentId)).execute();
       expect((await status('product')).body.data.duplicateSlugs).toBe(1);
+      // Spec §2: detail routing serves the most recently published of the duplicates.
+      const served = async () => (await pub(`/products/${a.slug}`)).body.routeEntry.documentId;
+      expect(await served()).toBe(b.documentId);
+      await t.db.updateTable('ct_product').set({ published_at: new Date(Date.now() + 60_000) }).where('document_id', '=', a.documentId).where('status', '=', 'published').execute();
+      expect(await served()).toBe(a.documentId);
+      await t.db.updateTable('ct_product').set({ published_at: new Date(Date.now() + 120_000) }).where('document_id', '=', b.documentId).where('status', '=', 'published').execute();
+      expect(await served()).toBe(b.documentId);
     });
 
     it('0009_detail_pages: down drops only the column and index (rows stay), up adds them back', async () => {
