@@ -35,6 +35,11 @@ function printField(field: FieldDefinition): string {
   return `    ${field.name}: f.${field.kind}(${lit(arg, '')}),`;
 }
 
+/** `{ path, slugField? }` in a fixed key order (empty `slugField` left out). */
+function detailPageLiteral(d: NonNullable<ContentTypeDefinition['detailPage']>): Record<string, unknown> {
+  return { path: d.path, ...(d.slugField ? { slugField: d.slugField } : {}) };
+}
+
 export function printSchemaFile(def: ContentTypeDefinition): string {
   const lines = [
     '// Source of truth for this content type. Edit by hand or from the admin',
@@ -49,6 +54,7 @@ export function printSchemaFile(def: ContentTypeDefinition): string {
     ...(def.description ? [`  description: ${lit(def.description, '')},`] : []),
     ...(def.review ? ['  review: true,'] : []),
     ...(def.private ? ['  private: true,'] : []),
+    ...(def.detailPage ? [`  detailPage: ${lit(detailPageLiteral(def.detailPage), '')},`] : []),
     '  fields: {',
     ...def.fields.map(printField),
     '  },',
